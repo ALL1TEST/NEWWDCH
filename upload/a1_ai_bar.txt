@@ -1,0 +1,69 @@
+in=round class="lucide lucide-sparkles size-3 text-foreground" aria-hidden=true>
+<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z">
+</path>
+<path d="M20 2v4">
+</path>
+<path d="M22 4h-4">
+</path>
+<circle cx=4 cy=20 r=2>
+</circle>
+</svg>
+</div>
+<textarea data-plate-focus=true placeholder="Ask AI to edit your content..." rows=1 class="flex-1 resize-none bg-transparent text-sm leading-normal placeholder:text-muted-foreground/50 focus:outline-none disabled:opacity-50 max-h-20 min-h-[22px]" style=height:22px>
+</textarea>
+<button data-plate-focus=true class="size-7 rounded-full flex items-center justify-center shrink-0 transition-all text-muted-foreground/40" disabled title="Insert at cursor">
+<svg xmlns=http://www.w3.org/2000/svg width=24 height=24 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round class="lucide lucide-send size-3.5" aria-hidden=true>
+<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z">
+</path>
+<path d="m21.854 2.147-10.94 10.939">
+</path>
+</svg>
+</button>
+</div>
+<div class="flex gap-1.5 px-3 pb-2.5 flex-wrap" bis_skin_checked=1>
+<button data-plate-focus=true class="text-[11px] px-2.5 py-1 rounded-full border border-border/50 bg-background hover:bg-muted hover:border-border transition-colors text-muted-foreground">Make it shorter</button>
+<button data-plate-focus=true class="text-[11px] px-2.5 py-1 rounded-full border border-border/50 bg-background hover:bg-muted hover:border-border transition-colors text-muted-foreground">Fix grammar</button>
+<button data-plate-focus=true class="text-[11px] px-2.5 py-1 rounded-full border border-border/50 bg-background hover:bg-muted hover:border-border transition-colors text-muted-foreground">More professional</button>
+<button data-plate-focus=true class="text-[11px] px-2.5 py-1 rounded-full border border-border/50 bg-background hover:bg-muted hover:border-border transition-colors text-muted-foreground">Add a conclusion</button>
+</div>
+</div>
+</div>
+<div class="absolute -top-12 right-2" bis_skin_checked=1>
+<button data-plate-focus=true class="size-10 rounded-full flex items-center justify-center shrink-0 transition-all shadow-sm bg-neutral-900 text-white hover:bg-neutral-800 hover:shadow-md dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200" data-state=closed data-slot=tooltip-trigger>
+<svg xmlns=http://www.w3.org/2000/svg width=24 height=24 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round class="lucide lucide-fingerprint-pattern size-4" aria-hidden=true>
+<path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4">
+</path>
+<path d="M14 13.12c0 2.38 0 6.38-1 8.88">
+</path>
+<path d="M17.29 21.02c.12-.6.43-2.3.5-3.02">
+</path>
+<path d="M2 12a10 10 0 0 1 18-6">
+</path>
+<path d="M2 16h.01">
+</path>
+<path d="M21.8 16c.2-2 .131-5.354 0-6">
+</path>
+<path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2">
+</path>
+<path d="M8.65 22c.21-.66.45-1.32.57-2">
+</path>
+<path d="M9 6.8a6 6 0 0 1 9 5.2v2">
+</path>
+</svg>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="hidden lg:block lg:col-span-4" bis_skin_checked=1>
+<div class="sticky top-4 max-h-[calc(100vh-6rem)] overflow-y-auto" bis_skin_checked=1>
+<div class="rounded-lg border bg-card" bis_skin_checked=1>
+<div data-slot=accordion class=px-4 data-orientation=vertical bis_skin_checked=1>
+<div data-state=open data-orientation=vertical data-slot=accordion-item class="border-b last:border-b-0" bis_skin_checked=1>
+<h3 data-orientation=vertical data-state=open class=flex>
+<button type=button aria-controls=radix-_r_43_ aria-expanded=true data-state=open data-orientation=vertical id=radix-_r_42_ data-slot=accordion-trigger class="focus-visible:border-ring focus-visible:ring-ring/50 flex flex-1 items-start justify-between gap-4 rounded-md text-left font-medium transition-all outline-none hover:underline focus-visible:ring-[3px] disabled:pointer-events-none disabled:opacity-50 [&amp;[data-state=open]>svg]:rotate-180 py-3 text-sm" data-radix-collection-item>
+<span class="flex items-center gap-2">
+<svg xmlns=http://www.w3.org/2000/svg width=24 height=24 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round class="lucide lucide-image h-3.5 w-3.5 text-muted-foreground" aria-hidden=true>
+<rect width=18 height=18 x=3 y=3 rx=2 

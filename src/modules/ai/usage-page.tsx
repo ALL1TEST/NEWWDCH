@@ -1,0 +1,250 @@
+'use client';
+
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { getApi } from '@/lib/api-client';
+import { queryKeys } from '@/lib/query-keys';
+import { useSiteStore } from '@/lib/stores/site-store';
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import {
+  BarChart3, DollarSign, Clock, Zap, AlertTriangle, Activity,
+} from 'lucide-react';
+import {
+  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend,
+} from 'recharts';
+
+// -------------------- Types --------------------
+
+interface UsageSummary {
+  totalRequests: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCost: number;
+  avgResponseTimeMs: number;
+  errorRate: number;
+  dailyUsage: Array<{ date: string; requests: number; tokens: number; cost: number }>;
+  costByProvider: Array<{ provider: string; cost: number }>;
+  tokenUsage: { input: number; output: number };
+  topProviders: Array<{ provider: string; requests: number; tokens: number; cost: number }>;
+  topModels: Array<{ model: string; provider: string; requests: number; tokens: number; cost: number }>;
+  budget?: { monthlyBudget: number; spent: number; warningThreshold: number };
+}
+
+// -------------------- Constants --------------------
+
+const CHART_COLORS = [
+  '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#f97316', '#6366f1',
+];
+
+// -------------------- Component --------------------
+
+export function UsagePage() {
+  const activeSiteId = useSiteStore((s) => s.activeSiteId);
+  const [period, setPeriod] = useState<'day' | 'week' | 'month'>('month');
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: queryKeys.aiUsage.summary({ period, siteId: activeSiteId }),
+    queryFn: () => getApi<UsageSummary>('/api/ai/usage/summary', {
+      period,
+      siteId: activeSiteId ?? undefined,
+    }),
+  });
+
+  const summary = data;
+
+  const kpiCards = [
+    { label: 'Total Requests', value: summary?.totalRequests?.toLocaleString() ?? '0', icon: Zap, color: 'bg-emerald-100 text-emerald-600' },
+    { label: 'Total Tokens', value: summary ? ((summary.totalInputTokens + summary.totalOutputTokens) / 1000).toFixed(1) + 'K' : '0', icon: Activity, color: 'bg-sky-100 text-sky-600' },
+    { label: 'Total Cost', value: summary ? `$${summary.totalCost.toFixed(2)}` : '$0.00', icon: DollarSign, color: 'bg-amber-100 text-amber-600' },
+    { label: 'Avg Response Time', value: summary ? `${summary.avgResponseTimeMs.toFixed(0)}ms` : '0ms', icon: Clock, color: 'bg-violet-100 text-violet-600' },
+    { label: 'Error Rate', value: summary ? `${(summary.errorRate * 100).toFixed(1)}%` : '0%', icon: AlertTriangle, color: 'bg-red-100 text-red-600' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Period Selector */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold flex items-center gap-2"><BarChart3 className="h-5 w-5" /> Usage Analytics</h2>
+        <ToggleGroup type="single" value={period} onValueChange={(v) => v && setPeriod(v as 'day' | 'week' | 'month')}>
+          <ToggleGroupItem value="day" className="text-xs">Day</ToggleGroupItem>
+          <ToggleGroupItem value="week" className="text-xs">Week</ToggleGroupItem>
+          <ToggleGroupItem value="month" className="text-xs">Month</ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        {kpiCards.map((kpi) => {
+          const Icon = kpi.icon;
+          return (
+            <Card key={kpi.label}>
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${kpi.color}`}><Icon className="h-4 w-4" /></div>
+                <div>
+                  <p className="text-xs text-zinc-500">{kpi.label}</p>
+                  <p className="text-lg font-bold">{isLoading ? <Skeleton className="h-6 w-16 inline-block" /> : kpi.value}</p>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {[1, 2].map((i) => <Card key={i}><CardContent className="p-6"><Skeleton className="h-[300px] w-full" /></CardContent></Card>)}
+        </div>
+      ) : isError ? (
+        <Card><CardContent className="p-8 text-center text-zinc-500">Failed to load usage data.</CardContent></Card>
+      ) : !summary ? (
+        <Card><CardContent className="p-8 text-center text-zinc-500">No usage data available.</CardContent></Card>
+      ) : (
+        <>
+          {/* Budget Progress */}
+          {summary.budget && (
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium">Monthly Budget</p>
+                  <p className="text-sm text-zinc-500">${summary.budget.spent.toFixed(2)} / ${summary.budget.monthlyBudget.toFixed(2)}</p>
+                </div>
+                <Progress value={(summary.budget.spent / summary.budget.monthlyBudget) * 100} />
+                <p className="text-xs text-zinc-400 mt-1">Warning at {summary.budget.warningThreshold}%</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Charts Row 1 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Daily Usage Line Chart */}
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Daily Usage (Requests)</CardTitle></CardHeader>
+              <CardContent className="p-4">
+                {summary.dailyUsage?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={250}>
+                    <LineChart data={summary.dailyUsage}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
+                      <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#a1a1aa" />
+                      <YAxis tick={{ fontSize: 11 }} stroke="#a1a1aa" />
+                      <RechartsTooltip />
+                      <Line type="monotone" dataKey="requests" stroke="#10b981" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[250px] flex items-center justify-center text-zinc-400 text-sm">No daily data</div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Cost by Provider Bar Chart */}
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Cost by Provider</CardTitle></CardHeader>
+              <CardContent className="p-4">
+                {summary.costByProvider?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={summary.costByProvider}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
+                      <XAxis dataKey="provider" tick={{ fontSize: 11 }} stroke="#a1a1aa" />
+                      <YAxis tick={{ fontSize: 11 }} stroke="#a1a1aa" />
+                      <RechartsTooltip />
+                      <Bar dataKey="cost" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[250px] flex items-center justify-center text-zinc-400 text-sm">No cost data</div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Token Usage Pie Chart + Tables */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Token Usage Pie */}
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Token Usage</CardTitle></CardHeader>
+              <CardContent className="p-4">
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'Input Tokens', value: summary.totalInputTokens },
+                        { name: 'Output Tokens', value: summary.totalOutputTokens },
+                      ]}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={80}
+                      innerRadius={40}
+                    >
+                      <Cell fill="#10b981" />
+                      <Cell fill="#f59e0b" />
+                    </Pie>
+                    <Legend iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+                    <RechartsTooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Top Providers Table */}
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Top Providers</CardTitle></CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="max-h-[240px]">
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Provider</TableHead><TableHead className="text-right">Requests</TableHead><TableHead className="text-right">Cost</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {(summary.topProviders ?? []).length === 0 ? (
+                        <TableRow><TableCell colSpan={3} className="text-center py-4 text-zinc-400 text-sm">No data</TableCell></TableRow>
+                      ) : (summary.topProviders ?? []).map((p, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="text-sm font-medium">{p.provider}</TableCell>
+                          <TableCell className="text-right text-sm">{p.requests.toLocaleString()}</TableCell>
+                          <TableCell className="text-right text-sm">${p.cost.toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <ScrollBar />
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            {/* Top Models Table */}
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Top Models</CardTitle></CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="max-h-[240px]">
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Model</TableHead><TableHead className="text-right">Requests</TableHead><TableHead className="text-right">Cost</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {(summary.topModels ?? []).length === 0 ? (
+                        <TableRow><TableCell colSpan={3} className="text-center py-4 text-zinc-400 text-sm">No data</TableCell></TableRow>
+                      ) : (summary.topModels ?? []).map((m, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="text-sm font-medium max-w-[120px] truncate">{m.model}</TableCell>
+                          <TableCell className="text-right text-sm">{m.requests.toLocaleString()}</TableCell>
+                          <TableCell className="text-right text-sm">${m.cost.toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <ScrollBar />
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

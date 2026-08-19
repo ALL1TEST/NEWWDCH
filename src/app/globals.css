@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -119,4 +120,26 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Thin sidebar scrollbar */
+.sidebar-thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.sidebar-thin-scroll:hover {
+  scrollbar-color: oklch(0.7 0 0 / 30%) transparent;
+}
+.sidebar-thin-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-thin-scroll::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 4px;
+}
+.sidebar-thin-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: oklch(0.7 0 0 / 30%);
 }

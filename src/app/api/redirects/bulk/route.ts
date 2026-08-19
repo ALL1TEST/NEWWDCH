@@ -1,0 +1,352 @@
+// ============================================================
+// GET  /api/redirects/bulk?action=export  — Export redirects as CSV
+// POST /api/redirects/bulk?action=import  — Import redirects from CSV
+// ============================================================
+
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import { generateRequestId } from '@/lib/utils';
+import { z } from 'zod/v4';
+import { getSiteWhere } from '@/lib/site-context';
+
+// ---------- Type mappings --------------------------------------------
+
+const TYPE_TO_NUM: Record<string, string> = {
+  PERMANENT_301: '301',
+  TEMPORARY_302: '302',
+  TEMPORARY_307: '307',
+  PERMANENT_308: '308',
+};
+
+const NUM_TO_TYPE: Record<string, string> = {
+  '301': 'PERMANENT_301',
+  '302': 'TEMPORARY_302',
+  '307': 'TEMPORARY_307',
+  '308': 'PERMANENT_308',
+};
+
+const VALID_TYPES = new Set(['301', '302', '307', '308']);
+
+// ---------- Loop detection helper -------------------------------------
+
+async function wouldCreateLoop(fromPath: string, toPath: string, siteFilter: Record<string, string>): Promise<boolean> {
+  const directLoop = await db.redirect.findFirst({
+    where: { ...siteFilter, fromPath: toPath, toPath: fromPath, isActive: true },
+  });
+  if (directLoop) return true;
+
+  let current = toPath;
+  const visited = new Set<string>();
+  visited.add(fromPath);
+
+  while (current) {
+    if (visited.has(current)) return true;
+    visited.add(current);
+
+    const next = await db.redirect.findFirst({
+      where: { ...siteFilter, fromPath: current, isActive: true },
+      select: { toPath: true },
+    });
+
+    if (!next) break;
+    current = next.toPath;
+  }
+
+  return false;
+}
+
+// ---------- CSV parsing -----------------------------------------------
+
+function parseCSV(csvContent: string): { headers: string[]; rows: string[][] } {
+  const lines = csvContent.split(/\r?\n/).filter((l) => l.trim() !== '');
+  if (lines.length === 0) return { headers: [], rows: [] };
+
+  // Simple CSV parser that handles quoted fields
+  function splitRow(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && i + 1 < line.length && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else if (ch === '"') {
+          inQuotes = false;
+        } else {
+          current += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ',') {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+    }
+    result.push(current.trim());
+    return result;
+  }
+
+  const headers = splitRow(lines[0]).map((h) => h.toLowerCase().trim());
+  const rows = lines.slice(1).map(splitRow);
+  return { headers, rows };
+}
+
+// ---------- Validation schema for import ------------------------------
+
+const importSchema = z.object({
+  csvContent: z.string().min(1, 'CSV content is required'),
+});
+
+// =====================================================================
+// GET — export
+// =====================================================================
+
+export async function GET(request: NextRequest) {
+  const id = generateRequestId();
+  const start = Date.now();
+
+  try {
+    const sp = new URL(request.url).searchParams;
+    const action = sp.get('action');
+
+    if (action !== 'export') {
+      return NextResponse.json(
+        { error: { code: 'INVALID_ACTION', message: 'Use ?action=export' }, meta: { requestId: id, timestamp: new Date().toISOString() } },
+        { status: 400 },
+      );
+    }
+
+    const siteFilter = await getSiteWhere(request);
+    const redirects = await db.redirect.findMany({
+      where: siteFilter,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const lines: string[] = ['fromPath,toPath,type,active'];
+    for (const r of redirects) {
+      const typeNum = TYPE_TO_NUM[r.type] || '301';
+      lines.push(`${r.fromPath},${r.toPath},${typeNum},${r.isActive}`);
+    }
+
+    const csv = lines.join('\n');
+
+    return new NextResponse(csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="redirects-export.csv"',
+      },
+    });
+  } catch (error) {
+    console.error(`[REDIRECTS:BULK:EXPORT] ${id} —`, error);
+    return NextResponse.json(
+      { error: { code: 'INTERNAL_ERROR', message: 'Failed to export redirects' }, meta: { requestId: id, timestamp: new Date().toISOString() } },
+      { status: 500 },
+    );
+  }
+}
+
+// =====================================================================
+// POST — import
+// =====================================================================
+
+export async function POST(request: NextRequest) {
+  const id = generateRequestId();
+  const start = Date.now();
+
+  try {
+    const sp = new URL(request.url).searchParams;
+    const action = sp.get('action');
+
+    if (action !== 'import') {
+      return NextResponse.json(
+        { error: { code: 'INVALID_ACTION', message: 'Use ?action=import' }, meta: { requestId: id, timestamp: new Date().toISOString() } },
+        { status: 400 },
+      );
+    }
+
+    const confirm = sp.get('confirm') === 'true';
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: { code: 'INVALID_JSON', message: 'Request body must be valid JSON' }, meta: { requestId: id, timestamp: new Date().toISOString() } },
+        { status: 400 },
+      );
+    }
+
+    const parsed = importSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: parsed.error.issues[0]?.message ?? 'Invalid input data',
+            details: parsed.error.issues.map((i) => ({ field: i.path.join('.'), message: i.message })),
+          },
+          meta: { requestId: id, timestamp: new Date().toISOString() },
+        },
+        { status: 400 },
+      );
+    }
+
+    const { csvContent } = parsed.data;
+    const { headers, rows } = parseCSV(csvContent);
+
+    // Find column indices: support 'from'/'fromPath', 'to'/'toPath', 'type'
+    const fromIdx = headers.findIndex((h) => h === 'from' || h === 'frompath');
+    const toIdx = headers.findIndex((h) => h === 'to' || h === 'topath');
+    const typeIdx = headers.findIndex((h) => h === 'type');
+
+    if (fromIdx === -1 || toIdx === -1) {
+      return NextResponse.json(
+        { error: { code: 'INVALID_CSV', message: 'CSV must have "from" (or "fromPath") and "to" (or "toPath") columns' }, meta: { requestId: id, timestamp: new Date().toISOString() } },
+        { status: 400 },
+      );
+    }
+
+    const siteFilter = await getSiteWhere(request);
+    const siteId = request.nextUrl.searchParams.get('siteId') || undefined;
+
+    // Validate all rows
+    const errors: { row: number; message: string }[] = [];
+    const validRows: { fromPath: string; toPath: string; type: string }[] = [];
+    const seenFromPaths = new Set<string>();
+
+    // Fetch existing active redirects' fromPaths for duplicate check
+    const existingRedirects = await db.redirect.findMany({
+      where: { ...siteFilter, isActive: true },
+      select: { fromPath: true },
+    });
+    const existingFromPaths = new Set(existingRedirects.map((r) => r.fromPath));
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2; // CSV row number (1-indexed, after header)
+
+      const fromVal = row[fromIdx]?.trim() || '';
+      const toVal = row[toIdx]?.trim() || '';
+      const typeVal = typeIdx >= 0 ? (row[typeIdx]?.trim() || '301') : '301';
+
+      // Check from is present
+      if (!fromVal) {
+        errors.push({ row: rowNum, message: 'Missing "from" path' });
+        continue;
+      }
+
+      // Check to is present
+      if (!toVal) {
+        errors.push({ row: rowNum, message: 'Missing "to" path' });
+        continue;
+      }
+
+      // from must start with /
+      if (!fromVal.startsWith('/')) {
+        errors.push({ row: rowNum, message: `"from" path must start with /: "${fromVal}"` });
+        continue;
+      }
+
+      // to must start with /
+      if (!toVal.startsWith('/')) {
+        errors.push({ row: rowNum, message: `"to" path must start with /: "${toVal}"` });
+        continue;
+      }
+
+      // type must be valid
+      if (!VALID_TYPES.has(typeVal)) {
+        errors.push({ row: rowNum, message: `Invalid redirect type "${typeVal}". Must be one of: 301, 302, 307, 308` });
+        continue;
+      }
+
+      // from and to cannot be the same
+      if (fromVal === toVal) {
+        errors.push({ row: rowNum, message: '"from" and "to" paths cannot be the same' });
+        continue;
+      }
+
+      // Duplicate within import
+      if (seenFromPaths.has(fromVal)) {
+        errors.push({ row: rowNum, message: `Duplicate source path within import: "${fromVal}"` });
+        continue;
+      }
+      seenFromPaths.add(fromVal);
+
+      // Check existing active redirect with same fromPath
+      if (existingFromPaths.has(fromVal)) {
+        errors.push({ row: rowNum, message: `An active redirect with from path "${fromVal}" already exists` });
+        continue;
+      }
+
+      validRows.push({ fromPath: fromVal, toPath: toVal, type: NUM_TO_TYPE[typeVal] || 'PERMANENT_301' });
+    }
+
+    // If not confirmed, return validation results only
+    if (!confirm) {
+      return NextResponse.json({
+        data: {
+          validRows: validRows.length,
+          invalidRows: errors.length,
+          errors,
+          imported: 0,
+          skipped: 0,
+          errorsDuringImport: 0,
+        },
+        meta: { requestId: id, timestamp: new Date().toISOString(), duration: Date.now() - start },
+      });
+    }
+
+    // Confirm mode: actually import valid rows
+    let imported = 0;
+    let skipped = 0;
+    let errorsDuringImport = 0;
+
+    for (const row of validRows) {
+      try {
+        // Loop detection
+        const loop = await wouldCreateLoop(row.fromPath, row.toPath, siteFilter);
+        if (loop) {
+          errorsDuringImport++;
+          continue;
+        }
+
+        await db.redirect.create({
+          data: {
+            fromPath: row.fromPath,
+            toPath: row.toPath,
+            type: row.type as 'PERMANENT_301' | 'TEMPORARY_302' | 'TEMPORARY_307' | 'PERMANENT_308',
+            siteId,
+          },
+        });
+        imported++;
+      } catch {
+        errorsDuringImport++;
+      }
+    }
+
+    return NextResponse.json({
+      data: {
+        validRows: validRows.length,
+        invalidRows: errors.length,
+        errors,
+        imported,
+        skipped,
+        errorsDuringImport,
+      },
+      meta: { requestId: id, timestamp: new Date().toISOString(), duration: Date.now() - start },
+    });
+  } catch (error) {
+    console.error(`[REDIRECTS:BULK:IMPORT] ${id} —`, error);
+    return NextResponse.json(
+      { error: { code: 'INTERNAL_ERROR', message: 'Failed to import redirects' }, meta: { requestId: id, timestamp: new Date().toISOString() } },
+      { status: 500 },
+    );
+  }
+}

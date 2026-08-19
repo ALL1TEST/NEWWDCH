@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,20 +7,2688 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum PostStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  PUBLISHED
+  UNPUBLISHED
+  ARCHIVED
 }
 
-model Post {
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  EDITOR
+  AUTHOR
+  CONTRIBUTOR
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+}
+
+enum ContentContributorRole {
+  AUTHOR
+  CO_AUTHOR
+  REVIEWER
+  TRANSLATOR
+}
+
+enum TranslationAssignmentStatus {
+  PENDING
+  IN_PROGRESS
+  REVIEW
+  APPROVED
+}
+
+enum MediaScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+}
+
+enum MediaProcessingStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  ERROR
+}
+
+enum ReusableBlockType {
+  RICH_TEXT
+  HTML
+  CODE_SNIPPET
+}
+
+enum NavItemType {
+  PAGE_LINK
+  CATEGORY_LINK
+  CUSTOM_URL
+  SEPARATOR
+  DROPDOWN
+  CONTENT_REFERENCE
+}
+
+enum MenuLocation {
+  HEADER
+  SECONDARY
+  FOOTER
+  MOBILE
+}
+
+enum MenuStatus {
+  ACTIVE
+  DRAFT
+  DISABLED
+}
+
+enum RedirectType {
+  PERMANENT_301
+  TEMPORARY_302
+  TEMPORARY_307
+  PERMANENT_308
+}
+
+enum SeoIssueSeverity {
+  CRITICAL
+  WARNING
+  INFO
+}
+
+enum IndexingStatusType {
+  INDEXED
+  PENDING
+  EXCLUDED
+  DISCOVERED
+  ERROR
+}
+
+enum BrokenLinkType {
+  INTERNAL
+  EXTERNAL
+  IMAGE
+  PDF
+  ANCHOR
+}
+
+enum BrokenLinkStatus {
+  BROKEN
+  IGNORED
+  FIXED
+}
+
+enum SitemapGenStatus {
+  PENDING
+  GENERATED
+  ERROR
+}
+
+enum SearchConsoleConnStatus {
+  CONNECTED
+  DISCONNECTED
+  EXPIRED
+}
+
+enum CommentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FLAGGED
+  SPAM
+}
+
+enum FormStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum SubmissionStatus {
+  RECEIVED
+  PROCESSING
+  COMPLETED
+  SPAM
+}
+
+enum SubscriberStatus {
+  SUBSCRIBED
+  UNSUBSCRIBED
+  BOUNCED
+  COMPLAINED
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  PAUSED
+  FAILED
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  ACTION_REQUIRED
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  PUSH
+  SLACK
+}
+
+enum BackupStatus {
+  CREATING
+  COMPLETED
+  FAILED
+  RESTORING
+  RESTORED
+  VERIFYING
+  VERIFIED
+  DELETING
+}
+
+enum BackupType {
+  AUTOMATED
+  MANUAL
+}
+
+enum BackupScope {
+  FULL
+  DATABASE_ONLY
+  MEDIA_ONLY
+  FILES_ONLY
+  SETTINGS_ONLY
+}
+
+enum BackupStorageProvider {
+  LOCAL
+  AMAZON_S3
+  GOOGLE_DRIVE
+  DROPBOX
+  ONEDRIVE
+  CLOUDFLARE_R2
+  BACKBLAZE_B2
+  FTP
+  SFTP
+}
+
+enum BackupVerificationStatus {
+  PENDING
+  VERIFIED
+  WARNING
+  FAILED
+  SKIPPED
+}
+
+enum BackupEncryptionStatus {
+  NONE
+  ENCRYPTED
+  DECRYPTED
+}
+
+enum BackupScheduleFrequency {
+  HOURLY
+  EVERY_6_HOURS
+  DAILY
+  WEEKLY
+  MONTHLY
+  CUSTOM_CRON
+}
+
+enum IpRuleType {
+  ALLOW
+  BLOCK
+}
+
+enum DependencyHealthStatus {
+  UP
+  DEGRADED
+  DOWN
+}
+
+enum BulkOperationType {
+  DELETE
+  PUBLISH
+  UNPUBLISH
+  ARCHIVE
+  RESTORE
+  MOVE
+  ASSIGN
+  EXPORT
+  IMPORT
+  ADD_TAGS
+  REMOVE_TAGS
+}
+
+enum ImportExportType {
+  IMPORT
+  EXPORT
+}
+
+enum ImportExportFormat {
+  JSON
+  CSV
+  MARKDOWN
+}
+
+enum ResourceType {
+  MEDIA
+  BACKUP
+  EXPORT
+  OTHER
+}
+
+enum StoragePeriod {
+  DAILY
+  MONTHLY
+}
+
+enum ApiKeyType {
+  LIVE
+  TEST
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  INACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum ApiKeyEnvironment {
+  DEVELOPMENT
+  TESTING
+  PRODUCTION
+}
+
+enum ApiKeySiteAccess {
+  CURRENT
+  SELECTED
+  ALL
+}
+
+enum OAuthGrantType {
+  AUTHORIZATION_CODE
+  CLIENT_CREDENTIALS
+  PKCE
+}
+
+enum OAuthClientStatus {
+  ACTIVE
+  INACTIVE
+  REVOKED
+}
+
+// (Legacy AI enums removed — see new enums in AI SERVICES section)
+
+enum WebhookDeliveryStatus {
+  SUCCESS
+  FAILED
+  PENDING
+  RETRYING
+  ABORTED
+  QUEUED
+}
+
+enum WebhookAuthMethod {
+  NONE
+  API_KEY
+  BEARER_TOKEN
+  BASIC_AUTH
+  CUSTOM_SECRET
+}
+
+enum WebhookPayloadFormat {
+  JSON
+  XML
+  FORM_DATA
+}
+
+enum WebhookHttpMethod {
+  POST
+  PUT
+  PATCH
+  GET
+  DELETE
+}
+
+enum WebhookRetryPolicy {
+  NONE
+  FIXED_DELAY
+  EXPONENTIAL_BACKOFF
+}
+
+enum WebhookScope {
+  ALL_SITES
+  SPECIFIC_SITE
+}
+
+enum EmailTemplateStatus {
+  ENABLED
+  DISABLED
+  DRAFT
+}
+
+enum EmailTemplateCategory {
+  CUSTOMER_EMAILS
+  AUTHENTICATION
+  NEWSLETTER
+  MARKETING
+  TRANSACTIONAL
+  NOTIFICATIONS
+  BILLING
+  SYSTEM
+}
+
+enum EmailProvider {
+  SMTP
+  SES
+  RESEND
+  MAILGUN
+  SENDGRID
+  POSTMARK
+  BREVO
+  ELASTIC_EMAIL
+}
+
+enum JobPriority {
+  CRITICAL
+  HIGH
+  NORMAL
+  LOW
+  BATCH
+}
+
+enum JobStatus {
+  WAITING
+  ACTIVE
+  COMPLETED
+  FAILED
+  RETRYING
+  CANCELLED
+}
+
+enum AlertStatus {
+  TRIGGERED
+  ACKNOWLEDGED
+  RESOLVED
+  SNOOZED
+}
+
+enum ErrorSeverity {
+  INFO
+  WARNING
+  ERROR
+  FATAL
+}
+
+enum ErrorType {
+  RUNTIME
+  DATABASE
+  NETWORK
+  VALIDATION
+  UNKNOWN
+}
+
+enum SettingType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+  EMAIL
+  URL
+  COLOR
+  ENCRYPTED
+  SECRET
+}
+
+enum SettingScope {
+  GLOBAL
+  WORKSPACE
+  USER
+  SITE
+}
+
+enum SettingsCategory {
+  GENERAL
+  LOCALIZATION
+  READING
+  DISCUSSION
+  SEO
+  MEDIA
+  SEARCH_ENGINE
+  EMAIL
+  SECURITY
+  API
+  AI
+  CACHE
+  PERFORMANCE
+  ANALYTICS
+  SEARCH_CONSOLE
+  SITEMAP
+  ROBOTS
+  BACKUPS
+  SCHEDULER
+  NOTIFICATIONS
+  MAINTENANCE
+  MULTI_SITE
+  IMPORT_EXPORT
+  ADVANCED
+}
+
+enum FieldType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+  ENUM
+  FILE
+}
+
+enum StorageProvider {
+  LOCAL
+  S3
+  GCS
+  AZURE
+}
+
+enum FeatureFlagTargetType {
+  USER
+  ROLE
+}
+
+enum SiteStatus {
+  ACTIVE
+  MAINTENANCE
+  SUSPENDED
+  ARCHIVED
+}
+
+// ============================================================
+// MULTI-SITE CORE
+// ============================================================
+
+model Site {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  domain      String?
+  description String?
+  logo        String?
+  favicon     String?
+  status      SiteStatus  @default(ACTIVE)
+  config      String?     // JSON: theme, seo defaults, social links, etc.
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Content
+  contentTypes        ContentType[]
+  contentItems        ContentItem[]
+  contentVersions     ContentVersion[]
+  contentTemplates    ContentTemplate[]
+  reusableBlocks      ReusableBlock[]
+  homepageLayouts     HomepageLayout[]
+  fieldPermissions    FieldPermission[]
+
+  // Media
+  media               Media[]
+  mediaFolders        MediaFolder[]
+  mediaCollections    MediaCollection[]
+  mediaCollectionItems MediaCollectionItem[]
+  mediaUsages         MediaUsage[]
+
+  // Navigation & SEO
+  navigations         Navigation[]
+  navigationVersions  NavigationVersion[]
+  redirects           Redirect[]
+  seoConfigs          SeoConfig[]
+  seoSettings         SeoSetting[]
+  sitemapConfigs      SitemapConfig[]
+  robotsTxts          RobotsTxt[]
+  searchConsoleConns  SearchConsoleConnection[]
+  seoIssues           SeoIssue[]
+  brokenLinks         BrokenLink[]
+  indexingRecords     IndexingRecord[]
+  searchConsoleStats  SearchConsoleStat[]
+  searchConsoleQueries SearchConsoleQuery[]
+  searchConsolePages  SearchConsolePage[]
+
+  // Taxonomy
+  categories          Category[]
+  tags                Tag[]
+
+  // Engagement
+  comments            Comment[]
+  forms               Form[]
+  formSubmissions     FormSubmission[]
+  newsletterSubscribers NewsletterSubscriber[]
+  newsletterCampaigns NewsletterCampaign[]
+
+  // Analytics
+  analyticsEvents     AnalyticsEvent[]
+
+  // Platform
+  settings            Setting[]
+  webhooks            Webhook[]
+  webhookDeliveries   WebhookDelivery[]
+  notifications       Notification[]
+  bulkOperations      BulkOperation[]
+  savedFilters        SavedFilter[]
+  importExportJobs    ImportExportJob[]
+
+  // AI
+  aiProviders         AiProvider[]
+  aiJobs              AiJob[]
+  aiLogs              AiLog[]
+  promptTemplates     PromptTemplate[]
+
+  // Infrastructure
+  queueJobs           QueueJob[]
+
+  // API
+  apiKeys             ApiKey[]
+  oAuthClients        OAuthClient[]
+
+  // Backups
+  backups             Backup[]
+  backupSchedules     BackupSchedule[]
+  backupLogs          BackupLog[]
+  backupStorages      BackupStorage[]
+
+  // Email
+  emailTemplates      EmailTemplate[]
+  smtpSettings        SmtpSetting[]
+
+  // Monitoring
+  systemMetrics       SystemMetric[]
+  errorLogs           ErrorLog[]
+  alertRules          AlertRule[]
+  alerts              Alert[]
+  securityEvents      SecurityEvent[]
+  schedulerLogs       SchedulerLog[]
+
+  @@index([slug])
+  @@index([status])
+}
+
+// ============================================================
+// USER & IDENTITY (5 entities)
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  avatar        String?
+  bio           String?
+  role          UserRole  @default(AUTHOR)
+  status        UserStatus @default(ACTIVE)
+  password      String?
+  emailVerified Boolean   @default(false)
+  mfaEnabled    Boolean   @default(false)
+  mfaSecret     String?
+  recoveryCodes String?
+  lastLoginAt   DateTime?
+  lastLoginIp   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+  assignedSites  String?
+  sitePermissions String?
+
+  // Relations
+  authoredContent   ContentItem[]
+  authorProfile     AuthorProfile?
+  sessions          Session[]
+  accounts          Account[]
+  apiKeys              ApiKey[]
+  oAuthClients         OAuthClient[]
+  personalAccessTokens PersonalAccessToken[]
+  reviewAssignments    ReviewAssignment[] @relation("Reviewer")
+  comments          Comment[]
+  notifications     UserNotificationPreference?
+  auditLogs         AuditLog[]
+  bulkOperations    BulkOperation[]
+  savedFilters      SavedFilter[]
+  aiProviders       AiProvider[] @relation("AiProviderCreator")
+  aiJobs            AiJob[] @relation("AiJobCreator")
+  aiLogs            AiLog[]
+  promptTemplates   PromptTemplate[] @relation("PromptCreator")
+  contentContributions ContentContributor[]
+  promptTemplateVersions PromptTemplateVersion[] @relation("PromptVersionAuthor")
+  webhooks          Webhook[] @relation("WebhookCreator")
+  newsletterCampaigns NewsletterCampaign[] @relation("CampaignAuthor")
+  backups           Backup[] @relation("BackupCreator")
+  backupSchedules   BackupSchedule[] @relation("BackupScheduleCreator")
+  backupStorages    BackupStorage[] @relation("BackupStorageCreator")
+  backupLogs        BackupLog[] @relation("BackupLogCreator")
+  mediaUploads      Media[] @relation("MediaUploader")
+  navVersionCreations NavigationVersion[] @relation("NavVersionAuthor")
+  dashboardLayouts  UserDashboardLayout[]
+  reviewComments    ReviewComment[]
+  translationReviews PostTranslation[] @relation("TranslationReviewer")
+  translations     PostTranslation[] @relation("Translator")
+  contentVersions   ContentVersion[]
+  emailTemplates    EmailTemplate[] @relation("EmailTemplateCreator")
+
+  // Monitoring
+  errorLogs         ErrorLog[]
+  resolvedErrorLogs ErrorLog[] @relation("ErrorLogResolver")
+  acknowledgedAlerts Alert[] @relation("AlertAcknowledger")
+  resolvedAlerts    Alert[] @relation("AlertResolver")
+  securityEvents    SecurityEvent[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+}
+
+model AuthorProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  displayName String?
+  slug        String   @unique
+  bio         String?
+  website     String?
+  twitter     String?
+  github      String?
+  linkedin    String?
+  avatar      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content ContentItem[] @relation("AuthorProfile")
+
+  @@index([slug])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  ipAddress    String?
+  userAgent    String?
+  deviceHash   String?
+  expiresAt    DateTime
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+model Account {
+  id           String   @id @default(cuid())
+  userId       String
+  provider     String
+  providerId   String
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@index([userId])
+}
+
+model ApiKey {
+  id               String              @id @default(cuid())
+  name             String
+  description      String?
+  keyHash          String
+  keyPrefix        String
+  type             ApiKeyType          @default(LIVE)
+  status           ApiKeyStatus        @default(ACTIVE)
+  environment      ApiKeyEnvironment   @default(PRODUCTION)
+  scopes           String
+  userId           String
+  siteId           String?
+  siteAccess       ApiKeySiteAccess    @default(CURRENT)
+  allowedSiteIds   String?             // JSON array of site IDs when siteAccess is SELECTED
+  allowedIps       String?             // JSON array of IP/CIDR patterns
+  allowedDomains   String?             // JSON array of allowed domains
+  allowedOrigins   String?             // JSON array of CORS origins
+  rateLimitPerMin  Int                 @default(100)
+  rateLimitPerHour Int                 @default(1000)
+  rateLimitPerDay  Int                 @default(10000)
+  lastUsedAt       DateTime?
+  lastUsedIp       String?
+  totalRequests    Int                 @default(0)
+  totalErrors      Int                 @default(0)
+  expiresAt        DateTime?
+  isActive         Boolean             @default(true)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site    Site?    @relation(fields: [siteId], references: [id])
+  apiLogs ApiLog[]
+
+  @@index([keyHash])
+  @@index([keyPrefix])
+  @@index([userId])
+  @@index([siteId])
+  @@index([status])
+  @@index([environment])
+}
+
+// ============================================================
+// CONTENT MANAGEMENT (14 entities)
+// ============================================================
+
+model ContentType {
+  id               String   @id @default(cuid())
+  name             String
+  slug             String
+  description      String?
+  icon             String?
+  allowedStatuses  String
+  fields           String
+  isBuiltIn        Boolean  @default(false)
+  siteId           String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  site           Site?           @relation(fields: [siteId], references: [id])
+  contentItems   ContentItem[]
+  fieldPermissions FieldPermission[]
+
+  @@unique([slug, siteId])
+  @@index([slug])
+  @@index([siteId])
+}
+
+model ContentItem {
+  id             String     @id @default(cuid())
+  title          String
+  slug           String
+  status         PostStatus @default(DRAFT)
+  version        Int        @default(0)
+  content        String?
+  excerpt        String?
+  authorId       String
+  contentTypeId  String
+  featuredImageId String?
+  categoryId     String?
+  publishedAt    DateTime?
+  scheduledAt    DateTime?
+  expiresAt      DateTime?
+  seoTitle       String?
+  seoDescription String?
+  seoImageId     String?
+  focusKeyword   String?
+  viewCount      Int        @default(0)
+  siteId         String?
+  deletedAt      DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  site           Site?           @relation(fields: [siteId], references: [id])
+  author         User             @relation(fields: [authorId], references: [id])
+  contentType    ContentType       @relation(fields: [contentTypeId], references: [id])
+  featuredImage  Media?            @relation("FeaturedImage", fields: [featuredImageId], references: [id])
+  category       Category?         @relation(fields: [categoryId], references: [id])
+  seoImage       Media?            @relation("SeoImage", fields: [seoImageId], references: [id])
+  authorProfile  AuthorProfile?   @relation("AuthorProfile", fields: [authorId], references: [userId])
+  tags           Tag[]
+  versions       ContentVersion[]
+  translations   PostTranslation[]
+  reviewAssignments ReviewAssignment[]
+  comments       Comment[]
+  contributors   ContentContributor[]
+
+  @@unique([slug, contentTypeId, deletedAt])
+  @@index([authorId])
+  @@index([contentTypeId])
+  @@index([status])
+  @@index([categoryId])
+  @@index([publishedAt])
+  @@index([scheduledAt])
+  @@index([siteId])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ContentVersion {
+  id          String   @id @default(cuid())
+  contentItemId String
+  versionNumber Int
+  title       String
+  content     String?
+  excerpt     String?
+  changeNote  String?
+  createdById String
+  siteId      String?
+  createdAt   DateTime @default(now())
+
+  site        Site?       @relation(fields: [siteId], references: [id])
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  createdBy   User       @relation(fields: [createdById], references: [id])
+
+  @@unique([contentItemId, versionNumber])
+  @@index([contentItemId])
+  @@index([siteId])
+}
+
+model PostTranslation {
+  id             String @id @default(cuid())
+  contentItemId  String
+  locale         String
+  title          String
+  content        String?
+  excerpt        String?
+  seoTitle       String?
+  seoDescription String?
+  status         TranslationAssignmentStatus @default(PENDING)
+  translatedById String?
+  reviewedById   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  contentItem  ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  translatedBy User?      @relation("Translator", fields: [translatedById], references: [id])
+  reviewedBy   User?      @relation("TranslationReviewer", fields: [reviewedById], references: [id])
+
+  @@unique([contentItemId, locale])
+  @@index([contentItemId])
+  @@index([locale])
+}
+
+model ReviewAssignment {
+  id             String       @id @default(cuid())
+  contentItemId  String
+  reviewerId     String
+  status         ReviewStatus @default(PENDING)
+  reviewNote     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  reviewer    User       @relation("Reviewer", fields: [reviewerId], references: [id])
+  comments    ReviewComment[]
+
+  @@index([contentItemId])
+  @@index([reviewerId])
+  @@index([status])
+}
+
+model ReviewComment {
+  id               String       @id @default(cuid())
+  reviewAssignmentId String
+  authorId         String
+  content          String
+  status           ReviewStatus @default(PENDING)
+  createdAt        DateTime     @default(now())
+
+  reviewAssignment ReviewAssignment @relation(fields: [reviewAssignmentId], references: [id], onDelete: Cascade)
+  author           User          @relation(fields: [authorId], references: [id])
+
+  @@index([reviewAssignmentId])
+}
+
+model ContentContributor {
+  id             String                 @id @default(cuid())
+  contentItemId  String
+  userId         String
+  role           ContentContributorRole @default(AUTHOR)
+  createdAt      DateTime               @default(now())
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([contentItemId, userId])
+  @@index([contentItemId])
+  @@index([userId])
+}
+
+model ContentTemplate {
+  id          String @id @default(cuid())
+  name        String
+  description String?
+  content     String?
+  thumbnailId String?
+  siteId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  site     Site?  @relation(fields: [siteId], references: [id])
+  thumbnail Media? @relation("TemplateThumbnail", fields: [thumbnailId], references: [id])
+
+  @@index([name])
+  @@index([siteId])
+}
+
+model ReusableBlock {
+  id          String            @id @default(cuid())
+  name        String
+  type        ReusableBlockType @default(RICH_TEXT)
+  content     String?
+  category    String?
+  siteId      String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([name])
+  @@index([type])
+  @@index([siteId])
+}
+
+model HomepageLayout {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+  name      String
+  layout    String
+  isActive  Boolean  @default(false)
+  publishedAt DateTime?
+  siteId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([isActive])
+  @@index([siteId])
+}
+
+model FieldPermission {
+  id            String  @id @default(cuid())
+  contentTypeId String
+  fieldName     String
+  roleId        UserRole
+  canRead       Boolean @default(true)
+  canWrite      Boolean @default(false)
+  siteId        String?
+
+  site        Site?       @relation(fields: [siteId], references: [id])
+  contentType ContentType @relation(fields: [contentTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([contentTypeId, fieldName, roleId])
+  @@index([contentTypeId])
+  @@index([roleId])
+  @@index([siteId])
+}
+
+// ============================================================
+// MEDIA MANAGEMENT (5 entities)
+// ============================================================
+
+model Media {
+  id               String               @id @default(cuid())
+  filename         String
+  originalName     String
+  mimeType         String
+  size             Int
+  width            Int?
+  height           Int?
+  alt              String?
+  caption          String?
+  seoTitle         String?
+  metaDescription  String?
+  focusKeywords    String?
+  imageDescription String?
+  folderId         String?
+  url              String
+  thumbnailUrl     String?
+  processingStatus MediaProcessingStatus @default(UPLOADING)
+  scanStatus       MediaScanStatus       @default(PENDING)
+  metadata         String?
+  blurhash         String?
+  uploadedById     String
+  siteId           String?
+  deletedAt        DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  site               Site?                   @relation(fields: [siteId], references: [id])
+  folder             MediaFolder?            @relation(fields: [folderId], references: [id])
+  uploadedBy         User                    @relation("MediaUploader", fields: [uploadedById], references: [id])
+  featuredContent     ContentItem[]           @relation("FeaturedImage")
+  seoContent          ContentItem[]           @relation("SeoImage")
+  templateThumbnails  ContentTemplate[]       @relation("TemplateThumbnail")
+  seoOgImages         SeoConfig[]            @relation("SeoOgImage")
+  collections         MediaCollectionItem[]
+  usages              MediaUsage[]
+
+  @@index([folderId])
+  @@index([mimeType])
+  @@index([uploadedById])
+  @@index([processingStatus])
+  @@index([siteId])
+  @@index([createdAt])
+}
+
+model MediaFolder {
+  id        String  @id @default(cuid())
+  name      String
+  parentId  String?
+  siteId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  site    Site?         @relation(fields: [siteId], references: [id])
+  parent   MediaFolder?  @relation("FolderTree", fields: [parentId], references: [id])
+  children MediaFolder[] @relation("FolderTree")
+  media    Media[]
+
+  @@index([parentId])
+  @@index([siteId])
+}
+
+model MediaUsage {
+  id            String   @id @default(cuid())
+  mediaId       String
+  resourceType  String
+  resourceId    String
+  field         String?
+  siteId        String?
+  createdAt     DateTime @default(now())
+
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  site  Site? @relation(fields: [siteId], references: [id])
+
+  @@index([mediaId])
+  @@index([resourceType, resourceId])
+  @@index([siteId])
+}
+
+model MediaCollection {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  siteId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  site  Site?                @relation(fields: [siteId], references: [id])
+  items MediaCollectionItem[]
+
+  @@index([name])
+  @@index([siteId])
+}
+
+model MediaCollectionItem {
+  id            String @id @default(cuid())
+  collectionId  String
+  mediaId       String
+  sortOrder     Int    @default(0)
+  siteId        String?
+  createdAt     DateTime @default(now())
+
+  collection MediaCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  media      Media          @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  site       Site?          @relation(fields: [siteId], references: [id])
+
+  @@unique([collectionId, mediaId])
+  @@index([collectionId])
+  @@index([siteId])
+}
+
+// ============================================================
+// NAVIGATION & SEO (4 entities)
+// ============================================================
+
+model Navigation {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String
+  description String?
+  items       String
+  location    MenuLocation?
+  status      MenuStatus  @default(DRAFT)
+  isActive    Boolean     @default(true)
+  siteId      String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  site     Site?              @relation(fields: [siteId], references: [id])
+  versions NavigationVersion[]
+
+  @@unique([slug, siteId])
+  @@index([isActive])
+  @@index([siteId])
+  @@index([location])
+  @@index([status])
+}
+
+model NavigationVersion {
+  id           String   @id @default(cuid())
+  navigationId String
+  version      Int
+  items        String
+  createdById  String
+  siteId       String?
+  createdAt    DateTime @default(now())
+
+  site      Site?     @relation(fields: [siteId], references: [id])
+  navigation Navigation @relation(fields: [navigationId], references: [id], onDelete: Cascade)
+  createdBy   User       @relation("NavVersionAuthor", fields: [createdById], references: [id])
+
+  @@unique([navigationId, version])
+  @@index([navigationId])
+  @@index([siteId])
+}
+
+model Redirect {
+  id              String       @id @default(cuid())
+  fromPath        String
+  toPath          String
+  type            RedirectType @default(PERMANENT_301)
+  hitCount        Int          @default(0)
+  isActive        Boolean      @default(true)
+  isAutoGenerated Boolean      @default(false)
+  sourceType      String?
+  sourceId        String?
+  siteId          String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([fromPath])
+  @@index([isActive])
+  @@index([isAutoGenerated])
+  @@index([siteId])
+}
+
+model SeoConfig {
+  id               String   @id @default(cuid())
+  resourceType     String
+  resourceId       String
+  metaTitle        String?
+  metaDescription  String?
+  ogTitle          String?
+  ogDescription    String?
+  ogImageId        String?
+  canonicalUrl     String?
+  robots           String?
+  structuredData   String?
+  siteId           String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  site    Site?  @relation(fields: [siteId], references: [id])
+  ogImage Media? @relation("SeoOgImage", fields: [ogImageId], references: [id])
+
+  @@unique([resourceType, resourceId, siteId])
+  @@index([resourceType, resourceId])
+  @@index([siteId])
+}
+
+model SeoSetting {
+  id                    String   @id @default(cuid())
+  autoRedirectsOnSlugChange Boolean @default(true)
+  siteId                String?  @unique
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @default(now())
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([siteId])
+}
+
+model SitemapConfig {
+  id               String          @id @default(cuid())
+  urlCount         Int             @default(0)
+  status           SitemapGenStatus @default(PENDING)
+  autoGenerate     Boolean         @default(false)
+  lastGeneratedAt   DateTime?
+  lastPingedGoogle  DateTime?
+  lastPingedBing    DateTime?
+  xmlContent       String?
+  siteId           String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([siteId])
+}
+
+model RobotsTxt {
+  id        String   @id @default(cuid())
+  content   String   @default("User-agent: *\nAllow: /\n\nSitemap: ")
+  siteId    String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+}
+
+model SearchConsoleConnection {
+  id           String                  @id @default(cuid())
+  siteUrl      String
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  status       SearchConsoleConnStatus @default(DISCONNECTED)
+  lastSyncAt   DateTime?
+  siteId       String?
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  site       Site?                  @relation(fields: [siteId], references: [id])
+  stats      SearchConsoleStat[]
+  topQueries SearchConsoleQuery[]
+  topPages   SearchConsolePage[]
+
+  @@index([siteId])
+}
+
+model SearchConsoleStat {
+  id           String   @id @default(cuid())
+  date         String
+  clicks       Int      @default(0)
+  impressions  Int      @default(0)
+  ctr          Float    @default(0)
+  position     Float    @default(0)
+  connectionId String
+  siteId       String?
+  createdAt    DateTime @default(now())
+
+  connection SearchConsoleConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  site       Site?                    @relation(fields: [siteId], references: [id])
+
+  @@index([connectionId])
+  @@index([date])
+  @@index([siteId])
+}
+
+model SearchConsoleQuery {
+  id           String   @id @default(cuid())
+  query        String
+  clicks       Int      @default(0)
+  impressions  Int      @default(0)
+  ctr          Float    @default(0)
+  position     Float    @default(0)
+  connectionId String
+  siteId       String?
+  createdAt    DateTime @default(now())
+
+  connection SearchConsoleConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  site       Site?                    @relation(fields: [siteId], references: [id])
+
+  @@index([connectionId])
+  @@index([siteId])
+}
+
+model SearchConsolePage {
+  id           String   @id @default(cuid())
+  pageUrl      String
+  clicks       Int      @default(0)
+  impressions  Int      @default(0)
+  ctr          Float    @default(0)
+  position     Float    @default(0)
+  connectionId String
+  siteId       String?
+  createdAt    DateTime @default(now())
+
+  connection SearchConsoleConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  site       Site?                    @relation(fields: [siteId], references: [id])
+
+  @@index([connectionId])
+  @@index([siteId])
+}
+
+model SeoIssue {
+  id             String           @id @default(cuid())
+  severity       SeoIssueSeverity @default(WARNING)
+  resourceType   String
+  resourceId     String?
+  pageUrl        String
+  problem        String
+  recommendation String
+  isResolved     Boolean          @default(false)
+  siteId         String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([severity])
+  @@index([isResolved])
+  @@index([siteId])
+}
+
+model BrokenLink {
+  id          String           @id @default(cuid())
+  brokenUrl   String
+  sourcePage  String
+  statusCode  Int?
+  linkType    BrokenLinkType   @default(INTERNAL)
+  status      BrokenLinkStatus @default(BROKEN)
+  anchorText  String?
+  siteId      String?
+  detectedAt  DateTime         @default(now())
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([linkType])
+  @@index([status])
+  @@index([siteId])
+  @@index([detectedAt])
+}
+
+model IndexingRecord {
+  id             String             @id @default(cuid())
+  title          String
+  pageUrl        String
+  status         IndexingStatusType @default(PENDING)
+  lastCrawl      DateTime?
+  lastIndexed    DateTime?
+  coverageError  String?
+  siteId         String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([status])
+  @@index([siteId])
+}
+
+// ============================================================
+// TAXONOMY (2 entities)
+// ============================================================
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String
+  description String?
+  parentId    String?
+  sortOrder   Int       @default(0)
+  siteId      String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  site     Site?     @relation(fields: [siteId], references: [id])
+  parent   Category?     @relation("CategoryTree", fields: [parentId], references: [id])
+  children   Category[]    @relation("CategoryTree")
+  content    ContentItem[]
+
+  @@unique([slug, parentId, siteId])
+  @@index([parentId])
+  @@index([sortOrder])
+  @@index([siteId])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String
+  color     String?
+  siteId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  site    Site?        @relation(fields: [siteId], references: [id])
+  content ContentItem[]
+
+  @@unique([slug, siteId])
+  @@index([name])
+  @@index([siteId])
+}
+
+// ============================================================
+// ENGAGEMENT (5 entities)
+// ============================================================
+
+model Comment {
+  id          String        @id @default(cuid())
+  content     String
+  authorId    String
+  contentItemId String
+  parentId    String?
+  status      CommentStatus @default(PENDING)
+  ipAddress   String?
+  userAgent   String?
+  siteId      String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  site        Site?        @relation(fields: [siteId], references: [id])
+  author      User          @relation(fields: [authorId], references: [id])
+  contentItem ContentItem   @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  parent      Comment?      @relation("CommentTree", fields: [parentId], references: [id])
+  children    Comment[]     @relation("CommentTree")
+
+  @@index([contentItemId])
+  @@index([authorId])
+  @@index([status])
+  @@index([parentId])
+  @@index([siteId])
+}
+
+model Form {
+  id          String     @id @default(cuid())
+  name        String
+  description String?
+  fields      String
+  status      FormStatus @default(DRAFT)
+  siteId      String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  site        Site?           @relation(fields: [siteId], references: [id])
+  submissions FormSubmission[]
+
+  @@index([status])
+  @@index([siteId])
+}
+
+model FormSubmission {
+  id         String           @id @default(cuid())
+  formId     String
+  data       String
+  status     SubmissionStatus @default(RECEIVED)
+  ipAddress  String?
+  userAgent  String?
+  siteId     String?
+  createdAt  DateTime         @default(now())
+
+  site Site? @relation(fields: [siteId], references: [id])
+  form Form @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId])
+  @@index([status])
+  @@index([siteId])
+  @@index([createdAt])
+}
+
+model NewsletterSubscriber {
+  id         String            @id @default(cuid())
+  email      String
+  name       String?
+  status     SubscriberStatus  @default(SUBSCRIBED)
+  source     String            @default("FORM")
+  subscribedAt DateTime         @default(now())
+  unsubscribedAt DateTime?
+  siteId     String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@unique([email, siteId])
+  @@index([email])
+  @@index([status])
+  @@index([siteId])
+}
+
+model NewsletterCampaign {
+  id           String          @id @default(cuid())
+  name         String
+  subject      String
+  content      String?
+  status       CampaignStatus  @default(DRAFT)
+  scheduledAt  DateTime?
+  sentAt       DateTime?
+  recipientCount Int           @default(0)
+  openCount    Int             @default(0)
+  clickCount   Int             @default(0)
+  createdById  String
+  siteId       String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  site      Site? @relation(fields: [siteId], references: [id])
+  createdBy User @relation("CampaignAuthor", fields: [createdById], references: [id])
+
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([siteId])
+}
+
+// ============================================================
+// ANALYTICS (3 entities)
+// ============================================================
+
+model AnalyticsEvent {
+  id         String   @id @default(cuid())
+  sessionId  String?
+  eventType  String
+  resourceType String?
+  resourceId   String?
+  data       String?
+  ipAddress  String?
+  userAgent  String?
+  siteId     String?
+  createdAt  DateTime @default(now())
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([sessionId])
+  @@index([eventType])
+  @@index([resourceType, resourceId])
+  @@index([siteId])
+  @@index([createdAt])
+}
+
+model UserDashboardLayout {
+  id        String @id @default(cuid())
+  userId    String @unique
+  layout    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// PLATFORM ADMIN (14 entities)
+// ============================================================
+
+model Setting {
+  id          String           @id @default(cuid())
+  key         String
+  value       String
+  type        SettingType      @default(STRING)
+  scope       SettingScope     @default(GLOBAL)
+  category    SettingsCategory @default(GENERAL)
+  description String?
+  isEncrypted Boolean          @default(false)
+  isPublic    Boolean          @default(false)
+  userId      String?
+  siteId      String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@unique([key, scope, userId, siteId])
+  @@index([key])
+  @@index([scope])
+  @@index([category])
+  @@index([siteId])
+}
+
+model SettingsAuditLog {
+  id        String   @id @default(cuid())
+  settingId String?
+  key       String
+  category  SettingsCategory @default(GENERAL)
+  oldValue  String?
+  newValue  String?
+  changedBy String?
+  changedByName String?
+  siteId    String?
+  ipAddress String?
+  action    String   @default("UPDATE")
+  createdAt DateTime @default(now())
+
+  @@index([key])
+  @@index([category])
+  @@index([changedBy])
+  @@index([siteId])
+  @@index([createdAt])
+}
+
+model IpRule {
+  id        String     @id @default(cuid())
+  ipAddress  String
+  type      IpRuleType
+  note      String?
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([ipAddress])
+  @@index([type])
+  @@index([isActive])
+}
+
+model Backup {
+  id                String                  @id @default(cuid())
+  name              String                  @default("")
+  filename          String
+  scope             BackupScope             @default(FULL)
+  size              Int                     @default(0)
+  type              BackupType              @default(MANUAL)
+  status            BackupStatus            @default(CREATING)
+  note              String?
+  storageProvider   BackupStorageProvider   @default(LOCAL)
+  storagePath       String?
+  encryptionStatus  BackupEncryptionStatus  @default(NONE)
+  verificationStatus BackupVerificationStatus @default(PENDING)
+  checksum          String?
+  databaseSize      Int                     @default(0)
+  fileCount         Int                     @default(0)
+  durationMs        Int?
+  downloadCount     Int                     @default(0)
+  siteId            String?
+  siteName          String?
+  createdById       String
+  completedAt       DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  createdBy  User             @relation("BackupCreator", fields: [createdById], references: [id])
+  site       Site?            @relation(fields: [siteId], references: [id])
+  schedule   BackupSchedule?  @relation(fields: [scheduleId], references: [id])
+  scheduleId String?
+  logs       BackupLog[]
+
+  @@index([status])
+  @@index([type])
+  @@index([scope])
+  @@index([storageProvider])
+  @@index([siteId])
+  @@index([scheduleId])
+  @@index([createdAt])
+}
+
+model BackupSchedule {
+  id             String                    @id @default(cuid())
+  name           String
+  description    String                    @default("")
+  frequency      BackupScheduleFrequency    @default(DAILY)
+  cronExpression String?
+  scope          BackupScope               @default(FULL)
+  storageProvider BackupStorageProvider     @default(LOCAL)
+  encryptionEnabled Boolean                  @default(false)
+  verificationEnabled Boolean                 @default(true)
+  retentionCount Int                       @default(10)
+  isActive       Boolean                   @default(true)
+  lastRunAt      DateTime?
+  nextRunAt      DateTime?
+  siteId         String?
+  createdById    String
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  createdBy User     @relation("BackupScheduleCreator", fields: [createdById], references: [id])
+  site      Site?    @relation(fields: [siteId], references: [id])
+  backups   Backup[]
+
+  @@index([isActive])
+  @@index([frequency])
+  @@index([siteId])
+  @@index([nextRunAt])
+}
+
+model BackupLog {
+  id               String                  @id @default(cuid())
+  backupId         String?
+  action           String                  @default("create")
+  status           String                  @default("success")
+  databaseSize     Int?
+  fileCount        Int?
+  archiveSize      Int?
+  durationMs       Int?
+  storageProvider  BackupStorageProvider?
+  verificationResult String?
+  errorMessage     String?
+  warnings         String?
+  siteId           String?
+  createdById      String?
+  createdAt         DateTime                @default(now())
+
+  backup   Backup? @relation(fields: [backupId], references: [id], onDelete: Cascade)
+  site     Site?   @relation(fields: [siteId], references: [id])
+  createdBy User?   @relation("BackupLogCreator", fields: [createdById], references: [id])
+
+  @@index([backupId])
+  @@index([action])
+  @@index([status])
+  @@index([siteId])
+  @@index([createdAt])
+}
+
+model BackupStorage {
+  id        String                  @id @default(cuid())
+  name      String                  @unique
+  provider  BackupStorageProvider   @default(LOCAL)
+  config    String                  @default("{}")
+  isActive  Boolean                 @default(true)
+  lastTestAt DateTime?
+  lastTestResult String?
+  siteId    String?
+  createdById String
+  createdAt  DateTime                @default(now())
+  updatedAt  DateTime                @updatedAt
+
+  site      Site?  @relation(fields: [siteId], references: [id])
+  createdBy User   @relation("BackupStorageCreator", fields: [createdById], references: [id])
+
+  @@index([provider])
+  @@index([isActive])
+  @@index([siteId])
+}
+
+model Notification {
+  id          String            @id @default(cuid())
+  type        NotificationType  @default(INFO)
+  title       String
+  message     String
+  channel     NotificationChannel @default(IN_APP)
+  userId      String?
+  siteId      String?
+  isRead      Boolean           @default(false)
+  link        String?
+  createdAt   DateTime          @default(now())
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([siteId])
+  @@index([createdAt])
+}
+
+model UserNotificationPreference {
+  id        String  @id @default(cuid())
+  userId    String  @unique
+  preferences String
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DependencyHealth {
+  id          String                @id @default(cuid())
+  name        String                @unique
+  status      DependencyHealthStatus @default(UP)
+  responseTime Int?
+  lastCheckedAt DateTime              @default(now())
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+}
+
+model BulkOperation {
+  id          String            @id @default(cuid())
+  type        BulkOperationType
+  resourceType String
+  totalCount  Int               @default(0)
+  completedCount Int             @default(0)
+  failedCount Int               @default(0)
+  status      String            @default("PENDING")
+  initiatedById String
+  siteId      String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  site        Site? @relation(fields: [siteId], references: [id])
+  initiatedBy User @relation(fields: [initiatedById], references: [id])
+
+  @@index([status])
+  @@index([siteId])
+  @@index([createdAt])
+}
+
+model SavedFilter {
+  id        String  @id @default(cuid())
+  name      String
+  module    String
+  config    String
+  userId    String
+  siteId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([module])
+  @@index([siteId])
+}
+
+model ImportExportJob {
+  id          String             @id @default(cuid())
+  type        ImportExportType
+  format      ImportExportFormat
+  resourceType String
+  filename    String?
+  totalCount  Int                @default(0)
+  processedCount Int              @default(0)
+  errorCount  Int                @default(0)
+  status      String             @default("PENDING")
+  initiatedById String
+  siteId      String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([status])
+  @@index([siteId])
+  @@index([createdAt])
+}
+
+model ApiLog {
+  id           String   @id @default(cuid())
+  apiKeyId     String?
+  patId        String?   // PersonalAccessToken ID if authed via PAT
+  method       String
+  path         String
+  query        String?
+  statusCode   Int
+  duration     Int      // ms
+  requestSize  Int      @default(0)
+  responseSize Int      @default(0)
+  ipAddress    String?
+  country      String?
+  userAgent    String?
+  browser      String?
+  device       String?
+  siteId       String?
+  userId       String?   // API key owner or PAT owner
+  errorCode    String?
+  errorMessage String?
+  createdAt    DateTime @default(now())
+
+  apiKey    ApiKey?              @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  pat       PersonalAccessToken? @relation(fields: [patId], references: [id], onDelete: SetNull)
+
+  @@index([apiKeyId])
+  @@index([patId])
+  @@index([createdAt])
+  @@index([method])
+  @@index([statusCode])
+  @@index([ipAddress])
+  @@index([siteId])
+  @@index([userId])
+}
+
+// ============================================================
+// OAUTH CLIENTS
+// ============================================================
+
+model OAuthClient {
+  id           String              @id @default(cuid())
+  name         String
+  description  String?
+  clientId     String              @unique
+  clientSecret String              // hashed
+  grantTypes   String              // JSON array of OAuthGrantType
+  redirectUris String              // JSON array of redirect URLs
+  scopes       String              // JSON array of scope strings
+  status       OAuthClientStatus   @default(ACTIVE)
+  userId       String
+  siteId       String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([status])
+}
+
+// ============================================================
+// PERSONAL ACCESS TOKENS
+// ============================================================
+
+model PersonalAccessToken {
+  id         String   @id @default(cuid())
+  name       String
+  tokenHash  String   @unique
+  tokenPrefix String
+  scopes     String   // JSON array of scope strings
+  userId     String
+  lastUsedAt DateTime?
+  lastUsedIp String?
+  expiresAt  DateTime?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiLogs ApiLog[]
+
+  @@index([tokenHash])
+  @@index([tokenPrefix])
+  @@index([userId])
+}
+
+model FeatureFlag {
+  id          String                  @id @default(cuid())
+  key         String                  @unique
+  name        String
+  description String?
+  isEnabled   Boolean                 @default(false)
+  targetType  FeatureFlagTargetType  @default(ROLE)
+  targetValue String?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@index([key])
+  @@index([isEnabled])
+}
+
+// ============================================================
+// AI SERVICES (enterprise upgrade)
+// ============================================================
+
+enum AiProviderKind {
+  OPENAI
+  ANTHROPIC
+  GEMINI
+  OPENROUTER
+  GROQ
+  DEEPSEEK
+  OLLAMA
+  AZURE_OPENAI
+}
+
+enum AiConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+enum AiJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  RETRYING
+  CANCELLED
+}
+
+enum AiJobType {
+  GENERATE_ARTICLE
+  REWRITE_CONTENT
+  SEO_OPTIMIZATION
+  GENERATE_IMAGES
+  TRANSLATE_ARTICLE
+  CUSTOM
+}
+
+enum PromptCategoryNew {
+  CONTENT_GENERATION
+  IMAGE_GENERATION
+  SEO
+  TRANSLATION
+  SUMMARIZATION
+  MARKETING
+  SOCIAL_MEDIA
+  EMAIL
+  CODING
+  ANALYSIS
+  CUSTOM
+}
+
+model AiProvider {
+  id               String              @id @default(cuid())
+  name             String
+  kind             AiProviderKind
+  isActive         Boolean             @default(true)
+  isDefault        Boolean             @default(false)
+  apiKeyEncrypted  String?
+  baseUrl          String?
+  apiVersion       String?
+  connectionStatus AiConnectionStatus @default(DISCONNECTED)
+  latencyMs        Int?
+  lastError        String?
+  lastUsedAt       DateTime?
+  lastSyncAt       DateTime?
+  lastHealthCheckAt DateTime?
+  pricingInfo      String?             // JSON: { inputCostPer1k, outputCostPer1k, currency }
+  config           String?             // JSON: extra provider-specific config
+  siteId           String?
+  createdById      String
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  site        Site?        @relation(fields: [siteId], references: [id])
+  createdBy    User         @relation("AiProviderCreator", fields: [createdById], references: [id])
+  models      AiModel[]
+  promptTemplates PromptTemplate[]
+  jobs        AiJob[]
+  logs        AiLog[]
+  fallbacksFrom AiProviderFallback[] @relation("FallbackFrom")
+  fallbacksTo   AiProviderFallback[]  @relation("FallbackTo")
+
+  @@index([kind])
+  @@index([isActive])
+  @@index([isDefault])
+  @@index([siteId])
+}
+
+model AiModel {
+  id              String  @id @default(cuid())
+  providerId      String
+  modelId         String  // e.g. "gpt-4o", "claude-3-sonnet"
+  name            String  // display name
+  contextLength   Int?
+  inputCostPer1k  Float?  // USD
+  outputCostPer1k Float?  // USD
+  supportsImages  Boolean @default(false)
+  supportsVision  Boolean @default(false)
+  supportsFunctionCalling Boolean @default(false)
+  supportsJsonMode Boolean @default(false)
+  supportsStreaming Boolean @default(true)
+  supportsTools   Boolean @default(false)
+  isActive        Boolean @default(true)
+  isDefault       Boolean @default(false)
+  lastSyncedAt    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  provider AiProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, modelId])
+  @@index([providerId])
+  @@index([isActive])
+}
+
+model AiProviderFallback {
+  id             String @id @default(cuid())
+  providerId     String
+  fallbackId     String
+  priority       Int    @default(0)
+  createdAt      DateTime @default(now())
+
+  provider  AiProvider @relation("FallbackFrom", fields: [providerId], references: [id], onDelete: Cascade)
+  fallback  AiProvider @relation("FallbackTo", fields: [fallbackId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, fallbackId])
+  @@index([providerId])
+}
+
+model PromptTemplate {
+  id            String           @id @default(cuid())
+  name          String
+  category      PromptCategoryNew
+  description   String?
+  tags          String?          // JSON array of strings
+  variables     String?          // JSON: [{name, label, type, default, required}]
+  systemPrompt  String?
+  userPrompt    String?
+  providerId    String?
+  modelId       String?
+  temperature   Float?
+  maxTokens     Int?
+  version       Int              @default(1)
+  isActive      Boolean          @default(true)
+  isFavorite    Boolean          @default(false)
+  isShared      Boolean          @default(true)
+  usageCount    Int              @default(0)
+  siteId        String?
+  createdById   String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  site        Site?                   @relation(fields: [siteId], references: [id])
+  createdBy    User                    @relation("PromptCreator", fields: [createdById], references: [id])
+  provider    AiProvider?             @relation(fields: [providerId], references: [id])
+  versions    PromptTemplateVersion[]
+
+  @@index([category])
+  @@index([isActive])
+  @@index([siteId])
+  @@index([createdById])
+}
+
+model PromptTemplateVersion {
+  id            String  @id @default(cuid())
+  templateId    String
+  version       Int
+  systemPrompt  String?
+  userPrompt    String?
+  variables     String?
+  temperature   Float?
+  maxTokens     Int?
+  createdById   String
+  createdAt     DateTime @default(now())
+
+  template  PromptTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  createdBy User          @relation("PromptVersionAuthor", fields: [createdById], references: [id])
+
+  @@unique([templateId, version])
+  @@index([templateId])
+}
+
+model AiJob {
+  id            String      @id @default(cuid())
+  title         String
+  type          AiJobType
+  status        AiJobStatus @default(PENDING)
+  providerId    String
+  modelId       String?
+  input         String?
+  output        String?
+  error         String?
+  inputTokens   Int?
+  outputTokens  Int?
+  totalTokens   Int?
+  costUsd       Float?
+  durationMs    Int?
+  priority      Int         @default(5)
+  maxRetries    Int         @default(3)
+  retryCount    Int         @default(0)
+  logs          String?     // JSON array of log entries
+  finishedAt    DateTime?
+  siteId        String?
+  createdById   String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  site      Site?      @relation(fields: [siteId], references: [id])
+  createdBy  User       @relation("AiJobCreator", fields: [createdById], references: [id])
+  provider  AiProvider @relation(fields: [providerId], references: [id])
+
+  @@index([status])
+  @@index([type])
+  @@index([providerId])
+  @@index([siteId])
+  @@index([createdById])
+  @@index([createdAt])
+}
+
+model AiLog {
+  id            String   @id @default(cuid())
+  providerId    String?
+  providerName  String?
+  modelId       String?
+  question      String?
+  response      String?
+  inputTokens   Int?
+  outputTokens  Int?
+  totalTokens   Int?
+  costUsd       Float?
+  durationMs    Int?
+  status        String   @default("success")
+  errorMessage  String?
+  siteId        String?
+  userId        String?
+  createdAt     DateTime @default(now())
+
+  site     Site?      @relation(fields: [siteId], references: [id])
+  user     User?      @relation(fields: [userId], references: [id])
+  provider AiProvider? @relation(fields: [providerId], references: [id])
+
+  @@index([providerId])
+  @@index([userId])
+  @@index([siteId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AiSettings {
+  id                String  @id @default(cuid())
+  scope             String  @default("global") // global | site:{siteId}
+  defaultProviderId String?
+  defaultModelId    String?
+  defaultTemperature Float?  @default(0.7)
+  defaultMaxTokens  Int?    @default(2048)
+  streamingEnabled  Boolean @default(true)
+  jsonModeEnabled   Boolean @default(false)
+  functionCallingEnabled Boolean @default(false)
+  imageModelId      String?
+  embeddingModelId  String?
+  monthlyBudgetUsd  Float?
+  warningThreshold  Float?  // percentage 0-100
+  stopOnBudget      Boolean @default(false)
+  requestsPerMinute Int?
+  tokensPerDay      Int?
+  config            String? // JSON for extra settings
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([scope])
+}
+
+model AiPromptMarketplace {
+  id          String   @id @default(cuid())
+  packName    String
+  slug        String   @unique
+  description String?
+  category    String?  // e.g. "SEO", "Blogging", "Marketing"
+  icon        String?
+  prompts     String   // JSON array of prompt objects
+  installCount Int     @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ============================================================
+// INFRASTRUCTURE (5 entities)
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  resourceType String
+  resourceId   String?
+  details    String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+}
+
+model Webhook {
+  id                String               @id @default(cuid())
+  name              String
+  description       String               @default("")
+  url               String
+  secret            String?
+  events            String
+  isActive          Boolean              @default(true)
+  httpMethod        WebhookHttpMethod    @default(POST)
+  payloadFormat     WebhookPayloadFormat @default(JSON)
+  authMethod        WebhookAuthMethod    @default(NONE)
+  authValue         String               @default("")
+  authUsername      String               @default("")
+  timeout           Int                  @default(10)
+  maxRetries        Int                  @default(3)
+  retryPolicy       WebhookRetryPolicy   @default(EXPONENTIAL_BACKOFF)
+  customHeaders     String               @default("[]")
+  filters           String               @default("[]")
+  conditions        String               @default("[]")
+  scope             WebhookScope         @default(ALL_SITES)
+  lastDeliveryAt    DateTime?
+  lastError         String?
+  lastStatusCode    Int?
+  successCount      Int                  @default(0)
+  failureCount      Int                  @default(0)
+  createdById       String
+  siteId            String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  site      Site?  @relation(fields: [siteId], references: [id])
+  createdBy User   @relation("WebhookCreator", fields: [createdById], references: [id])
+  deliveries WebhookDelivery[]
+
+  @@index([isActive])
+  @@index([siteId])
+  @@index([httpMethod])
+  @@index([scope])
+}
+
+model WebhookDelivery {
+  id              String                @id @default(cuid())
+  webhookId       String
+  webhookName     String
+  event           String
+  payload         String
+  requestHeaders  String                @default("{}")
+  response        String?
+  statusCode      Int?
+  status          WebhookDeliveryStatus @default(PENDING)
+  attempts        Int                   @default(0)
+  maxRetries      Int                   @default(3)
+  duration        Int?
+  nextRetryAt     DateTime?
+  errorMessage    String?
+  siteId          String?
+  createdAt       DateTime              @default(now())
+  completedAt     DateTime?
+
+  site   Site?   @relation(fields: [siteId], references: [id])
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId])
+  @@index([status])
+  @@index([siteId])
+  @@index([createdAt])
+  @@index([event])
+}
+
+model DomainEvent {
+  id           String   @id @default(cuid())
+  eventType    String
+  aggregateType String
+  aggregateId   String
+  payload      String?
+  createdAt    DateTime @default(now())
+
+  @@index([eventType])
+  @@index([aggregateType, aggregateId])
+  @@index([createdAt])
+}
+
+// ============================================================
+// EMAIL TEMPLATES (3 entities)
+// ============================================================
+
+model EmailTemplate {
+  id              String               @id @default(cuid())
+  name            String
+  slug            String               @unique
+  subject         String               @default("")
+  previewText     String               @default("")
+  htmlBody        String               @default("")
+  fromName        String               @default("")
+  fromEmail       String               @default("")
+  replyTo         String               @default("")
+  language        String               @default("en")
+  category        EmailTemplateCategory @default(SYSTEM)
+  status          EmailTemplateStatus   @default(ENABLED)
+  provider        EmailProvider         @default(SMTP)
+  trackOpens      Boolean              @default(true)
+  trackClicks     Boolean              @default(true)
+  enableAttachments Boolean             @default(false)
+  isSystem        Boolean              @default(false)
+  defaultBody     String?
+  analytics       String?
+  siteId          String?
+  createdById     String
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  site      Site?   @relation(fields: [siteId], references: [id])
+  createdBy User    @relation("EmailTemplateCreator", fields: [createdById], references: [id])
+  versions  EmailTemplateVersion[]
+
+  @@index([category])
+  @@index([status])
+  @@index([siteId])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model EmailTemplateVersion {
+  id          String             @id @default(cuid())
+  templateId  String
+  version     Int
+  subject     String             @default("")
+  previewText String             @default("")
+  htmlBody    String             @default("")
+  fromName    String             @default("")
+  fromEmail   String             @default("")
+  replyTo     String             @default("")
+  changeNote  String?
+  createdAt   DateTime           @default(now())
+
+  template EmailTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, version])
+  @@index([templateId])
+  @@index([createdAt])
+}
+
+model SmtpSetting {
+  id        String        @id @default(cuid())
+  name      String
+  provider  EmailProvider @default(SMTP)
+  host      String        @default("")
+  port      Int           @default(587)
+  username  String        @default("")
+  password  String        @default("")
+  fromName  String        @default("")
+  fromEmail String        @default("")
+  replyTo   String        @default("")
+  isDefault Boolean      @default(false)
+  isActive  Boolean      @default(true)
+  siteId    String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([provider])
+  @@index([isActive])
+  @@index([siteId])
+}
+
+model QueueJob {
+  id          String      @id @default(cuid())
+  type        String
+  payload     String
+  priority    JobPriority  @default(NORMAL)
+  status      JobStatus    @default(WAITING)
+  attempts    Int          @default(0)
+  maxAttempts Int          @default(3)
+  runAt       DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  error       String?
+  siteId      String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([type])
+  @@index([status])
+  @@index([priority])
+  @@index([siteId])
+  @@index([runAt])
+  @@index([createdAt])
+}
+
+// ============================================================
+// MONITORING & OBSERVABILITY (enterprise)
+// ============================================================
+
+enum MonitorSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertChannel {
+  IN_APP
+  EMAIL
+  WEBHOOK
+  SLACK
+  DISCORD
+  TELEGRAM
+}
+
+enum ErrorLogSeverity {
+  DEBUG
+  INFO
+  WARNING
+  ERROR
+  FATAL
+}
+
+enum SecurityEventType {
+  FAILED_LOGIN
+  BLOCKED_IP
+  RATE_LIMIT_HIT
+  PERMISSION_ERROR
+  SUSPICIOUS_ACTIVITY
+  EXPIRED_SESSION
+  BRUTE_FORCE_ATTEMPT
+  UNKNOWN
+}
+
+enum SchedulerJobStatus {
+  ENABLED
+  DISABLED
+  RUNNING
+  FAILED
+  RETRYING
+}
+
+model SystemMetric {
+  id          String           @id @default(cuid())
+  metricType  String           // cpu, ram, disk, network_in, network_out, requests, response_time, db_queries, cache_hit_ratio, queue_throughput, ai_usage
+  value       Float
+  unit        String?          // %, ms, bytes, req/s
+  labels      String?          // JSON: { siteId, worker, ... }
+  siteId      String?
+  createdAt   DateTime         @default(now())
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([metricType])
+  @@index([siteId])
+  @@index([createdAt])
+}
+
+model ErrorLog {
+  id            String           @id @default(cuid())
+  exception     String
+  message       String?          @default("")
+  stackTrace    String?
+  module        String?          @default("")
+  url           String?
+  httpMethod    String?
+  userId        String?
+  ipAddress     String?
+  userAgent     String?
+  severity      ErrorLogSeverity @default(ERROR)
+  environment   String?          @default("production")
+  isResolved    Boolean          @default(false)
+  resolvedById  String?
+  resolvedAt    DateTime?
+  siteId        String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  site        Site?  @relation(fields: [siteId], references: [id])
+  user        User?  @relation(fields: [userId], references: [id])
+  resolvedBy  User?  @relation("ErrorLogResolver", fields: [resolvedById], references: [id])
+
+  @@index([severity])
+  @@index([module])
+  @@index([isResolved])
+  @@index([siteId])
+  @@index([createdAt])
+}
+
+model AlertRule {
+  id            String          @id @default(cuid())
+  name          String
+  description   String?         @default("")
+  metricType    String          // cpu, ram, disk, backup_failed, smtp_offline, etc.
+  condition     String          // gt, gte, lt, lte, eq, neq
+  threshold     Float
+  durationSec   Int             @default(60)
+  severity      MonitorSeverity @default(HIGH)
+  channels      String          @default("[\"IN_APP\"]")  // JSON array of AlertChannel
+  isActive      Boolean         @default(true)
+  cooldownSec   Int             @default(300)
+  lastTriggered DateTime?
+  siteId        String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+  alerts Alert[]
+
+  @@index([isActive])
+  @@index([metricType])
+  @@index([siteId])
+}
+
+model Alert {
+  id          String       @id @default(cuid())
+  ruleId      String
+  title       String
+  message     String
+  severity    MonitorSeverity @default(HIGH)
+  status      AlertStatus  @default(TRIGGERED)
+  metricValue Float?
+  threshold   Float?
+  channels    String       @default("[\"IN_APP\"]")
+  acknowledgedById String?
+  acknowledgedAt DateTime?
+  resolvedById    String?
+  resolvedAt      DateTime?
+  siteId      String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  rule         AlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  acknowledgedBy User?   @relation("AlertAcknowledger", fields: [acknowledgedById], references: [id])
+  resolvedBy     User?   @relation("AlertResolver", fields: [resolvedById], references: [id])
+  site           Site?   @relation(fields: [siteId], references: [id])
+
+  @@index([ruleId])
+  @@index([status])
+  @@index([severity])
+  @@index([siteId])
+  @@index([createdAt])
+}
+
+model SecurityEvent {
+  id            String           @id @default(cuid())
+  eventType     SecurityEventType @default(UNKNOWN)
+  description   String           @default("")
+  ipAddress     String?
+  userAgent     String?
+  userId        String?
+  details       String?          // JSON
+  siteId        String?
+  createdAt     DateTime         @default(now())
+
+  site Site? @relation(fields: [siteId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([eventType])
+  @@index([ipAddress])
+  @@index([userId])
+  @@index([siteId])
+  @@index([createdAt])
+}
+
+model SchedulerLog {
+  id            String            @id @default(cuid())
+  jobName       String
+  jobType       String            @default("")
+  status        SchedulerJobStatus @default(ENABLED)
+  lastRunAt     DateTime?
+  nextRunAt     DateTime?
+  lastDuration  Int?              // ms
+  lastError     String?
+  runCount      Int               @default(0)
+  failCount     Int               @default(0)
+  cronExpr      String?           @default("")
+  siteId        String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  @@index([jobName])
+  @@index([status])
+  @@index([siteId])
+  @@index([nextRunAt])
+}
+
+model MonitorSetting {
+  id        String  @id @default(cuid())
+  key       String  @unique
+  value     String  @default("")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

@@ -1,31 +1,36 @@
-'use client'
+'use client';
+
+import { useState } from 'react';
+import dynamic from 'next/dynamic';
+import { ThemeProvider } from 'next-themes';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from '@/components/ui/sonner';
+import { I18nProvider } from '@/lib/i18n';
+
+const AppShell = dynamic(
+  () => import('@/components/layout/admin-app'),
+  { ssr: false, loading: () => <div className="flex items-center justify-center h-screen bg-background"><div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" /></div> }
+);
 
 export default function Home() {
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 60 * 1000,
+        refetchOnWindowFocus: false,
+      },
+    },
+  }));
+
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      gap: '2rem',
-      padding: '1rem'
-    }}>
-      <div style={{
-        position: 'relative',
-        width: '6rem',
-        height: '6rem'
-      }}>
-        <img
-          src="/logo.svg"
-          alt="Z.ai Logo"
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'contain'
-          }}
-        />
-      </div>
-    </div>
-  )
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <I18nProvider>
+          <AppShell />
+          <Toaster />
+        </I18nProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
 }
+
