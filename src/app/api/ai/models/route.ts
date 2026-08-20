@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
 
 // ---------- helpers ---------------------------------------------------
@@ -70,5 +71,78 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error(`[AI/MODELS:LIST] ${id} —`, error);
     return err('Failed to fetch AI models', 500, 'INTERNAL_ERROR');
+  }
+}
+
+// =====================================================================
+// POST — manually create a model (not just from sync)
+// =====================================================================
+
+const createSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(200),
+  modelId: z.string().min(1, 'Model ID is required').max(200),
+  providerId: z.string().min(1, 'Provider is required'),
+  type: z.enum(['TEXT', 'IMAGE']).default('TEXT'),
+  isActive: z.boolean().default(true),
+  isDefault: z.boolean().default(false),
+});
+
+export async function POST(request: NextRequest) {
+  const id = reqId();
+
+  try {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return err('Request body must be valid JSON', 400, 'INVALID_JSON');
+    }
+
+    const parsed = createSchema.safeParse(body);
+    if (!parsed.success) {
+      return err(parsed.error.issues[0]?.message ?? 'Invalid input data', 400, 'VALIDATION_ERROR');
+    }
+
+    const d = parsed.data;
+
+    // Verify the provider exists
+    const provider = await db.aiProvider.findUnique({ where: { id: d.providerId } });
+    if (!provider) {
+      return err('Provider not found', 404, 'NOT_FOUND');
+    }
+
+    // Check for duplicate [providerId, modelId]
+    const existing = await db.aiModel.findUnique({
+      where: { providerId_modelId: { providerId: d.providerId, modelId: d.modelId } },
+    });
+    if (existing) {
+      return err('A model with this Model ID already exists for this provider', 409, 'CONFLICT');
+    }
+
+    // If setting as default, unset other defaults of the same type
+    let isDefault = d.isDefault;
+    if (isDefault) {
+      await db.aiModel.updateMany({
+        where: { type: d.type, isDefault: true },
+        data: { isDefault: false },
+      });
+    }
+
+    const model = await db.aiModel.create({
+      data: {
+        name: d.name,
+        modelId: d.modelId,
+        providerId: d.providerId,
+        type: d.type,
+        isActive: d.isActive,
+        isDefault,
+      },
+      include: { provider: { select: { id: true, name: true, kind: true } } },
+    });
+
+    return ok(model, { requestId: id });
+  } catch (error) {
+    console.error(`[AI/MODELS:CREATE] ${id} —`, error);
+    return err('Failed to create AI model', 500, 'INTERNAL_ERROR');
   }
 }

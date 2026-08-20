@@ -112,9 +112,9 @@ const SUBPAGE_LABELS: Record<string, Record<string, string>> = {
     'providers': 'Providers',
     'models': 'Models',
     'prompts': 'Prompt Library',
-    'usage': 'Usage',
     'settings': 'Settings',
     // Legacy redirects
+    'usage': 'Settings',
     'playground': 'Providers',
     'jobs': 'Providers',
     'logs': 'Providers',

@@ -292,3 +292,33 @@ Stage Summary:
 - AI section simplified for a blogging CMS focus — only AI-powered blog content generation features remain.
 - Removed enterprise features (Playground, Jobs, Logs, Marketplace) that aren't needed for a blog platform.
 - Files modified: src/modules/ai/ai-page.tsx, src/components/layout/breadcrumbs.tsx
+
+---
+Task ID: AI-2
+Agent: main (orchestrator)
+Task: Simplify AI section to 4 tabs (remove Usage), add full model CRUD, simplify Settings
+
+Work Log:
+- src/modules/ai/ai-page.tsx: Removed Usage tab (5→4 tabs: Providers, Models, Prompt Library, Settings). Added 'usage' to LEGACY_REDIRECT → 'settings'. Removed UsagePage import.
+- src/modules/ai/settings-page.tsx: Complete rewrite. Simplified to only Text AI Settings (Default Provider, Default Model, Temperature, Max Tokens) + Image AI Settings (Default Image Provider, Default Image Model) + Save Settings button. Removed: Budget Management, Rate Limits, Fallback Providers, Streaming, JSON Mode, Function Calling, Embedding Model. Added provider→model type filtering (Text models for text, Image models for image).
+- src/modules/ai/models-page.tsx: Complete rewrite with full CRUD. Added Add Model button + dialog (Name, Model ID, Provider dropdown, Type dropdown [Text/Image], Active toggle, Default toggle). Added Edit Model (same dialog prefilled). Added Delete Model with confirmation. Table now shows: Model Name, Model ID, Provider, Type, Default, Active, Actions. Kept Sync All as optional feature. Added type filter.
+- prisma/schema.prisma: Added `type String @default("TEXT")` field to AiModel (TEXT | IMAGE). Ran db:push.
+- src/app/api/ai/models/route.ts: Added POST route for manual model creation (name, modelId, providerId, type, isActive, isDefault). Added zod import. Handles duplicate [providerId, modelId] conflict. Unsets other defaults of same type when setting a new default.
+- src/app/api/ai/models/[id]/route.ts: Updated PATCH route to allow updating type, modelId, providerId. Added logic to unset other defaults of same type when setting isDefault=true.
+- src/components/layout/breadcrumbs.tsx: Updated AI sub-page labels (removed 'usage', added 'usage'→'Settings' legacy redirect).
+
+Browser verification:
+- AI section: exactly 4 tabs (Providers, Models, Prompt Library, Settings) — no Usage tab.
+- Providers tab: works, has Add Provider button.
+- Models tab: works, has Add Model button + dialog with all fields (Name, Model ID, Provider, Type, Active, Default). Has Type column. Has Sync All. No errors.
+- Settings tab: works, has Text AI Settings + Image AI Settings + Save Settings. Budget/RateLimit/Fallback/Streaming/Embedding all removed.
+- No errors on any tab.
+- Lint: 0 errors.
+
+Stage Summary:
+- AI section simplified to 4 clean tabs focused on blog/CMS needs.
+- Full model CRUD: manually add, edit, delete models with Text/Image type support.
+- Settings simplified: only Text (provider/model/temp/maxTokens) + Image (provider/model) + Save.
+- Provider→Model relationship: Settings filters models by selected provider + type.
+- API supports model creation, update (including type/modelId/providerId), delete, set-default.
+- Files modified: ai-page.tsx, settings-page.tsx, models-page.tsx, breadcrumbs.tsx, prisma/schema.prisma, api/ai/models/route.ts, api/ai/models/[id]/route.ts

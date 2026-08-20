@@ -2083,6 +2083,7 @@ model AiModel {
   providerId      String
   modelId         String  // e.g. "gpt-4o", "claude-3-sonnet"
   name            String  // display name
+  type            String  @default("TEXT") // TEXT | IMAGE
   contextLength   Int?
   inputCostPer1k  Float?  // USD
   outputCostPer1k Float?  // USD

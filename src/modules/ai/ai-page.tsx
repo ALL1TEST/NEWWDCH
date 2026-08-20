@@ -5,24 +5,21 @@ import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { ProvidersPage } from './providers-page';
 import { PromptsPage } from './prompts-page';
 import { ModelsPage } from './models-page';
-import { UsagePage } from './usage-page';
 import { SettingsPage } from './settings-page';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Server,
   MessageSquare,
   Boxes,
-  BarChart3,
   Settings,
 } from 'lucide-react';
 
 // Simplified AI section — only features relevant to a blogging CMS.
-// Removed: Playground, Jobs, Logs, Marketplace (enterprise features not needed for blog content generation).
+// Removed: Playground, Jobs, Logs, Marketplace, Usage (provider dashboards handle analytics).
 const AI_SUB_PAGES = [
   { value: 'providers', label: 'Providers', icon: Server },
   { value: 'models', label: 'Models', icon: Boxes },
   { value: 'prompts', label: 'Prompt Library', icon: MessageSquare },
-  { value: 'usage', label: 'Usage', icon: BarChart3 },
   { value: 'settings', label: 'Settings', icon: Settings },
 ] as const;
 
@@ -34,6 +31,7 @@ const LEGACY_REDIRECT: Record<string, AiSubPage> = {
   jobs: 'providers',
   logs: 'providers',
   marketplace: 'providers',
+  usage: 'settings',
 };
 
 export function AiPage() {
@@ -89,9 +87,6 @@ export function AiPage() {
         </TabsContent>
         <TabsContent value="prompts">
           <PromptsPage />
-        </TabsContent>
-        <TabsContent value="usage">
-          <UsagePage />
         </TabsContent>
         <TabsContent value="settings">
           <SettingsPage />

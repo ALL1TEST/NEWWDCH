@@ -23,6 +23,9 @@ function err(message: string, status = 400, code = 'VALIDATION_ERROR') {
 
 const updateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
+  modelId: z.string().min(1).max(200).optional(),
+  providerId: z.string().min(1).optional(),
+  type: z.enum(['TEXT', 'IMAGE']).optional(),
   contextLength: z.number().int().positive().optional(),
   inputCostPer1k: z.number().min(0).optional(),
   outputCostPer1k: z.number().min(0).optional(),
@@ -87,9 +90,21 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       );
     }
 
+    const d = parsed.data;
+
+    // If setting as default, unset other defaults of the same type
+    if (d.isDefault === true) {
+      const modelType = d.type ?? existing.type;
+      await db.aiModel.updateMany({
+        where: { type: modelType, isDefault: true, id: { not: modelId } },
+        data: { isDefault: false },
+      });
+    }
+
     const item = await db.aiModel.update({
       where: { id: modelId },
-      data: parsed.data,
+      data: d,
+      include: { provider: { select: { id: true, name: true, kind: true } } },
     });
 
     return ok(item);
