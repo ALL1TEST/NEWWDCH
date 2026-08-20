@@ -85,7 +85,8 @@ const contentFormSchema = z.object({
 
 type ContentFormValues = z.infer<typeof contentFormSchema>;
 
-const AI_QUICK_ACTIONS = ['Duplicate', 'Make it shorter', 'Fix grammar', 'More professional', 'Add a conclusion'];
+const AI_NORMAL_ACTIONS = ['Make it shorter', 'Fix grammar', 'More professional', 'Add a conclusion'];
+const AI_SELECTED_ACTIONS = ['Make it shorter', 'Fix grammar', 'More professional', 'Rewrite this'];
 
 // -------------------- Preview Component ----------------
 
@@ -384,7 +385,7 @@ function AIAssistDialog({
             className="text-sm"
           />
           <div className="flex flex-wrap gap-1.5">
-            {AI_QUICK_ACTIONS.map((action) => (
+            {AI_NORMAL_ACTIONS.map((action) => (
               <button
                 key={action}
                 type="button"
@@ -427,7 +428,22 @@ export function ContentCreatePage() {
   const [editorContent, setEditorContent] = useState('');
   const [featuredImage, setFeaturedImage] = useState<MediaItem | null>(null);
   const [customTags, setCustomTags] = useState<string[]>([]); // For newly created tags
-  const [selectedText, setSelectedText] = useState(''); // Tracks the currently selected text in the editor
+  const [selectedText, setSelectedText] = useState(''); // Tracks the currently selected text in the editor (transient)
+  const [savedSelectedText, setSavedSelectedText] = useState(''); // Persistent saved selection context for AI bar
+
+  // Fix #2: onSelectionChange handler — set transient selectedText AND persistent savedSelectedText when non-empty
+  const handleEditorSelectionChange = useCallback((text: string) => {
+    setSelectedText(text);
+    if (text) {
+      setSavedSelectedText(text);
+    }
+    // Do NOT clear savedSelectedText when text is empty (focus may have moved to AI bar)
+  }, []);
+
+  const clearSavedSelection = useCallback(() => {
+    setSavedSelectedText('');
+    setSelectedText('');
+  }, []);
 
   // Dialog states
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -833,25 +849,25 @@ export function ContentCreatePage() {
               ref={editorRef}
               content={editorContent}
               onChange={setEditorContent}
-              onSelectionChange={setSelectedText}
+              onSelectionChange={handleEditorSelectionChange}
             />
 
             {/* AI Assistant Bar — floating at bottom */}
             <div className="absolute bottom-0 left-0 right-0 border-t bg-background/95 backdrop-blur-sm">
-              {/* Selected text indicator — shown when text is selected */}
-              {selectedText && (
+              {/* Fix #2/#17: Persistent saved selection indicator (survives focus loss to AI textarea) */}
+              {savedSelectedText && (
                 <div className="flex items-center gap-2 px-3 pt-2 pb-0">
                   <div className="flex items-center gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 px-2.5 py-1 min-w-0 flex-1">
                     <Sparkles className="h-3 w-3 text-amber-500 shrink-0" />
                     <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium shrink-0">Selected:</span>
-                    <span className="text-[11px] text-amber-800 dark:text-amber-300 truncate max-w-[240px]">&ldquo;{selectedText}&rdquo;</span>
+                    <span className="text-[11px] text-amber-800 dark:text-amber-300 truncate max-w-[280px]">&ldquo;{savedSelectedText}&rdquo;</span>
                   </div>
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => { editorRef.current?.editor?.commands.setTextSelection(editorRef.current.editor.state.selection.to); }}
+                    onClick={clearSavedSelection}
                     className="text-[10px] text-muted-foreground hover:text-foreground shrink-0 transition-colors"
-                    title="Clear selection"
+                    title="Clear selection context"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -865,6 +881,11 @@ export function ContentCreatePage() {
                   <textarea
                     value={aiInput}
                     onChange={(e) => setAiInput(e.target.value)}
+                    /* Fix #2: Save editor selection BEFORE the textarea takes focus, so AI actions can still operate on the saved range */
+                    onMouseDown={(e) => {
+                      // Allow textarea to take focus, but first save the editor's selection range
+                      editorRef.current?.saveSelectionForReplace();
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -874,7 +895,7 @@ export function ContentCreatePage() {
                         }
                       }
                     }}
-                    placeholder={selectedText ? 'Edit selected text...' : 'Ask AI to edit your content...'}
+                    placeholder={savedSelectedText ? 'Edit selected text...' : 'Ask AI to edit your content...'}
                     rows={1}
                     className="flex-1 resize-none bg-transparent text-sm leading-normal placeholder:text-muted-foreground/50 focus:outline-none w-full"
                   />
@@ -898,8 +919,9 @@ export function ContentCreatePage() {
                   )}
                 </button>
               </div>
+              {/* Fix #17: Context-aware quick action chips — different per state */}
               <div className="flex gap-1.5 px-3 pb-2.5 flex-wrap">
-                {AI_QUICK_ACTIONS.map((action) => (
+                {(savedSelectedText ? AI_SELECTED_ACTIONS : AI_NORMAL_ACTIONS).map((action) => (
                   <button
                     key={action}
                     type="button"
@@ -908,7 +930,7 @@ export function ContentCreatePage() {
                     disabled={aiGenerateMutation.isPending || aiEditSelectionMutation.isPending}
                     className={cn(
                       'text-[11px] px-2.5 py-1 rounded-full border transition-colors disabled:opacity-50 disabled:pointer-events-none',
-                      selectedText
+                      savedSelectedText
                         ? 'border-amber-300/60 bg-amber-50/60 text-amber-700 dark:bg-amber-950/20 dark:border-amber-700/40 dark:text-amber-400 hover:bg-amber-100/80 dark:hover:bg-amber-900/30'
                         : 'border-border/50 bg-background hover:bg-muted hover:border-border text-muted-foreground',
                     )}

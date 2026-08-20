@@ -25,11 +25,12 @@ import { Superscript } from '@tiptap/extension-superscript';
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
 import OrderedList from '@tiptap/extension-ordered-list';
-import { Extension, Node } from '@tiptap/core';
+import BulletList from '@tiptap/extension-bullet-list';
+import { Extension, Mark, Node } from '@tiptap/core';
 
 const lowlight = createLowlight(common);
 
-// Ordered List style types
+// -------------------- Ordered List styles --------------------
 export type OrderedListStyle = 'decimal' | 'lower-alpha' | 'upper-alpha' | 'lower-roman' | 'upper-roman';
 export const ORDERED_LIST_STYLES: { label: string; value: OrderedListStyle; preview: string }[] = [
   { label: 'Decimal', value: 'decimal', preview: '1, 2, 3' },
@@ -39,7 +40,6 @@ export const ORDERED_LIST_STYLES: { label: string; value: OrderedListStyle; prev
   { label: 'Upper Roman', value: 'upper-roman', preview: 'I, II, III' },
 ];
 
-// Custom OrderedList extension with list-style-type attribute
 const StyledOrderedList = OrderedList.extend({
   addAttributes() {
     return {
@@ -60,7 +60,274 @@ const StyledOrderedList = OrderedList.extend({
       setOrderedListStyle: (style: OrderedListStyle) => ({ commands }) => {
         return commands.updateAttributes('orderedList', { style: `list-style-type: ${style};` });
       },
+    } as any;
+  },
+});
+
+// -------------------- Bullet List styles --------------------
+export type BulletListStyle = 'disc' | 'circle' | 'square';
+export const BULLET_LIST_STYLES: { label: string; value: BulletListStyle; preview: string }[] = [
+  { label: 'Default (Disc)', value: 'disc', preview: '• Item' },
+  { label: 'Circle', value: 'circle', preview: '○ Item' },
+  { label: 'Square', value: 'square', preview: '▪ Item' },
+];
+
+const StyledBulletList = BulletList.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      style: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('style'),
+        renderHTML: (attributes) => {
+          if (!attributes.style) return {};
+          return { style: attributes.style };
+        },
+      },
     };
+  },
+  addCommands() {
+    return {
+      ...this.parent?.(),
+      setBulletListStyle: (style: BulletListStyle) => ({ commands }) => {
+        return commands.updateAttributes('bulletList', { style: `list-style-type: ${style};` });
+      },
+    } as any;
+  },
+});
+
+// -------------------- Toggle Block (collapsible) --------------------
+const ToggleBlock = Node.create({
+  name: 'toggleBlock',
+  group: 'block',
+  content: 'block+',
+  selectable: true,
+  draggable: true,
+  addAttributes() {
+    return {
+      expanded: {
+        default: true,
+        parseHTML: (element) => element.getAttribute('data-expanded') !== 'false',
+        renderHTML: (attributes) => ({ 'data-expanded': attributes.expanded ? 'true' : 'false' }),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-toggle]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['div', { ...HTMLAttributes, 'data-toggle': 'true' }, 0];
+  },
+  addCommands() {
+    return {
+      toggleExpand: () => ({ tr, state, dispatch }) => {
+        const { selection } = state;
+        let pos = -1;
+        let node: any = null;
+        state.doc.nodesBetween(selection.from, selection.to, (n, p) => {
+          if (n.type.name === 'toggleBlock' && pos < 0) { pos = p; node = n; }
+        });
+        if (pos >= 0 && node) {
+          const tr2 = tr.setNodeMarkup(pos, undefined, {
+            ...node.attrs,
+            expanded: !node.attrs.expanded,
+          });
+          if (dispatch) dispatch(tr2);
+          return true;
+        }
+        return false;
+      },
+      insertToggleBlock: () => ({ tr, state, dispatch }) => {
+        const node = state.schema.nodes.toggleBlock.create(null, [
+          state.schema.nodes.paragraph.create(null, [
+            state.schema.text('Toggle title — click to expand'),
+          ]),
+          state.schema.nodes.paragraph.create(null, [
+            state.schema.text('Hidden content here...'),
+          ]),
+        ]);
+        const tr2 = tr.replaceSelectionWith(node);
+        if (dispatch) dispatch(tr2);
+        return true;
+      },
+    } as any;
+  },
+  addKeyboardShortcuts() {
+    return { Enter: () => this.editor.commands.splitBlock() };
+  },
+});
+
+// -------------------- Table border styles --------------------
+export type TableBorder = 'all' | 'none' | 'outside' | 'top' | 'right' | 'bottom' | 'left';
+export const TABLE_BORDERS: { label: string; value: TableBorder }[] = [
+  { label: 'All Borders', value: 'all' },
+  { label: 'Outside Borders', value: 'outside' },
+  { label: 'No Border', value: 'none' },
+  { label: 'Top Border', value: 'top' },
+  { label: 'Bottom Border', value: 'bottom' },
+  { label: 'Left Border', value: 'left' },
+  { label: 'Right Border', value: 'right' },
+];
+
+const StyledTable = Table.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      borders: {
+        default: 'all',
+        parseHTML: (element) => (element.getAttribute('data-borders') as TableBorder) || 'all',
+        renderHTML: (attributes) => ({ 'data-borders': attributes.borders || 'all' }),
+      },
+    };
+  },
+  addCommands() {
+    return {
+      ...this.parent?.(),
+      setTableBorders: (value: TableBorder) => ({ tr, state, dispatch }) => {
+        const { selection } = state;
+        let pos = -1;
+        state.doc.nodesBetween(selection.from, selection.to, (node, p) => {
+          if (node.type.name === 'table' && pos < 0) pos = p;
+        });
+        // Also resolve from $from ancestry
+        if (pos < 0) {
+          const $from = state.doc.resolve(selection.from);
+          for (let d = $from.depth; d > 0; d--) {
+            if ($from.node(d).type.name === 'table') { pos = $from.before(d); break; }
+          }
+        }
+        if (pos >= 0) {
+          const node = state.doc.nodeAt(pos);
+          if (node) {
+            const tr2 = tr.setNodeMarkup(pos, undefined, { ...node.attrs, borders: value });
+            if (dispatch) dispatch(tr2);
+            return true;
+          }
+        }
+        return false;
+      },
+      moveTableUp: () => ({ tr, state, dispatch }) => {
+        return moveTableImpl(state, tr, dispatch, 'up');
+      },
+      moveTableDown: () => ({ tr, state, dispatch }) => {
+        return moveTableImpl(state, tr, dispatch, 'down');
+      },
+    } as any;
+  },
+});
+
+function moveTableImpl(state: any, tr: any, dispatch: any, direction: 'up' | 'down'): boolean {
+  const { selection } = state;
+  let tablePos = -1;
+  // Find table containing the selection
+  const $from = state.doc.resolve(selection.from);
+  for (let d = $from.depth; d > 0; d--) {
+    if ($from.node(d).type.name === 'table') { tablePos = $from.before(d); break; }
+  }
+  if (tablePos < 0) {
+    // Maybe selection is exactly the table — scan
+    state.doc.nodesBetween(selection.from, selection.to, (node: any, pos: number) => {
+      if (node.type.name === 'table' && tablePos < 0) tablePos = pos;
+    });
+  }
+  if (tablePos < 0) return false;
+  const tableNode = state.doc.nodeAt(tablePos);
+  if (!tableNode) return false;
+  const tableSize = tableNode.nodeSize;
+
+  if (direction === 'up') {
+    // Find previous top-level block
+    const $before = state.doc.resolve(tablePos);
+    const topLevelBefore = $before.before(1);
+    if (topLevelBefore < 0) return false;
+    const prevNode = state.doc.nodeAt(topLevelBefore);
+    if (!prevNode) return false;
+    const prevSize = prevNode.nodeSize;
+    const newTr = tr.delete(topLevelBefore, tablePos + tableSize);
+    newTr.insert(topLevelBefore, tableNode);
+    newTr.insert(topLevelBefore + tableNode.nodeSize, prevNode);
+    if (dispatch) dispatch(newTr);
+    return true;
+  } else {
+    const tableEnd = tablePos + tableSize;
+    const nextNode = state.doc.nodeAt(tableEnd);
+    if (!nextNode) return false;
+    const nextSize = nextNode.nodeSize;
+    const newTr = tr.delete(tablePos, tableEnd + nextSize);
+    newTr.insert(tablePos, nextNode);
+    newTr.insert(tablePos + nextNode.nodeSize, tableNode);
+    if (dispatch) dispatch(newTr);
+    return true;
+  }
+}
+
+// -------------------- Comment Mark --------------------
+const CommentMark = Mark.create({
+  name: 'comment',
+  inclusive: false,
+  addAttributes() {
+    return {
+      commentId: { default: null },
+      comment: { default: '' },
+      author: { default: 'You' },
+    };
+  },
+  parseHTML() {
+    return [
+      { tag: 'span[data-comment-id]' },
+      { tag: 'span.editor-comment' },
+    ];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['span', { ...HTMLAttributes, class: 'editor-comment' }, 0];
+  },
+  addCommands() {
+    return {
+      addComment: (data: { commentId: string; comment: string; author?: string }) => ({ tr, state, dispatch }) => {
+        const { from, to, empty } = state.selection;
+        if (empty) return false;
+        const text = state.doc.textBetween(from, to, '\n');
+        if (!text) return false;
+        // Remove any existing comment marks in the range first
+        const tr2 = tr.removeMark(from, to, state.schema.marks.comment);
+        // Add new comment mark
+        const mark = state.schema.marks.comment.create({
+          commentId: data.commentId,
+          comment: data.comment,
+          author: data.author || 'You',
+        });
+        tr2.addMark(from, to, mark);
+        if (dispatch) dispatch(tr2);
+        return true;
+      },
+      removeComment: () => ({ tr, state, dispatch }) => {
+        const { from, to } = state.selection;
+        const tr2 = tr.removeMark(from, to, state.schema.marks.comment);
+        if (dispatch) dispatch(tr2);
+        return true;
+      },
+    } as any;
+  },
+});
+
+// -------------------- Draggable Blocks Extension --------------------
+// Adds `draggable: true` to top-level block nodes via global attributes + a ProseMirror
+// plugin that handles drag/drop reordering of entire top-level blocks.
+const DraggableBlocks = Extension.create({
+  name: 'draggableBlocks',
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['paragraph', 'heading', 'blockquote', 'codeBlock', 'bulletList', 'orderedList', 'taskList', 'toggleBlock', 'table'],
+        attributes: {
+          draggable: {
+            default: null,
+            parseHTML: () => null,
+            renderHTML: () => ({ draggable: 'true' }),
+          },
+        },
+      },
+    ];
   },
 });
 
@@ -69,21 +336,22 @@ import mammoth from 'mammoth';
 
 import {
   Undo2, Redo2, Copy, ClipboardPaste, Clipboard,
-  Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, CodeXml,
+  Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code,
   Heading1, Heading2, Heading3, Heading4, Heading5, Heading6, Pilcrow,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   List, ListOrdered, ListChecks, Indent, Outdent,
-  Quote, Minus, Table as TableIcon, ImageIcon, Film, Link2, Unlink,
+  Quote, Table as TableIcon, ImageIcon, Film, Link2, Unlink,
   SmilePlus, AtSign, RemoveFormatting, Search, ArrowRightLeft,
   Type, ChevronDown, Maximize2, Minimize2, Palette, Highlighter,
-  LetterText, Rows3, Columns3, TableProperties, Plus,
+  LetterText, Rows3, Columns3, TableProperties, Plus, Minus,
   Download, Upload, FileText, Music, ChevronRight, ToggleLeft,
-  Columns2, Video, MessageSquare, MoreHorizontal, ImagePlus,
-  GripVertical, Pencil, Lightbulb, Ruler, Keyboard,
-  Paintbrush, Pipette,
+  Video, MessageSquare, MoreHorizontal, ImagePlus,
+  Pencil, Lightbulb, Ruler, Keyboard,
+  Paintbrush, GripVertical, ArrowUp, ArrowDown, Check,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
   Tooltip, TooltipTrigger, TooltipContent,
@@ -93,6 +361,7 @@ import {
   DropdownMenuItem, DropdownMenuSeparator,
   DropdownMenuRadioGroup, DropdownMenuRadioItem,
   DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
+  DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -161,9 +430,11 @@ const FONT_FAMILIES = [
   { label: 'System UI', value: 'system-ui, sans-serif' },
 ];
 
-const FONT_SIZES = ['10px', '11px', '12px', '13px', '14px', '15px', '16px', '18px', '20px', '22px', '24px', '28px', '32px', '36px', '48px', '64px', '72px'];
+// Fix #12: Font sizes 8-96
+const FONT_SIZES = ['8px','9px','10px','12px','14px','16px','18px','24px','30px','36px','48px','60px','72px','96px'];
 
-const LINE_HEIGHTS = ['1', '1.15', '1.2', '1.3', '1.4', '1.5', '1.6', '1.75', '2', '2.5', '3'];
+// Fix #15: Line heights
+const LINE_HEIGHTS = ['1', '1.2', '1.5', '2', '3'];
 
 const EMOJI_CATEGORIES: Record<string, string[]> = {
   'Smileys & People': [
@@ -193,18 +464,18 @@ const EMOJI_CATEGORIES: Record<string, string[]> = {
     '🇧🇷','🇮🇳','🇨🇦','🇦🇺','🇲🇽','🇸🇦','🇦🇪','🇿🇦','🇳🇬','🇪🇬',
     '🇹🇷','🇦🇷','🇨🇴','🇨🇱','🇵🇪','🇨🇺','🇯🇲','🇵🇭','🇮🇩','🇲🇾',
     '🇳🇿','🇸🇬','🇹🇭','🇻🇳','🇧🇩','🇰🇪','🇬🇭','🇹🇳','🇲🇦','🇪🇹',
-    '🇹🇿','🇺🇬','🇺🇾','🇵🇾','🇧🇴','🇵🇦','🇨🇷','🇭🇳','🇬🇹','🇸🇻',
+    '🇹🇿','🇺🇬','🇺🇾','🇵🇾','🇧🇴','🇵🇦','🇨🇷','🇭🇳','🇬🇹','🇸🇱',
     '🇳🇮','🇩🇴','🇪🇨','🇨🇭','🇦🇹','🇧🇪','🇧🇬','🇭🇷','🇨🇿','🇩🇰',
     '🇪🇪','🇫🇮','🇬🇷','🇭🇺','🇮🇸','🇮🇪','🇱🇻','🇱🇹','🇲🇹','🇳🇱',
-    '🇳🇴','🇵🇱','🇵🇹','🇷🇴','🇷🇸','🇸🇰','🇸🇮','🇸🇪','🇺🇦','🇬🇪',
+    '🇳🇴','🇵🇱','🇵🇹','🇷🇴','🇷🇸','🇸🇰','🇸🇲','🇸🇪','🇺🇦','🇬🇪',
     '🇦🇲','🇦🇿','🇧🇾','🇰🇿','🇺🇿','🇹🇲','🇰🇬','🇲🇳','🇹🇯','🇹🇰',
-    '🇦🇫','🇧🇯','🇧🇮','🇧🇼','🇨🇫','🇹🇩','🇨🇲','🇨🇬','🇨🇩','🇩🇯',
-    '🇬🇶','🇪🇷','🇬🇦','🇬🇲','🇬🇳','🇬🇼','🇬🇾','🇨🇮','🇰🇪','🇱🇷',
-    '🇲🇷','🇲🇼','🇳🇪','🇸🇳','🇸🇱','🇸🇴','🇿🇲','🇿🇼','🇦🇴','🇨🇻',
-    '🇰🇲','🇲🇬','🇲🇺','🇾🇹','🇸🇨','🇸🇽','🇰🇳','🇱🇨','🇻🇨','🇩🇲',
-    '🇬🇩','🇰🇵','🇲🇴','🇲🇰','🇵🇸','🇵🇼','🇸🇧','🇹🇻','🇻🇺','🇼🇫',
-    '🇹🇴','🇳🇨','🇳🇺','🇳🇫','🇵🇳','🇬🇮','🇪🇭','🇮🇴','🇸🇯','🇧🇲',
-    '🇰🇾','🇫🇰','🇲🇵','🇹🇨','🇻🇬','🇻🇮','🇧🇳','🇲🇭','🇵🇫','🇼🇸',
+    '🇦🇫','🇧🇯','🇧🇲','🇧🇼','🇨🇫','🇹🇩','🇨🇲','🇨🇬','🇨🇩','🇩🇯',
+    '🇬🇶','🇪🇷','🇬🇦','🇬🇲','🇬🇳','🇬🇼','🇬🇾','🇨🇲','🇰🇪','🇱🇷',
+    '🇲🇷','🇲🇼','🇳🇪','🇸🇳','🇸🇱','🇸🇺','🇿🇲','🇿🇼','🇦🇴','🇨🇻',
+    '🇰🇲','🇲🇬','🇲🇺','🇾🇹','🇸🇨','🇸🇽','🇰🇳','🇱🇨','🇻🇳','🇩🇲',
+    '🇬🇩','🇰🇵','🇲🇻','🇲🇰','🇵🇸','🇵🇼','🇸🇧','🇹🇻','🇻🇺','🇼🇫',
+    '🇹🇱','🇳🇨','🇳🇺','🇳🇫','🇵🇳','🇬🇮','🇪🇭','🇮🇱','🇸🇯','🇧🇲',
+    '🇰🇾','🇫🇰','🇱🇻','🇹🇳','🇻🇬','🇻🇮','🇧🇳','🇲🇭','🇵🇫','🇼🇸',
     '🇨🇰','🇳🇿','🇹🇰','🇬🇺','🇲🇸','🇧🇱','🇵🇲','🇸🇷','🇬🇾','🇬🇱',
     '🇦🇼','🇨🇼','🇸🇽','🇨🇺','🇪🇺',
   ],
@@ -212,52 +483,189 @@ const EMOJI_CATEGORIES: Record<string, string[]> = {
 
 const EMOJI_GRID = Object.values(EMOJI_CATEGORIES).flat();
 
-// -------------------- Custom Nodes --------------------
-
-// Toggle Block: renders as a styled collapsible div
-const ToggleBlock = Node.create({
-  name: 'toggleBlock',
-  group: 'block',
-  content: 'block+',
-  parseHTML() {
-    return [{ tag: 'div[data-toggle]' }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['div', { ...HTMLAttributes, 'data-toggle': 'true' }, 0];
-  },
-  addKeyboardShortcuts() {
-    return { Enter: () => this.editor.commands.splitBlock() };
-  },
-});
-
-// Column Layout: renders as a grid div
-const ColumnLayout = Node.create({
-  name: 'columnLayout',
-  group: 'block',
-  content: 'columnLayoutColumn columnLayoutColumn columnLayoutColumn',
-  parseHTML() {
-    return [{ tag: 'div[data-columns]' }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['div', { ...HTMLAttributes, 'data-columns': '3' }, 0];
-  },
-  addAttributes() {
-    return { columns: { default: 3 } };
-  },
-});
-
-const ColumnLayoutColumn = Node.create({
-  name: 'columnLayoutColumn',
-  group: 'block',
-  content: 'block+',
-  parseHTML() {
-    return [{ tag: 'div[data-column]' }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['div', { ...HTMLAttributes, 'data-column': '' }, 0];
-  },
-  isolating: true,
-});
+// Fix #11: Emoji keyword map for keyword-based search
+const EMOJI_KEYWORDS: Record<string, string[]> = {
+  '😀': ['smile', 'happy', 'grin', 'joy', 'face', 'laugh'],
+  '😁': ['smile', 'happy', 'grin', 'beam', 'face'],
+  '😂': ['laugh', 'joy', 'lol', 'face', 'cry', 'tears'],
+  '🤣': ['laugh', 'rofl', 'joy', 'lol', 'rolling'],
+  '😃': ['smile', 'happy', 'joy', 'face'],
+  '😄': ['smile', 'happy', 'grin', 'face'],
+  '😅': ['sweat', 'smile', 'nervous', 'face'],
+  '😆': ['laugh', 'grin', 'squint', 'face'],
+  '😉': ['wink', 'face', 'smile'],
+  '😊': ['smile', 'blush', 'happy', 'face', 'shy'],
+  '😋': ['yum', 'tongue', 'tasty', 'delicious', 'face'],
+  '😎': ['cool', 'sunglasses', 'smile', 'face'],
+  '😍': ['heart', 'eyes', 'love', 'adore', 'face'],
+  '🥰': ['love', 'hearts', 'adore', 'face'],
+  '😘': ['kiss', 'love', 'heart', 'face'],
+  '🤗': ['hug', 'love', 'care', 'face'],
+  '🤩': ['star', 'eyes', 'excited', 'wow', 'face'],
+  '🥳': ['party', 'celebrate', 'birthday', 'face'],
+  '🤠': ['cowboy', 'hat', 'face'],
+  '🤔': ['think', 'hmm', 'wonder', 'face'],
+  '🤥': ['lie', 'pinocchio', 'nose', 'face'],
+  '😔': ['sad', 'pensive', 'face'],
+  '😕': ['confused', 'face'],
+  '🙁': ['frown', 'sad', 'face'],
+  '☹️': ['frown', 'sad', 'face'],
+  '😮': ['oh', 'wow', 'surprised', 'open', 'mouth', 'face'],
+  '😯': ['hushed', 'surprised', 'face'],
+  '😡': ['angry', 'mad', 'rage', 'face', 'red'],
+  '😠': ['angry', 'mad', 'face'],
+  '😢': ['cry', 'tear', 'sad', 'face'],
+  '😭': ['cry', 'sob', 'tears', 'sad', 'face'],
+  '😅': ['sweat', 'smile', 'nervous', 'face'],
+  '😱': ['scream', 'fear', 'shock', 'face'],
+  '😴': ['sleep', 'tired', 'face'],
+  '🤯': ['mind', 'blown', 'shock', 'explode', 'face'],
+  '🥶': ['cold', 'freeze', 'face'],
+  '🤒': ['sick', 'thermometer', 'face'],
+  '🤧': ['sneeze', 'tissue', 'sick', 'face'],
+  '🤠': ['cowboy', 'hat', 'face'],
+  '😈': ['devil', 'smile', 'evil', 'face'],
+  '👿': ['devil', 'angry', 'evil', 'face'],
+  '👻': ['ghost', 'spooky', 'halloween'],
+  '👽': ['alien', 'ufo', 'space'],
+  '🤖': ['robot', 'ai', 'machine'],
+  '💩': ['poop', 'shit', 'crap'],
+  '❤️': ['heart', 'love', 'red', 'romance'],
+  '🧡': ['heart', 'orange', 'love'],
+  '💛': ['heart', 'yellow', 'love'],
+  '💚': ['heart', 'green', 'love'],
+  '💙': ['heart', 'blue', 'love'],
+  '💜': ['heart', 'purple', 'love'],
+  '🖤': ['heart', 'black', 'love', 'dark'],
+  '🤍': ['heart', 'white', 'love'],
+  '💔': ['heart', 'broken', 'sad', 'breakup'],
+  '👍': ['thumbs', 'up', 'like', 'yes', 'ok', 'agree'],
+  '👎': ['thumbs', 'down', 'dislike', 'no', 'disagree'],
+  '👌': ['ok', 'okay', 'good', 'yes', 'perfect'],
+  '✌️': ['peace', 'victory', 'fingers'],
+  '👋': ['wave', 'hello', 'hi', 'bye', 'hand'],
+  '👏': ['clap', 'applaud', 'cheer', 'hands'],
+  '🙌': ['raise', 'hands', 'celebrate', 'praise'],
+  '🙏': ['pray', 'please', 'thanks', 'hands'],
+  '💪': ['muscle', 'strong', 'flex', 'arm'],
+  '🤝': ['handshake', 'deal', 'agree'],
+  '✊': ['fist', 'power', 'fight', 'raised'],
+  '👊': ['fist', 'punch', 'fight'],
+  '✅': ['check', 'mark', 'done', 'ok', 'green'],
+  '❌': ['cross', 'x', 'no', 'wrong', 'cancel'],
+  '⭐': ['star', 'favorite', 'rate'],
+  '🌟': ['star', 'glow', 'shine', 'glitter'],
+  '🔥': ['fire', 'hot', 'lit', 'flame'],
+  '💯': ['hundred', '100', 'perfect', 'score'],
+  '🎉': ['party', 'celebrate', 'birthday', 'tada'],
+  '🎈': ['balloon', 'party', 'celebrate'],
+  '🎁': ['gift', 'present', 'box'],
+  '💡': ['idea', 'light', 'bulb', 'lamp'],
+  '⏰': ['alarm', 'clock', 'time', 'wake'],
+  '⚽': ['soccer', 'football', 'ball', 'kick'],
+  '🏀': ['basketball', 'ball', 'hoop'],
+  '🏈': ['football', 'nfl', 'ball'],
+  '⚾': ['baseball', 'ball', 'sport'],
+  '🎾': ['tennis', 'racket', 'ball'],
+  '🏆': ['trophy', 'win', 'champion', 'award'],
+  '🥇': ['gold', 'medal', 'first', 'win'],
+  '🥈': ['silver', 'medal', 'second'],
+  '🥉': ['bronze', 'medal', 'third'],
+  '🐶': ['dog', 'puppy', 'pet'],
+  '🐱': ['cat', 'kitten', 'pet', 'meow'],
+  '🐭': ['mouse', 'rat'],
+  '🐹': ['hamster', 'pet', 'rodent'],
+  '🐰': ['rabbit', 'bunny', 'pet'],
+  '🦊': ['fox', 'animal'],
+  '🐻': ['bear', 'animal', 'teddy'],
+  '🐼': ['panda', 'bear', 'animal'],
+  '🐨': ['koala', 'bear', 'animal'],
+  '🐯': ['tiger', 'animal', 'cat'],
+  '🦁': ['lion', 'animal', 'cat', 'king'],
+  '🐮': ['cow', 'bull', 'animal'],
+  '🐷': ['pig', 'animal'],
+  '🐸': ['frog', 'animal', 'amphibian'],
+  '🐵': ['monkey', 'ape', 'animal'],
+  '🐔': ['chicken', 'hen', 'bird'],
+  '🐧': ['penguin', 'bird', 'cold'],
+  '🐦': ['bird', 'tweet'],
+  '🦅': ['eagle', 'bird'],
+  '🦉': ['owl', 'bird', 'night'],
+  '🐝': ['bee', 'insect', 'honey'],
+  '🐢': ['turtle', 'tortoise', 'animal'],
+  '🐙': ['octopus', 'sea', 'animal'],
+  '🐳': ['whale', 'sea', 'spout'],
+  '🐬': ['dolphin', 'sea', 'animal'],
+  '🍎': ['apple', 'fruit', 'red'],
+  '🍌': ['banana', 'fruit', 'yellow'],
+  '🍊': ['orange', 'fruit', 'citrus'],
+  '🍓': ['strawberry', 'fruit', 'berry', 'red'],
+  '🍕': ['pizza', 'food', 'slice', 'cheese'],
+  '🍔': ['burger', 'hamburger', 'food', 'fast'],
+  '🍟': ['fries', 'chips', 'potato', 'food'],
+  '🌭': ['hotdog', 'sausage', 'food'],
+  '🍿': ['popcorn', 'snack', 'movie'],
+  '☕': ['coffee', 'drink', 'hot', 'cup'],
+  '🍵': ['tea', 'drink', 'green'],
+  '🍺': ['beer', 'drink', 'alcohol', 'mug'],
+  '🍷': ['wine', 'drink', 'alcohol', 'red'],
+  '🎂': ['cake', 'birthday', 'dessert'],
+  '🍦': ['icecream', 'ice', 'cream', 'dessert'],
+  '🍫': ['chocolate', 'candy', 'food'],
+  '🍩': ['donut', 'doughnut', 'food', 'dessert'],
+  '🍪': ['cookie', 'food', 'dessert'],
+  '🌻': ['sunflower', 'flower', 'yellow'],
+  '🌹': ['rose', 'flower', 'love', 'red'],
+  '🌷': ['tulip', 'flower'],
+  '🌸': ['cherry', 'blossom', 'flower', 'pink'],
+  '🌺': ['hibiscus', 'flower'],
+  '🌲': ['tree', 'pine', 'evergreen'],
+  '🌳': ['tree', 'forest', 'deciduous'],
+  '🌴': ['palm', 'tree', 'tropical'],
+  '🌵': ['cactus', 'plant', 'desert'],
+  '🌍': ['earth', 'globe', 'world', 'europe'],
+  '🌎': ['earth', 'globe', 'world', 'americas'],
+  '🌏': ['earth', 'globe', 'world', 'asia'],
+  '🌙': ['moon', 'crescent', 'night'],
+  '☀️': ['sun', 'sunny', 'weather', 'warm'],
+  '⭐': ['star', 'space', 'glow'],
+  '☁️': ['cloud', 'weather', 'sky'],
+  '🌧️': ['rain', 'cloud', 'weather'],
+  '⛈️': ['storm', 'rain', 'thunder', 'weather'],
+  '❄️': ['snow', 'cold', 'flake', 'winter'],
+  '🌈': ['rainbow', 'colors', 'lgbt'],
+  '⚡': ['zap', 'lightning', 'bolt', 'energy'],
+  '🌊': ['wave', 'ocean', 'water', 'sea'],
+  '🍃': ['leaf', 'leaves', 'plant', 'green'],
+  '🍀': ['clover', 'shamrock', 'luck', 'green'],
+  '🌺': ['hibiscus', 'flower'],
+  '🎵': ['music', 'note', 'song'],
+  '🎶': ['music', 'notes', 'song', 'melody'],
+  '💎': ['gem', 'diamond', 'jewel', 'blue'],
+  '💰': ['money', 'bag', 'cash', 'dollar'],
+  '💸': ['money', 'flying', 'wings', 'cash'],
+  '🚀': ['rocket', 'launch', 'space', 'fast'],
+  '✈️': ['airplane', 'plane', 'flight', 'travel'],
+  '🚗': ['car', 'auto', 'vehicle', 'drive'],
+  '🏠': ['house', 'home', 'building'],
+  '🏡': ['house', 'home', 'garden'],
+  '🏫': ['school', 'building', 'education'],
+  '🏥': ['hospital', 'medical', 'doctor', 'health'],
+  '💻': ['computer', 'laptop', 'tech'],
+  '📱': ['phone', 'mobile', 'device', 'cell'],
+  '⌨️': ['keyboard', 'type', 'input'],
+  '🖥️': ['desktop', 'computer', 'monitor'],
+  '📝': ['memo', 'note', 'write', 'pencil'],
+  '📌': ['pin', 'pushpin', 'location', 'mark'],
+  '📍': ['location', 'pin', 'place', 'map'],
+  '📎': ['paperclip', 'attach', 'clip'],
+  '✂️': ['scissors', 'cut', 'clip'],
+  '🔒': ['lock', 'closed', 'secure', 'private'],
+  '🔓': ['unlock', 'open', 'unlock'],
+  '🔑': ['key', 'unlock', 'password'],
+  '🔔': ['bell', 'notification', 'alert', 'ring'],
+  '📢': ['loudspeaker', 'announce', 'megaphone'],
+};
 
 // -------------------- Toolbar Button --------------------
 
@@ -301,10 +709,10 @@ function TSep() {
 }
 
 function TDropdown({
-  label, icon, active, children, className,
+  label, icon, active, children, className, triggerClassName,
 }: {
   label: string; icon: React.ReactNode; active?: boolean;
-  children: React.ReactNode; className?: string;
+  children: React.ReactNode; className?: string; triggerClassName?: string;
 }) {
   return (
     <DropdownMenu>
@@ -320,11 +728,11 @@ function TDropdown({
                 active
                   ? 'bg-accent text-accent-foreground shadow-sm'
                   : 'text-muted-foreground hover:bg-accent/80 hover:text-foreground',
-                className,
+                triggerClassName,
               )}
             >
               {icon}
-              <span className="hidden lg:inline text-xs max-w-[60px] truncate">{label}</span>
+              {label && <span className="hidden lg:inline text-xs max-w-[60px] truncate">{label}</span>}
               <ChevronDown className="h-3 w-3 opacity-60" />
             </button>
           </DropdownMenuTrigger>
@@ -338,7 +746,7 @@ function TDropdown({
   );
 }
 
-// -------------------- Enhanced Color Picker ----------------
+// -------------------- Color Picker ----------------
 
 function ColorPicker({
   colors, label, icon, onPick, onClear, currentColor, type = 'text',
@@ -374,7 +782,6 @@ function ColorPicker({
       </Tooltip>
       <PopoverContent className="w-56 p-2.5" align="start">
         <p className="text-[10px] font-medium text-muted-foreground mb-2 px-1">{label}</p>
-        {/* Tabs */}
         <div className="flex gap-1 mb-2">
           <button type="button" onClick={() => setTab('default')} className={cn('text-[10px] px-2 py-0.5 rounded-full border transition-colors', tab === 'default' ? 'bg-accent text-accent-foreground border-transparent' : 'border-border/50 text-muted-foreground hover:bg-muted')}>Default Colors</button>
           <button type="button" onClick={() => setTab('custom')} className={cn('text-[10px] px-2 py-0.5 rounded-full border transition-colors', tab === 'custom' ? 'bg-accent text-accent-foreground border-transparent' : 'border-border/50 text-muted-foreground hover:bg-muted')}>Custom Color</button>
@@ -412,7 +819,6 @@ function ColorPicker({
             </div>
           </div>
         )}
-        {/* Clear button */}
         {onClear && (
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={onClear} className="mt-2 w-full text-[10px] text-muted-foreground hover:text-foreground py-1 border-t border-border/50 text-center transition-colors">Clear</button>
         )}
@@ -454,8 +860,12 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
   const imageFileRef = useRef<HTMLInputElement>(null);
   const findCountRef = useRef(0);
 
-  // Comment state
-  const [showCommentInput, setShowCommentInput] = useState(false);
+  // Fix #3: Floating toolbar link popover state
+  const [showFloatingLinkPopover, setShowFloatingLinkPopover] = useState(false);
+  const [floatingLinkUrl, setFloatingLinkUrl] = useState('');
+
+  // Fix #13: Comment popover state
+  const [showCommentPopover, setShowCommentPopover] = useState(false);
   const [commentText, setCommentText] = useState('');
 
   // Media library state
@@ -467,11 +877,22 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
   const [emojiSearch, setEmojiSearch] = useState('');
   const [emojiCategory, setEmojiCategory] = useState(Object.keys(EMOJI_CATEGORIES)[0]);
   const [currentLineHeight, setCurrentLineHeight] = useState('');
+  const [currentFontSizeState, setCurrentFontSizeState] = useState('');
 
   // Floating toolbar state (positioned above selected text)
   const [floatingToolbar, setFloatingToolbar] = useState<{ x: number; y: number; show: boolean }>({
     x: 0, y: 0, show: false,
   });
+
+  // Fix #4: Table grid selector state
+  const [tableGridHover, setTableGridHover] = useState<{ rows: number; cols: number }>({ rows: 0, cols: 0 });
+
+  // Fix #1: Drag handle state — React overlay that follows hovered top-level block
+  const [dragHandle, setDragHandle] = useState<{ show: boolean; top: number; left: number; pos: number }>({
+    show: false, top: 0, left: 0, pos: 0,
+  });
+  const dragSourcePosRef = useRef<number | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<{ show: boolean; top: number }>({ show: false, top: 0 });
 
   // Table context menu state (right-click on table)
   const [tableCtxMenu, setTableCtxMenu] = useState<{
@@ -485,8 +906,6 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
   const closeTableCtxMenu = useCallback(() => {
     setTableCtxMenu((prev) => ({ ...prev, show: false, activeSubmenu: null }));
   }, []);
-
-  // handleTableContextMenu is defined after editor & isEditable declarations
 
   // Close context menu on click outside or scroll
   useEffect(() => {
@@ -503,10 +922,10 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [tableCtxMenu.show, closeTableCtxMenu]);
+
   // Keep onSelectionChange ref so the effect always sees the latest callback
   const onSelectionChangeRef = useRef(onSelectionChange);
   useEffect(() => { onSelectionChangeRef.current = onSelectionChange; });
-
 
   // Saved selection for use after focus is lost (e.g., clicking AI action buttons outside the editor)
   const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
@@ -579,21 +998,23 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
 
   const editor = useEditor({
     extensions: [
+      // Fix #10: Configure History with depth + newGroupDelay for per-action undo
       StarterKit.configure({
-        codeBlock: false,          // replaced by CodeBlockLowlight
-        orderedList: false,        // replaced by StyledOrderedList
+        codeBlock: false,
+        orderedList: false,
+        bulletList: false,
         heading: { levels: [1, 2, 3, 4, 5, 6] },
+        history: { depth: 200, newGroupDelay: 400 },
       }),
       StyledOrderedList,
-      // NOTE: TextStyleKit bundles color/fontSize/fontFamily/textStyle
-      // Underline and Link are added separately (TextStyleKit does NOT include them)
+      StyledBulletList,
       Underline,
       TextStyleKit,
       Highlight.configure({ multicolor: true }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Image.configure({ inline: false, allowBase64: true }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'editor-link' } }),
-      Table.configure({ resizable: true, HTMLAttributes: { class: 'editor-table' } }),
+      StyledTable.configure({ resizable: true, HTMLAttributes: { class: 'editor-table' } }),
       TableRow,
       TableCell,
       TableHeader,
@@ -608,14 +1029,44 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
       CodeBlockLowlight.configure({ lowlight }),
       IndentExt,
       ToggleBlock,
-      ColumnLayout,
-      ColumnLayoutColumn,
+      CommentMark,
+      DraggableBlocks,
     ],
     content: initialContent || '',
     editable: isEditable,
     editorProps: {
       attributes: {
         class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[60vh] editor-content',
+      },
+      // Fix #8: Toggle Block — clicking the toggle's first child toggles expansion
+      handleClickOn(view, pos, node, nodePos, event, direct) {
+        const target = event.target as HTMLElement;
+        if (!target || !target.closest) return false;
+        const toggleEl = target.closest('div[data-toggle="true"]') as HTMLElement | null;
+        if (!toggleEl) return false;
+        const firstChild = toggleEl.firstElementChild as HTMLElement | null;
+        if (!firstChild || !firstChild.contains(target)) return false;
+        try {
+          const domPos = view.posAtDOM(toggleEl, 0);
+          const $pos = view.state.doc.resolve(domPos);
+          let toggleDepth = -1;
+          for (let d = $pos.depth; d > 0; d--) {
+            if ($pos.node(d).type.name === 'toggleBlock') { toggleDepth = d; break; }
+          }
+          if (toggleDepth < 0) return false;
+          const togglePos = $pos.before(toggleDepth);
+          const toggleNode = view.state.doc.nodeAt(togglePos);
+          if (!toggleNode) return false;
+          const expanded = toggleNode.attrs.expanded !== false;
+          const tr = view.state.tr.setNodeMarkup(togglePos, undefined, {
+            ...toggleNode.attrs,
+            expanded: !expanded,
+          });
+          view.dispatch(tr);
+          return true;
+        } catch {
+          return false;
+        }
       },
       handlePaste: (view, event) => {
         // paste without formatting if holding shift
@@ -632,9 +1083,8 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
       lastEmittedHtmlRef.current = html;
       onChange(html);
     },
-    onSelectionUpdate: ({ editor }) => {
-      // onSelectionChange is handled via a separate useEffect below
-      // (to keep useEditor options stable and avoid stale closure issues)
+    onSelectionUpdate: () => {
+      // handled via dedicated effect below
     },
     immediatelyRender: false,
   });
@@ -648,6 +1098,7 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
 
       if (empty) {
         setFloatingToolbar((ft) => (ft.show ? { ...ft, show: false } : ft));
+        setShowFloatingLinkPopover(false);
         onSelectionChangeRef.current?.('');
         return;
       }
@@ -666,11 +1117,9 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
         const GAP = 8;
         const viewW = window.innerWidth;
 
-        // Center the toolbar over the selection, clamped to viewport
         let x = rect.left + rect.width / 2;
         x = Math.max(120, Math.min(viewW - 120, x));
 
-        // Place above the selection; if not enough room, place below
         let y = rect.top - TOOLBAR_H - GAP;
         if (y < 8) y = rect.bottom + GAP;
 
@@ -682,6 +1131,7 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
       // Small delay so onMouseDown e.preventDefault() on toolbar buttons can fire first
       setTimeout(() => {
         setFloatingToolbar((ft) => ({ ...ft, show: false }));
+        // Note: do NOT clear onSelectionChange here — the parent uses a persistent savedSelectedText
         onSelectionChangeRef.current?.('');
       }, 120);
     };
@@ -702,6 +1152,177 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
     }
   }, [editor, isEditable]);
 
+  // Fix #1: Drag handle — track hovered top-level block via mousemove
+  useEffect(() => {
+    if (!editor) return;
+    const editorDom = editor.view.dom as HTMLElement;
+    const scrollContainer = editorDom.parentElement?.parentElement as HTMLElement; // .max-w-4xl > .flex-1.overflow-y-auto
+
+    const findTopLevelBlockInfo = (target: HTMLElement): { pos: number; rectTop: number; rectLeft: number } | null => {
+      // Walk up until we find a direct child of the editor dom
+      let el: HTMLElement | null = target;
+      while (el && el.parentElement !== editorDom) {
+        el = el.parentElement;
+      }
+      if (!el) return null;
+      try {
+        const pos = editor.view.posAtDOM(el, 0);
+        // Ensure pos is at the start of a top-level block (depth 0)
+        const $pos = editor.state.doc.resolve(pos);
+        // If pos is inside a deeper block, get the top-level block start
+        const topLevelStart = $pos.before(1);
+        const realPos = topLevelStart >= 0 ? topLevelStart : pos;
+        const node = editor.state.doc.nodeAt(realPos);
+        if (!node) return null;
+        const dom = editor.view.nodeDOM(realPos) as HTMLElement | null;
+        if (!dom) return null;
+        const rect = dom.getBoundingClientRect();
+        return { pos: realPos, rectTop: rect.top, rectLeft: rect.left };
+      } catch {
+        return null;
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target || !editorDom.contains(target)) {
+        setDragHandle((dh) => (dh.show ? { ...dh, show: false } : dh));
+        return;
+      }
+      const info = findTopLevelBlockInfo(target);
+      if (!info) {
+        setDragHandle((dh) => (dh.show ? { ...dh, show: false } : dh));
+        return;
+      }
+      // Only show if mouse is in the left margin area (within 60px of block left edge)
+      const blockLeft = info.rectLeft;
+      if (e.clientX > blockLeft + 40) {
+        // Still hide if cursor moved away from left margin
+        setDragHandle((dh) => (dh.show ? { ...dh, show: false } : dh));
+        return;
+      }
+      setDragHandle({ show: true, top: info.rectTop, left: blockLeft - 28, pos: info.pos });
+    };
+
+    const handleMouseLeave = () => {
+      setDragHandle({ show: false, top: 0, left: 0, pos: 0 });
+    };
+
+    editorDom.addEventListener('mousemove', handleMouseMove);
+    editorDom.addEventListener('mouseleave', handleMouseLeave);
+    return () => {
+      editorDom.removeEventListener('mousemove', handleMouseMove);
+      editorDom.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, [editor]);
+
+  // Fix #1: Drag handle drag/drop handlers
+  const handleDragHandleDragStart = useCallback((e: React.DragEvent) => {
+    if (!editor) return;
+    dragSourcePosRef.current = dragHandle.pos;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', 'drag-block');
+    }
+    // Hide the drag handle during drag
+    setDragHandle((dh) => ({ ...dh, show: false }));
+  }, [editor, dragHandle.pos]);
+
+  const handleEditorDragOver = useCallback((e: React.DragEvent) => {
+    if (dragSourcePosRef.current == null) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    const target = e.target as HTMLElement;
+    if (!editor) return;
+    const editorDom = editor.view.dom as HTMLElement;
+    if (!editorDom.contains(target)) return;
+    // Find the hovered top-level block
+    let el: HTMLElement | null = target;
+    while (el && el.parentElement !== editorDom) {
+      el = el.parentElement;
+    }
+    if (!el) return;
+    try {
+      const pos = editor.view.posAtDOM(el, 0);
+      const $pos = editor.state.doc.resolve(pos);
+      const topLevelStart = $pos.before(1);
+      const realPos = topLevelStart >= 0 ? topLevelStart : pos;
+      if (realPos === dragSourcePosRef.current) {
+        setDropIndicator({ show: false, top: 0 });
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      // Show drop indicator at the top of the hovered block (or bottom if cursor is in lower half)
+      const isLowerHalf = e.clientY > rect.top + rect.height / 2;
+      setDropIndicator({ show: true, top: isLowerHalf ? rect.bottom : rect.top });
+    } catch {
+      // ignore
+    }
+  }, [editor]);
+
+  const handleEditorDrop = useCallback((e: React.DragEvent) => {
+    if (dragSourcePosRef.current == null || !editor) return;
+    e.preventDefault();
+    const srcPos = dragSourcePosRef.current;
+    const target = e.target as HTMLElement;
+    const editorDom = editor.view.dom as HTMLElement;
+    if (!editorDom.contains(target)) {
+      dragSourcePosRef.current = null;
+      setDropIndicator({ show: false, top: 0 });
+      return;
+    }
+    let el: HTMLElement | null = target;
+    while (el && el.parentElement !== editorDom) {
+      el = el.parentElement;
+    }
+    if (!el) {
+      dragSourcePosRef.current = null;
+      setDropIndicator({ show: false, top: 0 });
+      return;
+    }
+    try {
+      const pos = editor.view.posAtDOM(el, 0);
+      const $pos = editor.state.doc.resolve(pos);
+      const topLevelStart = $pos.before(1);
+      let targetPos = topLevelStart >= 0 ? topLevelStart : pos;
+      const srcNode = editor.state.doc.nodeAt(srcPos);
+      if (!srcNode) return;
+      const rect = el.getBoundingClientRect();
+      const isLowerHalf = e.clientY > rect.top + rect.height / 2;
+      const targetNode = editor.state.doc.nodeAt(targetPos);
+      if (!targetNode) return;
+      if (isLowerHalf) {
+        targetPos = targetPos + targetNode.nodeSize;
+      }
+      if (targetPos === srcPos || targetPos === srcPos + srcNode.nodeSize) {
+        dragSourcePosRef.current = null;
+        setDropIndicator({ show: false, top: 0 });
+        return;
+      }
+      // Perform the reorder transaction
+      const tr = editor.state.tr;
+      const srcNodeCopy = srcNode.toJSON();
+      tr.delete(srcPos, srcPos + srcNode.nodeSize);
+      // Adjust targetPos if we deleted before it
+      let adjustedTarget = targetPos;
+      if (targetPos > srcPos) {
+        adjustedTarget -= srcNode.nodeSize;
+      }
+      tr.insert(adjustedTarget, editor.state.schema.nodeFromJSON(srcNodeCopy));
+      editor.view.dispatch(tr);
+    } catch (err) {
+      // ignore
+    } finally {
+      dragSourcePosRef.current = null;
+      setDropIndicator({ show: false, top: 0 });
+    }
+  }, [editor]);
+
+  const handleEditorDragEnd = useCallback(() => {
+    dragSourcePosRef.current = null;
+    setDropIndicator({ show: false, top: 0 });
+  }, []);
+
   // Expose editor instance and selection helpers to parent via ref
   useImperativeHandle(ref, () => ({
     editor,
@@ -715,7 +1336,6 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
       if (!editor) return '';
       const { from, to, empty } = editor.state.selection;
       if (empty) return '';
-      // Use DOMParser to get the HTML of the selected slice
       const slice = editor.state.doc.slice(from, to);
       const tmp = document.createElement('div');
       const fragment = DOMSerializer.fromSchema(editor.state.schema).serializeFragment(slice.content);
@@ -725,8 +1345,13 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
     saveSelectionForReplace: () => {
       if (!editor) return '';
       const { from, to, empty } = editor.state.selection;
+      // Fix #2: When the editor has lost focus/selection (e.g., user clicked the AI textarea),
+      // DO NOT clear the previously saved range — keep it so AI actions can still operate on it.
       if (empty) {
-        savedSelectionRef.current = null;
+        // Return the previously saved text if any (range stays intact for later replaceSelection)
+        if (savedSelectionRef.current) {
+          return editor.state.doc.textBetween(savedSelectionRef.current.from, savedSelectionRef.current.to, '\n');
+        }
         return '';
       }
       savedSelectionRef.current = { from, to };
@@ -735,22 +1360,26 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
     replaceSelection: (html: string) => {
       if (!editor) return;
       const range = savedSelectionRef.current;
-      if (!range) return;
+      if (!range) {
+        editor.chain().focus().insertContent(html).run();
+        return;
+      }
       savedSelectionRef.current = null;
       editor.chain().focus().deleteRange({ from: range.from, to: range.to }).insertContent(html).run();
     },
     insertAfterSelection: (html: string) => {
       if (!editor) return;
       const range = savedSelectionRef.current;
-      if (!range) return;
+      if (!range) {
+        editor.chain().focus().insertContent(`<p>${html}</p>`).run();
+        return;
+      }
       savedSelectionRef.current = null;
-      // Insert a new paragraph with the content right after the selection end
       editor.chain()
         .focus()
         .insertContentAt(range.to, `<p>${html}</p>`)
         .run();
     },
-
     hasSelection: () => {
       if (!editor) return false;
       const { empty } = editor.state.selection;
@@ -769,18 +1398,11 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
   }, [editor, isEditable]);
 
   // Sync content from outside (e.g. loading saved article, AI generation).
-  // We track the last HTML the editor emitted so we can skip setContent() when
-  // the parent re-renders with the same value the editor just produced.
-  // Calling setContent() replaces the entire document and wipes the undo stack,
-  // so we must only do it for genuine external changes.
   const lastEmittedHtmlRef = useRef(initialContent);
   useEffect(() => {
     if (!editor) return;
-    // Only update the editor if the incoming content is different from what
-    // the editor itself last produced (i.e. a genuine external change).
     if (initialContent !== lastEmittedHtmlRef.current) {
       editor.commands.setContent(initialContent || '', false);
-      // Keep ref in sync so we don't re-apply the same content on the next render
       lastEmittedHtmlRef.current = initialContent || '';
     }
   });
@@ -862,7 +1484,6 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
     });
 
     if (count === 0 && startFrom > 0) {
-      // Wrap around
       findCountRef.current = 0;
       doc.descendants((node, pos) => {
         if (node.isText) {
@@ -898,7 +1519,6 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
     if (!editor || !findText) return;
     const html = editor.getHTML();
     const regex = new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    // Simple text replacement in HTML (works for plain text matches)
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
     const replaceInTextNodes = (node: Node) => {
@@ -952,6 +1572,26 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
     setLinkUrl('');
   }, [editor, linkUrl, isValidUrl]);
 
+  // Fix #3: Floating toolbar link popover apply
+  const handleFloatingLinkApply = useCallback(() => {
+    if (!editor) return;
+    if (floatingLinkUrl && !isValidUrl(floatingLinkUrl)) return;
+    if (floatingLinkUrl) {
+      editor.chain().focus().extendMarkRange('link').setLink({ href: floatingLinkUrl }).run();
+    } else {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run();
+    }
+    setShowFloatingLinkPopover(false);
+    setFloatingLinkUrl('');
+  }, [editor, floatingLinkUrl, isValidUrl]);
+
+  const handleFloatingLinkRemove = useCallback(() => {
+    if (!editor) return;
+    editor.chain().focus().extendMarkRange('link').unsetLink().run();
+    setShowFloatingLinkPopover(false);
+    setFloatingLinkUrl('');
+  }, [editor]);
+
   // ---- Image ----
   const handleSetImage = useCallback(() => {
     if (!editor || !imageUrl) return;
@@ -968,6 +1608,12 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
   }, [editor]);
 
   // ---- Table ----
+  // Fix #4: Insert table with specified size
+  const handleInsertTableSize = useCallback((rows: number, cols: number) => {
+    if (!editor) return;
+    editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+  }, [editor]);
+
   const handleInsertTable = useCallback(() => {
     if (!editor) return;
     editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
@@ -983,6 +1629,25 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
   const handleMergeCells = useCallback(() => { editor?.chain().focus().mergeCells().run(); closeTableCtxMenu(); }, [editor, closeTableCtxMenu]);
   const handleSplitCell = useCallback(() => { editor?.chain().focus().splitCell().run(); closeTableCtxMenu(); }, [editor, closeTableCtxMenu]);
 
+  // Fix #4: Table border + move up/down handlers
+  const handleSetTableBorders = useCallback((value: TableBorder) => {
+    if (!editor) return;
+    (editor.chain().focus() as any).setTableBorders(value).run();
+    closeTableCtxMenu();
+  }, [editor, closeTableCtxMenu]);
+
+  const handleMoveTableUp = useCallback(() => {
+    if (!editor) return;
+    (editor.chain().focus() as any).moveTableUp().run();
+    closeTableCtxMenu();
+  }, [editor, closeTableCtxMenu]);
+
+  const handleMoveTableDown = useCallback(() => {
+    if (!editor) return;
+    (editor.chain().focus() as any).moveTableDown().run();
+    closeTableCtxMenu();
+  }, [editor, closeTableCtxMenu]);
+
   // ---- Export ----
   const handleExportHTML = useCallback(() => {
     if (!editor) return;
@@ -993,7 +1658,6 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
 
   const handleExportMarkdown = useCallback(() => {
     if (!editor) return;
-    // Simple HTML→Markdown conversion
     const div = document.createElement('div');
     div.innerHTML = editor.getHTML();
     const toMd = (el: Element): string => {
@@ -1165,44 +1829,42 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
   // ---- Toggle Block ----
   const handleInsertToggle = useCallback(() => {
     if (!editor) return;
-    editor.chain().focus().insertContent({
-      type: 'toggleBlock',
-      content: [
-        { type: 'paragraph', content: [{ type: 'text', text: 'Toggle title — click to expand' }] },
-        { type: 'paragraph', content: [{ type: 'text', text: 'Hidden content here...' }] },
-      ],
-    }).run();
+    (editor.chain().focus() as any).insertToggleBlock().run();
   }, [editor]);
 
-  // ---- 3 Columns ----
-  const handleInsert3Columns = useCallback(() => {
+  // Fix #13: Comment on selected text — Popover-based, uses CommentMark
+  const handleOpenCommentPopover = useCallback(() => {
     if (!editor) return;
-    editor.chain().focus().insertContent({
-      type: 'columnLayout',
-      content: [
-        { type: 'columnLayoutColumn', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Column 1' }] }] },
-        { type: 'columnLayoutColumn', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Column 2' }] }] },
-        { type: 'columnLayoutColumn', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Column 3' }] }] },
-      ],
-    }).run();
+    // Save selection first
+    savedSelectionRef.current = null;
+    const { from, to, empty } = editor.state.selection;
+    if (empty) {
+      // No selection — do nothing (do not alert)
+      return;
+    }
+    savedSelectionRef.current = { from, to };
+    setShowCommentPopover(true);
+    setCommentText('');
   }, [editor]);
 
-  // ---- Comment on selected text ----
   const handleSubmitComment = useCallback(() => {
     if (!editor || !commentText.trim()) return;
-    const { from, to, empty } = editor.state.selection;
-    if (empty) { setShowCommentInput(false); setCommentText(''); return; }
+    const range = savedSelectionRef.current;
+    if (!range) {
+      setShowCommentPopover(false);
+      setCommentText('');
+      return;
+    }
     const commentId = 'c_' + Date.now();
-    const escaped = commentText.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    // Wrap selected text with a comment span
-    const text = editor.state.doc.textBetween(from, to, '\n');
-    editor.chain().focus()
-      .insertContentAt(
-        { from, to },
-        `<span class="editor-comment" data-comment-id="${commentId}" data-comment="${escaped}">${text}</span>`
-      )
-      .run();
-    setShowCommentInput(false);
+    // Restore selection in editor then apply the comment mark
+    editor.chain().focus().setTextSelection({ from: range.from, to: range.to }).run();
+    (editor.chain() as any).addComment({
+      commentId,
+      comment: commentText.trim(),
+      author: 'You',
+    }).run();
+    savedSelectionRef.current = null;
+    setShowCommentPopover(false);
     setCommentText('');
   }, [editor, commentText]);
 
@@ -1247,34 +1909,11 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
     e.target.value = '';
   }, [editor]);
 
-  // ---- Special Characters ----
-  const SPECIAL_CHARS = [
-    { label: 'Copyright', value: '\u00A9' }, { label: 'Registered', value: '\u00AE' }, { label: 'Trademark', value: '\u2122' },
-    { label: 'Degree', value: '\u00B0' }, { label: 'Plus/Minus', value: '\u00B1' }, { label: 'Multiply', value: '\u00D7' },
-    { label: 'Divide', value: '\u00F7' }, { label: 'Euro', value: '\u20AC' }, { label: 'Pound', value: '\u00A3' },
-    { label: 'Yen', value: '\u00A5' }, { label: 'Section', value: '\u00A7' }, { label: 'Paragraph', value: '\u00B6' },
-    { label: 'Bullet', value: '\u2022' }, { label: 'Ellipsis', value: '\u2026' }, { label: 'Em Dash', value: '\u2014' },
-    { label: 'En Dash', value: '\u2013' }, { label: 'Left Quote', value: '\u201C' }, { label: 'Right Quote', value: '\u201D' },
-    { label: 'Apostrophe', value: '\u2019' }, { label: 'Dagger', value: '\u2020' }, { label: 'Double Dagger', value: '\u2021' },
-    { label: 'Left Arrow', value: '\u2190' }, { label: 'Right Arrow', value: '\u2192' },
-    { label: 'Up Arrow', value: '\u2191' }, { label: 'Down Arrow', value: '\u2193' },
-    { label: 'Not Equal', value: '\u2260' }, { label: 'Less/Equal', value: '\u2264' }, { label: 'Greater/Equal', value: '\u2265' },
-    { label: 'Infinity', value: '\u221E' }, { label: 'Approx', value: '\u2248' }, { label: 'Square Root', value: '\u221A' },
-    { label: 'Sum', value: '\u2211' }, { label: 'Pi', value: '\u03C0' }, { label: 'Omega', value: '\u03A9' },
-    { label: 'Micro', value: '\u00B5' }, { label: 'Delta', value: '\u2206' }, { label: 'Check', value: '\u2713' },
-    { label: 'Cross', value: '\u2717' },
-  ];
-
-  const handleInsertSpecialChar = useCallback((char: string) => {
-    if (!editor) return;
-    editor.chain().focus().insertContent(char).run();
-  }, [editor]);
-
-  // ---- Current color tracking ----
+  // ---- Current state tracking ----
   const currentTextColor = editor?.getAttributes('textStyle').color || '';
   const currentHighlight = editor?.getAttributes('highlight').color || '';
   const currentFontFamily = editor?.getAttributes('textStyle').fontFamily || '';
-  const currentFontSize = editor?.getAttributes('textStyle').fontSize || '';
+  const currentFontSize = currentFontSizeState || editor?.getAttributes('textStyle').fontSize || '';
   const currentHeading = editor?.isActive('heading', { level: 1 }) ? 'H1'
     : editor?.isActive('heading', { level: 2 }) ? 'H2'
     : editor?.isActive('heading', { level: 3 }) ? 'H3'
@@ -1296,7 +1935,74 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
     return (match?.[1]?.trim() as OrderedListStyle) || 'decimal';
   };
 
+  const getBulletListStyle = (): BulletListStyle | null => {
+    if (!editor?.isActive('bulletList')) return null;
+    const attrs = editor.getAttributes('bulletList');
+    const style = attrs?.style as string | undefined;
+    if (!style) return 'disc';
+    const match = style.match(/list-style-type\s*:\s*([^;]+)/);
+    return (match?.[1]?.trim() as BulletListStyle) || 'disc';
+  };
+
+  // Track current line height (read from active paragraph/heading)
+  useEffect(() => {
+    if (!editor) return;
+    const updateLineHeight = () => {
+      const attrs = editor.getAttributes('paragraph');
+      const lh = attrs?.lineHeight as string | undefined;
+      setCurrentLineHeight(lh || '');
+    };
+    editor.on('selectionUpdate', updateLineHeight);
+    editor.on('transaction', updateLineHeight);
+    return () => {
+      editor.off('selectionUpdate', updateLineHeight);
+      editor.off('transaction', updateLineHeight);
+    };
+  }, [editor]);
+
+  // Fix #11: Emoji keyword search
+  const filteredEmojis = useMemo(() => {
+    if (!emojiSearch) return null;
+    const term = emojiSearch.toLowerCase().trim();
+    if (!term) return null;
+    const matched: string[] = [];
+    const seen = new Set<string>();
+    for (const emoji of EMOJI_GRID) {
+      if (seen.has(emoji)) continue;
+      const keywords = EMOJI_KEYWORDS[emoji] || [];
+      const hit = keywords.some((kw) => kw.includes(term)) || emoji.includes(term);
+      if (hit) {
+        matched.push(emoji);
+        seen.add(emoji);
+      }
+    }
+    return matched;
+  }, [emojiSearch]);
+
   if (!editor) return null;
+
+  // Fix #12: Font size +/- handlers
+  const stepFontSize = (direction: 1 | -1) => {
+    if (!editor) return;
+    const current = currentFontSize ? parseInt(currentFontSize, 10) : 16;
+    const numericSizes = FONT_SIZES.map((s) => parseInt(s, 10));
+    // Find nearest index
+    let idx = numericSizes.findIndex((s) => s === current);
+    if (idx < 0) {
+      // Find closest
+      let bestIdx = 0;
+      let bestDiff = Math.abs(numericSizes[0] - current);
+      numericSizes.forEach((s, i) => {
+        const d = Math.abs(s - current);
+        if (d < bestDiff) { bestDiff = d; bestIdx = i; }
+      });
+      idx = bestIdx;
+    }
+    const newIdx = Math.max(0, Math.min(FONT_SIZES.length - 1, idx + direction));
+    const newSize = FONT_SIZES[newIdx];
+    setCurrentFontSizeState(newSize);
+    editor.chain().focus().setFontSize(newSize).run();
+  };
 
   return (
     <div className={cn(
@@ -1330,7 +2036,7 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
               onPick={(val) => val ? editor.chain().focus().toggleHighlight({ color: val }).run() : editor.chain().focus().unsetHighlight().run()}
             />
             {/* Comment */}
-            <Tb tooltip="Add Comment" onClick={() => { saveSelectionForReplace(); setShowCommentInput(true); setCommentText(''); }}>
+            <Tb tooltip="Add Comment" onClick={handleOpenCommentPopover}>
               <MessageSquare className="h-4 w-4" />
             </Tb>
           </>
@@ -1411,24 +2117,41 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
           ))}
         </TDropdown>
 
-        {/* Font Size */}
-        <TDropdown
-          label={currentFontSize || 'Size'}
-          icon={<span className="text-xs font-bold w-4 text-center">A</span>}
-          active={!!currentFontSize}
-        >
-          {FONT_SIZES.map((s) => (
-            <DropdownMenuItem
-              key={s}
-              onClick={() => editor.chain().focus().setFontSize(s).run()}
-              className={cn('text-xs', currentFontSize === s && 'bg-accent')}
-            >
-              <span style={{ fontSize: Math.min(parseInt(s), 20) }}>{s}</span>
-            </DropdownMenuItem>
-          ))}
-        </TDropdown>
+        {/* Fix #12: Font Size grouped control with minus/plus */}
+        <div className="inline-flex items-center h-8 rounded-lg border border-border/60 bg-background shrink-0">
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => stepFontSize(-1)}
+            className="h-8 w-7 flex items-center justify-center rounded-l-lg text-muted-foreground hover:bg-accent/80 hover:text-foreground transition-colors"
+            title="Smaller font"
+          >
+            <Minus className="h-3.5 w-3.5" />
+          </button>
+          <TDropdown label={currentFontSize || 'Size'} icon={<span className="text-xs font-bold w-4 text-center">{currentFontSize ? currentFontSize.replace('px','') : 'A'}</span>} triggerClassName="border-0 bg-transparent px-2 h-8">
+            {FONT_SIZES.map((s) => (
+              <DropdownMenuItem
+                key={s}
+                onClick={() => { setCurrentFontSizeState(s); editor.chain().focus().setFontSize(s).run(); }}
+                className={cn('text-xs', currentFontSize === s && 'bg-accent')}
+              >
+                <span style={{ fontSize: Math.min(parseInt(s), 20) }}>{s}</span>
+                {currentFontSize === s && <Check className="h-3 w-3 ml-auto" />}
+              </DropdownMenuItem>
+            ))}
+          </TDropdown>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => stepFontSize(1)}
+            className="h-8 w-7 flex items-center justify-center rounded-r-lg text-muted-foreground hover:bg-accent/80 hover:text-foreground transition-colors"
+            title="Larger font"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
 
-        {/* Line Height */}
+        {/* Fix #15: Line Height with checkmark */}
         <TDropdown
           label={currentLineHeight || 'Line'}
           icon={<Ruler className="h-4 w-4" />}
@@ -1452,14 +2175,15 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
               }}
               className={cn('text-xs', currentLineHeight === lh && 'bg-accent')}
             >
-              <span style={{ lineHeight: lh, display: 'block' }}>{lh === '1' ? 'Single' : lh === '1.5' ? '1.5x' : lh === '2' ? 'Double' : lh}</span>
+              <span style={{ lineHeight: lh, display: 'block' }}>{lh === '1' ? 'Single (1)' : lh === '1.5' ? '1.5x' : lh === '2' ? 'Double (2)' : lh}</span>
+              {currentLineHeight === lh && <Check className="h-3 w-3 ml-auto" />}
             </DropdownMenuItem>
           ))}
         </TDropdown>
 
         <TSep />
 
-        {/* Block / Heading Type */}
+        {/* Fix #7: Block / Heading Type — restructured as "Turn into" */}
         <TDropdown
           label={currentHeading}
           icon={
@@ -1473,31 +2197,65 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
           }
           active={currentHeading !== 'Paragraph'}
         >
+          <DropdownMenuLabel className="text-[10px] text-muted-foreground">Turn into</DropdownMenuLabel>
           <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()} className={cn('text-xs', currentHeading === 'Paragraph' && 'bg-accent')}>
-            <Pilcrow className="h-4 w-4 mr-1.5" />Text (Paragraph)
+            <Pilcrow className="h-4 w-4 mr-1.5" />Text
+            {currentHeading === 'Paragraph' && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={cn('text-xs font-bold', currentHeading === 'H1' && 'bg-accent')}>
+            Heading 1
+            {currentHeading === 'H1' && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={cn('text-sm font-bold', currentHeading === 'H2' && 'bg-accent')}>
+            Heading 2
+            {currentHeading === 'H2' && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} className={cn('text-[13px] font-semibold', currentHeading === 'H3' && 'bg-accent')}>
+            Heading 3
+            {currentHeading === 'H3' && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()} className={cn('text-xs font-semibold', currentHeading === 'H4' && 'bg-accent')}>
+            Heading 4
+            {currentHeading === 'H4' && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 5 }).run()} className={cn('text-xs font-medium', currentHeading === 'H5' && 'bg-accent')}>
+            Heading 5
+            {currentHeading === 'H5' && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 6 }).run()} className={cn('text-[11px] font-medium', currentHeading === 'H6' && 'bg-accent')}>
+            Heading 6
+            {currentHeading === 'H6' && <Check className="h-3 w-3 ml-auto" />}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={cn('text-xs font-bold', currentHeading === 'H1' && 'bg-accent')}>Heading 1</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={cn('text-sm font-bold', currentHeading === 'H2' && 'bg-accent')}>Heading 2</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} className={cn('text-[13px] font-semibold', currentHeading === 'H3' && 'bg-accent')}>Heading 3</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()} className={cn('text-xs font-semibold', currentHeading === 'H4' && 'bg-accent')}>Heading 4</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 5 }).run()} className={cn('text-xs font-medium', currentHeading === 'H5' && 'bg-accent')}>Heading 5</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 6 }).run()} className={cn('text-[11px] font-medium', currentHeading === 'H6' && 'bg-accent')}>Heading 6</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleInsertToggle} className="text-xs">
-            <ChevronRight className="h-4 w-4 mr-1.5" />Toggle Block
+          <DropdownMenuItem onClick={() => editor.chain().focus().toggleBulletList().run()} className={cn('text-xs', editor.isActive('bulletList') && 'bg-accent')}>
+            <List className="h-4 w-4 mr-1.5" />Bulleted List
+            {editor.isActive('bulletList') && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => editor.chain().focus().toggleOrderedList().run()} className={cn('text-xs', editor.isActive('orderedList') && 'bg-accent')}>
+            <ListOrdered className="h-4 w-4 mr-1.5" />Numbered List
+            {editor.isActive('orderedList') && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => editor.chain().focus().toggleTaskList().run()} className={cn('text-xs', editor.isActive('taskList') && 'bg-accent')}>
+            <ListChecks className="h-4 w-4 mr-1.5" />To-do List
+            {editor.isActive('taskList') && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleInsertToggle} className={cn('text-xs', editor.isActive('toggleBlock') && 'bg-accent')}>
+            <ToggleLeft className="h-4 w-4 mr-1.5" />Toggle List
+            {editor.isActive('toggleBlock') && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={cn('text-xs font-mono', editor.isActive('codeBlock') && 'bg-accent')}>
+            <Code className="h-4 w-4 mr-1.5" />Code Block
+            {editor.isActive('codeBlock') && <Check className="h-3 w-3 ml-auto" />}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => editor.chain().focus().toggleBlockquote().run()} className={cn('text-xs', editor.isActive('blockquote') && 'bg-accent')}>
             <Quote className="h-4 w-4 mr-1.5" />Block Quote
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleInsert3Columns} className="text-xs">
-            <Columns2 className="h-4 w-4 mr-1.5" />3 Columns
+            {editor.isActive('blockquote') && <Check className="h-3 w-3 ml-auto" />}
           </DropdownMenuItem>
         </TDropdown>
 
         <TSep />
 
-        {/* Text Formatting */}
+        {/* Text Formatting (Bold / Italic / Underline / Strikethrough) */}
         <Tb tooltip="Bold (Ctrl+B)" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()}>
           <Bold className="h-4 w-4" />
         </Tb>
@@ -1509,15 +2267,6 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
         </Tb>
         <Tb tooltip="Strikethrough" active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()}>
           <Strikethrough className="h-4 w-4" />
-        </Tb>
-        <Tb tooltip="Inline Code" active={editor.isActive('code')} onClick={() => editor.chain().focus().toggleCode().run()}>
-          <CodeXml className="h-4 w-4" />
-        </Tb>
-        <Tb tooltip="Subscript" active={editor.isActive('subscript')} onClick={() => editor.chain().focus().toggleSubscript().run()}>
-          <span className="text-xs font-bold">X₂</span>
-        </Tb>
-        <Tb tooltip="Superscript" active={editor.isActive('superscript')} onClick={() => editor.chain().focus().toggleSuperscript().run()}>
-          <span className="text-xs font-bold">X²</span>
         </Tb>
 
         <TSep />
@@ -1542,35 +2291,36 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
 
         <TSep />
 
-        {/* Keyboard Input */}
-        <Tb tooltip="Keyboard Input" onClick={() => editor.chain().focus().insertContent('<span class="editor-kbd">Ctrl</span>').run()}>
-          <Keyboard className="h-4 w-4" />
-        </Tb>
-
-        <TSep />
-
-        {/* Alignment */}
-        <TDropdown label="Align" icon={<AlignLeft className="h-4 w-4" />} active={currentAlign !== 'left'}>
-          <DropdownMenuItem className="text-xs" onClick={() => editor.chain().focus().setTextAlign('left').run()}>
-            <AlignLeft className="h-3.5 w-3.5 mr-1.5" />Align Left
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-xs" onClick={() => editor.chain().focus().setTextAlign('center').run()}>
-            <AlignCenter className="h-3.5 w-3.5 mr-1.5" />Align Center
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-xs" onClick={() => editor.chain().focus().setTextAlign('right').run()}>
-            <AlignRight className="h-3.5 w-3.5 mr-1.5" />Align Right
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-xs" onClick={() => editor.chain().focus().setTextAlign('justify').run()}>
-            <AlignJustify className="h-3.5 w-3.5 mr-1.5" />Justify
-          </DropdownMenuItem>
+        {/* Fix #5: Bullet List grouped dropdown (disc/circle/square) */}
+        <TDropdown
+          label="Bullet List"
+          icon={<List className="h-4 w-4" />}
+          active={editor.isActive('bulletList')}
+        >
+          {BULLET_LIST_STYLES.map((s) => (
+            <DropdownMenuItem
+              key={s.value}
+              className="text-xs gap-2"
+              onClick={() => {
+                const cur = getBulletListStyle();
+                if (cur === s.value && editor.isActive('bulletList')) {
+                  editor.chain().focus().toggleBulletList().run();
+                } else {
+                  editor.chain().focus().toggleBulletList().run();
+                  (editor.chain().focus() as any).setBulletListStyle(s.value).run();
+                }
+              }}
+            >
+              <span className="font-mono text-[11px] text-muted-foreground w-16 shrink-0">{s.preview}</span>
+              <span>{s.label}</span>
+              {getBulletListStyle() === s.value && editor.isActive('bulletList') && (
+                <Check className="h-3 w-3 ml-auto" />
+              )}
+            </DropdownMenuItem>
+          ))}
         </TDropdown>
 
-        <TSep />
-
-        {/* Lists */}
-        <Tb tooltip="Bullet List" active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()}>
-          <List className="h-4 w-4" />
-        </Tb>
+        {/* Fix #6: Numbered List grouped dropdown (verified working) */}
         <TDropdown
           label="Numbered List"
           icon={<ListOrdered className="h-4 w-4" />}
@@ -1593,7 +2343,7 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
               <span className="font-mono text-[11px] text-muted-foreground w-16 shrink-0">{s.preview}</span>
               <span>{s.label}</span>
               {getOrderedListStyle() === s.value && editor.isActive('orderedList') && (
-                <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
+                <Check className="h-3 w-3 ml-auto" />
               )}
             </DropdownMenuItem>
           ))}
@@ -1614,7 +2364,44 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
 
         <TSep />
 
-        {/* Insert Elements */}
+        {/* Alignment */}
+        <TDropdown label="Align" icon={<AlignLeft className="h-4 w-4" />} active={currentAlign !== 'left'}>
+          <DropdownMenuItem className="text-xs" onClick={() => editor.chain().focus().setTextAlign('left').run()}>
+            <AlignLeft className="h-3.5 w-3.5 mr-1.5" />Align Left
+            {currentAlign === 'left' && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-xs" onClick={() => editor.chain().focus().setTextAlign('center').run()}>
+            <AlignCenter className="h-3.5 w-3.5 mr-1.5" />Align Center
+            {currentAlign === 'center' && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-xs" onClick={() => editor.chain().focus().setTextAlign('right').run()}>
+            <AlignRight className="h-3.5 w-3.5 mr-1.5" />Align Right
+            {currentAlign === 'right' && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-xs" onClick={() => editor.chain().focus().setTextAlign('justify').run()}>
+            <AlignJustify className="h-3.5 w-3.5 mr-1.5" />Justify
+            {currentAlign === 'justify' && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+        </TDropdown>
+
+        <TSep />
+
+        {/* Fix #16: Insert dropdown — Keyboard Input, Superscript, Subscript */}
+        <TDropdown label="Insert" icon={<Plus className="h-4 w-4" />} triggerClassName="px-2.5">
+          <DropdownMenuItem className="text-xs" onClick={() => editor.chain().focus().insertContent('<kbd class="editor-kbd">Ctrl</kbd>').run()}>
+            <Keyboard className="h-3.5 w-3.5 mr-1.5" />Keyboard Input
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-xs" onClick={() => editor.chain().focus().toggleSuperscript().run()}>
+            <span className="font-bold mr-1.5 w-4 text-center">X²</span>Superscript
+            {editor.isActive('superscript') && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-xs" onClick={() => editor.chain().focus().toggleSubscript().run()}>
+            <span className="font-bold mr-1.5 w-4 text-center">X₂</span>Subscript
+            {editor.isActive('subscript') && <Check className="h-3 w-3 ml-auto" />}
+          </DropdownMenuItem>
+        </TDropdown>
+
+        {/* Insert Link / Image / Video / Audio / Comment */}
         <Tb tooltip="Insert Link" active={editor.isActive('link')} onClick={() => {
           const prev = editor.getAttributes('link').href;
           setLinkUrl(prev || '');
@@ -1625,27 +2412,65 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
         <Tb tooltip="Insert Image" onClick={() => { setImageUrl(''); setShowImageInput(true); }}>
           <ImageIcon className="h-4 w-4" />
         </Tb>
-        {/* Video */}
         <Tb tooltip="Insert Video" onClick={() => { setVideoUrl(''); setShowVideoDialog(true); }}>
           <Film className="h-4 w-4" />
         </Tb>
-        {/* Audio */}
         <Tb tooltip="Insert Audio" onClick={() => { setAudioUrl(''); setShowAudioDialog(true); }}>
           <Music className="h-4 w-4" />
         </Tb>
-        {/* Comment */}
-        <Tb tooltip="Add Comment" onClick={() => { saveSelectionForReplace(); setShowCommentInput(true); setCommentText(''); }}>
+        {/* Comment (popover-based) */}
+        <Tb tooltip="Add Comment" onClick={handleOpenCommentPopover}>
           <MessageSquare className="h-4 w-4" />
         </Tb>
-        <TDropdown label="Table" icon={<TableIcon className="h-4 w-4" />}>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger className="text-xs"><TableIcon className="h-3.5 w-3.5 mr-1.5" />Table</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuItem onClick={handleInsertTable} className="text-xs">
-                <Plus className="h-3.5 w-3.5 mr-1.5" />Insert Table
-              </DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+
+        {/* Fix #4: Table dropdown with grid selector + border controls + move up/down */}
+        <TDropdown label="Table" icon={<TableIcon className="h-4 w-4" />} active={editor.isActive('table')}>
+          {/* Grid selector — replaces "Insert Table" single item */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                className="w-full flex items-center justify-between px-2 py-1.5 text-xs hover:bg-accent transition-colors"
+              >
+                <span className="flex items-center gap-1.5">
+                  <TableIcon className="h-3.5 w-3.5" />Insert Table
+                </span>
+                <ChevronRight className="h-3 w-3 opacity-50" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-2" align="start" side="right">
+              <div className="flex flex-col gap-1.5">
+                <div className="grid grid-cols-6 gap-0.5">
+                  {Array.from({ length: 36 }).map((_, i) => {
+                    const r = Math.floor(i / 6) + 1;
+                    const c = (i % 6) + 1;
+                    const active = r <= tableGridHover.rows && c <= tableGridHover.cols;
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onMouseEnter={() => setTableGridHover({ rows: r, cols: c })}
+                        onClick={() => {
+                          handleInsertTableSize(r, c);
+                          setTableGridHover({ rows: 0, cols: 0 });
+                        }}
+                        className={cn(
+                          'h-5 w-5 rounded-sm border',
+                          active ? 'bg-amber-400 border-amber-500' : 'border-border/60 hover:bg-accent/50',
+                        )}
+                      />
+                    );
+                  })}
+                </div>
+                <span className="text-[10px] text-muted-foreground text-center">
+                  {tableGridHover.rows > 0 ? `${tableGridHover.rows} × ${tableGridHover.cols}` : 'Hover to select'}
+                </span>
+              </div>
+            </PopoverContent>
+          </Popover>
+          <DropdownMenuSeparator />
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="text-xs"><TableProperties className="h-3.5 w-3.5 mr-1.5" />Cell</DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
@@ -1669,17 +2494,39 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
               <DropdownMenuItem onClick={handleDeleteColumn} className="text-xs">Delete Column</DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
+          {/* Fix #4: Border submenu */}
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="text-xs"><Pencil className="h-3.5 w-3.5 mr-1.5" />Borders</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {TABLE_BORDERS.map((b) => (
+                <DropdownMenuItem
+                  key={b.value}
+                  onClick={() => handleSetTableBorders(b.value)}
+                  className="text-xs"
+                >
+                  {b.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          {/* Fix #4: Move up/down */}
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="text-xs"><ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />Move</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem onClick={handleMoveTableUp} className="text-xs"><ArrowUp className="h-3.5 w-3.5 mr-1.5" />Move Up</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleMoveTableDown} className="text-xs"><ArrowDown className="h-3.5 w-3.5 mr-1.5" />Move Down</DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleDeleteTable} className="text-xs text-destructive">Delete table</DropdownMenuItem>
         </TDropdown>
-        <Tb tooltip="Horizontal Rule" onClick={() => { try { editor.chain().focus().setHorizontalRule().run(); } catch { editor.chain().focus().insertContent('<hr>').run(); } }}>
-          <Minus className="h-4 w-4" />
-        </Tb>
+
+        {/* Code Block (kept) */}
         <Tb tooltip="Code Block" active={editor.isActive('codeBlock')} onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
           <Code className="h-4 w-4" />
         </Tb>
 
-        {/* Emoji with search */}
+        {/* Fix #11: Emoji with keyword search */}
         <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -1701,12 +2548,11 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
               <Input
                 value={emojiSearch}
                 onChange={(e) => setEmojiSearch(e.target.value)}
-                placeholder="Search emojis..."
+                placeholder="Search by keyword (smile, heart, ...)"
                 className="h-7 pl-7 text-xs"
                 autoFocus
               />
             </div>
-            {/* Category tabs — no horizontal scroll */}
             {!emojiSearch && (
               <div className="flex flex-wrap gap-0.5 mb-2">
                 {Object.keys(EMOJI_CATEGORIES).map((cat) => (
@@ -1726,8 +2572,8 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
               </div>
             )}
             <div className="grid grid-cols-10 gap-0.5 max-h-48 overflow-y-auto">
-              {(emojiSearch
-                ? EMOJI_GRID.filter((e) => e.includes(emojiSearch))
+              {(filteredEmojis
+                ? filteredEmojis
                 : (EMOJI_CATEGORIES[emojiCategory] || EMOJI_CATEGORIES[Object.keys(EMOJI_CATEGORIES)[0]] || [])
               ).map((emoji, i) => (
                 <button
@@ -1740,6 +2586,11 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
                   {emoji}
                 </button>
               ))}
+              {filteredEmojis && filteredEmojis.length === 0 && (
+                <div className="col-span-10 text-center text-xs text-muted-foreground py-4">
+                  No emojis found for &ldquo;{emojiSearch}&rdquo;
+                </div>
+              )}
             </div>
           </PopoverContent>
         </Popover>
@@ -1759,7 +2610,7 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
           <RemoveFormatting className="h-4 w-4" />
         </Tb>
 
-        {/* More Options (...) */}
+        {/* More Options (...) — formatting shortcuts */}
         <TDropdown label="" icon={<MoreHorizontal className="h-4 w-4" />}>
           <DropdownMenuItem className="text-xs" onClick={() => editor.chain().focus().toggleSuperscript().run()}>
             <span className="font-bold mr-1.5">X²</span>Superscript
@@ -1793,31 +2644,6 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
           <DropdownMenuItem className="text-xs" onClick={() => editor.chain().focus().setTextAlign('justify').run()}>
             <AlignJustify className="h-3.5 w-3.5 mr-1.5" />Justify
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <Popover>
-            <PopoverTrigger asChild>
-              <DropdownMenuItem className="text-xs" onSelect={(e) => e.preventDefault()}>
-                <Type className="h-3.5 w-3.5 mr-1.5" />Special Characters...
-              </DropdownMenuItem>
-            </PopoverTrigger>
-            <PopoverContent className="w-56 p-2" align="start">
-              <p className="text-[10px] font-medium text-muted-foreground mb-1.5 px-1">Insert Special Character</p>
-              <div className="grid grid-cols-8 gap-1">
-                {SPECIAL_CHARS.map((c) => (
-                  <button
-                    key={c.label}
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => handleInsertSpecialChar(c.value)}
-                    className="h-7 w-7 flex items-center justify-center rounded border border-border/50 hover:bg-accent text-sm transition-colors"
-                    title={c.label}
-                  >
-                    {c.value}
-                  </button>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
         </TDropdown>
           </>
         )}
@@ -1830,7 +2656,7 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
         </div>
       </div>
 
-      {/* ========== LINK INPUT BAR ========== */}
+      {/* ========== LINK INPUT BAR (toolbar-level) ========== */}
       {showLinkInput && (
         <div className="flex items-center gap-2 border-b border-border/50 bg-muted/30 px-3 py-2">
           <Link2 className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -1897,25 +2723,6 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
             <Upload className="h-3 w-3" />Upload
           </Button>
           <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowImageInput(false)}>
-            <span className="text-xs">✕</span>
-          </Button>
-        </div>
-      )}
-
-      {/* ========== COMMENT INPUT BAR ========== */}
-      {showCommentInput && (
-        <div className="flex items-center gap-2 border-b border-border/50 bg-amber-500/5 px-3 py-2">
-          <MessageSquare className="h-4 w-4 text-amber-600 shrink-0" />
-          <Input
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            placeholder="Write a comment on selected text..."
-            className="h-8 text-sm flex-1"
-            onKeyDown={(e) => { if (e.key === 'Enter') handleSubmitComment(); if (e.key === 'Escape') { setShowCommentInput(false); setCommentText(''); } }}
-            autoFocus
-          />
-          <Button type="button" size="sm" className="h-8" onClick={handleSubmitComment} disabled={!commentText.trim()}>Comment</Button>
-          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setShowCommentInput(false); setCommentText(''); }}>
             <span className="text-xs">✕</span>
           </Button>
         </div>
@@ -2021,11 +2828,6 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
             className={cn('h-7 w-7 flex items-center justify-center rounded transition-colors', editor.isActive('strike') ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground')}>
             <Strikethrough className="h-3.5 w-3.5" />
           </button>
-          {/* Code */}
-          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleCode().run()} title="Inline Code"
-            className={cn('h-7 w-7 flex items-center justify-center rounded transition-colors', editor.isActive('code') ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground')}>
-            <Code className="h-3.5 w-3.5" />
-          </button>
           {/* Superscript */}
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleSuperscript().run()} title="Superscript"
             className={cn('h-7 w-7 flex items-center justify-center rounded transition-colors text-[10px] font-bold', editor.isActive('superscript') ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground')}>
@@ -2042,23 +2844,118 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
             className={cn('h-7 w-7 flex items-center justify-center rounded transition-colors', editor.isActive('highlight') ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground')}>
             <Highlighter className="h-3.5 w-3.5" />
           </button>
-          {/* Link */}
-          <button type="button" onMouseDown={(e) => e.preventDefault()}
-            onClick={() => {
-              const url = window.prompt('Enter URL:');
-              if (url) { editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run(); }
-              else if (url === '') { editor.chain().focus().unsetLink().run(); }
-            }}
-            title="Link"
-            className={cn('h-7 w-7 flex items-center justify-center rounded transition-colors', editor.isActive('link') ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground')}>
-            <Link2 className="h-3.5 w-3.5" />
-          </button>
+          {/* Fix #3: Link popover (replaces window.prompt) */}
+          <Popover open={showFloatingLinkPopover} onOpenChange={(open) => {
+            setShowFloatingLinkPopover(open);
+            if (open) {
+              const prev = editor.getAttributes('link').href;
+              setFloatingLinkUrl(prev || '');
+            }
+          }}>
+            <PopoverTrigger asChild>
+              <button type="button" onMouseDown={(e) => e.preventDefault()} title="Link"
+                className={cn('h-7 w-7 flex items-center justify-center rounded transition-colors', editor.isActive('link') ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground')}>
+                <Link2 className="h-3.5 w-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-2" align="center" sideOffset={6}>
+              <div className="flex items-center gap-1.5">
+                <Link2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <Input
+                  value={floatingLinkUrl}
+                  onChange={(e) => setFloatingLinkUrl(e.target.value)}
+                  placeholder="https://example.com"
+                  className="h-7 text-xs flex-1"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); handleFloatingLinkApply(); }
+                    if (e.key === 'Escape') setShowFloatingLinkPopover(false);
+                  }}
+                  autoFocus
+                />
+              </div>
+              {floatingLinkUrl && !isValidUrl(floatingLinkUrl) && (
+                <p className="text-[10px] text-destructive mt-1">Invalid URL</p>
+              )}
+              <div className="flex items-center gap-1.5 mt-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 text-xs flex-1"
+                  onClick={handleFloatingLinkApply}
+                  disabled={!!floatingLinkUrl && !isValidUrl(floatingLinkUrl)}
+                >
+                  Apply
+                </Button>
+                {editor.isActive('link') && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={handleFloatingLinkRemove}
+                  >
+                    <Unlink className="h-3 w-3 mr-1" />Remove
+                  </Button>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
           {/* Clear Formatting */}
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().unsetAllMarks().run()} title="Clear Formatting"
             className="h-7 w-7 flex items-center justify-center rounded transition-colors text-muted-foreground hover:bg-accent/70 hover:text-foreground">
             <RemoveFormatting className="h-3.5 w-3.5" />
           </button>
         </div>
+      )}
+
+      {/* Fix #13: Comment Popover (replaces full-width comment bar) */}
+      {showCommentPopover && (
+        <Popover open={showCommentPopover} onOpenChange={setShowCommentPopover}>
+          <PopoverContent
+            className="w-80 p-2"
+            align="center"
+            // Anchor at top-center of viewport (since there's no trigger visible)
+            sideOffset={window.innerHeight - 200}
+            style={{ position: 'fixed', left: '50%', top: '40%', transform: 'translateX(-50%)' }}
+          >
+            <div className="flex items-center gap-1.5 mb-2">
+              <MessageSquare className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+              <span className="text-xs font-medium">Add Comment</span>
+            </div>
+            <Textarea
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder="Write a comment on the selected text..."
+              rows={3}
+              className="text-xs resize-none"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleSubmitComment(); }
+                if (e.key === 'Escape') { setShowCommentPopover(false); setCommentText(''); }
+              }}
+              autoFocus
+            />
+            <div className="flex items-center gap-1.5 mt-2">
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 text-xs flex-1 bg-amber-500 hover:bg-amber-400 text-white"
+                onClick={handleSubmitComment}
+                disabled={!commentText.trim()}
+              >
+                Save Comment
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => { setShowCommentPopover(false); setCommentText(''); }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
       )}
 
       {/* ========== TABLE CONTEXT MENU (right-click on table) ========== */}
@@ -2080,9 +2977,15 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
             {tableCtxMenu.activeSubmenu === 'table' && (
               <div className="table-ctx-submenu" onMouseEnter={() => setTableCtxMenu((p) => ({ ...p, activeSubmenu: 'table' }))}>
                 <div className="table-ctx-item" onClick={(e) => { e.stopPropagation(); handleInsertTable(); closeTableCtxMenu(); }}>
-                  <Plus className="h-3.5 w-3.5 mr-2 opacity-70" />Insert Table
+                  <Plus className="h-3.5 w-3.5 mr-2 opacity-70" />Insert 3×3 Table
                 </div>
-                <div className="table-ctx-item" onClick={(e) => { e.stopPropagation(); handleDeleteTable(); }}>
+                <div className="table-ctx-item" onClick={(e) => { e.stopPropagation(); handleMoveTableUp(); }}>
+                  <ArrowUp className="h-3.5 w-3.5 mr-2 opacity-70" />Move Up
+                </div>
+                <div className="table-ctx-item" onClick={(e) => { e.stopPropagation(); handleMoveTableDown(); }}>
+                  <ArrowDown className="h-3.5 w-3.5 mr-2 opacity-70" />Move Down
+                </div>
+                <div className="table-ctx-item table-ctx-item-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteTable(); }}>
                   Delete Table
                 </div>
               </div>
@@ -2152,6 +3055,28 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
             )}
           </div>
 
+          {/* Borders submenu (right-click) */}
+          <div
+            className="table-ctx-item"
+            onMouseEnter={() => setTableCtxMenu((p) => ({ ...p, activeSubmenu: 'borders' }))}
+          >
+            <span>Borders</span>
+            <ChevronRight className="h-3.5 w-3.5 opacity-50" />
+            {tableCtxMenu.activeSubmenu === 'borders' && (
+              <div className="table-ctx-submenu" onMouseEnter={() => setTableCtxMenu((p) => ({ ...p, activeSubmenu: 'borders' }))}>
+                {TABLE_BORDERS.map((b) => (
+                  <div
+                    key={b.value}
+                    className="table-ctx-item"
+                    onClick={(e) => { e.stopPropagation(); handleSetTableBorders(b.value); }}
+                  >
+                    {b.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Separator */}
           <div className="table-ctx-separator" />
 
@@ -2166,7 +3091,46 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
       )}
 
       {/* ========== EDITOR CONTENT ========== */}
-      <div className="flex-1 overflow-y-auto min-h-0" onContextMenu={handleTableContextMenu}>
+      <div
+        className="flex-1 overflow-y-auto min-h-0 relative"
+        onContextMenu={handleTableContextMenu}
+        onDragOver={handleEditorDragOver}
+        onDrop={handleEditorDrop}
+        onDragEnd={handleEditorDragEnd}
+      >
+        {/* Fix #1: Drag handle overlay (real DOM, draggable) */}
+        {dragHandle.show && (
+          <div
+            draggable
+            onDragStart={handleDragHandleDragStart}
+            style={{
+              position: 'fixed',
+              top: dragHandle.top,
+              left: dragHandle.left,
+              zIndex: 50,
+              cursor: 'grab',
+            }}
+            className="h-6 w-6 rounded-md bg-popover border border-border/60 shadow-sm flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            title="Drag to reorder block"
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </div>
+        )}
+        {/* Drop indicator line */}
+        {dropIndicator.show && (
+          <div
+            style={{
+              position: 'fixed',
+              top: dropIndicator.top - 1.5,
+              left: 0,
+              right: 0,
+              height: 3,
+              backgroundColor: 'oklch(0.75 0.18 75)',
+              zIndex: 49,
+              pointerEvents: 'none',
+            }}
+          />
+        )}
         <div className="max-w-4xl mx-auto px-6 md:px-12 lg:px-16 py-8">
           <EditorContent editor={editor} />
         </div>
@@ -2198,14 +3162,6 @@ function EyeIcon({ className }: { className?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /><circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
-function MessageSquareIcon({ className }: { className?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   );
 }

@@ -84,7 +84,7 @@
   margin-bottom: 0.8em;
 }
 .editor-content li {
- margin-bottom: 0.25em;
+  margin-bottom: 0.25em;
   line-height: 1.7;
 }
 .editor-content li p {
@@ -278,6 +278,53 @@
   pointer-events: none;
 }
 
+/* Fix #4: Table border styles (based on data-borders attribute) */
+.editor-content table[data-borders="none"] td,
+.editor-content table[data-borders="none"] th {
+  border: none !important;
+}
+.editor-content table[data-borders="none"] {
+  border: none !important;
+}
+
+.editor-content table[data-borders="outside"] td,
+.editor-content table[data-borders="outside"] th {
+  border: none !important;
+}
+.editor-content table[data-borders="outside"] {
+  border: 1px solid oklch(var(--border)) !important;
+}
+
+.editor-content table[data-borders="top"] td,
+.editor-content table[data-borders="top"] th,
+.editor-content table[data-borders="bottom"] td,
+.editor-content table[data-borders="bottom"] th,
+.editor-content table[data-borders="left"] td,
+.editor-content table[data-borders="left"] th,
+.editor-content table[data-borders="right"] td,
+.editor-content table[data-borders="right"] th {
+  border: none !important;
+}
+
+.editor-content table[data-borders="top"] td:first-child,
+.editor-content table[data-borders="top"] th:first-child {
+  border-top: 1px solid oklch(var(--border)) !important;
+}
+.editor-content table[data-borders="top"] {
+  border-top: 1px solid oklch(var(--border)) !important;
+}
+.editor-content table[data-borders="bottom"] {
+  border-bottom: 1px solid oklch(var(--border)) !important;
+}
+.editor-content table[data-borders="left"] td:first-child,
+.editor-content table[data-borders="left"] th:first-child {
+  border-left: 1px solid oklch(var(--border)) !important;
+}
+.editor-content table[data-borders="right"] td:last-child,
+.editor-content table[data-borders="right"] th:last-child {
+  border-right: 1px solid oklch(var(--border)) !important;
+}
+
 /* ---- Video (YouTube) ---- */
 .editor-content .editor-video {
   position: relative;
@@ -318,8 +365,8 @@
 
 /* ---- Selection — yellow highlight like a text marker ---- */
 .editor-content ::selection {
-  background-color: #fde047; /* Tailwind yellow-300 — vivid, readable */
-  color: #1a1a1a;            /* dark text so it stays legible on yellow */
+  background-color: #fde047;
+  color: #1a1a1a;
 }
 .editor-content ::-moz-selection {
   background-color: #fde047;
@@ -361,26 +408,17 @@
   transition: transform 0.2s;
   color: oklch(var(--muted-foreground));
   flex-shrink: 0;
+  display: inline-block;
+}
+/* Fix #8: Rotate arrow when expanded; hide nested content when collapsed */
+.editor-content div[data-toggle="true"][data-expanded="true"] > p:first-child::before {
+  transform: rotate(90deg);
+}
+.editor-content div[data-toggle="true"][data-expanded="false"] > *:not(:first-child) {
+  display: none;
 }
 .editor-content div[data-toggle="true"] > *:not(:first-child) {
   margin-top: 0.25em;
-}
-
-/* ---- 3 Columns ---- */
-.editor-content [data-columns="3"] {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 16px;
-  margin: 1em 0;
-  border: 1px dashed oklch(var(--border));
-  border-radius: 6px;
-  padding: 0.75em;
-}
-.editor-content [data-column] {
-  border: 1px solid oklch(var(--border) / 0.5);
-  border-radius: 4px;
-  padding: 0.5em;
-  min-height: 60px;
 }
 
 /* ---- Audio / Video ---- */
@@ -398,10 +436,10 @@
   display: block;
 }
 
-/* ---- Comment ---- */
+/* ---- Comment (Mark-based + legacy span compat) ---- */
 .editor-content .editor-comment {
-  background: oklch(var(--primary) / 0.08);
-  border-bottom: 2px solid oklch(var(--primary));
+  background: oklch(0.85 0.13 80 / 0.2);
+  border-bottom: 2px solid oklch(0.75 0.18 75);
   border-radius: 2px;
   padding: 0.1em 0.2em;
   cursor: help;
@@ -415,11 +453,11 @@
   transform: translateX(-50%);
   background: oklch(var(--popover));
   border: 1px solid oklch(var(--border));
- color: oklch(var(--popover-foreground));
+  color: oklch(var(--popover-foreground));
   padding: 4px 8px;
   border-radius: 6px;
   font-size: 0.75rem;
-  white-space: nowrap;
+  white-space: pre-wrap;
   max-width: 250px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -431,80 +469,6 @@
 }
 .editor-content .editor-comment:hover::after {
   opacity: 1;
-}
-
-/* ---- Drag Handle (appears on hover over block elements) ---- */
-.editor-content > p,
-.editor-content > h1,
-.editor-content > h2,
-.editor-content > h3,
-.editor-content > h4,
-.editor-content > h5,
-.editor-content > h6,
-.editor-content > blockquote,
-.editor-content > pre,
-.editor-content > ul,
-.editor-content > ol,
-.editor-content > hr,
-.editor-content > details::before,
-.editor-content > [data-toggle],
-.editor-content > [data-columns],
-.editor-content > .editor-video,
-.editor-content > img {
-  position: relative;
-}
-
-.editor-content > p::before,
-.editor-content > h1::before,
-.editor-content > h2::before,
-.editor-content > h3::before,
-.editor-content > h4::before,
-.editor-content > h5::before,
-.editor-content > h6::before,
-.editor-content > blockquote::before,
-.editor-content > pre::before,
-.editor-content > ul::before,
-.editor-content > ol::before,
-.editor-content > [data-toggle]::before,
-.editor-content > [data-columns]::before {
-  content: '';
-  position: absolute;
-  left: -32px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 20px;
-  height: 20px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='5' r='1'/%3E%3Ccircle cx='9' cy='12' r='1'/%3E%3Ccircle cx='9' cy='19' r='1'/%3E%3Ccircle cx='15' cy='5' r='1'/%3E%3Ccircle cx='15' cy='12' r='1'/%3E%3Ccircle cx='15' cy='19' r='1'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: center;
-  border-radius: 4px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  cursor: grab;
-  pointer-events: auto;
-}
-
-.editor-content > p:hover::before,
-.editor-content > h1:hover::before,
-.editor-content > h2:hover::before,
-.editor-content > h3:hover::before,
-.editor-content > h4:hover::before,
-.editor-content > h5:hover::before,
-.editor-content > h6:hover::before,
-.editor-content > blockquote:hover::before,
-.editor-content > pre:hover::before,
-.editor-content > ul:hover::before,
-.editor-content > ol:hover::before,
-.editor-content > [data-toggle]:hover::before,
-.editor-content > [data-columns]:hover::before {
-  opacity: 0.5;
-}
-
-.editor-content > p:hover::before,
-.editor-content > h1:hover::before,
-.editor-content > h2:hover::before,
-.editor-content > h3:hover::before {
-  opacity: 0.7;
 }
 
 /* ---- Keyboard Shortcut (kbd) ---- */
@@ -538,6 +502,16 @@
 .editor-content ol[data-style*="upper-roman"],
 .editor-content ol[style*="upper-roman"] {
   list-style-type: upper-roman;
+}
+
+/* ---- Bullet List Style Types (Fix #5) ---- */
+.editor-content ul[data-style*="circle"],
+.editor-content ul[style*="circle"] {
+  list-style-type: circle;
+}
+.editor-content ul[data-style*="square"],
+.editor-content ul[style*="square"] {
+  list-style-type: square;
 }
 
 /* ---- Inline highlight (background color) visual ---- */
