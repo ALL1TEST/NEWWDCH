@@ -188,3 +188,33 @@ Stage Summary:
 - Backups/Monitoring/API/Settings retain arrows only because they have real child pages.
 - All existing pages and functionality preserved (only the sidebar navigation structure changed).
 - Files modified: src/components/layout/sidebar.tsx
+
+---
+Task ID: SEO-1
+Agent: main (orchestrator)
+Task: Refactor and simplify the SEO section — consolidate 12 pages into 4 tabs
+
+Work Log:
+- Analyzed current SEO module: 12 separate pages (Overview, Redirects, Sitemap, Robots, Search Console, Indexing, Broken Links, Social Preview, Schema.org, Canonicals, Internal Links, SEO Audit) each as a sub-nav tab.
+- Rewrote src/modules/seo/index.tsx: consolidated SEO_TABS from 12 → 4 (Overview, SEO Audit, Search Console, Settings). Added legacy sub-page redirect logic: redirects→settings, indexing/broken-links/canonicals/internal-links/schema→audit, social-preview→overview, sitemap/robots→settings.
+- Created src/modules/seo/seo-settings-page.tsx: new consolidated Settings page with internal tabbed navigation (Sitemap | Robots.txt | Advanced: Redirects) that reuses the existing SeoSitemapPage, SeoRobotsPage, SeoRedirectsPage components.
+- Updated src/lib/stores/navigation-store.ts: added 'audit' and 'settings' to SUB_PAGE_KEYWORDS so they're recognized as sub-pages (not item IDs).
+- Updated src/modules/seo/seo-overview-page.tsx: fixed all navigation links — indexing→audit, broken-links→audit, canonicals→audit, schema→audit, redirects→settings, sitemap→settings, robots→settings.
+- Updated src/components/layout/breadcrumbs.tsx: added 'seo' entry to SUBPAGE_LABELS with correct labels for all new + legacy sub-pages.
+- Fixed bug in seo-audit-page.tsx: was using useMemo without importing it (added to React import).
+- Fixed bug in seo-settings-page.tsx: was importing cn from 'lucide-react' (wrong) instead of '@/lib/utils' — caused compilation error HTTP 500.
+
+Browser verification:
+- SEO sub-nav shows exactly 4 tabs: Overview, SEO Audit, Search Console, Settings.
+- Settings page renders with internal tabs: Sitemap, Robots.txt, Advanced: Redirects.
+- Legacy redirects work: #seo/redirects → Settings page (heading "SEO Settings"); #seo/broken-links → SEO Audit page (heading "SEO Audit").
+- Old 12-tab structure is gone (no standalone Redirects/Indexing/Broken Links/Social Preview/Schema.org/Canonicals/Internal Links tabs in the sub-nav).
+- No runtime errors.
+- Lint: 0 errors.
+
+Stage Summary:
+- SEO section simplified from 12 pages to 4 clean tabs matching the requested structure:
+  SEO → Overview | SEO Audit | Search Console | Settings (Sitemap + Robots.txt + Advanced: Redirects)
+- Legacy pages redirect to closest new tab (no broken links).
+- Existing functionality preserved: sitemap generation, robots.txt editing, redirects management, SEO audit, search console — all accessible within the new 4-tab structure.
+- Files modified: src/modules/seo/index.tsx, src/modules/seo/seo-settings-page.tsx (new), src/modules/seo/seo-overview-page.tsx, src/modules/seo/seo-audit-page.tsx, src/components/layout/breadcrumbs.tsx, src/lib/stores/navigation-store.ts

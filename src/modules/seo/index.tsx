@@ -2,20 +2,17 @@
 
 import React, { Suspense } from 'react';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
-import { Loader2, Search, Navigation, FileText, Shield, BarChart3, Activity, Unlink, Share2, Code, Link2, GitBranch, ClipboardCheck } from 'lucide-react';
+import { Loader2, Search, ClipboardCheck, BarChart3, Settings, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SeoOverviewPage } from './seo-overview-page';
+import { SeoAuditPage } from './seo-audit-page';
+import { SeoSearchConsolePage } from './seo-search-console-page';
+import { SeoSettingsPage } from './seo-settings-page';
+
+// Legacy pages kept for internal reuse inside Settings (redirects) but no longer routed standalone.
 import { SeoRedirectsPage } from './seo-redirects-page';
 import { SeoSitemapPage } from './seo-sitemap-page';
 import { SeoRobotsPage } from './seo-robots-page';
-import { SeoSearchConsolePage } from './seo-search-console-page';
-import { SeoIndexingPage } from './seo-indexing-page';
-import { SeoBrokenLinksPage } from './seo-broken-links-page';
-import { SeoSocialPreviewPage } from './seo-social-preview-page';
-import { SeoSchemaPage } from './seo-schema-page';
-import { SeoCanonicalsPage } from './seo-canonicals-page';
-import { SeoInternalLinksPage } from './seo-internal-links-page';
-import { SeoAuditPage } from './seo-audit-page';
 
 function PageLoader() {
   return (
@@ -26,20 +23,16 @@ function PageLoader() {
 }
 
 // ==================== SEO Sub-Navigation ====================
+// Consolidated from 12 tabs to 4 clean tabs:
+//   Overview | SEO Audit | Search Console | Settings
+// Legacy sub-pages (redirects, indexing, broken-links, canonicals, internal-links,
+// social-preview, schema, sitemap, robots) are redirected to the closest new tab.
 
 const SEO_TABS = [
   { key: null, label: 'Overview', icon: Search },
-  { key: 'redirects', label: 'Redirects', icon: Navigation },
-  { key: 'sitemap', label: 'Sitemap', icon: FileText },
-  { key: 'robots', label: 'Robots.txt', icon: Shield },
-  { key: 'search-console', label: 'Search Console', icon: BarChart3 },
-  { key: 'indexing', label: 'Indexing', icon: Activity },
-  { key: 'broken-links', label: 'Broken Links', icon: Unlink },
-  { key: 'social-preview', label: 'Social Preview', icon: Share2 },
-  { key: 'schema', label: 'Schema.org', icon: Code },
-  { key: 'canonicals', label: 'Canonicals', icon: Link2 },
-  { key: 'internal-links', label: 'Internal Links', icon: GitBranch },
   { key: 'audit', label: 'SEO Audit', icon: ClipboardCheck },
+  { key: 'search-console', label: 'Search Console', icon: BarChart3 },
+  { key: 'settings', label: 'Settings', icon: Settings },
 ] as const;
 
 function SeoSubNav() {
@@ -79,35 +72,62 @@ function SeoSubNav() {
 
 function SeoRouter() {
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
+  const navigate = useNavigationStore((s) => s.navigate);
+
+  // ---- Legacy sub-page redirects → new consolidated tabs ----
+  // These pages no longer exist as standalone tabs. Redirect to the closest new tab.
+  React.useEffect(() => {
+    if (!currentSubPage) return;
+    const legacyMap: Record<string, string | null> = {
+      // Redirects → Settings (Advanced tab handles redirects)
+      'redirects': 'settings',
+      // Indexing / Canonicals / Internal-links / Broken-links → SEO Audit (integrated checks)
+      'indexing': 'audit',
+      'canonicals': 'audit',
+      'internal-links': 'audit',
+      'broken-links': 'audit',
+      // Schema → SEO Audit (schema validation is part of the audit)
+      'schema': 'audit',
+      // Social Preview → moved to Article Editor; redirect to Overview
+      'social-preview': null,
+      // Sitemap / Robots → Settings
+      'sitemap': 'settings',
+      'robots': 'settings',
+    };
+    if (currentSubPage in legacyMap) {
+      navigate('seo', null, legacyMap[currentSubPage]);
+    }
+  }, [currentSubPage, navigate]);
+
+  const effectiveSubPage = (() => {
+    // Treat legacy sub-pages as their redirect target for rendering
+    if (!currentSubPage) return null;
+    const legacyRedirect: Record<string, string | null> = {
+      'redirects': 'settings',
+      'indexing': 'audit',
+      'canonicals': 'audit',
+      'internal-links': 'audit',
+      'broken-links': 'audit',
+      'schema': 'audit',
+      'social-preview': null,
+      'sitemap': 'settings',
+      'robots': 'settings',
+    };
+    return currentSubPage in legacyRedirect ? legacyRedirect[currentSubPage] : currentSubPage;
+  })();
 
   return (
     <>
       <SeoSubNav />
       <Suspense fallback={<PageLoader />}>
         {(() => {
-          switch (currentSubPage) {
-            case 'redirects':
-              return <SeoRedirectsPage />;
-            case 'sitemap':
-              return <SeoSitemapPage />;
-            case 'robots':
-              return <SeoRobotsPage />;
-            case 'search-console':
-              return <SeoSearchConsolePage />;
-            case 'indexing':
-              return <SeoIndexingPage />;
-            case 'broken-links':
-              return <SeoBrokenLinksPage />;
-            case 'social-preview':
-              return <SeoSocialPreviewPage />;
-            case 'schema':
-              return <SeoSchemaPage />;
-            case 'canonicals':
-              return <SeoCanonicalsPage />;
-            case 'internal-links':
-              return <SeoInternalLinksPage />;
+          switch (effectiveSubPage) {
             case 'audit':
               return <SeoAuditPage />;
+            case 'search-console':
+              return <SeoSearchConsolePage />;
+            case 'settings':
+              return <SeoSettingsPage />;
             default:
               return <SeoOverviewPage />;
           }
@@ -122,14 +142,10 @@ export function SeoModule() {
 }
 
 export { SeoOverviewPage } from './seo-overview-page';
+export { SeoAuditPage } from './seo-audit-page';
+export { SeoSearchConsolePage } from './seo-search-console-page';
+export { SeoSettingsPage } from './seo-settings-page';
+// Legacy exports kept for backwards compatibility (internal reuse)
 export { SeoRedirectsPage } from './seo-redirects-page';
 export { SeoSitemapPage } from './seo-sitemap-page';
 export { SeoRobotsPage } from './seo-robots-page';
-export { SeoSearchConsolePage } from './seo-search-console-page';
-export { SeoIndexingPage } from './seo-indexing-page';
-export { SeoBrokenLinksPage } from './seo-broken-links-page';
-export { SeoSocialPreviewPage } from './seo-social-preview-page';
-export { SeoSchemaPage } from './seo-schema-page';
-export { SeoCanonicalsPage } from './seo-canonicals-page';
-export { SeoInternalLinksPage } from './seo-internal-links-page';
-export { SeoAuditPage } from './seo-audit-page';

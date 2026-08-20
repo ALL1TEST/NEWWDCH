@@ -37,7 +37,7 @@ function parseHash(hash: string): {
     'create', 'edit', 'versions', 'translations', 'preview',
     // SEO
     'redirects', 'sitemap', 'robots', 'search-console', 'indexing', 'broken-links',
-    'social-preview', 'schema', 'canonicals', 'internal-links',
+    'social-preview', 'schema', 'canonicals', 'internal-links', 'audit', 'settings',
     // Email Templates
     'smtp-settings',
     // AI

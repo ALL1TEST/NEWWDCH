@@ -94,6 +94,20 @@ const MODULE_LABELS: Record<string, string> = {
 };
 
 const SUBPAGE_LABELS: Record<string, Record<string, string>> = {
+  seo: {
+    'audit': 'SEO Audit',
+    'settings': 'Settings',
+    'search-console': 'Search Console',
+    'sitemap': 'Settings',
+    'robots': 'Settings',
+    'redirects': 'Settings',
+    'indexing': 'SEO Audit',
+    'broken-links': 'SEO Audit',
+    'canonicals': 'SEO Audit',
+    'internal-links': 'SEO Audit',
+    'schema': 'SEO Audit',
+    'social-preview': 'Overview',
+  },
   settings: {
     'general': 'General',
     'localization': 'Localization',
