@@ -210,27 +210,6 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
-    label: 'Monitoring',
-    href: '#monitoring',
-    icon: 'Activity',
-    requiredRole: 'ADMIN',
-    children: [
-      { label: 'Overview', href: '#monitoring', icon: 'Gauge' },
-      { label: 'Health', href: '#monitoring/health', icon: 'HeartPulse' },
-      { label: 'Performance', href: '#monitoring/performance', icon: 'Cpu' },
-      { label: 'Jobs', href: '#monitoring/jobs', icon: 'Clock' },
-      { label: 'Queues', href: '#monitoring/queues', icon: 'ListTodo' },
-      { label: 'Audit Log', href: '#monitoring/audit-log', icon: 'ScrollText' },
-      { label: 'Error Logs', href: '#monitoring/error-logs', icon: 'ScrollText' },
-      { label: 'Scheduler', href: '#monitoring/scheduler', icon: 'Clock' },
-      { label: 'Alerts', href: '#monitoring/alerts', icon: 'BellRing' },
-      { label: 'API Status', href: '#monitoring/api-status', icon: 'Activity' },
-      { label: 'AI Monitoring', href: '#monitoring/ai-monitoring', icon: 'Brain' },
-      { label: 'Backup Monitoring', href: '#monitoring/backup-monitoring', icon: 'HardDrive' },
-      { label: 'Security', href: '#monitoring/security', icon: 'ShieldAlert' },
-    ],
-  },
-  {
     label: 'API',
     href: '#api',
     icon: 'Plug',
@@ -281,7 +260,6 @@ const ROUTE_PREFIX_TO_SECTION: Record<string, string> = {
   'content': 'Content',
   'api': 'API',
   'backups': 'Backups',
-  'monitoring': 'Monitoring',
   'settings': 'Settings',
 };
 

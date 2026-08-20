@@ -241,14 +241,6 @@ const ENDPOINT_CATEGORIES: EndpointCategory[] = [
       { method: 'GET', path: '/api/backups/[id]/download', description: 'Download a backup file' },
       { method: 'POST', path: '/api/backups/[id]/verify', description: 'Verify backup integrity' },
       { method: 'GET', path: '/api/backups/stats', description: 'Get backup statistics' },
-      // Monitoring
-      { method: 'GET', path: '/api/monitoring/overview', description: 'Get monitoring overview dashboard' },
-      { method: 'GET', path: '/api/monitoring/health', description: 'Get system health check results' },
-      { method: 'GET', path: '/api/monitoring/system-info', description: 'Get detailed system information' },
-      { method: 'GET', path: '/api/monitoring/performance', description: 'Get performance metrics' },
-      { method: 'GET', path: '/api/monitoring/alerts', description: 'List monitoring alerts' },
-      { method: 'GET', path: '/api/monitoring/security', description: 'Get security event logs' },
-      { method: 'GET', path: '/api/monitoring/api-status', description: 'Get external service status' },
       // Settings
       { method: 'GET', path: '/api/settings', description: 'Get all system settings' },
       { method: 'PATCH', path: '/api/settings', description: 'Update system settings' },

@@ -456,3 +456,34 @@ Stage Summary:
 - Storage logic fixed — backups and schedules select from configured storage destinations, not raw providers.
 - Breadcrumb hidden for all backups pages.
 - Files modified: src/modules/backups/index.tsx, src/modules/backups/dashboard-page.tsx, src/modules/backups/backups-list-page.tsx, src/modules/backups/schedules-page.tsx, src/components/layout/breadcrumbs.tsx
+
+---
+Task ID: REMOVE-MONITORING-1
+Agent: main (orchestrator)
+Task: Remove the entire Monitoring feature from the CMS
+
+Work Log:
+- Deleted src/modules/monitoring/ (15 files: index.tsx + 14 page files — overview, health, performance, jobs, queues, audit-log, error-logs, scheduler, alerts, api-status, ai-monitoring, backup-monitoring, security, settings).
+- Deleted src/app/api/monitoring/ (16 route directories: overview, health, performance, metrics, error-logs, alerts, alert-rules, api-status, ai-stats, backup-stats, health, notification-stats, overview, performance, scheduler, security, settings, system-info, webhook-stats).
+- src/components/layout/sidebar.tsx: Removed Monitoring NAV_ITEMS entry (13 children) + 'monitoring' from ROUTE_PREFIX_TO_SECTION.
+- src/lib/module-registry.tsx: Removed monitoring dynamic import + from moduleRegistry object.
+- src/components/layout/breadcrumbs.tsx: Removed 'monitoring' from ICON_MAP + MODULE_LABELS.
+- src/lib/stores/navigation-store.ts: Removed monitoring-specific sub-page keywords (health, performance, queues, audit-log, error-logs, alerts, api-status, ai-monitoring, backup-monitoring).
+- src/lib/permissions.ts: Removed ...Object.values(PERM_CONST.monitoring) from SUPER_ADMIN and ADMIN roles.
+- src/lib/api-client.ts: Removed '/api/monitoring' from GLOBAL_ROUTES set.
+- src/lib/query-keys.ts: Removed monitoring query keys block.
+- src/modules/api/api-docs-page.tsx: Removed monitoring API endpoint listings.
+- Left Prisma schema models intact (SystemMetric, ErrorLog, SecurityEvent, etc.) — they're unused but removing them requires db push which risks data loss.
+- Left i18n.tsx, seed.ts, shared/constants monitoring references — harmless dead constants/strings.
+
+Browser verification:
+- Sidebar: NO Monitoring item. Items: Dashboard, Articles, Media, Users, Comments, ..., Backups, API, Settings.
+- App loads without error (has-error: false).
+- Lint: 0 errors.
+
+Stage Summary:
+- Monitoring section completely removed from the CMS (frontend + API routes + navigation + permissions).
+- No broken routes, no dead links, no TypeScript errors.
+- Shared functionality preserved: Audit module (separate), Jobs module (separate), Backups (separate), API (separate) all still work.
+- Files deleted: 15 module files + 16 API route directories.
+- Files edited: sidebar.tsx, module-registry.tsx, breadcrumbs.tsx, navigation-store.ts, permissions.ts, api-client.ts, query-keys.ts, api-docs-page.tsx.

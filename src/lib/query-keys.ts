@@ -256,28 +256,7 @@ export const queryKeys = {
     all: ['backup-stats'] as const,
     dashboard: () => ['backup-stats', 'dashboard'] as const,
   },
-
-  // -------------------- Monitoring --------------------
-  monitoring: {
-    all: ['monitoring'] as const,
-    health: () => ['monitoring', 'health'] as const,
-    systemInfo: () => ['monitoring', 'system-info'] as const,
-    overview: () => ['monitoring', 'overview'] as const,
-    performance: (range?: Record<string, unknown>) => ['monitoring', 'performance', range] as const,
-    metrics: (type?: string, range?: Record<string, unknown>) => ['monitoring', 'metrics', type, range] as const,
-    errorLogs: createQueryKeys('monitoring-error-logs'),
-    alerts: createQueryKeys('monitoring-alerts'),
-    alertRules: createQueryKeys('monitoring-alert-rules'),
-    securityEvents: createQueryKeys('monitoring-security'),
-    schedulerLogs: () => ['monitoring', 'scheduler-logs'] as const,
-    apiStatus: () => ['monitoring', 'api-status'] as const,
-    webhookStats: () => ['monitoring', 'webhook-stats'] as const,
-    aiStats: (range?: Record<string, unknown>) => ['monitoring', 'ai-stats', range] as const,
-    backupStats: () => ['monitoring', 'backup-stats'] as const,
-    notificationStats: () => ['monitoring', 'notification-stats'] as const,
-    settings: () => ['monitoring', 'settings'] as const,
-    live: () => ['monitoring', 'live'] as const,
-  },
+  // Monitoring module has been removed from the CMS.
   jobs: createQueryKeys('jobs'),
   auditLog: {
     all: ['audit-log'] as const,

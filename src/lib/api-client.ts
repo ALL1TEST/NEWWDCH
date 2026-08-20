@@ -80,7 +80,6 @@ const GLOBAL_ROUTES = new Set([
   '/api/users',
   '/api/backups',
   '/api/audit-logs',
-  '/api/monitoring',
   '/api/jobs',
   '/api/api-keys',
   '/api/ai',

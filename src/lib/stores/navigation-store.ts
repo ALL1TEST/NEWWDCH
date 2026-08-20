@@ -44,10 +44,6 @@ function parseHash(hash: string): {
     'providers', 'prompts', 'models', 'playground', 'jobs', 'usage', 'marketplace',
     // Backups
     'backups', 'schedules', 'restore', 'storage', 'logs',
-    // Monitoring
-    'health', 'performance', 'queues', 'audit-log', 'error-logs',
-    'scheduler', 'alerts', 'api-status', 'ai-monitoring', 'backup-monitoring',
-    'security',
     // API
     'dashboard', 'keys', 'docs', 'explorer', 'oauth', 'tokens', 'rate-limits',
     // Newsletter
