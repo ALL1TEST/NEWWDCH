@@ -5,51 +5,56 @@ import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { ProvidersPage } from './providers-page';
 import { PromptsPage } from './prompts-page';
 import { ModelsPage } from './models-page';
-import { PlaygroundPage } from './playground-page';
-import { JobsPage } from './jobs-page';
 import { UsagePage } from './usage-page';
 import { SettingsPage } from './settings-page';
-import { LogsPage } from './logs-page';
-import { MarketplacePage } from './marketplace-page';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Server,
   MessageSquare,
   Boxes,
-  Play,
-  Clock,
   BarChart3,
   Settings,
-  FileText,
-  Store,
 } from 'lucide-react';
 
+// Simplified AI section — only features relevant to a blogging CMS.
+// Removed: Playground, Jobs, Logs, Marketplace (enterprise features not needed for blog content generation).
 const AI_SUB_PAGES = [
   { value: 'providers', label: 'Providers', icon: Server },
-  { value: 'prompts', label: 'Prompt Library', icon: MessageSquare },
   { value: 'models', label: 'Models', icon: Boxes },
-  { value: 'playground', label: 'Playground', icon: Play },
-  { value: 'jobs', label: 'Jobs', icon: Clock },
+  { value: 'prompts', label: 'Prompt Library', icon: MessageSquare },
   { value: 'usage', label: 'Usage', icon: BarChart3 },
   { value: 'settings', label: 'Settings', icon: Settings },
-  { value: 'logs', label: 'Logs', icon: FileText },
-  { value: 'marketplace', label: 'Marketplace', icon: Store },
 ] as const;
 
 type AiSubPage = (typeof AI_SUB_PAGES)[number]['value'];
+
+// Legacy sub-pages that no longer have their own tab — redirect to Providers.
+const LEGACY_REDIRECT: Record<string, AiSubPage> = {
+  playground: 'providers',
+  jobs: 'providers',
+  logs: 'providers',
+  marketplace: 'providers',
+};
 
 export function AiPage() {
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
 
-  const activeTab: AiSubPage =
-    (currentSubPage as AiSubPage) || 'providers';
+  // Resolve the effective tab: legacy sub-pages redirect to 'providers'
+  const effectiveTab: AiSubPage = currentSubPage && LEGACY_REDIRECT[currentSubPage]
+    ? LEGACY_REDIRECT[currentSubPage]
+    : (currentSubPage as AiSubPage) || 'providers';
 
   const handleTabChange = (value: string) => {
     navigate('ai', null, value);
   };
 
   useEffect(() => {
+    // Redirect legacy sub-pages to the closest valid tab
+    if (currentSubPage && LEGACY_REDIRECT[currentSubPage]) {
+      navigate('ai', null, LEGACY_REDIRECT[currentSubPage]);
+      return;
+    }
     if (!currentSubPage) {
       navigate('ai', null, 'providers');
     }
@@ -57,7 +62,7 @@ export function AiPage() {
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <Tabs value={activeTab} onValueChange={handleTabChange}>
+      <Tabs value={effectiveTab} onValueChange={handleTabChange}>
         <div className="overflow-x-auto">
           <TabsList className="w-full justify-start">
             {AI_SUB_PAGES.map((tab) => {
@@ -79,29 +84,17 @@ export function AiPage() {
         <TabsContent value="providers">
           <ProvidersPage />
         </TabsContent>
-        <TabsContent value="prompts">
-          <PromptsPage />
-        </TabsContent>
         <TabsContent value="models">
           <ModelsPage />
         </TabsContent>
-        <TabsContent value="playground">
-          <PlaygroundPage />
-        </TabsContent>
-        <TabsContent value="jobs">
-          <JobsPage />
+        <TabsContent value="prompts">
+          <PromptsPage />
         </TabsContent>
         <TabsContent value="usage">
           <UsagePage />
         </TabsContent>
         <TabsContent value="settings">
           <SettingsPage />
-        </TabsContent>
-        <TabsContent value="logs">
-          <LogsPage />
-        </TabsContent>
-        <TabsContent value="marketplace">
-          <MarketplacePage />
         </TabsContent>
       </Tabs>
     </div>

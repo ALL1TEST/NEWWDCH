@@ -108,6 +108,18 @@ const SUBPAGE_LABELS: Record<string, Record<string, string>> = {
     'schema': 'SEO Audit',
     'social-preview': 'Overview',
   },
+  ai: {
+    'providers': 'Providers',
+    'models': 'Models',
+    'prompts': 'Prompt Library',
+    'usage': 'Usage',
+    'settings': 'Settings',
+    // Legacy redirects
+    'playground': 'Providers',
+    'jobs': 'Providers',
+    'logs': 'Providers',
+    'marketplace': 'Providers',
+  },
   settings: {
     'general': 'General',
     'localization': 'Localization',

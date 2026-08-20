@@ -271,3 +271,24 @@ Stage Summary:
 - The fix is robust: works for Bitdefender, LastPass, Grammarly, and similar extensions.
 - The MutationObserver ensures future re-injections are caught.
 - Files modified: src/app/layout.tsx
+
+---
+Task ID: AI-1
+Agent: main (orchestrator)
+Task: Simplify AI section — remove Playground, Jobs, Logs, Marketplace; keep only 5 essential tabs
+
+Work Log:
+- Rewrote src/modules/ai/ai-page.tsx: reduced from 9 tabs to 5 (Providers, Models, Prompt Library, Usage, Settings). Removed imports for PlaygroundPage, JobsPage, LogsPage, MarketplacePage. Added legacy redirect logic: playground/jobs/logs/marketplace → providers.
+- Updated src/components/layout/breadcrumbs.tsx: added 'ai' entry to SUBPAGE_LABELS with correct labels for all 5 new tabs + legacy redirect labels.
+
+Browser verification:
+- AI tab bar shows exactly 5 tabs: Providers, Models, Prompt Library, Usage, Settings.
+- Tab count confirmed: "tab count: 5 labels: Providers, Models, Prompt Library, Usage, Settings".
+- Removed tabs (Playground, Jobs, Logs, Marketplace) are gone from the UI.
+- Legacy redirect works: #ai/playground → active tab: Providers.
+- Lint: 0 errors.
+
+Stage Summary:
+- AI section simplified for a blogging CMS focus — only AI-powered blog content generation features remain.
+- Removed enterprise features (Playground, Jobs, Logs, Marketplace) that aren't needed for a blog platform.
+- Files modified: src/modules/ai/ai-page.tsx, src/components/layout/breadcrumbs.tsx
