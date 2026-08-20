@@ -58,7 +58,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuBadge,
@@ -139,12 +138,9 @@ const NAV_ITEMS: NavItem[] = [
     icon: 'LayoutDashboard',
   },
   {
-    label: 'Content',
+    label: 'Articles',
     href: '#content',
     icon: 'FileText',
-    children: [
-      { label: 'Articles', href: '#content', icon: 'FileText' },
-    ],
   },
   {
     label: 'Media',
@@ -308,46 +304,9 @@ interface NavGroup {
   items: NavItem[];
 }
 
+// Flat sidebar: all items in a single group, no section headings.
 function buildNavGroups(items: NavItem[]): NavGroup[] {
-  const groups: NavGroup[] = [
-    { label: 'Overview', items: [] },
-    { label: 'Content', items: [] },
-    { label: 'Media', items: [] },
-    { label: 'Users', items: [] },
-    { label: 'Engagement', items: [] },
-    { label: 'Platform', items: [] },
-    { label: 'AI', items: [] },
-    { label: 'System', items: [] },
-  ];
-
-  const groupMap: Record<string, string> = {
-    'Dashboard': 'Overview',
-    'Content': 'Content',
-    'Comments': 'Engagement',
-    'Media': 'Media',
-    'Users': 'Users',
-    'Newsletter': 'Engagement',
-    'Email Templates': 'Engagement',
-    'SEO': 'Platform',
-    'Navigation': 'Platform',
-    'AI': 'AI',
-    'Notifications': 'System',
-    'Webhooks': 'System',
-    'Backups': 'System',
-    'Monitoring': 'System',
-    'API': 'System',
-    'Settings': 'System',
-  };
-
-  for (const item of items) {
-    const groupName = groupMap[item.label] ?? 'System';
-    const group = groups.find((g) => g.label === groupName);
-    if (group) {
-      group.items.push(item);
-    }
-  }
-
-  return groups.filter((g) => g.items.length > 0);
+  return [{ label: '', items }];
 }
 
 // -------------------- Helpers --------------------
@@ -528,7 +487,6 @@ function NavGroupSection({
 }) {
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           {group.items.map((item) => {
