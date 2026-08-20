@@ -81,7 +81,6 @@ const GLOBAL_ROUTES = new Set([
   '/api/backups',
   '/api/audit-logs',
   '/api/jobs',
-  '/api/api-keys',
   '/api/ai',
   '/api/ai-providers',
   '/api/prompt-templates',

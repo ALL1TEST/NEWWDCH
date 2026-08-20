@@ -58,7 +58,6 @@ const ICON_MAP: Record<string, LucideIcon> = {
   settings: Settings,
   security: Shield,
   backups: Database,
-  api: Plug,
   jobs: Activity,
   'email-templates': MailPlus,
   profile: User,
@@ -84,7 +83,6 @@ const MODULE_LABELS: Record<string, string> = {
   settings: 'Settings',
   security: 'Security',
   backups: 'Backups',
-  api: 'API',
   jobs: 'Jobs',
   'email-templates': 'Email Templates',
   profile: 'Profile',
@@ -144,16 +142,6 @@ const SUBPAGE_LABELS: Record<string, Record<string, string>> = {
     'import-export': 'Import / Export',
     'advanced': 'Advanced',
     'audit-log': 'Audit Log',
-  },
-  api: {
-    'dashboard': 'Dashboard',
-    'keys': 'API Keys',
-    'logs': 'API Logs',
-    'docs': 'Documentation',
-    'explorer': 'Explorer',
-    'oauth': 'OAuth Clients',
-    'tokens': 'Access Tokens',
-    'rate-limits': 'Rate Limits',
   },
 };
 

@@ -487,3 +487,33 @@ Stage Summary:
 - Shared functionality preserved: Audit module (separate), Jobs module (separate), Backups (separate), API (separate) all still work.
 - Files deleted: 15 module files + 16 API route directories.
 - Files edited: sidebar.tsx, module-registry.tsx, breadcrumbs.tsx, navigation-store.ts, permissions.ts, api-client.ts, query-keys.ts, api-docs-page.tsx.
+
+---
+Task ID: REMOVE-API-1
+Agent: main (orchestrator)
+Task: Remove the entire API module from the CMS
+
+Work Log:
+- Deleted src/modules/api/ (9 files: index.tsx + api-dashboard-page, api-docs-page, api-explorer-page, api-keys-page, api-logs-page, oauth-clients-page, pat-page, rate-limits-page).
+- Deleted src/app/api/api-dashboard/, src/app/api/api-keys/, src/app/api/api-logs/, src/app/api/oauth-clients/, src/app/api/personal-access-tokens/ (5 route directories).
+- src/components/layout/sidebar.tsx: Removed API NAV_ITEMS entry (8 children: Dashboard, API Keys, API Logs, Documentation, Explorer, OAuth Clients, Access Tokens, Rate Limits) + 'api' from ROUTE_PREFIX_TO_SECTION.
+- src/lib/module-registry.tsx: Removed api dynamic import + from moduleRegistry.
+- src/components/layout/breadcrumbs.tsx: Removed 'api' from ICON_MAP, MODULE_LABELS, SUBPAGE_LABELS.
+- src/lib/stores/navigation-store.ts: Removed API sub-page keywords (dashboard, keys, docs, explorer, oauth, tokens, rate-limits).
+- src/lib/permissions.ts: Removed PERM_CONST.api from SUPER_ADMIN and ADMIN roles.
+- src/lib/api-client.ts: Removed '/api/api-keys' from GLOBAL_ROUTES.
+- src/lib/query-keys.ts: Removed apiDashboard, apiKeys, apiLogs, oauthClients, personalAccessTokens query keys.
+- src/components/patterns/command-palette.tsx: Removed 8 API command palette entries + 15 stale Monitoring command palette entries (from previous monitoring removal task).
+- Left Prisma schema models intact (ApiKey, ApiLog, OAuthClient, PersonalAccessToken) — unused but removing requires db push which risks data loss.
+- Left shared/constants, i18n, seed API references — harmless dead constants/strings.
+
+Browser verification:
+- Sidebar: NO API item. Items: Dashboard, Articles, Media, Users, Comments, Newsletter, Email Templates, SEO, Navigation, AI, Notifications, Webhooks, Backups, Settings.
+- App loads without error (has-error: false).
+- Lint: 0 errors.
+
+Stage Summary:
+- API module completely removed from the CMS (frontend + API routes + navigation + permissions + command palette).
+- No broken routes, no dead links, no TypeScript errors.
+- Shared functionality preserved: Settings (separate), Backups (separate), AI (separate) all still work.
+- Also cleaned up stale Monitoring entries from the command palette.

@@ -266,18 +266,8 @@ export const queryKeys = {
       ['audit-log', 'detail', id] as const,
   },
 
-  // -------------------- API (Developer API Module) --------------------
-  apiDashboard: {
-    all: ['api-dashboard'] as const,
-  },
-  apiKeys: createQueryKeys('api-keys'),
-  apiLogs: {
-    all: ['api-logs'] as const,
-    list: (filters?: Record<string, unknown>) =>
-      ['api-logs', 'list', filters] as const,
-  },
-  oauthClients: createQueryKeys('oauth-clients'),
-  personalAccessTokens: createQueryKeys('personal-access-tokens'),
+  // -------------------- API Module (REMOVED) --------------------
+  // The API Developer module has been completely removed from the CMS.
 
   // -------------------- Feature Flags --------------------
   featureFlags: createQueryKeys('feature-flags'),

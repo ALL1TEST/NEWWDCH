@@ -27,11 +27,10 @@ const webhooks = dynamic(() => import('@/modules/webhooks').then(m => ({ default
 const audit = dynamic(() => import('@/modules/audit').then(m => ({ default: m.AuditModule as ComponentType })), { loading: ModuleFallback });
 const backups = dynamic(() => import('@/modules/backups').then(m => ({ default: m.BackupsModule as ComponentType })), { loading: ModuleFallback });
 const jobs = dynamic(() => import('@/modules/jobs').then(m => ({ default: m.JobsModule as ComponentType })), { loading: ModuleFallback });
-const api = dynamic(() => import('@/modules/api').then(m => ({ default: m.ApiModule as ComponentType })), { loading: ModuleFallback });
 const emailTemplates = dynamic(() => import('@/modules/email-templates').then(m => ({ default: m.EmailTemplatesModule as ComponentType })), { loading: ModuleFallback });
 const profile = dynamic(() => import('@/modules/profile').then(m => ({ default: m.ProfileModule as ComponentType })), { loading: ModuleFallback });
 const billing = dynamic(() => import('@/modules/billing').then(m => ({ default: m.BillingModule as ComponentType })), { loading: ModuleFallback });
 
 export const moduleRegistry: Record<string, ComponentType> = {
-  dashboard, content, media, users, categories, tags, comments, newsletter, 'email-templates': emailTemplates, seo, navigation, notifications, settings, ai, webhooks, audit, backups, jobs, api, profile, billing,
+  dashboard, content, media, users, categories, tags, comments, newsletter, 'email-templates': emailTemplates, seo, navigation, notifications, settings, ai, webhooks, audit, backups, jobs, profile, billing,
 };

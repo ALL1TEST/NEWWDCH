@@ -210,22 +210,6 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
-    label: 'API',
-    href: '#api',
-    icon: 'Plug',
-    requiredRole: 'ADMIN',
-    children: [
-      { label: 'Dashboard', href: '#api', icon: 'LayoutDashboard' },
-      { label: 'API Keys', href: '#api/keys', icon: 'Key' },
-      { label: 'API Logs', href: '#api/logs', icon: 'ScrollText' },
-      { label: 'Documentation', href: '#api/docs', icon: 'FileText' },
-      { label: 'Explorer', href: '#api/explorer', icon: 'Terminal' },
-      { label: 'OAuth Clients', href: '#api/oauth', icon: 'Link' },
-      { label: 'Access Tokens', href: '#api/tokens', icon: 'KeyRound' },
-      { label: 'Rate Limits', href: '#api/rate-limits', icon: 'Gauge' },
-    ],
-  },
-  {
     label: 'Settings',
     href: '#settings',
     icon: 'Settings',
@@ -258,7 +242,6 @@ const NAV_ITEMS: NavItem[] = [
 
 const ROUTE_PREFIX_TO_SECTION: Record<string, string> = {
   'content': 'Content',
-  'api': 'API',
   'backups': 'Backups',
   'settings': 'Settings',
 };
