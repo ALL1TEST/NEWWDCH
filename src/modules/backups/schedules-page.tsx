@@ -49,7 +49,7 @@ import {
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { cn, formatRelativeTime, labelize } from '@/lib/utils';
-import { BACKUP_SCOPE_OPTIONS, BACKUP_STORAGE_OPTIONS } from '@/lib/backup-constants';
+import { BACKUP_SCOPE_OPTIONS } from '@/lib/backup-constants';
 import type { PaginatedResponse, BackupScope, BackupStorageProvider, BackupScheduleFrequency } from '@/shared/types';
 import { toast } from 'sonner';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -63,7 +63,7 @@ interface ScheduleRow {
   frequency: BackupScheduleFrequency;
   cronExpression: string | null;
   scope: BackupScope;
-  storageProvider: BackupStorageProvider;
+  storageId: string | null;
   encryptionEnabled: boolean;
   verificationEnabled: boolean;
   retentionCount: number;
@@ -80,7 +80,7 @@ interface ScheduleForm {
   frequency: BackupScheduleFrequency;
   cronExpression: string;
   scope: BackupScope;
-  storageProvider: BackupStorageProvider;
+  storageId: string;
   encryptionEnabled: boolean;
   verificationEnabled: boolean;
   retentionCount: number;
@@ -103,7 +103,7 @@ const initialForm: ScheduleForm = {
   frequency: 'DAILY',
   cronExpression: '',
   scope: 'FULL',
-  storageProvider: 'LOCAL',
+  storageId: '',
   encryptionEnabled: false,
   verificationEnabled: true,
   retentionCount: 7,
@@ -137,6 +137,14 @@ export function SchedulesPage() {
     }),
     staleTime: 10_000,
   });
+
+  // Fetch configured storage destinations for the dropdown
+  const { data: storageData } = useQuery({
+    queryKey: ['backup-storage-destinations'],
+    queryFn: () => getApi<{ id: string; name: string; provider: string; isActive: boolean }[]>('/api/backups/storage?pageSize=100'),
+    staleTime: 30_000,
+  });
+  const storageDestinations = (storageData as unknown as { id: string; name: string; provider: string; isActive: boolean }[] | undefined)?.filter(s => s.isActive) ?? [];
 
   const schedules = data?.data ?? [];
   const pagination = data?.pagination;
@@ -197,7 +205,7 @@ export function SchedulesPage() {
       frequency: row.frequency,
       cronExpression: row.cronExpression || '',
       scope: row.scope,
-      storageProvider: row.storageProvider,
+      storageId: row.storageId || '',
       encryptionEnabled: row.encryptionEnabled,
       verificationEnabled: row.verificationEnabled,
       retentionCount: row.retentionCount,
@@ -265,9 +273,9 @@ export function SchedulesPage() {
         ),
       },
       {
-        id: 'storageProvider',
+        id: 'storage',
         header: 'Storage',
-        accessorKey: 'storageProvider',
+        accessorKey: 'storageId',
         enableSorting: false,
         size: 120,
         cell: ({ getValue }) => (
@@ -508,17 +516,22 @@ export function SchedulesPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="sched-storage">Storage Provider</Label>
+                <Label htmlFor="sched-storage">Storage Destination</Label>
                 <Select
-                  value={form.storageProvider}
-                  onValueChange={(v) => updateForm('storageProvider', v as BackupStorageProvider)}
+                  value={form.storageId}
+                  onValueChange={(v) => updateForm('storageId', v)}
                 >
                   <SelectTrigger id="sched-storage">
-                    <SelectValue />
+                    <SelectValue placeholder="Select a storage destination" />
                   </SelectTrigger>
                   <SelectContent>
-                    {BACKUP_STORAGE_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    {storageDestinations.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        <div className="flex items-center gap-2">
+                          <span>{s.name}</span>
+                          <span className="text-xs text-muted-foreground">{s.provider}</span>
+                        </div>
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

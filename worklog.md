@@ -421,3 +421,38 @@ Stage Summary:
 - Retention: implemented (deletes old backups, logs deletions).
 - Restore: implemented (download → decrypt → extract → restore DB with pre-restore backup).
 - Logs: all operations create real BackupLog entries.
+
+---
+Task ID: BACKUPS-UI-1
+Agent: main (orchestrator)
+Task: Refactor Backups module UI — remove duplicated navigation, redesign dashboard, fix storage logic
+
+Work Log:
+1. REMOVED DUPLICATED TOP NAVIGATION:
+   - src/modules/backups/index.tsx: Removed PageSubNav component entirely. The left sidebar (Backups → Dashboard/Backups/Schedules/Restore/Storage/Logs) is now the only navigation.
+   - src/components/layout/breadcrumbs.tsx: Added conditional to hide breadcrumb for all backups pages (currentModule === 'backups' → return null).
+
+2. REDESIGNED DASHBOARD:
+   - src/modules/backups/dashboard-page.tsx: Complete rewrite with clean SaaS admin design:
+     - Stat cards: small muted label → large bold value → small secondary info. Icons are small (h-4 w-4) in top-right corner, not competing with values. More padding (p-5), more whitespace between sections (space-y-8).
+     - 3-column grid on large screens (6 cards: Total Backups, Total Storage, Success Rate, Avg Duration, Last Backup, Failed).
+     - Layout: Page Header (title + Create Backup button) → Stats grid → Activity section (chart + recent activity side by side, balanced widths).
+     - Chart: proper BarChart with clear X-axis labels, tooltips, professional empty state ("No backup activity yet" with icon).
+     - Recent Activity: clean list with status dots (green/red/amber), action text, truncated errors, relative time. Not a crowded table.
+
+3. FIXED STORAGE LOGIC:
+   - src/modules/backups/backups-list-page.tsx: Changed CreateBackupForm from `storageProvider` to `storageId`. Added query to fetch configured storage destinations. Dialog now shows "Storage Destination" dropdown (name + provider as secondary info) instead of "Storage Provider" dropdown. Warning shown if no storage destinations configured.
+   - src/modules/backups/schedules-page.tsx: Same change — ScheduleForm now uses `storageId` instead of `storageProvider`. Added storage destinations query. Dialog shows "Storage Destination" dropdown. Removed unused BACKUP_STORAGE_OPTIONS import.
+
+Browser verification:
+- Dashboard: no error, h1="Backups", Create Backup button present, Backup Activity + Recent Activity sections visible, breadcrumb hidden.
+- Create Backup dialog: has "Storage Destination" (not "Storage Provider"), has Scope + Encryption.
+- Schedules page: no error.
+- Lint: 0 errors.
+
+Stage Summary:
+- Duplicated top navigation removed — sidebar is the only navigation.
+- Dashboard redesigned with clean SaaS admin design (better spacing, typography hierarchy, card proportions).
+- Storage logic fixed — backups and schedules select from configured storage destinations, not raw providers.
+- Breadcrumb hidden for all backups pages.
+- Files modified: src/modules/backups/index.tsx, src/modules/backups/dashboard-page.tsx, src/modules/backups/backups-list-page.tsx, src/modules/backups/schedules-page.tsx, src/components/layout/breadcrumbs.tsx

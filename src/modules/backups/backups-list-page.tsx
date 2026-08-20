@@ -82,7 +82,7 @@ interface CreateBackupForm {
   name: string;
   description: string;
   scope: BackupScope;
-  storageProvider: BackupStorageProvider;
+  storageId: string; // selected storage destination ID
   encryptionEnabled: boolean;
 }
 
@@ -133,7 +133,7 @@ const initialForm: CreateBackupForm = {
   name: '',
   description: '',
   scope: 'FULL',
-  storageProvider: 'LOCAL',
+  storageId: '',
   encryptionEnabled: false,
 };
 
@@ -165,6 +165,14 @@ export function BackupsListPage() {
     }),
     staleTime: 10_000,
   });
+
+  // Fetch configured storage destinations for the dropdown
+  const { data: storageDestinationsData } = useQuery({
+    queryKey: ['backup-storage-destinations'],
+    queryFn: () => getApi<{ id: string; name: string; provider: string; isActive: boolean }[]>('/api/backups/storage?pageSize=100'),
+    staleTime: 30_000,
+  });
+  const storageDestinations = (storageDestinationsData as unknown as { id: string; name: string; provider: string; isActive: boolean }[] | undefined)?.filter(s => s.isActive) ?? [];
 
   const backups = data?.data ?? [];
   const pagination = data?.pagination;
@@ -439,17 +447,25 @@ export function BackupsListPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="backup-storage">Storage Provider</Label>
-              <Select value={form.storageProvider} onValueChange={(v) => updateForm('storageProvider', v)}>
+              <Label htmlFor="backup-storage">Storage Destination</Label>
+              <Select value={form.storageId} onValueChange={(v) => updateForm('storageId', v)}>
                 <SelectTrigger id="backup-storage">
-                  <SelectValue />
+                  <SelectValue placeholder="Select a storage destination" />
                 </SelectTrigger>
                 <SelectContent>
-                  {BACKUP_STORAGE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  {storageDestinations.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{s.name}</span>
+                        <span className="text-xs text-muted-foreground">{s.provider}</span>
+                      </div>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {storageDestinations.length === 0 && (
+                <p className="text-xs text-amber-600">No storage destinations configured. Add one in Storage first.</p>
+              )}
             </div>
             <div className="flex items-center justify-between">
               <div>
@@ -469,7 +485,7 @@ export function BackupsListPage() {
             </Button>
             <Button
               onClick={() => createMutation.mutate(form)}
-              disabled={createMutation.isPending || !form.name.trim()}
+              disabled={createMutation.isPending || !form.name.trim() || !form.storageId}
             >
               {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Create Backup

@@ -1,36 +1,22 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
-  DatabaseBackup,
-  HardDrive,
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
-  XCircle,
+  DatabaseBackup, HardDrive, CheckCircle2, Clock, XCircle,
+  Plus, BarChart3, Activity as ActivityIcon,
 } from 'lucide-react';
-import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  CardDescription,
-} from '@/components/ui/card';
-import { PageHeader } from '@/components/patterns';
-import { StatusBadge } from '@/components/patterns';
+import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { getApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
-import { cn, formatFileSize, formatRelativeTime } from '@/lib/utils';
+import { cn, formatFileSize, formatRelativeTime, truncate } from '@/lib/utils';
 import { formatDurationMs } from '@/lib/backup-constants';
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '@/components/ui/chart';
-import type { BackupStatus } from '@/shared/types';
+import { useNavigationStore } from '@/lib/stores/navigation-store';
 
 // -------------------- Types --------------------
 
@@ -43,69 +29,74 @@ interface BackupStats {
   avgDurationFormatted?: string;
   lastBackup?: { id: string; name: string; filename?: string; status: string; createdAt: string; size?: number } | null;
   failedBackups: number;
+  completedBackups?: number;
   statusDistribution?: Record<string, number>;
-  scopeDistribution?: Record<string, number>;
   storageTrend?: { completedAt: string; size: number }[];
-  activeSchedulesCount?: number;
   recentLogs?: { id: string; action: string; status: string; createdAt: string; errorMessage?: string | null }[];
 }
 
 // -------------------- Stat Card --------------------
 
-interface StatCardProps {
-  title: string;
+function StatCard({
+  label, value, secondary, icon, iconColor, delay = 0, onClick,
+}: {
+  label: string;
   value: string | number;
-  description?: string;
+  secondary?: string;
   icon: React.ReactNode;
-  colorClass: string;
+  iconColor: string;
   delay?: number;
-}
-
-function StatCard({ title, value, description, icon, colorClass, delay = 0 }: StatCardProps) {
+  onClick?: () => void;
+}) {
+  const Wrapper = onClick ? 'button' : 'div';
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: delay * 0.05, ease: 'easeOut' }}
+      transition={{ duration: 0.3, delay: delay * 0.06 }}
     >
-      <Card className="py-4">
-        <CardContent className="pb-0">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 space-y-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                {title}
-              </p>
-              <p className="text-2xl font-bold tracking-tight tabular-nums">{value}</p>
-              {description && (
-                <p className="text-xs text-muted-foreground">{description}</p>
-              )}
-            </div>
-            <div className={cn('shrink-0 rounded-lg p-2.5', colorClass)}>
-              {icon}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <Wrapper
+        {...(onClick ? { onClick, type: 'button' as const } : {})}
+        className={cn(
+          'text-left w-full rounded-xl border bg-card p-5 transition-colors',
+          onClick && 'hover:bg-muted/40 cursor-pointer',
+        )}
+      >
+        {/* Small muted label */}
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+          {label}
+        </p>
+        {/* Large value */}
+        <p className="text-3xl font-bold tracking-tight tabular-nums leading-none">
+          {value}
+        </p>
+        {/* Small secondary info */}
+        {secondary && (
+          <p className="text-xs text-muted-foreground mt-2">{secondary}</p>
+        )}
+        {/* Small icon — bottom right, doesn't compete with value */}
+        <div className={cn('absolute top-5 right-5 flex h-8 w-8 items-center justify-center rounded-lg', iconColor)}>
+          {icon}
+        </div>
+      </Wrapper>
     </motion.div>
   );
 }
 
-// -------------------- Chart Config --------------------
-
-const chartConfig = {
-  count: {
-    label: 'Backups',
-    color: 'hsl(var(--chart-1))',
-  },
-  size: {
-    label: 'Storage',
-    color: 'hsl(var(--chart-2))',
-  },
-};
+function StatCardSkeleton() {
+  return (
+    <div className="rounded-xl border bg-card p-5 relative">
+      <Skeleton className="h-3 w-20 mb-3" />
+      <Skeleton className="h-8 w-16 mb-2" />
+      <Skeleton className="h-3 w-24" />
+    </div>
+  );
+}
 
 // -------------------- Dashboard Page --------------------
 
 export function DashboardPage() {
+  const navigate = useNavigationStore((s) => s.navigate);
   const { data: stats, isLoading } = useQuery({
     queryKey: queryKeys.backupStats.dashboard(),
     queryFn: () => getApi<BackupStats>('/api/backups/stats'),
@@ -115,182 +106,228 @@ export function DashboardPage() {
   const trendData = useMemo(() => {
     const trend = stats?.storageTrend;
     if (!trend?.length) return [];
-    // Group by date and aggregate count + size
-    const byDate = new Map<string, { date: string; size: number; count: number }>();
+    const byDate = new Map<string, { date: string; count: number }>();
     for (const d of trend) {
       const day = new Date(d.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const existing = byDate.get(day) ?? { date: day, size: 0, count: 0 };
-      existing.size += d.size ?? 0;
+      const existing = byDate.get(day) ?? { date: day, count: 0 };
       existing.count += 1;
       byDate.set(day, existing);
     }
     return Array.from(byDate.values());
   }, [stats?.storageTrend]);
 
+  const goToBackups = useCallback(() => navigate('backups', null, 'backups'), [navigate]);
+  const goToStorage = useCallback(() => navigate('backups', null, 'storage'), [navigate]);
+  const goToLogs = useCallback(() => navigate('backups', null, 'logs'), [navigate]);
+
   if (isLoading || !stats) {
     return (
-      <div className="space-y-4">
-        <PageHeader title="Backups" description="Create and manage database backups" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i} className="py-4">
-              <CardContent className="pb-0">
-                <div className="h-20 animate-pulse bg-muted rounded" />
-              </CardContent>
-            </Card>
-          ))}
+      <div className="space-y-6 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton className="h-8 w-32 mb-2" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-9 w-32" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => <StatCardSkeleton key={i} />)}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Skeleton className="h-64 rounded-xl" />
+          <Skeleton className="h-64 rounded-xl" />
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Backups" description="Create and manage database backups" />
+  const successSecondary = stats.totalBackups > 0
+    ? `${stats.completedBackups ?? 0} of ${stats.totalBackups} successful`
+    : 'No backups yet';
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <StatCard
-          title="Total Backups"
-          value={stats.totalBackups}
-          description="All-time backups"
-          icon={<DatabaseBackup className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />}
-          colorClass="bg-emerald-100 dark:bg-emerald-900/30"
-          delay={0}
-        />
-        <StatCard
-          title="Total Storage"
-          value={stats.totalStorageFormatted ?? formatFileSize(stats.totalStorageBytes ?? 0)}
-          description="Across all backups"
-          icon={<HardDrive className="h-5 w-5 text-amber-600 dark:text-amber-400" />}
-          colorClass="bg-amber-100 dark:bg-amber-900/30"
-          delay={1}
-        />
-        <StatCard
-          title="Success Rate"
-          value={`${(stats.successRate ?? 0).toFixed(1)}%`}
-          description="Completed successfully"
-          icon={<CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />}
-          colorClass="bg-green-100 dark:bg-green-900/30"
-          delay={2}
-        />
-        <StatCard
-          title="Avg Duration"
-          value={stats.avgDurationFormatted ?? formatDurationMs(stats.avgDurationMs ?? null)}
-          description="Per backup"
-          icon={<Clock className="h-5 w-5 text-sky-600 dark:text-sky-400" />}
-          colorClass="bg-sky-100 dark:bg-sky-900/30"
-          delay={3}
-        />
-        <StatCard
-          title="Last Backup"
-          value={stats.lastBackup ? formatRelativeTime(stats.lastBackup.createdAt) : 'Never'}
-          description={stats.lastBackup ? new Date(stats.lastBackup.createdAt).toLocaleDateString() : 'No backups yet'}
-          icon={<DatabaseBackup className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
-          colorClass="bg-violet-100 dark:bg-violet-900/30"
-          delay={4}
-        />
-        <StatCard
-          title="Failed Backups"
-          value={stats.failedBackups}
-          description={stats.failedBackups === 0 ? 'All healthy' : 'Needs attention'}
-          icon={<XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />}
-          colorClass="bg-red-100 dark:bg-red-900/30"
-          delay={5}
-        />
+  const lastBackupValue = stats.lastBackup
+    ? new Date(stats.lastBackup.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : 'Never';
+  const lastBackupSecondary = stats.lastBackup
+    ? new Date(stats.lastBackup.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : 'No backups yet';
+
+  return (
+    <div className="space-y-8 p-6">
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Backups</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Monitor and manage your system backups.</p>
+        </div>
+        <Button onClick={goToBackups} className="gap-2">
+          <Plus className="h-4 w-4" />
+          Create Backup
+        </Button>
       </div>
 
-      {/* Trend + Recent Table */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      {/* Statistics Cards — 3 columns on large screens, 2 on medium, 1 on small */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="relative">
+          <StatCard
+            label="Total Backups"
+            value={stats.totalBackups}
+            secondary="All backups"
+            icon={<DatabaseBackup className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
+            iconColor="bg-emerald-50 dark:bg-emerald-900/20"
+            delay={0}
+            onClick={goToBackups}
+          />
+        </div>
+        <div className="relative">
+          <StatCard
+            label="Total Storage"
+            value={stats.totalStorageFormatted ?? formatFileSize(stats.totalStorageBytes ?? 0)}
+            secondary="Across all backups"
+            icon={<HardDrive className="h-4 w-4 text-amber-600 dark:text-amber-400" />}
+            iconColor="bg-amber-50 dark:bg-amber-900/20"
+            delay={1}
+            onClick={goToStorage}
+          />
+        </div>
+        <div className="relative">
+          <StatCard
+            label="Success Rate"
+            value={`${(stats.successRate ?? 0).toFixed(0)}%`}
+            secondary={successSecondary}
+            icon={<CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />}
+            iconColor="bg-green-50 dark:bg-green-900/20"
+            delay={2}
+          />
+        </div>
+        <div className="relative">
+          <StatCard
+            label="Avg Duration"
+            value={stats.avgDurationFormatted ?? formatDurationMs(stats.avgDurationMs ?? null)}
+            secondary="Per backup"
+            icon={<Clock className="h-4 w-4 text-sky-600 dark:text-sky-400" />}
+            iconColor="bg-sky-50 dark:bg-sky-900/20"
+            delay={3}
+          />
+        </div>
+        <div className="relative">
+          <StatCard
+            label="Last Backup"
+            value={lastBackupValue}
+            secondary={lastBackupSecondary}
+            icon={<DatabaseBackup className="h-4 w-4 text-violet-600 dark:text-violet-400" />}
+            iconColor="bg-violet-50 dark:bg-violet-900/20"
+            delay={4}
+          />
+        </div>
+        <div className="relative">
+          <StatCard
+            label="Failed"
+            value={stats.failedBackups}
+            secondary={stats.failedBackups === 0 ? 'All healthy' : 'Requires attention'}
+            icon={<XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />}
+            iconColor="bg-red-50 dark:bg-red-900/20"
+            delay={5}
+            onClick={goToLogs}
+          />
+        </div>
+      </div>
+
+      {/* Backup Activity — chart + recent activity side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 7-Day Trend Chart */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base">7-Day Trend</CardTitle>
-            <CardDescription>Backup activity over the last 7 days</CardDescription>
+        <Card className="flex flex-col">
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold">Backup Activity</CardTitle>
+            </div>
+            <p className="text-xs text-muted-foreground">Backup count over the last 7 days</p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-1">
             {trendData.length > 0 ? (
-              <ChartContainer config={chartConfig} className="h-[240px] w-full">
-                <BarChart data={trendData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tickLine={false}
-                    axisLine={false}
-                    fontSize={12}
-                    tickMargin={8}
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={trendData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.5} />
+                  <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={11} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis tickLine={false} axisLine={false} fontSize={11} allowDecimals={false} tickMargin={4} stroke="hsl(var(--muted-foreground))" />
+                  <RechartsTooltip
+                    cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
+                    contentStyle={{
+                      borderRadius: '8px',
+                      border: '1px solid hsl(var(--border))',
+                      background: 'hsl(var(--popover))',
+                      fontSize: '12px',
+                    }}
                   />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    fontSize={12}
-                    tickMargin={8}
-                  />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        hideLabel
-                        formatter={(value, name) => {
-                          if (name === 'size') return formatFileSize(value as number);
-                          return String(value);
-                        }}
-                      />
-                    }
-                  />
-                  <Bar dataKey="count" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" fill="hsl(var(--chart-1))" radius={[6, 6, 0, 0]} maxBarSize={48} />
                 </BarChart>
-              </ChartContainer>
+              </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[240px] text-muted-foreground text-sm">
-                No trend data available
+              <div className="flex flex-col items-center justify-center h-[220px] text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
+                  <BarChart3 className="h-6 w-6 text-muted-foreground/50" />
+                </div>
+                <p className="text-sm font-medium text-foreground">No backup activity yet</p>
+                <p className="text-xs text-muted-foreground mt-1">Create your first backup to start tracking activity.</p>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Recent Activity Table */}
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle className="text-base">Recent Activity</CardTitle>
-            <CardDescription>Latest backup operations</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-xs text-muted-foreground uppercase tracking-wider">
-                    <th className="px-4 py-3 font-medium">Action</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium hidden md:table-cell">Error</th>
-                    <th className="px-4 py-3 font-medium hidden lg:table-cell">Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.recentLogs && stats.recentLogs.length > 0 ? (
-                    stats.recentLogs.map((log) => (
-                      <tr key={log.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                        <td className="px-4 py-3 font-medium capitalize">{log.action}</td>
-                        <td className="px-4 py-3">
-                          <StatusBadge status={log.status} size="sm" />
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs hidden md:table-cell max-w-[200px] truncate">
-                          {log.errorMessage || '—'}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs hidden lg:table-cell">
-                          {formatRelativeTime(log.createdAt)}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-12 text-center text-muted-foreground text-sm">
-                        No backup activity yet. Create your first backup to get started.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+        {/* Recent Activity */}
+        <Card className="flex flex-col">
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-2">
+              <ActivityIcon className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold">Recent Activity</CardTitle>
             </div>
+            <p className="text-xs text-muted-foreground">Latest backup operations</p>
+          </CardHeader>
+          <CardContent className="flex-1 p-0">
+            {stats.recentLogs && stats.recentLogs.length > 0 ? (
+              <div className="divide-y">
+                {stats.recentLogs.slice(0, 6).map((log) => (
+                  <div key={log.id} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/40 transition-colors">
+                    {/* Status badge */}
+                    <div className={cn(
+                      'h-2 w-2 rounded-full shrink-0',
+                      log.status === 'success' ? 'bg-green-500' : log.status === 'failed' ? 'bg-red-500' : 'bg-amber-500',
+                    )} />
+                    {/* Action */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium capitalize">{log.action.replace(/_/g, ' ')}</p>
+                      {log.errorMessage && (
+                        <p className="text-xs text-muted-foreground truncate" title={log.errorMessage}>
+                          {truncate(log.errorMessage, 60)}
+                        </p>
+                      )}
+                    </div>
+                    {/* Status text */}
+                    <Badge variant="outline" className={cn(
+                      'text-[10px] font-medium border-transparent shrink-0',
+                      log.status === 'success' ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                      : log.status === 'failed' ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                      : 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400',
+                    )}>
+                      {log.status}
+                    </Badge>
+                    {/* Time */}
+                    <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                      {formatRelativeTime(log.createdAt)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
+                  <ActivityIcon className="h-6 w-6 text-muted-foreground/50" />
+                </div>
+                <p className="text-sm font-medium text-foreground">No activity yet</p>
+                <p className="text-xs text-muted-foreground mt-1">Backup operations will appear here.</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

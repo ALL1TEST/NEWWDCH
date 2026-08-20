@@ -227,6 +227,11 @@ export function Breadcrumbs() {
     return null;
   }
 
+  // Backups pages — sidebar is the only navigation, hide breadcrumb to avoid duplication.
+  if (currentModule === 'backups') {
+    return null;
+  }
+
   if (crumbs.length <= 1 && crumbs[0]?.isCurrent) {
     // Single item, minimal display
     const item = crumbs[0];
