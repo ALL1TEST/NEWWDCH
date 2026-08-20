@@ -218,6 +218,11 @@ export function Breadcrumbs() {
     return null;
   }
 
+  // Settings pages — sidebar is the only navigation, hide breadcrumb.
+  if (currentModule === 'settings') {
+    return null;
+  }
+
   if (crumbs.length <= 1 && crumbs[0]?.isCurrent) {
     // Single item, minimal display
     const item = crumbs[0];
