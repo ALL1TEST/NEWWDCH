@@ -70,7 +70,6 @@ const NAV_ITEMS: CommandItemDef[] = [
   { id: 'nav-comments', label: 'Comments', icon: MessageSquare, module: 'comments' },
   { id: 'nav-newsletters', label: 'Newsletters', icon: Mail, module: 'newsletters' },
   { id: 'nav-seo', label: 'SEO', icon: Search, module: 'seo' },
-  { id: 'nav-navigation', label: 'Navigation', icon: NavigationIcon, module: 'navigation' },
   { id: 'nav-analytics', label: 'Analytics', icon: BarChart3, module: 'analytics' },
   { id: 'nav-notifications', label: 'Notifications', icon: Bell, module: 'notifications' },
   { id: 'nav-ai', label: 'AI', icon: Sparkles, module: 'ai' },
@@ -78,7 +77,6 @@ const NAV_ITEMS: CommandItemDef[] = [
   { id: 'nav-ai-prompts', label: 'Prompt Library', icon: FileText, module: 'ai', subPage: 'prompts' },
   { id: 'nav-ai-playground', label: 'AI Playground', icon: Sparkles, module: 'ai', subPage: 'playground' },
   { id: 'nav-ai-jobs', label: 'AI Jobs', icon: Clock, module: 'ai', subPage: 'jobs' },
-  { id: 'nav-webhooks', label: 'Webhooks', icon: Webhook, module: 'webhooks' },
   { id: 'nav-backups', label: 'Backups Dashboard', icon: Database, module: 'backups' },
   { id: 'nav-backups-list', label: 'Backups List', icon: Database, module: 'backups', subPage: 'backups' },
   { id: 'nav-backups-schedules', label: 'Backup Schedules', icon: Clock, module: 'backups', subPage: 'schedules' },
@@ -113,7 +111,6 @@ const ACTION_ITEMS: CommandItemDef[] = [
   { id: 'act-create-user', label: 'Create User', icon: Plus, module: 'users', subPage: 'create' },
   { id: 'act-create-category', label: 'Create Category', icon: Plus, module: 'categories', subPage: 'create' },
   { id: 'act-create-tag', label: 'Create Tag', icon: Plus, module: 'tags', subPage: 'create' },
-  { id: 'act-create-webhook', label: 'Create Webhook', icon: Plus, module: 'webhooks', subPage: 'create' },
 ];
 
 // -------------------- Recent Items (in-memory) --------------------

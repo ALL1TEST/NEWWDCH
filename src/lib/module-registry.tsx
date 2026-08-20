@@ -19,12 +19,11 @@ const tags = dynamic(() => import('@/modules/tags').then(m => ({ default: m.Tags
 const comments = dynamic(() => import('@/modules/comments').then(m => ({ default: m.CommentsModule as ComponentType })), { loading: ModuleFallback });
 const newsletter = dynamic(() => import('@/modules/newsletter').then(m => ({ default: m.NewsletterModule as ComponentType })), { loading: ModuleFallback });
 const seo = dynamic(() => import('@/modules/seo').then(m => ({ default: m.SeoModule as ComponentType })), { loading: ModuleFallback });
-const navigation = dynamic(() => import('@/modules/navigation').then(m => ({ default: m.NavigationModule as ComponentType })), { loading: ModuleFallback });
 const notifications = dynamic(() => import('@/modules/notifications').then(m => ({ default: m.NotificationsModule as ComponentType })), { loading: ModuleFallback });
 const settings = dynamic(() => import('@/modules/settings').then(m => ({ default: m.SettingsModule as ComponentType })), { loading: ModuleFallback });
 const ai = dynamic(() => import('@/modules/ai').then(m => ({ default: m.AiModule as ComponentType })), { loading: ModuleFallback });
-const webhooks = dynamic(() => import('@/modules/webhooks').then(m => ({ default: m.WebhooksModule as ComponentType })), { loading: ModuleFallback });
 const audit = dynamic(() => import('@/modules/audit').then(m => ({ default: m.AuditModule as ComponentType })), { loading: ModuleFallback });
+const automation = dynamic(() => import('@/modules/automation').then(m => ({ default: m.AutomationModule as ComponentType })), { loading: ModuleFallback });
 const backups = dynamic(() => import('@/modules/backups').then(m => ({ default: m.BackupsModule as ComponentType })), { loading: ModuleFallback });
 const jobs = dynamic(() => import('@/modules/jobs').then(m => ({ default: m.JobsModule as ComponentType })), { loading: ModuleFallback });
 const emailTemplates = dynamic(() => import('@/modules/email-templates').then(m => ({ default: m.EmailTemplatesModule as ComponentType })), { loading: ModuleFallback });
@@ -32,5 +31,5 @@ const profile = dynamic(() => import('@/modules/profile').then(m => ({ default: 
 const billing = dynamic(() => import('@/modules/billing').then(m => ({ default: m.BillingModule as ComponentType })), { loading: ModuleFallback });
 
 export const moduleRegistry: Record<string, ComponentType> = {
-  dashboard, content, media, users, categories, tags, comments, newsletter, 'email-templates': emailTemplates, seo, navigation, notifications, settings, ai, webhooks, audit, backups, jobs, profile, billing,
+  dashboard, content, media, users, categories, tags, comments, newsletter, 'email-templates': emailTemplates, seo, notifications, settings, ai, audit, backups, automation, jobs, profile, billing,
 };

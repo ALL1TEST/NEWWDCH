@@ -45,6 +45,7 @@ import {
   Upload,
   AlertTriangle,
   Gauge,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
@@ -122,6 +123,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'Upload': Upload,
   'AlertTriangle': AlertTriangle,
   'Gauge': Gauge,
+  'Zap': Zap,
 };
 
 function getIcon(iconName?: string): LucideIcon {
@@ -175,11 +177,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: 'Search',
   },
   {
-    label: 'Navigation',
-    href: '#navigation',
-    icon: 'Navigation',
-  },
-  {
     label: 'AI',
     href: '#ai',
     icon: 'Sparkles',
@@ -190,15 +187,15 @@ const NAV_ITEMS: NavItem[] = [
     icon: 'Bell',
   },
   {
-    label: 'Webhooks',
-    href: '#webhooks',
-    icon: 'Webhook',
-    requiredRole: 'ADMIN',
-  },
-  {
     label: 'Backups',
     href: '#backups',
     icon: 'Database',
+    requiredRole: 'ADMIN',
+  },
+  {
+    label: 'Automation',
+    href: '#automation',
+    icon: 'Zap',
     requiredRole: 'ADMIN',
   },
   {
@@ -219,6 +216,7 @@ const NAV_ITEMS: NavItem[] = [
 const ROUTE_PREFIX_TO_SECTION: Record<string, string> = {
   'content': 'Content',
   'backups': 'Backups',
+  'automation': 'Automation',
   'settings': 'Settings',
 };
 

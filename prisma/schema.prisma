@@ -2694,3 +2694,54 @@ model MonitorSetting {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// ============================================================
+// AUTOMATION MODELS
+// ============================================================
+
+model Automation {
+  id              String   @id @default(cuid())
+  siteId          String?
+  name            String
+  description     String   @default("")
+  triggerType     String   @default("MANUAL") // MANUAL | SCHEDULED
+  scheduleConfig  String   @default("{}") // JSON: frequency, time, timezone, startDate, endDate
+  workflowConfig  String   @default("{}") // JSON: contentGeneration, seoProcessing, media, finalAction
+  status          String   @default("ACTIVE") // ACTIVE | PAUSED | FAILED
+  lastRunAt       DateTime?
+  nextRunAt       DateTime?
+  totalRuns       Int      @default(0)
+  successfulRuns  Int      @default(0)
+  failedRuns      Int      @default(0)
+  createdById     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  runs      AutomationRun[]
+
+  @@index([status])
+  @@index([siteId])
+  @@index([nextRunAt])
+  @@index([createdById])
+}
+
+model AutomationRun {
+  id              String   @id @default(cuid())
+  automationId    String
+  status          String   @default("PENDING") // PENDING | RUNNING | COMPLETED | FAILED | CANCELLED
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  durationMs      Int?
+  generatedArticleId String?
+  generatedArticleName String?
+  errorMessage    String?
+  failedStep      String?
+  logsJson        String   @default("[]") // JSON array of {timestamp, step, message, level}
+  createdAt       DateTime @default(now())
+
+  automation Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([automationId])
+  @@index([status])
+  @@index([createdAt])
+}

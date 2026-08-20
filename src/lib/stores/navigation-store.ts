@@ -44,6 +44,8 @@ function parseHash(hash: string): {
     'providers', 'prompts', 'models', 'playground', 'jobs', 'usage', 'marketplace',
     // Backups
     'backups', 'schedules', 'restore', 'storage', 'logs',
+    // Automation
+    'create', 'edit', 'details', 'runs',
     // Newsletter
     'subscribers', 'campaigns', 'collections',
     // Media

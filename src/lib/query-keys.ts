@@ -155,16 +155,6 @@ export const queryKeys = {
     all: ['seo-audit'] as const,
   },
 
-  // -------------------- Navigation --------------------
-  navigation: {
-    all: ['navigation'] as const,
-    list: (filters?: Record<string, unknown>) =>
-      ['navigation', 'list', filters] as const,
-    detail: (id: string) =>
-      ['navigation', 'detail', id] as const,
-    versions: (id: string) =>
-      ['navigation', 'versions', id] as const,
-  },
 
   // -------------------- Analytics --------------------
   analytics: {
