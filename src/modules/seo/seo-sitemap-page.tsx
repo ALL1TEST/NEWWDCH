@@ -30,7 +30,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { PageHeader } from '@/components/patterns';
 import { getApi, postApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useSiteStore } from '@/lib/stores/site-store';
@@ -236,11 +235,6 @@ export function SeoSitemapPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Sitemap"
-        description="Generate and manage your XML sitemap for search engines"
-      />
-
       {/* Error state */}
       {error && (
         <Card className="border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20">

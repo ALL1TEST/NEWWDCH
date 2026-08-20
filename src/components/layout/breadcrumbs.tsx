@@ -208,6 +208,13 @@ export function Breadcrumbs() {
     return items;
   }, [currentModule, currentItemId, currentSubPage, isAllSites]);
 
+  // SEO Settings pages (Sitemap, Robots.txt, Redirects) manage their own title
+  // and tab bar — hide the global breadcrumb to avoid duplicate navigation.
+  const SEO_SETTINGS_SUBPAGES = new Set(['settings', 'sitemap', 'robots', 'redirects']);
+  if (currentModule === 'seo' && currentSubPage && SEO_SETTINGS_SUBPAGES.has(currentSubPage)) {
+    return null;
+  }
+
   if (crumbs.length <= 1 && crumbs[0]?.isCurrent) {
     // Single item, minimal display
     const item = crumbs[0];

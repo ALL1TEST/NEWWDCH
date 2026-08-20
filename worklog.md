@@ -218,3 +218,31 @@ Stage Summary:
 - Legacy pages redirect to closest new tab (no broken links).
 - Existing functionality preserved: sitemap generation, robots.txt editing, redirects management, SEO audit, search console — all accessible within the new 4-tab structure.
 - Files modified: src/modules/seo/index.tsx, src/modules/seo/seo-settings-page.tsx (new), src/modules/seo/seo-overview-page.tsx, src/modules/seo/seo-audit-page.tsx, src/components/layout/breadcrumbs.tsx, src/lib/stores/navigation-store.ts
+
+---
+Task ID: SEO-2
+Agent: main (orchestrator)
+Task: Clean up SEO Settings UI — remove redundant breadcrumbs, duplicate headings, repeated navigation
+
+Work Log:
+- Rewrote src/modules/seo/seo-settings-page.tsx: removed the static "SEO Settings" PageHeader. Now shows a dynamic title + description based on the active tab (Sitemap / Robots.txt / Redirects). Single tab bar below the title. No duplicate heading.
+- Removed PageHeader from child pages (rendered inside Settings, no duplicate title):
+  - src/modules/seo/seo-sitemap-page.tsx: removed <PageHeader title="Sitemap">; content renders directly.
+  - src/modules/seo/seo-robots-page.tsx: removed <PageHeader title="Robots.txt">; content renders directly.
+  - src/modules/seo/seo-redirects-page.tsx: removed <PageHeader title="Redirects">; action buttons (Export CSV, Import CSV, Create Redirect) preserved as inline flex row at top of content.
+- Removed unused PageHeader imports from all three child pages.
+- Updated src/components/layout/breadcrumbs.tsx: added conditional to hide the global breadcrumb for SEO Settings pages (sitemap/robots/redirects sub-pages). Moved the conditional after the useMemo hook to respect rules-of-hooks.
+
+Browser verification:
+- Sitemap tab: ONE h1 "Sitemap", no breadcrumb, tab bar present, all sitemap content (info, actions, generate, preview, download) intact.
+- Robots.txt tab: ONE h1 "Robots.txt", no breadcrumb, tab bar present.
+- Redirects tab: ONE h1 "Redirects", no breadcrumb, tab bar present, action buttons (Export CSV, Import CSV, Create Redirect) all present and functional.
+- No duplicate "SEO Settings" heading anywhere.
+- No "All Sites > SEO > Settings" breadcrumb.
+- No standalone SVG breadcrumb icons.
+- Lint: 0 errors.
+
+Stage Summary:
+- SEO Settings UI is now clean: one dynamic title, one tab bar, no duplicate breadcrumbs/headings.
+- All existing functionality preserved (sitemap generation, robots.txt editor, redirects CRUD, export/import CSV).
+- Files modified: src/modules/seo/seo-settings-page.tsx, src/modules/seo/seo-sitemap-page.tsx, src/modules/seo/seo-robots-page.tsx, src/modules/seo/seo-redirects-page.tsx, src/components/layout/breadcrumbs.tsx

@@ -53,7 +53,6 @@ import {
   DataTable,
   useDataTable,
   ColumnDefHelper,
-  PageHeader,
   ConfirmDialog,
   StatusBadge,
 } from '@/components/patterns';
@@ -713,32 +712,27 @@ export function SeoRedirectsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Redirects"
-        description="Manage URL redirect rules for your site"
-        action={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleExport} disabled={exportMutation.isPending}>
-              {exportMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-              Export CSV
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
-              <Upload className="h-4 w-4 mr-2" />
-              Import CSV
-            </Button>
-            <Button
-              onClick={() => {
-                setCreateForm(EMPTY_REDIRECT_FORM);
-                setIsCreateOpen(true);
-              }}
-              size="sm"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Create Redirect
-            </Button>
-          </div>
-        }
-      />
+      {/* Action buttons (preserved from PageHeader, rendered inline) */}
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={handleExport} disabled={exportMutation.isPending}>
+          {exportMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+          Export CSV
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
+          <Upload className="h-4 w-4 mr-2" />
+          Import CSV
+        </Button>
+        <Button
+          onClick={() => {
+            setCreateForm(EMPTY_REDIRECT_FORM);
+            setIsCreateOpen(true);
+          }}
+          size="sm"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Create Redirect
+        </Button>
+      </div>
 
       <DataTable
         columns={columns}

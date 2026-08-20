@@ -3,36 +3,42 @@
 import React, { useState } from 'react';
 import { FileText, Shield, GitBranch } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { PageHeader } from '@/components/patterns';
 import { SeoSitemapPage } from './seo-sitemap-page';
 import { SeoRobotsPage } from './seo-robots-page';
 import { SeoRedirectsPage } from './seo-redirects-page';
 
 // ==================== SEO Settings ====================
 // Consolidates Sitemap, Robots.txt, and Redirects (Advanced) into one settings page.
-// Internal tabbed navigation — not separate sidebar pages.
+// Provides a single dynamic title + tab bar. Child pages render content only (no
+// duplicate PageHeader / breadcrumb).
 
 type SettingsTab = 'sitemap' | 'robots' | 'redirects';
 
-const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ElementType; description: string }[] = [
-  { key: 'sitemap', label: 'Sitemap', icon: FileText, description: 'Automatically generated XML sitemap' },
-  { key: 'robots', label: 'Robots.txt', icon: Shield, description: 'Crawler directives for search engines' },
-  { key: 'redirects', label: 'Advanced: Redirects', icon: GitBranch, description: 'Manage URL redirects (advanced tool)' },
+const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ElementType }[] = [
+  { key: 'sitemap', label: 'Sitemap', icon: FileText },
+  { key: 'robots', label: 'Robots.txt', icon: Shield },
+  { key: 'redirects', label: 'Advanced: Redirects', icon: GitBranch },
 ];
+
+const TAB_META: Record<SettingsTab, { title: string; description: string }> = {
+  sitemap: { title: 'Sitemap', description: 'Generate and manage your XML sitemap for search engines' },
+  robots: { title: 'Robots.txt', description: 'Control how search engine crawlers access your site' },
+  redirects: { title: 'Redirects', description: 'Manage URL redirect rules for your site' },
+};
 
 export function SeoSettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('sitemap');
-  const activeTabDef = SETTINGS_TABS.find((t) => t.key === activeTab)!;
-  const ActiveIcon = activeTabDef.icon;
+  const meta = TAB_META[activeTab];
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="SEO Settings"
-        description="Manage sitemap, robots.txt, and advanced redirect configuration"
-      />
+      {/* Single dynamic page title — no duplicate "SEO Settings" heading */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{meta.title}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{meta.description}</p>
+      </div>
 
-      {/* Settings Tab Bar */}
+      {/* Single tab bar */}
       <div className="flex items-center gap-1 border-b">
         {SETTINGS_TABS.map((tab) => {
           const Icon = tab.icon;
@@ -55,7 +61,7 @@ export function SeoSettingsPage() {
         })}
       </div>
 
-      {/* Active Tab Content */}
+      {/* Active tab content — child pages render content only */}
       <div>
         {activeTab === 'sitemap' && <SeoSitemapPage />}
         {activeTab === 'robots' && <SeoRobotsPage />}

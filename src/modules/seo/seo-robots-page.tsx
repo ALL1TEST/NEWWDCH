@@ -23,7 +23,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { PageHeader } from '@/components/patterns';
 import { getApi, putApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useSiteStore } from '@/lib/stores/site-store';
@@ -195,11 +194,6 @@ export function SeoRobotsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Robots.txt"
-        description="Control how search engine crawlers access your site"
-      />
-
       {/* Error state */}
       {error && (
         <Card className="border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20">
