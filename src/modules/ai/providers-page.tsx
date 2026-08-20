@@ -321,7 +321,7 @@ export function ProvidersPage() {
             </div>
             <div>
               <p className="text-sm text-zinc-500">Total Providers</p>
-              <p className="text-2xl font-bold">{isLoading ? <Skeleton className="h-8 w-12 inline-block" /> : totalProviders}</p>
+              <div className="text-2xl font-bold">{isLoading ? <Skeleton className="h-8 w-12 inline-block" /> : totalProviders}</div>
             </div>
           </CardContent>
         </Card>
@@ -332,7 +332,7 @@ export function ProvidersPage() {
             </div>
             <div>
               <p className="text-sm text-zinc-500">Connected</p>
-              <p className="text-2xl font-bold">{isLoading ? <Skeleton className="h-8 w-12 inline-block" /> : connectedCount}</p>
+              <div className="text-2xl font-bold">{isLoading ? <Skeleton className="h-8 w-12 inline-block" /> : connectedCount}</div>
             </div>
           </CardContent>
         </Card>
@@ -343,7 +343,7 @@ export function ProvidersPage() {
             </div>
             <div>
               <p className="text-sm text-zinc-500">Default Provider</p>
-              <p className="text-lg font-bold truncate max-w-[200px]">{isLoading ? <Skeleton className="h-6 w-32 inline-block" /> : defaultProvider?.name ?? 'None'}</p>
+              <div className="text-lg font-bold truncate max-w-[200px]">{isLoading ? <Skeleton className="h-6 w-32 inline-block" /> : defaultProvider?.name ?? 'None'}</div>
             </div>
           </CardContent>
         </Card>

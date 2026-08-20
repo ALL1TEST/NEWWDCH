@@ -68,6 +68,10 @@ interface FallbackProvider {
 // -------------------- Component --------------------
 
 export function SettingsPage() {
+  return <SettingsPageInner />;
+}
+
+function SettingsPageInner() {
   const queryClient = useQueryClient();
 
   const defaultSettings: AiSettings = {
@@ -89,7 +93,6 @@ export function SettingsPage() {
 
   // Form state
   const [localSettings, setLocalSettings] = useState<AiSettings>(defaultSettings);
-  const settings = settingsData ?? localSettings;
   const updateField = <K extends keyof AiSettings>(key: K, value: AiSettings[K]) => {
     setLocalSettings((prev) => ({ ...prev, [key]: value }));
   };
@@ -103,7 +106,8 @@ export function SettingsPage() {
     queryFn: () => getApi<AiSettings>('/api/ai/settings', { scope: 'global' }),
   });
 
-
+  // settings = fetched data ?? local fallback (MUST be after useQuery that defines settingsData)
+  const settings = settingsData ?? localSettings;
 
   // Fetch providers for selects
   const { data: providersData } = useQuery({

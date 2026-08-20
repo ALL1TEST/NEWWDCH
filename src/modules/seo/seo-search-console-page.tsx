@@ -102,18 +102,19 @@ interface PaginatedList<T> {
 
 // ==================== Helpers ====================
 
-function formatNumber(n: number): string {
-  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return n.toLocaleString();
+function formatNumber(n: number | null | undefined): string {
+  const num = n ?? 0;
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return num.toLocaleString();
 }
 
-function formatPercent(n: number): string {
-  return `${(n * 100).toFixed(2)}%`;
+function formatPercent(n: number | null | undefined): string {
+  return `${((n ?? 0) * 100).toFixed(2)}%`;
 }
 
-function formatPosition(n: number): string {
-  return n.toFixed(1);
+function formatPosition(n: number | null | undefined): string {
+  return (n ?? 0).toFixed(1);
 }
 
 function formatDate(dateStr: string | null): string {
@@ -456,6 +457,10 @@ function SearchConsoleSkeleton() {
 // ==================== Main Page ====================
 
 export function SeoSearchConsolePage() {
+  return <SeoSearchConsolePageInner />;
+}
+
+function SeoSearchConsolePageInner() {
   const queryClient = useQueryClient();
   const [connectUrl, setConnectUrl] = useState('');
 
