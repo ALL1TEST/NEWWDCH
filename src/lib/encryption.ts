@@ -2,7 +2,7 @@
 // ENCRYPTION UTILITY — AES-256-GCM for API key encryption
 // ============================================================
 
-const ALGORITHM = 'aes-256-gcm';
+const ALGORITHM = 'AES-GCM';
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
 

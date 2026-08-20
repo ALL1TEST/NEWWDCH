@@ -24,7 +24,7 @@ const listIncludes = {
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200, 'Name must be 200 characters or less').trim(),
-  provider: z.enum(['LOCAL', 'AMAZON_S3', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'FTP', 'SFTP']),
+  provider: z.enum(['LOCAL', 'AMAZON_S3', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'BACKBLAZE_B2', 'FTP', 'SFTP']),
   config: z.string().default('{}'),
   isActive: z.boolean().default(true),
   siteId: z.string().optional(),
@@ -75,6 +75,12 @@ function validateConfigJson(configStr: string, provider: string): { valid: boole
       if (!config.secretAccessKey) errors.push('Cloudflare R2 config requires "secretAccessKey"');
       break;
     }
+    case 'BACKBLAZE_B2': {
+      if (!config.bucket) errors.push('Backblaze B2 config requires "bucket"');
+      if (!config.keyId) errors.push('Backblaze B2 config requires "keyId"');
+      if (!config.applicationKey) errors.push('Backblaze B2 config requires "applicationKey"');
+      break;
+    }
     case 'FTP':
     case 'SFTP': {
       if (!config.host) errors.push(`${provider} config requires "host"`);
@@ -83,8 +89,7 @@ function validateConfigJson(configStr: string, provider: string): { valid: boole
       break;
     }
     case 'LOCAL': {
-      // Local requires a path
-      if (!config.path) errors.push('Local config requires "path"');
+      // Local path is optional — uses default backup directory if not specified
       break;
     }
   }
@@ -153,7 +158,7 @@ export async function GET(request: NextRequest) {
 }
 
 // =====================================================================
-// POST — create
+// POST — create OR test connection (action=test)
 // =====================================================================
 
 export async function POST(request: NextRequest) {
@@ -203,6 +208,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ---- Test Connection action ----
+    if ((body as Record<string, unknown>).action === 'test') {
+      const { testStorageConnection } = await import('@/lib/backup/backup-service');
+      let configObj: Record<string, unknown>;
+      try {
+        configObj = JSON.parse(d.config);
+      } catch {
+        configObj = {};
+      }
+      const result = await testStorageConnection(d.provider, configObj);
+      return NextResponse.json({ data: result, meta: { requestId: id } });
+    }
+
     // Resolve createdById — fallback to first user if not provided
     let createdById = d.createdById;
     if (!createdById) {
@@ -225,11 +243,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Encrypt sensitive config fields before storing
+    let configObj: Record<string, unknown>;
+    try {
+      configObj = JSON.parse(d.config);
+    } catch {
+      configObj = {};
+    }
+    const { encryptConfigForStorage } = await import('@/lib/backup/providers');
+    const encryptedConfig = await encryptConfigForStorage(configObj);
+
     const item = await db.backupStorage.create({
       data: {
         name: d.name,
         provider: d.provider,
-        config: d.config,
+        config: encryptedConfig,
         isActive: d.isActive,
         createdById,
         siteId: d.siteId ?? null,
@@ -237,7 +265,17 @@ export async function POST(request: NextRequest) {
       include: listIncludes,
     });
 
-    return NextResponse.json({ data: item, meta: { requestId: id } }, { status: 201 });
+    // Mask secrets in the response
+    const { maskConfigSecrets } = await import('@/lib/backup/providers');
+    let responseConfig: Record<string, unknown>;
+    try {
+      responseConfig = JSON.parse(item.config);
+    } catch {
+      responseConfig = {};
+    }
+    const maskedItem = { ...item, config: JSON.stringify(maskConfigSecrets(responseConfig)) };
+
+    return NextResponse.json({ data: maskedItem, meta: { requestId: id } }, { status: 201 });
   } catch (error) {
     console.error(`[BACKUP_STORAGE:CREATE] ${id} —`, error);
     return NextResponse.json(

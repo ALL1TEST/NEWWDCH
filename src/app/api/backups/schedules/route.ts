@@ -30,7 +30,7 @@ const createSchema = z.object({
   cronExpression: z.string().max(100).optional(),
   customCron: z.string().max(100).optional(), // alias for cronExpression
   scope: z.enum(['FULL', 'DATABASE_ONLY', 'MEDIA_ONLY', 'FILES_ONLY', 'SETTINGS_ONLY']).default('FULL'),
-  storageProvider: z.enum(['LOCAL', 'AMAZON_S3', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'FTP', 'SFTP']).default('LOCAL'),
+  storageProvider: z.enum(['LOCAL', 'AMAZON_S3', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'BACKBLAZE_B2', 'FTP', 'SFTP']).default('LOCAL'),
   encryptionEnabled: z.boolean().default(false),
   verificationEnabled: z.boolean().default(true),
   retentionCount: z.number().int().min(1).max(1000).default(10),

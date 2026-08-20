@@ -38,8 +38,10 @@ const createSchema = z.object({
   description: z.string().max(2000).optional().or(z.literal('')), // alias for note
   siteId: z.string().optional(),
   scheduleId: z.string().optional(),
-  storageProvider: z.enum(['LOCAL', 'AMAZON_S3', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'FTP', 'SFTP']).default('LOCAL'),
+  storageProvider: z.enum(['LOCAL', 'AMAZON_S3', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'BACKBLAZE_B2', 'FTP', 'SFTP']).default('LOCAL'),
+  storageId: z.string().optional(), // ID of a configured BackupStorage destination
   encryptionEnabled: z.boolean().optional(),
+  verifyAfterUpload: z.boolean().optional(),
   createdById: z.string().min(1, 'Creator ID is required').optional(),
 });
 
@@ -161,133 +163,28 @@ export async function POST(request: NextRequest) {
     }
 
     const d = parsed.data;
-    const startedAt = Date.now();
-    const now = new Date();
-    const timestamp = formatTimestamp(now);
-    const scope = d.scope as string;
-    const backupName = d.name?.trim() || `Backup ${timestamp}`;
-    const filename = `backup-${timestamp}-${scope.toLowerCase()}.sqlite3`;
-    const storagePath = path.join(BACKUP_DIR, filename);
 
-    // Resolve createdById — fallback to first user if not provided
-    let createdById = d.createdById;
-    if (!createdById) {
-      const firstUser = await db.user.findFirst({ select: { id: true } });
-      createdById = firstUser?.id;
-      if (!createdById) {
-        return NextResponse.json(
-          { error: { code: 'VALIDATION_ERROR', message: 'No users exist in the system. Create a user first.' }, meta: { requestId: id } },
-          { status: 400 },
-        );
-      }
-    }
-
-    // Resolve note: accept both `note` and `description` (description is an alias)
-    const note = d.note === '' ? null : d.description === '' ? null : d.description ?? d.note ?? null;
-    const encryptionStatus = d.encryptionEnabled ? 'ENCRYPTED' as const : 'NONE' as const;
-
-    // Ensure backups directory exists
-    if (!existsSync(BACKUP_DIR)) {
-      await mkdir(BACKUP_DIR, { recursive: true });
-    }
-
-    // Create the backup record with CREATING status
-    const backup = await db.backup.create({
-      data: {
-        name: backupName,
-        filename,
+    // Use the backup service for real backup creation (archive → encrypt → upload → verify → log)
+    try {
+      const { createBackup } = await import('@/lib/backup/backup-service');
+      const backup = await createBackup({
+        name: d.name,
         scope: d.scope,
         type: d.type,
-        status: 'CREATING',
-        note,
+        note: d.note || d.description,
+        storageId: d.storageId,
         storageProvider: d.storageProvider,
-        storagePath,
-        encryptionStatus,
-        verificationStatus: 'PENDING',
-        createdById,
-        siteId: d.siteId ?? null,
-        scheduleId: d.scheduleId ?? null,
-        siteName: null,
-      },
-      include: listIncludes,
-    });
-
-    // Perform the actual SQLite backup
-    try {
-      // Get the database size before backup
-      const dbStat = await stat(DB_PATH).catch(() => null);
-      const databaseSize = dbStat?.size ?? 0;
-
-      // Copy the SQLite database file
-      await copyFile(DB_PATH, storagePath);
-
-      // Calculate file size
-      const backupStat = await stat(storagePath);
-      const fileSize = backupStat.size;
-
-      // Compute SHA-256 checksum
-      const checksum = await computeFileSha256(storagePath);
-
-      const durationMs = Date.now() - startedAt;
-
-      // Update backup record as COMPLETED
-      const completed = await db.backup.update({
-        where: { id: backup.id },
-        data: {
-          status: 'COMPLETED',
-          size: fileSize,
-          databaseSize,
-          durationMs,
-          checksum,
-          verificationStatus: 'VERIFIED',
-          completedAt: new Date(),
-          fileCount: 1, // SQLite DB is a single file
-        },
-        include: listIncludes,
+        encryptionEnabled: d.encryptionEnabled,
+        verifyAfterUpload: d.verifyAfterUpload ?? true,
+        createdById: d.createdById,
+        siteId: d.siteId,
+        scheduleId: d.scheduleId,
       });
 
-      // Create a backup log entry
-      await db.backupLog.create({
-        data: {
-          backupId: backup.id,
-          action: 'create',
-          status: 'success',
-          databaseSize,
-          fileCount: 1,
-          archiveSize: fileSize,
-          durationMs,
-          storageProvider: d.storageProvider,
-          verificationResult: 'VERIFIED',
-          createdById,
-          siteId: d.siteId ?? null,
-        },
-      });
-
-      return NextResponse.json({ data: completed, meta: { requestId: id } }, { status: 201 });
+      // Fetch with includes for the response
+      const result = await db.backup.findUnique({ where: { id: backup.id }, include: listIncludes });
+      return NextResponse.json({ data: result, meta: { requestId: id } }, { status: 201 });
     } catch (backupError) {
-      const durationMs = Date.now() - startedAt;
-
-      // Mark backup as FAILED
-      const failed = await db.backup.update({
-        where: { id: backup.id },
-        data: { status: 'FAILED', durationMs },
-        include: listIncludes,
-      });
-
-      // Create error log
-      await db.backupLog.create({
-        data: {
-          backupId: backup.id,
-          action: 'create',
-          status: 'failed',
-          durationMs,
-          storageProvider: d.storageProvider,
-          errorMessage: backupError instanceof Error ? backupError.message : 'Unknown backup error',
-          createdById,
-          siteId: d.siteId ?? null,
-        },
-      });
-
       return NextResponse.json(
         {
           error: {
