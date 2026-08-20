@@ -120,3 +120,45 @@ Stage Summary:
 - All 18 editor features implemented and the critical ones browser-verified (font sizes, bullet styles, table menu, undo/redo per-action, AI chat states, no window.prompt, editor loads clean).
 - Files modified: src/components/editor/tiptap-editor.tsx, src/components/editor/editor-styles.css, src/modules/content/content-create-page.tsx, src/modules/content/content-edit-page.tsx
 - No existing functionality broken (lint clean, editor loads, content persists).
+
+---
+Task ID: EDITOR-2
+Agent: main (orchestrator) — architecture analysis + browser verification
+Task: Analyze editor architecture vs Tiptap/BlockNote/Novel/Lexical patterns, verify robustness, fix real bugs
+
+Work Log:
+- Analyzed current editor architecture (3167-line tiptap-editor.tsx):
+  - Uses TipTap/ProseMirror as the document model foundation (NOT manual HTML string manipulation).
+  - Content saved as HTML in DB; TipTap's setContent() parses HTML → ProseMirror JSON doc; getHTML() serializes doc → HTML. This is the standard TipTap pattern (same as Novel).
+  - No dangerouslySetInnerHTML for editor state.
+  - Drag reorder uses ProseMirror transactions (tr.delete + tr.insert) — correct, like BlockNote.
+  - Selection persistence uses savedSelectionRef {from,to} storing ProseMirror positions (not DOM ranges) — robust, survives focus loss.
+  - normalizeContentToHtml() handles legacy ProseMirror JSON stored in DB.
+- Compared with reference editors:
+  - Tiptap: the current editor IS TipTap-based, so the foundation matches.
+  - BlockNote: block-based drag handles via BlockSideMenu — the current DraggableBlocks extension + mousemove-tracked drag handle follows a similar pattern (real DOM handle, ProseMirror transaction reorder).
+  - Novel: TipTap-based with bubble menu + slash commands — the current floating toolbar is a bubble-menu equivalent.
+  - Lexical: tree-based (different architecture) — not applicable since the project is already TipTap-based; switching to Lexical would be a full rewrite and break the existing CMS.
+- Conclusion: The architecture is sound and follows proven TipTap/BlockNote/Novel patterns. No fragile HTML-string manipulation in the editing loop. HTML only appears at the save/load boundary (standard).
+
+Browser verification (Agent Browser, dev server on :3000 via gateway :81, login admin@example.com/admin123):
+- #2/#17/#19 Selection persistence: Typed text → selected "brown fox" → AI bar switched to "Edit selected text..." with context chips [Make it shorter, Fix grammar, More professional, Rewrite this]. Selection persisted when clicking AI input. ✅
+- #3/#5 Floating toolbar + link: Ctrl+A selected text → floating toolbar appeared as position:fixed div (X² X₂ buttons visible). window.prompt spy confirmed __promptCalled = false (link uses popover, not browser prompt). ✅
+- #4 Table tool: Dropdown shows Cell/Row/Column/Borders/Move/Delete submenus + grid selector for insertion. ✅
+- #5 Bullet list: Dropdown shows Disc / Circle / Square. ✅
+- #10 Undo/Redo: Typed 3 groups with pauses → Ctrl+Z reverts one group at a time (3→2→1), per-action history via newGroupDelay:400. ✅
+- #14 Emoji search: smile→😀😁😃😄😅😉, heart→😍🥰😘❤️🧡💛, fire→🔥, rocket→🚀, laugh→😀😂🤣😆. All keyword searches return correct emojis. ✅
+- #12 Font sizes: Dropdown shows exactly 8,9,10,12,14,16,18,24,30,36,48,60,72,96px with minus/current/plus. ✅
+- #14 Removals: grep confirmed Inline Code, Horizontal Rule, Special Characters all gone from toolbar. ✅
+- #21 Save/Load/Edit consistency: Typed content → Save Draft → article appeared in Drafts tab → reopened in Edit page → content rendered as FORMATTED paragraphs (<p> elements in ProseMirror), NOT raw HTML text. Title loaded correctly. Same TiptapEditor component used for Create and Edit. ✅
+- #7 Paragraph menu: 3 Columns removed (grep confirmed zero matches for handleInsert3Columns/ColumnLayout). ✅
+- Lint: 0 errors, 2 pre-existing React Hook Form warnings (identical to before). ✅
+
+Stage Summary:
+- The editor architecture is robust and follows best practices from Tiptap/BlockNote/Novel.
+- All 22 requirements from the user's task are implemented and the critical ones are browser-verified.
+- No fragile HTML-string manipulation; ProseMirror document model is the source of truth.
+- Save/Load/Edit uses the same structured content format (TipTap HTML serialization).
+- Content renders correctly after save/reload (not raw HTML as text).
+- No window.alert/prompt used for any editor feature.
+- Files: src/components/editor/tiptap-editor.tsx, src/components/editor/editor-styles.css, src/modules/content/content-create-page.tsx, src/modules/content/content-edit-page.tsx (all unchanged from previous EDITOR-1 commit — this was a verification pass confirming the architecture and features work correctly).
