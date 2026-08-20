@@ -246,3 +246,28 @@ Stage Summary:
 - SEO Settings UI is now clean: one dynamic title, one tab bar, no duplicate breadcrumbs/headings.
 - All existing functionality preserved (sitemap generation, robots.txt editor, redirects CRUD, export/import CSV).
 - Files modified: src/modules/seo/seo-settings-page.tsx, src/modules/seo/seo-sitemap-page.tsx, src/modules/seo/seo-robots-page.tsx, src/modules/seo/seo-redirects-page.tsx, src/components/layout/breadcrumbs.tsx
+
+---
+Task ID: HYDRATION-1
+Agent: main (orchestrator)
+Task: Fix browser-extension hydration error (bis_skin_checked attribute mismatch)
+
+Work Log:
+- Diagnosed: The hydration error was caused by a browser extension (Bitdefender) injecting `bis_skin_checked="1"` into a `<div hidden={true}>` element (Next.js internal metadata div) AFTER server render but BEFORE React hydration. The `suppressHydrationWarning` on `<html>`/`<body>` only covers those elements, not nested children.
+- Fix: Added an inline `<script>` in the `<head>` of src/app/layout.tsx that:
+  1. Runs synchronously before React hydration begins.
+  2. Strips known browser-extension attributes from all DOM elements: `bis_skin_checked` (Bitdefender), `data-lastpass-installed`/`data-lp-timestamp` (LastPass), `data-bitdefender`, `cz-shortcut-listen`, `data-new-gr-c-s-check-loaded`/`data-gr-c-s-loaded`/`data-gr-ext-installed`/`data-grammarly` (Grammarly).
+  3. Sets up a `MutationObserver` with `attributeFilter` to continuously strip any future attribute injections (extensions sometimes re-add attributes after initial cleanup).
+- Kept existing `suppressHydrationWarning` on `<html>` and `<body>` tags.
+
+Browser verification:
+- Inline script present in `<head>`: confirmed.
+- Elements with `bis_skin_checked`: 0 (stripped successfully).
+- Dev log: no `bis_skin_checked` or "attributes didn't match" hydration errors.
+- Lint: 0 errors.
+
+Stage Summary:
+- The browser-extension hydration mismatch (bis_skin_checked) is resolved.
+- The fix is robust: works for Bitdefender, LastPass, Grammarly, and similar extensions.
+- The MutationObserver ensures future re-injections are caught.
+- Files modified: src/app/layout.tsx
