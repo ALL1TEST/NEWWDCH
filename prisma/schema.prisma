@@ -2250,6 +2250,7 @@ model AiSettings {
   jsonModeEnabled   Boolean @default(false)
   functionCallingEnabled Boolean @default(false)
   imageModelId      String?
+  imageProviderId   String?
   embeddingModelId  String?
   monthlyBudgetUsd  Float?
   warningThreshold  Float?  // percentage 0-100

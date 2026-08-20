@@ -30,6 +30,7 @@ const upsertSchema = z.object({
   jsonModeEnabled: z.boolean().optional(),
   functionCallingEnabled: z.boolean().optional(),
   imageModelId: z.string().optional().or(z.literal('')),
+  imageProviderId: z.string().optional().or(z.literal('')),
   embeddingModelId: z.string().optional().or(z.literal('')),
   monthlyBudgetUsd: z.number().min(0).optional(),
   warningThreshold: z.number().min(0).max(100).optional(),
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
       defaultProviderId: d.defaultProviderId === '' ? null : d.defaultProviderId ?? undefined,
       defaultModelId: d.defaultModelId === '' ? null : d.defaultModelId ?? undefined,
       imageModelId: d.imageModelId === '' ? null : d.imageModelId ?? undefined,
+      imageProviderId: d.imageProviderId === '' ? null : d.imageProviderId ?? undefined,
       embeddingModelId: d.embeddingModelId === '' ? null : d.embeddingModelId ?? undefined,
       config: d.config === '' ? null : d.config ?? undefined,
     };

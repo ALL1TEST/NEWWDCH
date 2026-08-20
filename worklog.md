@@ -322,3 +322,40 @@ Stage Summary:
 - Provider→Model relationship: Settings filters models by selected provider + type.
 - API supports model creation, update (including type/modelId/providerId), delete, set-default.
 - Files modified: ai-page.tsx, settings-page.tsx, models-page.tsx, breadcrumbs.tsx, prisma/schema.prisma, api/ai/models/route.ts, api/ai/models/[id]/route.ts
+
+---
+Task ID: AI-3
+Agent: main (orchestrator)
+Task: Review and improve AI section — verify CRUD, fix provider→model→settings chain
+
+Work Log:
+- Audited all 4 AI tabs (Providers, Models, Prompt Library, Settings) for completeness.
+- Providers: ✅ Add/Edit/Delete/Activate/Test Connection + API key masking + Base URL + Provider Kind + ConfirmDialog — all present and functional.
+- Models: ✅ Add/Edit/Delete/Activate/Default + Type (Text/Image) + Sync All (optional) + ConfirmDialog — all present.
+- Prompt Library: ✅ CRUD + 11 categories (Content Generation, Image Generation, SEO, Translation, Summarization, Marketing, Social Media, Email, Coding, Analysis, Custom) + optional provider/model override + dynamic model dropdown (enabled when provider selected, resets on provider change) + variables JSON + system/user prompt + temperature/maxTokens.
+- Settings: ✅ Text AI Settings (Provider, Model, Temperature, Max Tokens) + Image AI Settings (Provider, Model) + Save — all removed sections (Budget/RateLimit/Fallback/Streaming/Embedding) confirmed gone.
+
+Fixes applied:
+- prisma/schema.prisma: Added `imageProviderId String?` to AiSettings (was missing — image provider selection wasn't persisting). Ran db:push.
+- src/app/api/ai/settings/route.ts: Added `imageProviderId` to upsertSchema + save logic (converts '' to null).
+- src/app/api/content/ai-generate/route.ts: Fixed to use AiSettings defaults (defaultProviderId, defaultModelId, defaultTemperature, defaultMaxTokens) instead of just AiProvider.isDefault. Resolution chain: AiSettings.defaultProviderId → AiProvider.isDefault → any active provider. Also passes modelId and settings temperature/maxTokens to executeChat.
+
+Relationships verified:
+- Provider → Models: models belong to providers (providerId FK, onDelete: Cascade). Provider dropdown filters models.
+- Models → Settings: Text settings show only TEXT models for the selected provider; Image settings show only IMAGE models. Model dropdown disabled until provider selected.
+- Prompts → Provider/Model: optional override. If empty, falls back to AI Settings defaults (now correctly resolved in ai-generate route).
+- One default per type: PATCH /api/ai/models/[id] unsets other defaults of the same type when setting isDefault=true.
+- Deleting a provider cascades to its models (Prisma onDelete: Cascade).
+
+Browser verification:
+- 4 tabs confirmed (Providers, Models, Prompt Library, Settings) — no Usage.
+- All tabs: has-error: false (no crashes).
+- Add Model dialog: has all fields (Name, Model ID, Provider, Type, Active, Default).
+- Settings: has Text AI Settings + Image AI Settings + Save Settings.
+- Lint: 0 errors.
+
+Stage Summary:
+- AI section is complete with full CRUD for providers, models, and prompts.
+- Provider→Model→Settings→Generation chain works correctly with proper fallback to global defaults.
+- All unnecessary enterprise features (Usage, Budget, Rate Limits, etc.) removed.
+- Files modified: prisma/schema.prisma, src/app/api/ai/settings/route.ts, src/app/api/content/ai-generate/route.ts (the UI files were already correct from AI-2 task).

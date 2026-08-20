@@ -49,13 +49,24 @@ export async function POST(request: NextRequest) {
 
     const { title, brief, keywords, writingStyle, targetLength, numberOfDrafts, includeCta } = parsed.data;
 
-    // Find an active AI provider
-    const provider = await db.aiProvider.findFirst({
-      where: { isActive: true, isDefault: true, apiKeyEncrypted: { not: null } },
-      include: { models: true },
-    });
+    // Read global AI settings for default provider/model/temperature/maxTokens
+    const aiSettings = await db.aiSettings.findUnique({ where: { scope: 'global' } });
 
-    if (!provider) {
+    // Resolve provider: use AiSettings.defaultProviderId if set, else AiProvider.isDefault, else any active
+    let activeProvider = null as Awaited<ReturnType<typeof db.aiProvider.findFirst>> | null;
+    if (aiSettings?.defaultProviderId) {
+      activeProvider = await db.aiProvider.findFirst({
+        where: { id: aiSettings.defaultProviderId, isActive: true, apiKeyEncrypted: { not: null } },
+        include: { models: true },
+      });
+    }
+    if (!activeProvider) {
+      activeProvider = await db.aiProvider.findFirst({
+        where: { isActive: true, isDefault: true, apiKeyEncrypted: { not: null } },
+        include: { models: true },
+      });
+    }
+    if (!activeProvider) {
       const fallback = await db.aiProvider.findFirst({
         where: { isActive: true, apiKeyEncrypted: { not: null } },
         include: { models: true },
@@ -63,9 +74,18 @@ export async function POST(request: NextRequest) {
       if (!fallback) {
         return err('No active AI provider configured. Please set up an AI provider in Settings > AI.', 400, 'NO_PROVIDER');
       }
+      activeProvider = fallback;
     }
 
-    const activeProvider = provider!;
+    // Resolve model: use AiSettings.defaultModelId if set and belongs to the provider
+    const defaultModel = aiSettings?.defaultModelId
+      ? activeProvider.models.find((m) => m.id === aiSettings.defaultModelId && m.isActive)
+      : null;
+    const modelId = defaultModel?.modelId ?? activeProvider.models.find((m) => m.isActive)?.modelId;
+
+    // Use settings temperature/maxTokens if available
+    const genTemperature = aiSettings?.defaultTemperature ?? 0.7;
+    const genMaxTokens = aiSettings?.defaultMaxTokens ?? 8000;
 
     const lengthMap: Record<string, string> = {
       'Short (300-600 words)': '300-600',
@@ -99,8 +119,9 @@ Write the full article content now. Use proper HTML formatting for headings, par
       const result = await executeChat({
         providerId: activeProvider.id,
         messages,
-        temperature: 0.7 + i * 0.15,
-        maxTokens: 8000,
+        temperature: genTemperature + i * 0.15,
+        maxTokens: genMaxTokens,
+        ...(modelId ? { modelId } : {}),
       });
       drafts.push({
         content: result.content,
