@@ -55,7 +55,7 @@ interface LogRow {
 // -------------------- Filter Options --------------------
 
 const ACTION_OPTIONS = [
-  { value: '', label: 'All Actions' },
+  { value: 'all', label: 'All Actions' },
   { value: 'CREATE', label: 'Create' },
   { value: 'RESTORE', label: 'Restore' },
   { value: 'VERIFY', label: 'Verify' },
@@ -65,7 +65,7 @@ const ACTION_OPTIONS = [
 ];
 
 const STATUS_OPTIONS = [
-  { value: '', label: 'All Status' },
+  { value: 'all', label: 'All Status' },
   { value: 'SUCCESS', label: 'Success' },
   { value: 'FAILED', label: 'Failed' },
   { value: 'IN_PROGRESS', label: 'In Progress' },
@@ -74,8 +74,8 @@ const STATUS_OPTIONS = [
 // -------------------- Logs Page --------------------
 
 export function LogsPage() {
-  const [actionFilter, setActionFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [actionFilter, setActionFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
@@ -88,8 +88,8 @@ export function LogsPage() {
       sort: table.sortField,
       order: table.sortOrder,
       search: table.searchValue || undefined,
-      action: actionFilter || undefined,
-      status: statusFilter || undefined,
+      action: actionFilter !== 'all' ? actionFilter : undefined,
+      status: statusFilter !== 'all' ? statusFilter : undefined,
       from: fromDate || undefined,
       to: toDate || undefined,
     }),

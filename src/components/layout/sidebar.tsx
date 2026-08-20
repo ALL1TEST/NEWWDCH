@@ -200,14 +200,6 @@ const NAV_ITEMS: NavItem[] = [
     href: '#backups',
     icon: 'Database',
     requiredRole: 'ADMIN',
-    children: [
-      { label: 'Dashboard', href: '#backups', icon: 'LayoutDashboard' },
-      { label: 'Backups', href: '#backups/backups', icon: 'Database' },
-      { label: 'Schedules', href: '#backups/schedules', icon: 'Clock' },
-      { label: 'Restore', href: '#backups/restore', icon: 'RotateCcw' },
-      { label: 'Storage', href: '#backups/storage', icon: 'Database' },
-      { label: 'Logs', href: '#backups/logs', icon: 'ScrollText' },
-    ],
   },
   {
     label: 'Settings',
