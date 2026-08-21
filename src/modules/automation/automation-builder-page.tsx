@@ -129,13 +129,25 @@ export function AutomationBuilderPage() {
   const [publishDate, setPublishDate] = useState('');
   const [publishTime, setPublishTime] = useState('');
 
-  // ── Queries (same as before) ──
+  // ── Queries ──
+  // Fetch ALL saved keywords once (no server-side search) — filter client-side for real-time search
   const { data: savedKeywordsData } = useQuery({
-    queryKey: ['saved-keywords', savedKeywordSearch],
-    queryFn: () => getApi(`/api/tags?pageSize=100${savedKeywordSearch ? `&search=${encodeURIComponent(savedKeywordSearch)}` : ''}`),
+    queryKey: ['saved-keywords-all'],
+    queryFn: () => getApi(`/api/tags?pageSize=500`),
     enabled: keywordSource === 'SAVED' && step === 2, staleTime: 30_000,
   });
-  const savedKeywords: SavedKeyword[] = useMemo(() => { const d = savedKeywordsData as any; return Array.isArray(d) ? d : d?.data ?? []; }, [savedKeywordsData]);
+  const allSavedKeywords: SavedKeyword[] = useMemo(() => {
+    const d = savedKeywordsData as any;
+    if (Array.isArray(d)) return d as SavedKeyword[];
+    if (d?.data && Array.isArray(d.data)) return d.data as SavedKeyword[];
+    return [];
+  }, [savedKeywordsData]);
+  // Client-side real-time filtering
+  const savedKeywords = useMemo(() => {
+    if (!savedKeywordSearch.trim()) return allSavedKeywords;
+    const q = savedKeywordSearch.toLowerCase();
+    return allSavedKeywords.filter(k => k.keyword.toLowerCase().includes(q));
+  }, [allSavedKeywords, savedKeywordSearch]);
 
   const { data: foldersData } = useQuery({
     queryKey: ['media-folders'], queryFn: () => getApi('/api/media-folders?pageSize=100'),
@@ -205,24 +217,17 @@ export function AutomationBuilderPage() {
 
   return (
     <div className="min-h-screen bg-muted/20">
-      {/* Sticky Top Bar */}
+      {/* Sticky Top Bar — clean, only Cancel + Next */}
       <div className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur-sm">
-        <div className="flex items-center justify-between px-6 py-3">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate('automation')}><ArrowLeft className="h-4 w-4" /></Button>
-            <div className="h-5 w-px bg-border" />
-            <h1 className="text-base font-semibold tracking-tight">Create Automation</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => navigate('automation')}>Cancel</Button>
-            {step < 4 ? (
-              <Button size="sm" onClick={() => setStep(step + 1)} disabled={!canProceed} className="gap-1.5">Next <ChevronRight className="h-4 w-4" /></Button>
-            ) : (
-              <Button size="sm" onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !canProceed} className="gap-1.5">
-                {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Create
-              </Button>
-            )}
-          </div>
+        <div className="flex items-center justify-end gap-2 px-6 py-3">
+          <Button variant="ghost" size="sm" onClick={() => navigate('automation')}>Cancel</Button>
+          {step < 4 ? (
+            <Button size="sm" onClick={() => setStep(step + 1)} disabled={!canProceed} className="gap-1.5">Next <ChevronRight className="h-4 w-4" /></Button>
+          ) : (
+            <Button size="sm" onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !canProceed} className="gap-1.5">
+              {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Create
+            </Button>
+          )}
         </div>
       </div>
 
@@ -315,6 +320,7 @@ export function AutomationBuilderPage() {
                 )}
                 {keywordSource === 'SAVED' && (
                   <ConditionalBlock>
+                    {/* Search + Import */}
                     <div className="flex items-center gap-2">
                       <div className="relative flex-1">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -323,14 +329,38 @@ export function AutomationBuilderPage() {
                       <input ref={keywordFileRef} type="file" accept=".txt,.csv" className="hidden" onChange={handleKeywordFileImport} />
                       <Button variant="outline" size="sm" className="h-9 gap-1.5 shrink-0" onClick={() => keywordFileRef.current?.click()}><Upload className="h-3.5 w-3.5" />Import</Button>
                     </div>
+                    {/* Selected keywords chips */}
                     {selectedSavedKeywordIds.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {selectedSavedKeywordIds.map(id => { const kw = savedKeywords.find(k => k.id === id); return <Badge key={id} variant="secondary" className="gap-1 text-xs pr-1">{kw?.keyword ?? id}<button type="button" onClick={() => toggleSavedKeyword(id)} className="hover:text-destructive"><X className="h-3 w-3" /></button></Badge>; })}
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-muted-foreground">{selectedSavedKeywordIds.length} selected</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedSavedKeywordIds.map(id => { const kw = allSavedKeywords.find(k => k.id === id); return <Badge key={id} variant="secondary" className="gap-1 text-xs pr-1 py-1">{kw?.keyword ?? id}<button type="button" onClick={() => toggleSavedKeyword(id)} className="hover:text-destructive"><X className="h-3 w-3" /></button></Badge>; })}
+                        </div>
                       </div>
                     )}
-                    <div className="max-h-48 overflow-y-auto rounded-lg border bg-card">
-                      {savedKeywords.length === 0 ? <p className="p-4 text-center text-xs text-muted-foreground">No saved keywords found. Import a .txt/.csv file or save from Tags.</p>
-                        : savedKeywords.filter(k => !selectedSavedKeywordIds.includes(k.id)).map(kw => <button key={kw.id} type="button" onClick={() => toggleSavedKeyword(kw.id)} className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors border-b last:border-0">{kw.keyword}</button>)}
+                    {/* Keyword list — real-time filtered, selected items highlighted */}
+                    <div className="max-h-56 overflow-y-auto rounded-lg border bg-card">
+                      {allSavedKeywords.length === 0 ? (
+                        <div className="p-6 text-center">
+                          <p className="text-sm font-medium text-muted-foreground">No saved keywords found</p>
+                          <p className="text-xs text-muted-foreground mt-1">Import a .txt/.csv file or save keywords from the Tags page first.</p>
+                        </div>
+                      ) : savedKeywords.length === 0 && savedKeywordSearch.trim() ? (
+                        <div className="p-6 text-center">
+                          <p className="text-sm font-medium text-muted-foreground">No matching keywords found</p>
+                          <p className="text-xs text-muted-foreground mt-1">Try a different search term.</p>
+                        </div>
+                      ) : (
+                        savedKeywords.map(kw => {
+                          const isSelected = selectedSavedKeywordIds.includes(kw.id);
+                          return (
+                            <button key={kw.id} type="button" onClick={() => toggleSavedKeyword(kw.id)} className={cn('w-full flex items-center justify-between text-left px-3 py-2.5 text-sm transition-colors border-b last:border-0', isSelected ? 'bg-primary/5' : 'hover:bg-muted/50')}>
+                              <span className={cn(isSelected && 'font-medium text-primary')}>{kw.keyword}</span>
+                              {isSelected && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                            </button>
+                          );
+                        })
+                      )}
                     </div>
                   </ConditionalBlock>
                 )}
@@ -497,21 +527,12 @@ export function AutomationBuilderPage() {
           </CardContent>
         </Card>
 
-        {/* Bottom Navigation */}
+        {/* Bottom Navigation — Back only (Next/Create are in the sticky top bar) */}
         <div className="flex items-center justify-between mt-6">
           <Button variant="outline" onClick={() => step > 1 ? setStep(step - 1) : navigate('automation')} className="gap-1.5">
             <ChevronLeft className="h-4 w-4" />{step > 1 ? 'Back' : 'Cancel'}
           </Button>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground hidden sm:inline">Step {step} of 4</span>
-            {step < 4 ? (
-              <Button onClick={() => setStep(step + 1)} disabled={!canProceed} className="gap-1.5">Next <ChevronRight className="h-4 w-4" /></Button>
-            ) : (
-              <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !canProceed} className="gap-1.5">
-                {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Create Automation
-              </Button>
-            )}
-          </div>
+          <span className="text-xs text-muted-foreground hidden sm:inline">Step {step} of 4</span>
         </div>
       </div>
     </div>
