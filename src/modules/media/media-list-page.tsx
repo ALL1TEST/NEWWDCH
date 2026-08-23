@@ -60,6 +60,14 @@ interface FolderCrumb {
   name: string;
 }
 
+// Result of an upload attempt — captures per-file success/failure so the
+// UI can show "N uploaded, M failed: <names>" instead of a generic
+// "Failed to upload X files" message.
+interface UploadSummary {
+  succeeded: number;
+  failed: { name: string; reason: string }[];
+}
+
 const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4'] as const;
 const IMAGE_COUNTS = [1, 2, 3, 4] as const;
 
@@ -501,47 +509,112 @@ export function MediaListPage() {
     onError: () => toast.error('Failed to delete folder'),
   });
 
-  // FIX #5: Upload mutation now includes siteId in the fetch URL
+  // Upload mutation — per-file POSTs to /api/media/upload (multipart/form-data).
+  // Each file is uploaded in its own request, so one failed file does NOT
+  // mark the others as failed. Real backend error messages are surfaced to
+  // the console AND in the toast so the user can see exactly what failed.
   const uploadMutation = useMutation({
     mutationFn: async (files: File[]) => {
       const url = buildUploadUrl();
-      const results = [];
-      let failedCount = 0;
+      const results: MediaItemRow[] = [];
+      const failures: { name: string; reason: string }[] = [];
+
       for (const file of files) {
         const formData = new FormData();
         formData.append('file', file);
         if (currentFolderId) formData.append('folderId', currentFolderId);
         if (user?.id) formData.append('uploadedById', user.id);
+
         try {
           const res = await fetch(url, { method: 'POST', body: formData });
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            failedCount++;
-            console.error(`Failed to upload ${file.name}:`, err?.error?.message || res.statusText);
-          } else {
-            const json = await res.json();
-            if (json.data) results.push(...(Array.isArray(json.data) ? json.data : [json.data]));
+          // Always try to read the JSON envelope — even on error responses
+          // the backend returns `{ error: { code, message }, meta }`.
+          const json = (await res.json().catch(() => null)) as
+            | { data?: MediaItemRow | MediaItemRow[]; error?: { code?: string; message?: string } }
+            | null;
+
+          if (!res.ok || !json?.data) {
+            const reason =
+              json?.error?.message ||
+              (res.status === 413 ? 'File is too large' :
+               res.status === 415 ? 'File type not supported' :
+               res.status === 401 ? 'Authentication required' :
+               res.status === 403 ? 'Not allowed' :
+               res.status === 404 ? 'Upload endpoint not found' :
+               res.status >= 500 ? 'Server error' :
+               `HTTP ${res.status}`) ||
+              res.statusText ||
+              'Upload failed';
+            failures.push({ name: file.name, reason });
+            console.error(
+              `[MEDIA:UPLOAD] ${file.name} failed —`,
+              `status=${res.status}`,
+              `code=${json?.error?.code ?? 'n/a'}`,
+              `reason=${reason}`,
+            );
+            continue;
           }
+
+          const data = json.data;
+          if (Array.isArray(data)) results.push(...data);
+          else results.push(data);
         } catch (err) {
-          failedCount++;
-          console.error(`Failed to upload ${file.name}:`, err);
+          // Network error / aborted request — surface the actual reason
+          const reason = err instanceof Error ? err.message : 'Network request failed';
+          failures.push({ name: file.name, reason });
+          console.error(`[MEDIA:UPLOAD] ${file.name} network error —`, err);
         }
       }
-      if (failedCount > 0 && results.length === 0) {
-        throw new Error(`Failed to upload ${failedCount} file${failedCount > 1 ? 's' : ''}`);
+
+      // Always refresh the media list — even partial success means new
+      // files exist on the server and should appear.
+      const summary: UploadSummary = {
+        succeeded: results.length,
+        failed: failures,
+      };
+      // If EVERY file failed, throw so React Query triggers onError — but
+      // include the structured summary so the handler can show specifics.
+      if (results.length === 0 && files.length > 0) {
+        const err = new Error(
+          failures.length === 1
+            ? `Upload failed: ${failures[0].reason}`
+            : `All ${failures.length} files failed`,
+        ) as Error & { uploadSummary?: UploadSummary };
+        err.uploadSummary = summary;
+        throw err;
       }
-      if (failedCount > 0) {
-        toast.warning(`${failedCount} file${failedCount > 1 ? 's' : ''} failed, ${results.length} uploaded`);
-      }
-      return results;
+      return summary;
     },
-    onSuccess: () => {
+    onSuccess: (summary) => {
       invalidateMediaAndFolders();
       setUploadDialogOpen(false);
       setUploadFiles([]);
-      toast.success('Files uploaded successfully');
+
+      if (summary.failed.length === 0) {
+        const n = summary.succeeded;
+        toast.success(n === 1 ? '1 file uploaded successfully' : `${n} files uploaded successfully`);
+      } else {
+        const failedNames = summary.failed.map((f) => f.name).join(', ');
+        toast.warning(
+          `${summary.succeeded} file${summary.succeeded === 1 ? '' : 's'} uploaded, ${summary.failed.length} failed: ${failedNames}`,
+          { duration: 6000 },
+        );
+      }
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error & { uploadSummary?: UploadSummary }) => {
+      const summary = err.uploadSummary;
+      if (summary && summary.failed.length > 0) {
+        const first = summary.failed[0];
+        toast.error(
+          summary.failed.length === 1
+            ? `Upload failed: ${first.reason}`
+            : `All ${summary.failed.length} files failed. First reason: ${first.reason}`,
+          { duration: 8000 },
+        );
+      } else {
+        toast.error(err.message || 'Upload failed');
+      }
+    },
   });
 
   // FIX #7: AI Generate defaults to current folder, uses amber style
