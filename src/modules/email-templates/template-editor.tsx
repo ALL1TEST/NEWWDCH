@@ -25,35 +25,26 @@ import {
   ChevronDown,
   Copy,
   Check,
-  RotateCcw,
   Loader2,
   ArrowLeft,
   Code2,
-  BarChart3,
-  History,
-  Settings2,
   Variable,
   Mail,
   Send,
   MousePointerClick,
-  ToggleLeft,
-  Paperclip,
   Replace,
   X,
   PanelRightClose,
   PanelRightOpen,
-  AlertCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
-import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
@@ -72,16 +63,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { ConfirmDialog } from '@/components/patterns';
 import { useAuthStore } from '@/lib/stores/auth-store';
 
 import { getApi, patchApi, postApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
-import { cn, formatRelativeTime, labelize } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import type {
   EmailTemplateStatus,
   EmailTemplateCategory,
-  EmailProvider,
 } from '@/shared/types';
 
 // ============================================================
@@ -104,41 +93,14 @@ interface EmailTemplate {
   htmlBody: string;
   category: EmailTemplateCategory;
   status: EmailTemplateStatus;
-  provider: EmailProvider;
-  language: string;
   isSystem: boolean;
-  previewText: string | null;
-  fromName: string | null;
-  fromEmail: string | null;
-  replyTo: string | null;
-  trackOpens: boolean;
-  trackClicks: boolean;
-  enableAttachments: boolean;
-  defaultBody: string | null;
   createdAt: string;
   updatedAt: string;
-  _count?: { versions: number };
-}
-
-interface TemplateVersion {
-  id: string;
-  versionNumber: number;
-  changeNote: string | null;
-  createdAt: string;
 }
 
 interface TemplateSettings {
-  previewText: string;
-  fromName: string;
-  fromEmail: string;
-  replyTo: string;
-  language: string;
   category: EmailTemplateCategory;
   status: EmailTemplateStatus;
-  provider: EmailProvider;
-  trackOpens: boolean;
-  trackClicks: boolean;
-  enableAttachments: boolean;
 }
 
 interface DynamicVariable {
@@ -234,39 +196,16 @@ const VARIABLE_GROUPS: VariableGroup[] = [
     ],
   },
   {
-    label: 'Invoice',
-    icon: <Settings2 className="h-3.5 w-3.5" />,
-    variables: [
-      { key: 'invoice.id', description: 'Invoice ID' },
-      { key: 'invoice.total', description: 'Invoice total amount' },
-      { key: 'invoice.due_date', description: 'Invoice due date' },
-      { key: 'invoice.items', description: 'Invoice line items' },
-      { key: 'invoice.pdf_url', description: 'Invoice PDF download URL' },
-    ],
-  },
-  {
-    label: 'Subscription',
-    icon: <Settings2 className="h-3.5 w-3.5" />,
-    variables: [
-      { key: 'subscription.plan', description: 'Subscription plan name' },
-      { key: 'subscription.status', description: 'Subscription status' },
-      { key: 'subscription.amount', description: 'Subscription amount' },
-      { key: 'subscription.next_billing', description: 'Next billing date' },
-    ],
-  },
-  {
     label: 'System',
-    icon: <AlertCircle className="h-3.5 w-3.5" />,
+    icon: <Code2 className="h-3.5 w-3.5" />,
     variables: [
       { key: 'current_date', description: 'Current date' },
       { key: 'current_year', description: 'Current year' },
       { key: 'current_month', description: 'Current month name' },
       { key: 'verification_url', description: 'Email verification link' },
       { key: 'reset_password_url', description: 'Password reset link' },
-      { key: 'magic_login_url', description: 'Magic login link' },
       { key: 'invite_url', description: 'Invitation accept link' },
       { key: 'unsubscribe_url', description: 'Global unsubscribe link' },
-      { key: 'manage_preferences_url', description: 'Email preferences link' },
     ],
   },
 ];
@@ -283,31 +222,8 @@ const CATEGORY_OPTIONS: { value: EmailTemplateCategory; label: string }[] = [
 ];
 
 const STATUS_OPTIONS: { value: EmailTemplateStatus; label: string }[] = [
-  { value: 'ENABLED', label: 'Enabled' },
-  { value: 'DISABLED', label: 'Disabled' },
   { value: 'DRAFT', label: 'Draft' },
-];
-
-const PROVIDER_OPTIONS: { value: EmailProvider; label: string }[] = [
-  { value: 'SMTP', label: 'SMTP' },
-  { value: 'SES', label: 'Amazon SES' },
-  { value: 'RESEND', label: 'Resend' },
-  { value: 'MAILGUN', label: 'Mailgun' },
-  { value: 'SENDGRID', label: 'SendGrid' },
-  { value: 'POSTMARK', label: 'Postmark' },
-  { value: 'BREVO', label: 'Brevo' },
-  { value: 'ELASTIC_EMAIL', label: 'Elastic Email' },
-];
-
-const LANGUAGE_OPTIONS = [
-  { value: 'en', label: 'English' },
-  { value: 'es', label: 'Español' },
-  { value: 'fr', label: 'Français' },
-  { value: 'de', label: 'Deutsch' },
-  { value: 'pt', label: 'Português' },
-  { value: 'ar', label: 'العربية' },
-  { value: 'zh', label: '中文' },
-  { value: 'ja', label: '日本語' },
+  { value: 'ENABLED', label: 'Enabled' },
 ];
 
 // ============================================================
@@ -490,7 +406,7 @@ function SearchReplaceBar({
 }
 
 // ============================================================
-// Component: Variable Picker (Popover-like dropdown)
+// Component: Variable Chip
 // ============================================================
 
 function VariableChip({
@@ -554,24 +470,14 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
   const [subject, setSubject] = useState('');
   const [htmlBody, setHtmlBody] = useState('');
   const [settings, setSettings] = useState<TemplateSettings>({
-    previewText: '',
-    fromName: '',
-    fromEmail: '',
-    replyTo: '',
-    language: 'en',
     category: 'SYSTEM',
     status: 'DRAFT',
-    provider: 'SMTP',
-    trackOpens: false,
-    trackClicks: false,
-    enableAttachments: false,
   });
   const [templateName, setTemplateName] = useState('');
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [revertDialogOpen, setRevertDialogOpen] = useState(false);
   const [originalData, setOriginalData] = useState<{ subject: string; htmlBody: string; settings: TemplateSettings } | null>(null);
 
   // Refs
@@ -603,12 +509,6 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
     enabled: !!templateId && !isNew,
   });
 
-  const { data: versions = [] } = useQuery<TemplateVersion[]>({
-    queryKey: queryKeys.emailTemplates.nested('versions').list(templateId),
-    queryFn: () => getApi<TemplateVersion[]>(`/api/email-templates/${templateId}/versions`),
-    enabled: !!templateId && !isNew,
-  });
-
   // -------------------- Create Mutation (for new templates) --------------------
 
   const createMutation = useMutation({
@@ -616,17 +516,8 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
       name: string;
       subject: string;
       htmlBody: string;
-      previewText?: string;
-      fromName?: string;
-      fromEmail?: string;
-      replyTo?: string;
-      language?: string;
       category?: EmailTemplateCategory;
       status?: EmailTemplateStatus;
-      provider?: EmailProvider;
-      trackOpens?: boolean;
-      trackClicks?: boolean;
-      enableAttachments?: boolean;
     }) => postApi<EmailTemplate>('/api/email-templates', { ...data, createdById: currentUser?.id }),
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
@@ -644,17 +535,8 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
   useEffect(() => {
     if (template) {
       const newSettings: TemplateSettings = {
-        previewText: template.previewText ?? '',
-        fromName: template.fromName ?? '',
-        fromEmail: template.fromEmail ?? '',
-        replyTo: template.replyTo ?? '',
-        language: template.language ?? 'en',
         category: template.category,
         status: template.status,
-        provider: template.provider,
-        trackOpens: template.trackOpens ?? false,
-        trackClicks: template.trackClicks ?? false,
-        enableAttachments: template.enableAttachments ?? false,
       };
       const orig = {
         subject: template.subject,
@@ -676,35 +558,16 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
     mutationFn: (data: {
       subject: string;
       htmlBody: string;
-      previewText?: string;
-      fromName?: string;
-      fromEmail?: string;
-      replyTo?: string;
-      language?: string;
       category?: EmailTemplateCategory;
       status?: EmailTemplateStatus;
-      provider?: EmailProvider;
-      trackOpens?: boolean;
-      trackClicks?: boolean;
-      enableAttachments?: boolean;
     }) => patchApi<EmailTemplate>(`/api/email-templates/${templateId}`, data),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.detail(templateId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.nested('versions').all });
       setSaveState('saved');
       const newSettings: TemplateSettings = {
-        previewText: updated.previewText ?? '',
-        fromName: updated.fromName ?? '',
-        fromEmail: updated.fromEmail ?? '',
-        replyTo: updated.replyTo ?? '',
-        language: updated.language ?? 'en',
         category: updated.category,
         status: updated.status,
-        provider: updated.provider,
-        trackOpens: updated.trackOpens ?? false,
-        trackClicks: updated.trackClicks ?? false,
-        enableAttachments: updated.enableAttachments ?? false,
       };
       setOriginalData({
         subject: updated.subject,
@@ -722,36 +585,6 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
     },
   });
 
-  // -------------------- Revert Mutation --------------------
-
-  const revertMutation = useMutation({
-    mutationFn: () => postApi<EmailTemplate>(`/api/email-templates/${templateId}/revert`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.detail(templateId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
-      setRevertDialogOpen(false);
-      toast.success('Template reverted to default');
-    },
-    onError: (err: Error) => {
-      toast.error(err.message || 'Failed to revert template');
-    },
-  });
-
-  // -------------------- Restore Version Mutation --------------------
-
-  const restoreVersionMutation = useMutation({
-    mutationFn: (versionId: string) =>
-      postApi<EmailTemplate>(`/api/email-templates/${templateId}/versions/${versionId}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.detail(templateId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.nested('versions').all });
-      toast.success('Version restored');
-    },
-    onError: (err: Error) => {
-      toast.error(err.message || 'Failed to restore version');
-    },
-  });
-
   // -------------------- Auto-Save --------------------
 
   const performSave = useCallback(() => {
@@ -760,17 +593,8 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
     saveMutation.mutate({
       subject,
       htmlBody,
-      previewText: settings.previewText || undefined,
-      fromName: settings.fromName || undefined,
-      fromEmail: settings.fromEmail || undefined,
-      replyTo: settings.replyTo || undefined,
-      language: settings.language,
       category: settings.category,
       status: settings.status,
-      provider: settings.provider,
-      trackOpens: settings.trackOpens,
-      trackClicks: settings.trackClicks,
-      enableAttachments: settings.enableAttachments,
     });
   }, [isDirty, saveMutation, subject, htmlBody, settings]);
 
@@ -797,7 +621,6 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
       const before = htmlBody.substring(0, start);
       const after = htmlBody.substring(end);
       setHtmlBody(before + tag + after);
-      // Restore cursor position after React re-render
       requestAnimationFrame(() => {
         textarea.focus();
         const newPos = start + tag.length;
@@ -819,7 +642,6 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
         textarea.focus();
         textarea.setSelectionRange(idx, idx + query.length);
       } else {
-        // Wrap to beginning
         const idxFromStart = htmlBody.indexOf(query);
         if (idxFromStart >= 0) {
           textarea.focus();
@@ -908,19 +730,10 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
       name: templateName.trim(),
       subject,
       htmlBody,
-      previewText: settings.previewText || undefined,
-      fromName: settings.fromName || undefined,
-      fromEmail: settings.fromEmail || undefined,
-      replyTo: settings.replyTo || undefined,
-      language: settings.language,
       category: settings.category,
       status: settings.status,
-      provider: settings.provider,
-      trackOpens: settings.trackOpens,
-      trackClicks: settings.trackClicks,
-      enableAttachments: settings.enableAttachments,
     });
-  }, [templateName, subject, htmlBody, settings, createMutation, onCreated]);
+  }, [templateName, subject, htmlBody, settings, createMutation]);
 
   // -------------------- Keyboard Shortcuts --------------------
 
@@ -948,7 +761,6 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
           <Skeleton className="h-4 w-48" />
           <div className="ml-auto flex gap-2">
             <Skeleton className="h-9 w-24" />
-            <Skeleton className="h-9 w-20" />
           </div>
         </div>
         <div className="flex flex-1 gap-0">
@@ -984,7 +796,7 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
             autoFocus
           />
           <p className="text-xs text-muted-foreground">
-            A descriptive name for this template. Used for internal reference.
+            A descriptive name for internal reference.
           </p>
         </div>
       )}
@@ -992,7 +804,7 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
       {/* ---- Subject Field ---- */}
       <div className="space-y-1.5">
         <Label htmlFor="template-subject" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Subject
+          Subject <span className="text-red-500">*</span>
         </Label>
         <Input
           id="template-subject"
@@ -1000,7 +812,8 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
           onChange={(e) => setSubject(e.target.value)}
           placeholder="Email subject line..."
           className="h-10 text-sm"
-        />\        {subject && (
+        />
+        {subject && (
           <p className="text-xs text-muted-foreground truncate">
             Preview: {subject.replace(/\{\{[^}]+\}\}/g, (match) => {
               const key = match.replace(/\{\{|\}\}/g, '');
@@ -1009,6 +822,51 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
             })}
           </p>
         )}
+      </div>
+
+      {/* ---- Category + Status Row ---- */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Template Category <span className="text-red-500">*</span>
+          </Label>
+          <Select
+            value={settings.category}
+            onValueChange={(v) => updateSettings('category', v as EmailTemplateCategory)}
+          >
+            <SelectTrigger className="h-10">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CATEGORY_OPTIONS.map((c) => (
+                <SelectItem key={c.value} value={c.value}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Status
+          </Label>
+          <Select
+            value={settings.status}
+            onValueChange={(v) => updateSettings('status', v as EmailTemplateStatus)}
+          >
+            <SelectTrigger className="h-10">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* ---- HTML Editor ---- */}
@@ -1062,7 +920,7 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
                 <Search className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Search & Replace (Ctrl+F)</TooltipContent>
+            <TooltipContent>Search &amp; Replace (Ctrl+F)</TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -1072,7 +930,6 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => {
-                  // Open variable section in sidebar
                   setSidebarOpen(true);
                 }}
               >
@@ -1144,7 +1001,7 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
 
   const sidebarContent = (
     <div className="space-y-1">
-      {/* ====== Section 1: Dynamic Variables ====== */}
+      {/* ====== Dynamic Variables ====== */}
       <Collapsible defaultOpen>
         <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent">
           <div className="flex items-center gap-2">
@@ -1175,334 +1032,6 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
           </div>
         </CollapsibleContent>
       </Collapsible>
-
-      <Separator />
-
-      {/* ====== Section 2: Email Settings ====== */}
-      <Collapsible defaultOpen>
-        <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent">
-          <div className="flex items-center gap-2">
-            <Settings2 className="h-4 w-4 text-muted-foreground" />
-            Email Settings
-          </div>
-          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]>&]:rotate-0 [[data-state=closed]>&]:-rotate-90" />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="space-y-4 px-3 pb-4">
-            {/* Preview Text */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs">Preview Text</Label>
-                <span className={cn(
-                  'text-[10px] tabular-nums',
-                  settings.previewText.length > 150
-                    ? 'text-red-500'
-                    : settings.previewText.length > 120
-                      ? 'text-amber-500'
-                      : 'text-muted-foreground',
-                )}>
-                  {settings.previewText.length}/150
-                </span>
-              </div>
-              <Textarea
-                value={settings.previewText}
-                onChange={(e) =>
-                  updateSettings('previewText', e.target.value.slice(0, 150))
-                }
-                placeholder="Text shown in inbox preview..."
-                className="min-h-[60px] resize-none text-xs"
-              />
-            </div>
-
-            {/* From Name */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">From Name</Label>
-              <Input
-                value={settings.fromName}
-                onChange={(e) => updateSettings('fromName', e.target.value)}
-                placeholder="Sender name"
-                className="h-8 text-xs"
-              />
-            </div>
-
-            {/* From Email */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">From Email</Label>
-              <Input
-                type="email"
-                value={settings.fromEmail}
-                onChange={(e) => updateSettings('fromEmail', e.target.value)}
-                placeholder="sender@example.com"
-                className="h-8 text-xs"
-              />
-            </div>
-
-            {/* Reply-To */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Reply-To</Label>
-              <Input
-                type="email"
-                value={settings.replyTo}
-                onChange={(e) => updateSettings('replyTo', e.target.value)}
-                placeholder="reply@example.com"
-                className="h-8 text-xs"
-              />
-            </div>
-
-            {/* Language */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Language</Label>
-              <Select
-                value={settings.language}
-                onValueChange={(v) => updateSettings('language', v)}
-              >
-                <SelectTrigger className="h-8 w-full text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {LANGUAGE_OPTIONS.map((l) => (
-                    <SelectItem key={l.value} value={l.value}>
-                      {l.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Category */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Template Category</Label>
-              <Select
-                value={settings.category}
-                onValueChange={(v) => updateSettings('category', v as EmailTemplateCategory)}
-              >
-                <SelectTrigger className="h-8 w-full text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORY_OPTIONS.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Status */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Status</Label>
-              <Select
-                value={settings.status}
-                onValueChange={(v) => updateSettings('status', v as EmailTemplateStatus)}
-              >
-                <SelectTrigger className="h-8 w-full text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUS_OPTIONS.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Provider */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Provider</Label>
-              <Select
-                value={settings.provider}
-                onValueChange={(v) => updateSettings('provider', v as EmailProvider)}
-              >
-                <SelectTrigger className="h-8 w-full text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROVIDER_OPTIONS.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Separator />
-
-            {/* Track Opens */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                <Label className="text-xs cursor-pointer" htmlFor="track-opens">
-                  Track Opens
-                </Label>
-              </div>
-              <Switch
-                id="track-opens"
-                checked={settings.trackOpens}
-                onCheckedChange={(v) => updateSettings('trackOpens', v)}
-              />
-            </div>
-
-            {/* Track Clicks */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MousePointerClick className="h-3.5 w-3.5 text-muted-foreground" />
-                <Label className="text-xs cursor-pointer" htmlFor="track-clicks">
-                  Track Clicks
-                </Label>
-              </div>
-              <Switch
-                id="track-clicks"
-                checked={settings.trackClicks}
-                onCheckedChange={(v) => updateSettings('trackClicks', v)}
-              />
-            </div>
-
-            {/* Enable Attachments */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
-                <Label className="text-xs cursor-pointer" htmlFor="enable-attachments">
-                  Enable Attachments
-                </Label>
-              </div>
-              <Switch
-                id="enable-attachments"
-                checked={settings.enableAttachments}
-                onCheckedChange={(v) => updateSettings('enableAttachments', v)}
-              />
-            </div>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-
-      <Separator />
-
-      {/* ====== Section 3: Template Analytics (edit mode only) ====== */}
-      {!isNew && (<>
-      <Collapsible>
-        <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            Template Analytics
-          </div>
-          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]>&]:rotate-0 [[data-state=closed]>&]:-rotate-90" />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 px-3 pb-4">
-            <div>
-              <p className="text-[11px] text-muted-foreground">Sent</p>
-              <p className="text-sm font-semibold tabular-nums">1,234</p>
-            </div>
-            <div>
-              <p className="text-[11px] text-muted-foreground">Delivered</p>
-              <p className="text-sm font-semibold tabular-nums">1,200 <span className="text-[10px] font-normal text-emerald-500">(97.2%)</span></p>
-            </div>
-            <div>
-              <p className="text-[11px] text-muted-foreground">Opened</p>
-              <p className="text-sm font-semibold tabular-nums">456 <span className="text-[10px] font-normal text-sky-500">(38%)</span></p>
-            </div>
-            <div>
-              <p className="text-[11px] text-muted-foreground">Clicked</p>
-              <p className="text-sm font-semibold tabular-nums">89 <span className="text-[10px] font-normal text-violet-500">(7.4%)</span></p>
-            </div>
-            <div>
-              <p className="text-[11px] text-muted-foreground">Bounce Rate</p>
-              <p className="text-sm font-semibold tabular-nums text-amber-500">2.3%</p>
-            </div>
-            <div>
-              <p className="text-[11px] text-muted-foreground">Last Sent</p>
-              <p className="text-sm font-medium">2 hours ago</p>
-            </div>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-      </>)}
-
-      <Separator />
-
-      {/* ====== Section 4: Version History (edit mode only) ====== */}
-      {!isNew && (<>
-      <Collapsible>
-        <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent">
-          <div className="flex items-center gap-2">
-            <History className="h-4 w-4 text-muted-foreground" />
-            Version History
-            {versions.length > 0 && (
-              <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
-                {versions.length}
-              </Badge>
-            )}
-          </div>
-          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]>&]:rotate-0 [[data-state=closed]>&]:-rotate-90" />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="max-h-64 overflow-y-auto px-1 pb-3">
-            {versions.length === 0 ? (
-              <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-                No versions yet. Save changes to create a version.
-              </p>
-            ) : (
-              <div className="space-y-1">
-                {versions.slice(0, 5).map((version) => (
-                  <div
-                    key={version.id}
-                    className="group flex items-start justify-between gap-2 rounded-md px-2 py-2 transition-colors hover:bg-accent"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium tabular-nums">
-                          v{version.versionNumber}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">
-                          {formatRelativeTime(version.createdAt)}
-                        </span>
-                      </div>
-                      {version.changeNote && (
-                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                          {version.changeNote}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => {
-                          // View version - could load it into editor
-                          toast.info(`Viewing v${version.versionNumber}`);
-                        }}
-                      >
-                        <Eye className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        disabled={restoreVersionMutation.isPending}
-                        onClick={() => {
-                          restoreVersionMutation.mutate(version.id);
-                        }}
-                      >
-                        {restoreVersionMutation.isPending ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <RotateCcw className="h-3 w-3" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-      </>)}
     </div>
   );
 
@@ -1521,14 +1050,6 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
             <span className="hidden sm:inline">Email Templates</span>
           </button>
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <button
-            type="button"
-            onClick={onBack}
-            className="text-muted-foreground hover:text-foreground transition-colors hidden sm:block"
-          >
-            Email Settings
-          </button>
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 hidden sm:block" />
           <span className="truncate font-medium max-w-[200px] lg:max-w-[400px]">
             {isNew ? 'Create Template' : (template?.name ?? 'Loading...')}
           </span>
@@ -1541,35 +1062,15 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
             <SaveIndicator state={displaySaveState} />
           </div>
 
-          {/* Revert to Default */}
-          {!isNew && template?.isSystem && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="hidden sm:inline-flex"
-              onClick={() => setRevertDialogOpen(true)}
-              disabled={revertMutation.isPending}
-            >
-              {revertMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RotateCcw className="h-4 w-4" />
-              )}
-              <span className="ml-1.5 hidden lg:inline">Revert to Default</span>
-            </Button>
-          )}
-
-          {/* Preview (edit mode only) */}
-          {!isNew && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPreview(templateId)}
-            >
-              <Eye className="h-4 w-4" />
-              <span className="ml-1.5 hidden sm:inline">Preview Email</span>
-            </Button>
-          )}
+          {/* Cancel */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onBack}
+          >
+            <X className="h-4 w-4" />
+            <span className="ml-1.5 hidden sm:inline">Cancel</span>
+          </Button>
 
           {/* Save / Create */}
           <Button
@@ -1616,7 +1117,6 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
         <aside
           className={cn(
             'flex-shrink-0 border-l bg-card overflow-y-auto transition-all duration-300',
-            // Mobile: overlay
             'fixed inset-y-0 right-0 z-50 w-80 shadow-xl lg:relative lg:inset-auto lg:z-auto lg:shadow-none',
             sidebarOpen
               ? 'translate-x-0'
@@ -1644,20 +1144,6 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
           )}
         </AnimatePresence>
       </div>
-
-      {/* ====== Revert Dialog (edit mode only) ====== */}
-      {!isNew && (
-      <ConfirmDialog
-        open={revertDialogOpen}
-        onOpenChange={setRevertDialogOpen}
-        title="Revert to Default"
-        description="This will replace the current template content with the original system default. A version snapshot will be created before reverting. This action cannot be undone."
-        confirmLabel="Revert to Default"
-        variant="destructive"
-        onConfirm={() => revertMutation.mutate()}
-        isLoading={revertMutation.isPending}
-      />
-      )}
 
       {/* ====== Fullscreen Overlay ====== */}
       <AnimatePresence>
