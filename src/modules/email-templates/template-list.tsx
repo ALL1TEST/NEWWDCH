@@ -754,7 +754,6 @@ export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
                               </>
                             )}
                           </DropdownMenuItem>
-                          <DropdownMenuSeparator />
                           {template.isSystem && (
                             <DropdownMenuItem
                               onClick={() => setRevertTarget(template)}
@@ -765,13 +764,16 @@ export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
                             </DropdownMenuItem>
                           )}
                           {!template.isSystem && (
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={() => setDeleteTarget(template)}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => setDeleteTarget(template)}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </>
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
