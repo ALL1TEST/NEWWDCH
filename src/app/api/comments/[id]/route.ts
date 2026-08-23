@@ -16,7 +16,7 @@ function reqId() {
 }
 
 const commentIncludes = {
-  author: { select: { id: true, name: true, email: true, avatar: true } },
+  author: { select: { id: true, name: true, email: true, avatar: true, website: true } },
   contentItem: { select: { id: true, title: true, slug: true } },
   parent: { select: { id: true, content: true } },
   children: true,

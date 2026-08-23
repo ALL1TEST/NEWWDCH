@@ -78,7 +78,6 @@ import {
   Globe,
   Mail,
   AlertTriangle,
-  Sparkles as SparklesIcon,
 } from 'lucide-react';
 import {
   DEMO_COMMENTS,
@@ -276,6 +275,25 @@ const SPAM_PROVIDERS = [
   { value: 'custom', label: 'Custom' },
 ];
 
+// Masked placeholder shown when an API key is already saved. The backend
+// returns '[ENCRYPTED]' for sensitive fields; we never display the actual
+// secret. Submitting this exact placeholder preserves the existing value.
+const API_KEY_MASK = '••••••••';
+
+interface ProviderDraft {
+  commentsEnabled?: boolean;
+  spamDetection?: boolean;
+  spamProvider?: string;
+  // Custom provider fields
+  customProviderName?: string;
+  customApiEndpoint?: string;
+  customApiKey?: string;
+  customEnabled?: boolean;
+  // Akismet fields
+  akismetApiKey?: string;
+  akismetBlogUrl?: string;
+}
+
 function CommentSettingsCard() {
   const queryClient = useQueryClient();
 
@@ -285,26 +303,74 @@ function CommentSettingsCard() {
     staleTime: 10_000,
   });
 
+  // Hydrate from saved settings. API keys come back as '[ENCRYPTED]' when
+  // a value is stored — we show the mask placeholder instead of the real
+  // secret. Empty string means no key has been saved yet.
   const savedCommentsEnabled = settingsData?.enable_comments !== 'false';
   const savedSpamDetection = settingsData?.comment_auto_spam_detection === 'true';
   const savedSpamProvider = settingsData?.comment_spam_provider || 'none';
 
-  const [draft, setDraft] = useState<{ commentsEnabled?: boolean; spamDetection?: boolean; spamProvider?: string }>({});
+  const savedCustomProviderName = settingsData?.comment_spam_provider_name || '';
+  const savedCustomApiEndpoint = settingsData?.comment_spam_api_endpoint || '';
+  const hasSavedCustomApiKey = settingsData?.comment_spam_api_key && settingsData.comment_spam_api_key !== '';
+  const savedCustomEnabled = settingsData?.comment_spam_enabled !== 'false';
+
+  const savedAkismetBlogUrl = settingsData?.akismet_blog_url || '';
+  const hasSavedAkismetApiKey = settingsData?.akismet_api_key && settingsData.akismet_api_key !== '';
+
+  const [draft, setDraft] = useState<ProviderDraft>({});
 
   const commentsEnabled = draft.commentsEnabled ?? savedCommentsEnabled;
   const spamDetection = draft.spamDetection ?? savedSpamDetection;
   const spamProvider = draft.spamProvider ?? savedSpamProvider;
+
+  // Custom-provider draft values (fall back to saved).
+  const customProviderName = draft.customProviderName ?? savedCustomProviderName;
+  const customApiEndpoint = draft.customApiEndpoint ?? savedCustomApiEndpoint;
+  // API key: show mask when a key is saved AND the user hasn't typed a new one.
+  const customApiKey = draft.customApiKey ?? (hasSavedCustomApiKey ? API_KEY_MASK : '');
+  const customEnabled = draft.customEnabled ?? savedCustomEnabled;
+
+  // Akismet draft values.
+  const akismetApiKey = draft.akismetApiKey ?? (hasSavedAkismetApiKey ? API_KEY_MASK : '');
+  const akismetBlogUrl = draft.akismetBlogUrl ?? savedAkismetBlogUrl;
+
   const isDirty = Object.keys(draft).length > 0;
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      postApi('/api/settings', {
-        settings: [
-          { key: 'enable_comments', value: String(commentsEnabled), type: 'BOOLEAN', category: 'DISCUSSION' },
-          { key: 'comment_auto_spam_detection', value: String(spamDetection), type: 'BOOLEAN', category: 'DISCUSSION' },
-          { key: 'comment_spam_provider', value: spamProvider, type: 'STRING', category: 'DISCUSSION' },
-        ],
-      }),
+    mutationFn: () => {
+      const settings: Array<{ key: string; value: string; type?: string; category: string }> = [
+        { key: 'enable_comments', value: String(commentsEnabled), type: 'BOOLEAN', category: 'DISCUSSION' },
+        { key: 'comment_auto_spam_detection', value: String(spamDetection), type: 'BOOLEAN', category: 'DISCUSSION' },
+        { key: 'comment_spam_provider', value: spamProvider, type: 'STRING', category: 'DISCUSSION' },
+      ];
+
+      // Custom provider config — only include the API key when the user
+      // typed something OTHER than the mask placeholder (so submitting the
+      // mask preserves the existing stored secret).
+      if (spamProvider === 'custom') {
+        settings.push(
+          { key: 'comment_spam_provider_name', value: customProviderName, type: 'STRING', category: 'DISCUSSION' },
+          { key: 'comment_spam_api_endpoint', value: customApiEndpoint, type: 'URL', category: 'DISCUSSION' },
+          { key: 'comment_spam_enabled', value: String(customEnabled), type: 'BOOLEAN', category: 'DISCUSSION' },
+        );
+        if (customApiKey && customApiKey !== API_KEY_MASK) {
+          settings.push({ key: 'comment_spam_api_key', value: customApiKey, type: 'ENCRYPTED', category: 'DISCUSSION' });
+        }
+      }
+
+      // Akismet config — same mask-preservation logic.
+      if (spamProvider === 'akismet') {
+        settings.push(
+          { key: 'akismet_blog_url', value: akismetBlogUrl, type: 'URL', category: 'DISCUSSION' },
+        );
+        if (akismetApiKey && akismetApiKey !== API_KEY_MASK) {
+          settings.push({ key: 'akismet_api_key', value: akismetApiKey, type: 'ENCRYPTED', category: 'DISCUSSION' });
+        }
+      }
+
+      return postApi('/api/settings', { settings });
+    },
     onSuccess: () => {
       setDraft({});
       queryClient.invalidateQueries({ queryKey: ['settings'] });
@@ -327,6 +393,7 @@ function CommentSettingsCard() {
 
   return (
     <Card className="p-4">
+      {/* Top row — global comment settings */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         {/* Enable Comments */}
         <div className="flex items-center gap-2">
@@ -355,7 +422,7 @@ function CommentSettingsCard() {
           </Label>
         </div>
 
-        {/* Spam Provider (conditional) */}
+        {/* Spam Provider (conditional on spam detection being on) */}
         {spamDetection && (
           <div className="flex items-center gap-2">
             <Label className="text-sm text-muted-foreground">Provider:</Label>
@@ -390,6 +457,130 @@ function CommentSettingsCard() {
           Save
         </Button>
       </div>
+
+      {/* ---------- Provider configuration sections ---------- */}
+
+      {/* Custom provider config — only when Provider = Custom */}
+      {spamDetection && spamProvider === 'custom' && (
+        <div className="mt-4 pt-4 border-t border-dashed">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Custom Spam Provider</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="custom-enabled" className="text-xs text-muted-foreground cursor-pointer">
+                {customEnabled ? 'Enabled' : 'Disabled'}
+              </Label>
+              <Switch
+                id="custom-enabled"
+                checked={customEnabled}
+                onCheckedChange={(v) => setDraft((prev) => ({ ...prev, customEnabled: v }))}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="custom-provider-name" className="text-xs font-medium">
+                Provider Name
+              </Label>
+              <Input
+                id="custom-provider-name"
+                value={customProviderName}
+                onChange={(e) => setDraft((prev) => ({ ...prev, customProviderName: e.target.value }))}
+                placeholder="e.g. ProjectShield"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="custom-api-endpoint" className="text-xs font-medium">
+                API Endpoint / URL
+              </Label>
+              <Input
+                id="custom-api-endpoint"
+                value={customApiEndpoint}
+                onChange={(e) => setDraft((prev) => ({ ...prev, customApiEndpoint: e.target.value }))}
+                placeholder="https://api.example.com/v1/spam-check"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="custom-api-key" className="text-xs font-medium">
+                API Key
+              </Label>
+              <Input
+                id="custom-api-key"
+                type="password"
+                value={customApiKey}
+                onChange={(e) => setDraft((prev) => ({ ...prev, customApiKey: e.target.value }))}
+                placeholder={hasSavedCustomApiKey ? API_KEY_MASK : 'Enter API key'}
+                className="h-8 text-sm"
+              />
+              {hasSavedCustomApiKey && !draft.customApiKey && (
+                <p className="text-[10px] text-muted-foreground">Leave as {API_KEY_MASK} to keep the saved key.</p>
+              )}
+            </div>
+            <div className="space-y-1 flex items-end">
+              <span className="text-[10px] text-muted-foreground">
+                The custom endpoint receives <code>POST</code> requests with the comment payload and must respond with <code>{'{ "spam": true|false, "score": 0-100 }'}</code>.
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Akismet config — only when Provider = Akismet */}
+      {spamDetection && spamProvider === 'akismet' && (
+        <div className="mt-4 pt-4 border-t border-dashed">
+          <div className="flex items-center gap-2 mb-3">
+            <Shield className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">Akismet Configuration</h3>
+            <span className="text-[10px] text-muted-foreground">
+              Get your key at{' '}
+              <a href="https://akismet.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                akismet.com
+              </a>
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="akismet-api-key" className="text-xs font-medium">
+                Akismet API Key
+              </Label>
+              <Input
+                id="akismet-api-key"
+                type="password"
+                value={akismetApiKey}
+                onChange={(e) => setDraft((prev) => ({ ...prev, akismetApiKey: e.target.value }))}
+                placeholder={hasSavedAkismetApiKey ? API_KEY_MASK : 'Enter Akismet key'}
+                className="h-8 text-sm"
+              />
+              {hasSavedAkismetApiKey && !draft.akismetApiKey && (
+                <p className="text-[10px] text-muted-foreground">Leave as {API_KEY_MASK} to keep the saved key.</p>
+              )}
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="akismet-blog-url" className="text-xs font-medium">
+                Blog / Site URL
+              </Label>
+              <Input
+                id="akismet-blog-url"
+                value={akismetBlogUrl}
+                onChange={(e) => setDraft((prev) => ({ ...prev, akismetBlogUrl: e.target.value }))}
+                placeholder="https://yoursite.com"
+                className="h-8 text-sm"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* None — no extra config needed */}
+      {spamDetection && spamProvider === 'none' && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          No spam provider selected — comments marked as spam will rely on manual moderation only.
+        </p>
+      )}
     </Card>
   );
 }
@@ -860,15 +1051,7 @@ export function CommentsPage() {
         {/* Page Header */}
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3 flex-wrap">
-              Comments
-              {USE_DEMO_DATA && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-400">
-                  <SparklesIcon className="h-3 w-3" />
-                  Demo Data
-                </span>
-              )}
-            </h1>
+            <h1 className="text-3xl font-bold tracking-tight">Comments</h1>
             <p className="text-muted-foreground mt-1">
               Moderate and manage user comments across your content
             </p>
@@ -1000,8 +1183,8 @@ export function CommentsPage() {
                 </span>
               </div>
 
-              {/* Comment Cards */}
-              <div className="max-h-[600px] overflow-y-auto">
+              {/* Comment Cards — natural page scroll (no nested scrollbar) */}
+              <div>
                 {comments.map((comment) => {
                   const sentiment = detectSentiment(comment.content);
                   const isExpanded = expandedComments.has(comment.id);
@@ -1047,38 +1230,14 @@ export function CommentsPage() {
                         className="h-10 w-10 shrink-0"
                       />
 
-                      {/* Content area */}
+                      {/* Content area — vertical stack: Name, Email/Website, Article, Comment text, Date + Status badges */}
                       <div className="flex-1 min-w-0">
-                        {/* Author row */}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold text-foreground truncate max-w-[14rem]">
-                            {comment.author?.name ?? 'Anonymous'}
-                          </span>
-                          <StatusBadgeSmall status={comment.status} />
-                          <SentimentBadge sentiment={sentiment} />
-                          {/* Spam indicator — only on SPAM rows */}
-                          {isSpam && typeof comment.spamScore === 'number' && (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-1.5 py-0 text-[10px] font-medium leading-4 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-400">
-                              <AlertTriangle className="h-3 w-3" />
-                              Spam {comment.spamScore}%
-                            </span>
-                          )}
-                          {/* Flag indicator — only on FLAGGED rows */}
-                          {isFlagged && comment.flagReason && (
-                            <span
-                              title={comment.flagReason}
-                              className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0 text-[10px] font-medium leading-4 text-orange-700 dark:border-orange-800/60 dark:bg-orange-900/20 dark:text-orange-400"
-                            >
-                              <FlagIcon className="h-3 w-3" />
-                              Flagged
-                            </span>
-                          )}
-                          <span className="text-xs text-muted-foreground">
-                            {formatRelativeTime(comment.createdAt)}
-                          </span>
-                        </div>
+                        {/* Author Name */}
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          {comment.author?.name ?? 'Anonymous'}
+                        </p>
 
-                        {/* Email + website meta row */}
+                        {/* Email + Website row (immediately below name) */}
                         {(comment.author?.email || comment.author?.website) && (
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-[11px] text-muted-foreground">
                             {comment.author?.email && (
@@ -1103,7 +1262,7 @@ export function CommentsPage() {
                           </div>
                         )}
 
-                        {/* Article reference */}
+                        {/* on "Article Title" */}
                         {comment.contentItem && (
                           <p className="text-xs text-muted-foreground mt-0.5">
                             on &ldquo;
@@ -1183,6 +1342,30 @@ export function CommentsPage() {
                             </p>
                           </div>
                         )}
+
+                        {/* Date / time + Status badges — below comment text */}
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                          <span className="text-xs text-muted-foreground">
+                            {formatRelativeTime(comment.createdAt)}
+                          </span>
+                          <StatusBadgeSmall status={comment.status} />
+                          <SentimentBadge sentiment={sentiment} />
+                          {isSpam && typeof comment.spamScore === 'number' && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-1.5 py-0 text-[10px] font-medium leading-4 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-400">
+                              <AlertTriangle className="h-3 w-3" />
+                              Spam {comment.spamScore}%
+                            </span>
+                          )}
+                          {isFlagged && comment.flagReason && (
+                            <span
+                              title={comment.flagReason}
+                              className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0 text-[10px] font-medium leading-4 text-orange-700 dark:border-orange-800/60 dark:bg-orange-900/20 dark:text-orange-400"
+                            >
+                              <FlagIcon className="h-3 w-3" />
+                              Flagged
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Hover Actions */}

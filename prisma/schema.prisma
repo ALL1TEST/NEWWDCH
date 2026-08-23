@@ -641,6 +641,7 @@ model User {
   name          String?
   avatar        String?
   bio           String?
+  website       String?
   role          UserRole  @default(AUTHOR)
   status        UserStatus @default(ACTIVE)
   password      String?
