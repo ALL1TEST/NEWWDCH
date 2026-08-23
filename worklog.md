@@ -598,3 +598,85 @@ Stage Summary:
 - Password security: encrypted at rest via AES-256-GCM (existing `@/lib/encryption`); masked placeholder returned from GET; existing password preserved on PUT when placeholder submitted; backend decrypts ciphertext (base64, 100+ chars heuristic) before connecting.
 - All three API endpoints verified end-to-end against the running dev server — they correctly return the standard `{ error: { code, message }, meta: { requestId } }` envelope and the right HTTP status codes (200, 400, 422, 500).
 - No new lint errors introduced. Dev server running cleanly on port 3000 (no ⨯ or compile errors in dev.log).
+
+---
+Task ID: AI-IDEAS-IMPROVE-1
+Agent: main (orchestrator)
+Task: Improve the AI Ideas sidebar on the Articles page — richer idea data, ZAI fallback, new IdeaCard, error/empty/generating states, localStorage save, Generate More (append), removed orphaned AIGenerateDialog
+
+Work Log:
+
+1. PART 1 — Rewrote `src/app/api/content/ai-ideas/route.ts` (303 lines):
+   - Removed the orphan `'use server';` directive at top (route handlers don't need it; was inconsistent with `/api/media/generate/route.ts` and `/api/media/[id]/generate-seo/route.ts` patterns).
+   - Updated zod schema: added `existingTitles: z.array(z.string()).optional().default([])`, changed `count` default from 5 to 6.
+   - New strict system prompt asks the AI to return per-idea fields: `title`, `seoOpportunity` (0-100), `topicRelevance` (0-100), `competition` (Low|Medium|High), `contentPotential` (High|Medium|Low), `searchIntent` (Informational|Commercial|Transactional|Navigational), `primaryKeyword`, `keywords` (3-5), `description`, `suggestedAngle`, `tags` (3-5). Explicitly forbids `monthlyVolume` / `seoScore` / `difficulty`.
+   - When `existingTitles` is non-empty, the system prompt tells the model to avoid duplicates or near-duplicates of those titles.
+   - **Path 1 (DB provider configured)**: Same `executeChat` path as before (look up `isDefault` provider → fallback to any active provider → call `executeChat` with `jsonMode: true`).
+   - **Path 2 (no DB provider)**: Dynamically imports `z-ai-web-dev-sdk`, creates `ZAI.create()` instance, calls `zai.chat.completions.create({ messages, thinking: { type: 'disabled' } })`. Mirrors the pattern in `/api/media/[id]/generate-seo/route.ts`.
+   - Added two robust helpers:
+     - `parseIdeasJson(raw)`: strips markdown fences, slices to first `{`/last `}` pair, calls `JSON.parse`.
+     - `normalizeIdea(raw)`: coerces/clamps all numeric scores to 0-100, validates enum values with case-insensitive fallback, coerces `keywords`/`tags` arrays (or splits comma-separated strings), falls back `primaryKeyword` to first keyword when missing. Returns `null` if title is empty.
+   - Response shape unchanged: `{ data: { ideas: [...] }, meta: { requestId, timestamp, usage? } }`. `usage` only included when DB provider path was used (ZAI path doesn't expose token counts).
+
+2. PART 2 — Updated `ArticleIdea` interface in `src/modules/content/content-list-page.tsx`:
+   - Removed: `seoScore`, `difficulty`, `monthlyVolume`.
+   - Added: `seoOpportunity`, `topicRelevance`, `competition`, `contentPotential`, `primaryKeyword`, `suggestedAngle`.
+   - Kept: `title`, `searchIntent`, `keywords`, `description`, `tags`.
+   - Added module-level constant `SAVED_IDEAS_STORAGE_KEY = 'cms_saved_ideas'`.
+
+3. PART 3 — Rewrote the `IdeaCard` component:
+   - Removed `onBookmark` and `isBookmarked` props (consolidated into Save).
+   - Added `isSaved: boolean` prop. The Save button now: shows "Save" when not saved (variant=outline), shows "Saved" when saved (variant=secondary, disabled).
+   - **Collapsed view**: SEO Opportunity ring (SVG circle progress) using `getSeoScoreBg`/`getSeoScoreColor` (emerald ≥80, amber ≥60, red <60). Title (line-clamp-2). Primary keyword amber pill. Competition pill (`COMPETITION_COLORS`: Low=emerald, Medium=amber, High=red). Chevron up/down on the right.
+   - **Expanded view**: description (only if present). Metrics grid: Search intent pill (`INTENT_COLORS`) + Topic relevance score (with `Target` icon, colored via `getSeoScoreColor`). Content potential pill (`CONTENT_POTENTIAL_COLORS`: High=emerald, Medium=amber, Low=red). Suggested Angle (label + body text). Keywords (amber pills). Tags (muted pills). Action row: "Save"/"Saved" button (outline/secondary) + "+ Create Article" button (amber/yellow primary).
+   - Removed: `monthlyVolume` display, `difficulty` pill, bookmark button.
+
+4. PART 4 — Sidebar states (single ternary chain in JSX):
+   - `ideasMutation.isError` → Error state: red AlertCircle icon, "Couldn't generate ideas", "Something went wrong. Please try again.", "Try Again" button (amber, RotateCcw icon) that calls `ideasMutation.mutate()`.
+   - `ideasMutation.isPending` → Generating state: Loader2 spin, "Generating SEO content ideas…", "Analyzing your niche and keywords".
+   - `ideasEmpty && ideas.length === 0` → No ideas returned state: Lightbulb icon (amber tint), "No strong topic ideas found.", "Try changing your niche or target keywords.", re-renders the niche + keywords inputs and a "Try Again" button.
+   - `ideas.length === 0` → Empty/CTA state: Sparkles icon, "Need Content Ideas? Let AI Help!", description text, niche + keywords inputs, "Generate Article Ideas" button (amber, Sparkles icon, disabled while pending).
+   - Else → Results state: scrollable list of IdeaCards (`max-h-[60vh] overflow-y-auto` with custom thin scrollbar styling via `[scrollbar-width:thin]` + webkit pseudo-elements). Bottom actions: "Generate More" (outline, RotateCcw icon, calls `ideasMutation.mutate()`, disabled while pending) + "Clear" (ghost, X icon, clears ideas + expandedIdea + ideasEmpty).
+   - Only one card expanded at a time (`expandedIdea: number | null`, toggled via `setExpandedIdea(prev === idx ? null : idx)`).
+
+5. Save functionality:
+   - `savedTitles: Set<string>` state — lazy initializer reads from `localStorage['cms_saved_ideas']` on mount (parses JSON array of ArticleIdea objects, builds Set of lowercased titles).
+   - `savedIdeas: Set<number>` derived via `useMemo` from `ideas + savedTitles` — maps idea index → set membership by title. This stays in sync when "Generate More" appends ideas (no setState-in-effect lint error, React Compiler-friendly).
+   - `handleSaveIdea(idx)`: reads `savedTitles` to check if already saved; if not, updates state (`setSavedTitles`) AND persists the full idea object to localStorage (with title-based dedupe for safety). Shows `toast.success('Idea saved!')` on first save, `toast.info('Idea already saved')` on dup.
+   - Saved ideas persist across sidebar toggles AND across page navigation (ContentListPage remount re-reads localStorage via the lazy initializer).
+
+6. Create Article functionality:
+   - `handleCreateFromIdea(_idea?: ArticleIdea)` calls `navigate('automation', null, 'generate')` — uses the existing Automation builder in generate mode. No separate AI generation dialog or duplicate logic.
+   - The dropdown menu's "Generate with AI" item also calls the same handler (works with no idea arg).
+
+7. PART 5 — Updated `ideasMutation`:
+   - Request body now includes `count: 6` (was 5) and `existingTitles: ideas.map(i => i.title)` (so "Generate More" asks the API to avoid returning duplicates of already-shown ideas).
+   - On success: if `result.data.ideas` is missing/non-array/empty → set `ideasEmpty = true` and toast the appropriate message ("No strong topic ideas found. Try refining your niche or keywords." if `ideas.length === 0`, "No new ideas returned. Try refining your niche or keywords." otherwise). Existing ideas stay visible.
+   - On success with ideas: `setIdeasEmpty(false)`, APPEND new ideas to existing ones via `setIdeas((prev) => [...prev, ...generatedIdeas])` (preserves prior batch — was previously replacing). Expand the first newly-appended idea via `setExpandedIdea(prevLen === 0 ? 0 : prevLen)`.
+   - On error: `setIdeasEmpty(false)` (clear in case a prior call set it) + toast the error message.
+
+8. Cleanup:
+   - Removed the entire `AIGenerateDialog` component (was ~160 lines of dead code — referenced `/api/content/ai-generate` endpoint that doesn't exist anymore).
+   - Removed its rendering at the bottom of the component (`<AIGenerateDialog ... />`).
+   - Removed orphaned state: `bookmarkedIdeas`, `generateDialogOpen`, `selectedIdea`.
+   - Removed unused imports: `Bookmark`, `BookmarkCheck`, `BarChart3`, `useEffect`.
+   - Added imports: `RotateCcw`, `AlertCircle`.
+   - Removed the `DIFFICULTY_COLORS` constant (was keyed by Easy/Medium/Hard/Very Hard, no longer used).
+   - Added `COMPETITION_COLORS` and `CONTENT_POTENTIAL_COLORS` constants (both use emerald/amber/red schema matching the spec).
+
+VERIFICATION:
+- API endpoint tested via curl with `niche=productivity, count=3` → HTTP 200, returned 3 ideas with all 11 required fields populated. ZAI fallback path was exercised (no DB provider configured).
+- API endpoint tested with `existingTitles` parameter (3 titles from first call) → returned 3 different titles (no overlap with existing). Deduplication works.
+- File syntax verified via brace/paren balance check (358/358 braces, 453/453 parens).
+- Lint: 0 errors in `content-list-page.tsx` and `api/content/ai-ideas/route.ts`. (Remaining lint errors are all in pre-existing files: NEWWDCH/*, content-create-page.tsx, content-edit-page.tsx, data-table.tsx, seo-broken-links-page.tsx, seo-social-preview-page.tsx, webhooks-page.tsx — none introduced by this task.)
+- Dev server: 200 OK on `/` and `/api/content/ai-ideas` (POST). Original dev server (PID 21700, Next.js v16.1.3) hot-reloaded the changes successfully. Stale duplicate dev-runner processes killed.
+
+Stage Summary:
+- AI Ideas sidebar now produces richer, AI-internal-scored ideas (no fake search volume). SEO Opportunity + Topic Relevance + Competition + Content Potential + Search Intent + Primary Keyword + Suggested Angle + Keywords + Tags all populated.
+- Falls back to `z-ai-web-dev-sdk` when no DB AI provider is configured (matches the existing pattern in `/api/media/*`).
+- Sidebar supports empty/generating/error/no-results/results states with appropriate copy and retry CTAs.
+- "Generate More" appends new ideas (preserving prior batch) and passes existing titles to the API for deduplication.
+- Save persists full idea objects to `localStorage['cms_saved_ideas']` (title-deduped), with the "Saved" button state derived from a title set that survives "Generate More" appends and page navigation.
+- "Create Article" navigates to the existing Automation builder in `generate` mode — no duplicate generation logic.
+- Removed dead code: `AIGenerateDialog`, orphaned `generateDialogOpen`/`selectedIdea`/`bookmarkedIdeas` state, unused `Bookmark`/`BookmarkCheck`/`BarChart3` imports, unused `DIFFICULTY_COLORS` constant.
+- Files modified: `src/app/api/content/ai-ideas/route.ts` (full rewrite, 303 lines), `src/modules/content/content-list-page.tsx` (interface + IdeaCard + state + ideasMutation + sidebar JSX).

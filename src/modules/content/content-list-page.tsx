@@ -11,19 +11,18 @@ import {
   Trash2,
   Sparkles,
   ChevronRight,
-  Bookmark,
-  BookmarkCheck,
   Save,
   FileText,
   ChevronDown,
   ChevronUp,
   Loader2,
-  BarChart3,
   Target,
   X,
   Lightbulb,
   FolderOpen,
   Tag,
+  RotateCcw,
+  AlertCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -108,14 +107,20 @@ interface ContentItemRow {
 
 interface ArticleIdea {
   title: string;
-  seoScore: number;
-  difficulty: string;
-  monthlyVolume: number;
+  seoOpportunity: number;
+  topicRelevance: number;
+  competition: string;
+  contentPotential: string;
   searchIntent: string;
+  primaryKeyword: string;
   keywords: string[];
   description: string;
+  suggestedAngle: string;
   tags: string[];
 }
+
+// localStorage key for persisting saved ideas across sessions
+const SAVED_IDEAS_STORAGE_KEY = 'cms_saved_ideas';
 
 // -------------------- Status Config --------------------
 
@@ -145,18 +150,23 @@ const STATUS_LABELS: Record<string, string> = {
   ARCHIVED: 'Archived',
 };
 
-const DIFFICULTY_COLORS: Record<string, string> = {
-  Easy: 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-900/20',
-  Medium: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-900/20',
-  Hard: 'text-orange-600 bg-orange-50 dark:text-orange-400 dark:bg-orange-900/20',
-  'Very Hard': 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-900/20',
-};
-
 const INTENT_COLORS: Record<string, string> = {
   Informational: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   Commercial: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
   Transactional: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
   Navigational: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400',
+};
+
+const COMPETITION_COLORS: Record<string, string> = {
+  Low: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  Medium: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  High: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+};
+
+const CONTENT_POTENTIAL_COLORS: Record<string, string> = {
+  High: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  Medium: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  Low: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
 
 function getSeoScoreColor(score: number): string {
@@ -179,18 +189,16 @@ function IdeaCard({
   expanded,
   onToggle,
   onSave,
-  onBookmark,
   onCreateArticle,
-  isBookmarked,
+  isSaved,
 }: {
   idea: ArticleIdea;
   index: number;
   expanded: boolean;
   onToggle: () => void;
   onSave: () => void;
-  onBookmark: () => void;
   onCreateArticle: () => void;
-  isBookmarked: boolean;
+  isSaved: boolean;
 }) {
   return (
     <div className="border rounded-xl overflow-hidden transition-all duration-200 hover:shadow-sm">
@@ -200,29 +208,31 @@ function IdeaCard({
         onClick={onToggle}
         className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-muted/50 transition-colors"
       >
-        {/* SEO Score Ring */}
+        {/* SEO Opportunity Ring */}
         <div className="relative shrink-0">
           <svg className="h-10 w-10 -rotate-90" viewBox="0 0 36 36">
             <circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeWidth="3" className="text-muted/30" />
             <circle
               cx="18" cy="18" r="15.5" fill="none" strokeWidth="3" strokeLinecap="round"
-              strokeDasharray={`${(idea.seoScore / 100) * 97.4} 97.4`}
-              className={cn('transition-all duration-700', getSeoScoreBg(idea.seoScore))}
+              strokeDasharray={`${(idea.seoOpportunity / 100) * 97.4} 97.4`}
+              className={cn('transition-all duration-700', getSeoScoreBg(idea.seoOpportunity))}
             />
           </svg>
-          <span className={cn('absolute inset-0 flex items-center justify-center text-[10px] font-bold', getSeoScoreColor(idea.seoScore))}>
-            {idea.seoScore}
+          <span className={cn('absolute inset-0 flex items-center justify-center text-[10px] font-bold', getSeoScoreColor(idea.seoOpportunity))}>
+            {idea.seoOpportunity}
           </span>
         </div>
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium leading-tight line-clamp-2">{idea.title}</p>
-          <div className="flex items-center gap-2 mt-1">
-            <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', DIFFICULTY_COLORS[idea.difficulty] || 'bg-gray-100 text-gray-600')}>
-              {idea.difficulty}
-            </span>
-            <span className="text-[10px] text-muted-foreground">
-              {idea.monthlyVolume >= 1000 ? `${(idea.monthlyVolume / 1000).toFixed(1)}k` : idea.monthlyVolume} searches/mo
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            {idea.primaryKeyword && (
+              <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200/50 dark:border-amber-800/30">
+                {idea.primaryKeyword}
+              </span>
+            )}
+            <span className={cn('inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full', COMPETITION_COLORS[idea.competition] || 'bg-gray-100 text-gray-600')}>
+              {idea.competition} comp.
             </span>
           </div>
         </div>
@@ -238,66 +248,82 @@ function IdeaCard({
       {expanded && (
         <div className="border-t px-3 py-3 space-y-3 animate-in slide-in-from-top-1 duration-200">
           {/* Description */}
-          <p className="text-xs text-muted-foreground leading-relaxed">{idea.description}</p>
+          {idea.description && (
+            <p className="text-xs text-muted-foreground leading-relaxed">{idea.description}</p>
+          )}
 
           {/* Metrics Row */}
           <div className="grid grid-cols-2 gap-2">
+            {/* Search Intent */}
             <div className="flex items-center gap-1.5 text-xs">
-              <Target className="h-3 w-3 text-muted-foreground" />
               <span className="text-muted-foreground">Intent:</span>
               <span className={cn('font-medium px-1.5 py-0.5 rounded text-[10px]', INTENT_COLORS[idea.searchIntent] || 'bg-gray-100 text-gray-600')}>
                 {idea.searchIntent}
               </span>
             </div>
+            {/* Topic Relevance */}
             <div className="flex items-center gap-1.5 text-xs">
-              <BarChart3 className="h-3 w-3 text-muted-foreground" />
-              <span className="text-muted-foreground">Volume:</span>
-              <span className="font-medium">{idea.monthlyVolume.toLocaleString()}/mo</span>
+              <Target className="h-3 w-3 text-muted-foreground" />
+              <span className="text-muted-foreground">Relevance:</span>
+              <span className={cn('font-semibold', getSeoScoreColor(idea.topicRelevance))}>{idea.topicRelevance}/100</span>
             </div>
           </div>
+
+          {/* Content Potential */}
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-muted-foreground">Content potential:</span>
+            <span className={cn('font-medium px-1.5 py-0.5 rounded text-[10px]', CONTENT_POTENTIAL_COLORS[idea.contentPotential] || 'bg-gray-100 text-gray-600')}>
+              {idea.contentPotential}
+            </span>
+          </div>
+
+          {/* Suggested Angle */}
+          {idea.suggestedAngle && (
+            <div>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Suggested Angle</p>
+              <p className="text-xs text-foreground/90 leading-relaxed">{idea.suggestedAngle}</p>
+            </div>
+          )}
 
           {/* Keywords */}
-          <div>
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">Keywords</p>
-            <div className="flex flex-wrap gap-1">
-              {idea.keywords.map((kw) => (
-                <span key={kw} className="inline-flex items-center px-2 py-0.5 text-[10px] font-medium rounded-full bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200/50 dark:border-amber-800/30">
-                  {kw}
-                </span>
-              ))}
+          {idea.keywords.length > 0 && (
+            <div>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">Keywords</p>
+              <div className="flex flex-wrap gap-1">
+                {idea.keywords.map((kw) => (
+                  <span key={kw} className="inline-flex items-center px-2 py-0.5 text-[10px] font-medium rounded-full bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200/50 dark:border-amber-800/30">
+                    {kw}
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Tags */}
-          <div>
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">Related Tags</p>
-            <div className="flex flex-wrap gap-1">
-              {idea.tags.map((tag) => (
-                <span key={tag} className="inline-flex items-center px-2 py-0.5 text-[10px] rounded-full bg-muted text-muted-foreground">
-                  {tag}
-                </span>
-              ))}
+          {idea.tags.length > 0 && (
+            <div>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">Tags</p>
+              <div className="flex flex-wrap gap-1">
+                {idea.tags.map((tag) => (
+                  <span key={tag} className="inline-flex items-center px-2 py-0.5 text-[10px] rounded-full bg-muted text-muted-foreground">
+                    {tag}
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Actions */}
           <div className="flex items-center gap-1.5 pt-1">
             <Button
               size="sm"
-              variant="outline"
+              variant={isSaved ? 'secondary' : 'outline'}
               className="h-7 text-[11px] gap-1 flex-1"
               onClick={(e) => { e.stopPropagation(); onSave(); }}
+              disabled={isSaved}
             >
               <Save className="h-3 w-3" />
-              Save
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-[11px] gap-1"
-              onClick={(e) => { e.stopPropagation(); onBookmark(); }}
-            >
-              {isBookmarked ? <BookmarkCheck className="h-3 w-3 text-amber-500" /> : <Bookmark className="h-3 w-3" />}
+              {isSaved ? 'Saved' : 'Save'}
             </Button>
             <Button
               size="sm"
@@ -305,173 +331,12 @@ function IdeaCard({
               onClick={(e) => { e.stopPropagation(); onCreateArticle(); }}
             >
               <FileText className="h-3 w-3" />
-              Create Article
+              + Create Article
             </Button>
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-// -------------------- AI Generate Dialog --------------------
-
-function AIGenerateDialog({
-  open,
-  onOpenChange,
-  idea,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  idea: ArticleIdea | null;
-}) {
-  const [brief, setBrief] = useState('');
-  const [keywords, setKeywords] = useState('');
-  const [writingStyle, setWritingStyle] = useState('Professional');
-  const [targetLength, setTargetLength] = useState('Medium (800-1200 words)');
-  const [numberOfDrafts, setNumberOfDrafts] = useState('1');
-  const [includeCta, setIncludeCta] = useState(false);
-
-  const navigate = useNavigationStore((s) => s.navigate);
-
-  const generateMutation = useMutation({
-    mutationFn: () =>
-      postApi('/api/content/ai-generate', {
-        title: idea?.title || '',
-        brief: brief || idea?.description || '',
-        keywords: keywords || idea?.keywords?.join(', ') || '',
-        writingStyle,
-        targetLength,
-        numberOfDrafts: parseInt(numberOfDrafts),
-        includeCta,
-      }),
-    onSuccess: (result) => {
-      const draft = result.data?.drafts?.[0];
-      if (draft) {
-        toast.success('Article draft generated!');
-        onOpenChange(false);
-        navigate('content', null, 'create');
-      }
-    },
-    onError: (err: Error) => toast.error(err.message || 'Failed to generate'),
-  });
-
-  React.useEffect(() => {
-    if (idea) {
-      setBrief(idea.description);
-      setKeywords(idea.keywords?.join(', ') || '');
-    }
-  }, [idea]);
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-amber-500" />
-            Generate Article with AI
-          </DialogTitle>
-          <DialogDescription>Configure and generate an article draft from this idea.</DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {/* Title */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Article Title</Label>
-            <div className="rounded-md border bg-muted/50 px-3 py-2 text-sm font-medium">
-              {idea?.title}
-            </div>
-          </div>
-
-          {/* Brief */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Brief / Description</Label>
-            <Textarea
-              value={brief}
-              onChange={(e) => setBrief(e.target.value)}
-              placeholder="Describe what the article should cover..."
-              rows={3}
-              className="text-sm resize-none"
-            />
-          </div>
-
-          {/* Keywords */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Keywords</Label>
-            <Input
-              value={keywords}
-              onChange={(e) => setKeywords(e.target.value)}
-              placeholder="comma, separated, keywords"
-              className="h-9 text-sm"
-            />
-          </div>
-
-          {/* Output Settings Grid */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Number of Drafts</Label>
-              <Select value={numberOfDrafts} onValueChange={setNumberOfDrafts}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">1 Draft</SelectItem>
-                  <SelectItem value="2">2 Drafts</SelectItem>
-                  <SelectItem value="3">3 Drafts</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Writing Style</Label>
-              <Select value={writingStyle} onValueChange={setWritingStyle}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Professional">Professional</SelectItem>
-                  <SelectItem value="Casual">Casual</SelectItem>
-                  <SelectItem value="Academic">Academic</SelectItem>
-                  <SelectItem value="Conversational">Conversational</SelectItem>
-                  <SelectItem value="Persuasive">Persuasive</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Target Length</Label>
-            <Select value={targetLength} onValueChange={setTargetLength}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Short (300-600 words)">Short (300-600 words)</SelectItem>
-                <SelectItem value="Medium (800-1200 words)">Medium (800-1200 words)</SelectItem>
-                <SelectItem value="Long (1500-2500 words)">Long (1500-2500 words)</SelectItem>
-                <SelectItem value="Comprehensive (3000+ words)">Comprehensive (3000+ words)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* CTA Checkbox */}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={includeCta}
-              onChange={(e) => setIncludeCta(e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            <span className="text-sm">Include call-to-action</span>
-          </label>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button
-            className="gap-1.5 bg-amber-400 text-zinc-900 hover:bg-amber-400/90"
-            onClick={() => generateMutation.mutate()}
-            disabled={generateMutation.isPending}
-          >
-            {generateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            Generate Drafts
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -717,13 +582,66 @@ export function ContentListPage() {
   const [aiIdeasOpen, setAiIdeasOpen] = useState(false);
   const [ideas, setIdeas] = useState<ArticleIdea[]>([]);
   const [expandedIdea, setExpandedIdea] = useState<number | null>(null);
-  const [bookmarkedIdeas, setBookmarkedIdeas] = useState<Set<number>>(new Set());
-  const [savedIdeas, setSavedIdeas] = useState<Set<number>>(new Set());
-  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
-  const [selectedIdea, setSelectedIdea] = useState<ArticleIdea | null>(null);
+  const [ideasEmpty, setIdeasEmpty] = useState(false);
   const [ideaNiche, setIdeaNiche] = useState('');
   const [ideaKeywords, setIdeaKeywords] = useState('');
   const [catTagOpen, setCatTagOpen] = useState(false);
+
+  // Saved ideas — kept as a Set of titles in state (loaded from localStorage on mount),
+  // then derived into a Set of indices for the current `ideas` array.
+  // The full idea objects are persisted to localStorage so they survive page reloads.
+  const [savedTitles, setSavedTitles] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const raw = window.localStorage.getItem(SAVED_IDEAS_STORAGE_KEY);
+      if (!raw) return new Set();
+      const stored: ArticleIdea[] = JSON.parse(raw) as ArticleIdea[];
+      return new Set(stored.map((s) => s.title.toLowerCase()));
+    } catch {
+      return new Set();
+    }
+  });
+
+  // Derived Set<number> of saved idea indices (so the IdeaCard "Saved" state stays in sync
+  // when ideas are appended via "Generate More").
+  const savedIdeas = useMemo(() => {
+    const next = new Set<number>();
+    ideas.forEach((idea, idx) => {
+      if (savedTitles.has(idea.title.toLowerCase())) next.add(idx);
+    });
+    return next;
+  }, [ideas, savedTitles]);
+
+  const handleSaveIdea = useCallback((idx: number) => {
+    if (typeof window === 'undefined') return;
+    const idea = ideas[idx];
+    if (!idea) return;
+    const key = idea.title.toLowerCase();
+    const alreadySaved = savedTitles.has(key);
+
+    if (!alreadySaved) {
+      // Update state
+      setSavedTitles((prev) => {
+        const next = new Set(prev);
+        next.add(key);
+        return next;
+      });
+      // Persist full idea object to localStorage (dedupe by title for safety)
+      try {
+        const raw = window.localStorage.getItem(SAVED_IDEAS_STORAGE_KEY);
+        const stored: ArticleIdea[] = raw ? (JSON.parse(raw) as ArticleIdea[]) : [];
+        if (!stored.some((s) => s.title.toLowerCase() === key)) {
+          stored.push(idea);
+          window.localStorage.setItem(SAVED_IDEAS_STORAGE_KEY, JSON.stringify(stored));
+        }
+      } catch {
+        // storage may be full or disabled; ignore silently
+      }
+      toast.success('Idea saved!');
+    } else {
+      toast.info('Idea already saved');
+    }
+  }, [ideas, savedTitles]);
 
   // Build query params
   const queryParams = useMemo(
@@ -791,19 +709,35 @@ export function ContentListPage() {
       postApi('/api/content/ai-ideas', {
         niche: ideaNiche || undefined,
         keywords: ideaKeywords || undefined,
-        count: 5,
+        count: 6,
+        existingTitles: ideas.map((i) => i.title),
       }),
-    onSuccess: (result) => {
-      const generatedIdeas = result.data?.ideas;
-      if (generatedIdeas && Array.isArray(generatedIdeas)) {
-        setIdeas(generatedIdeas);
-        setExpandedIdea(0);
-        toast.success(`Generated ${generatedIdeas.length} article ideas!`);
-      } else {
-        toast.error('Unexpected response format from AI');
+    onSuccess: (result: any) => {
+      // postApi unwraps the ApiResponse envelope, so `result` is the inner `data` object.
+      // The API returns { data: { ideas: [...] }, meta: {...} } → postApi returns { ideas: [...] }
+      const generatedIdeas: ArticleIdea[] | undefined = result?.ideas ?? result?.data?.ideas;
+      if (!generatedIdeas || !Array.isArray(generatedIdeas) || generatedIdeas.length === 0) {
+        // No ideas returned — surface the "no strong topic ideas found" empty state.
+        // If user already has ideas (Generate More), keep them visible and just toast.
+        setIdeasEmpty(true);
+        if (ideas.length === 0) {
+          // No existing ideas to fall back on — toast informs the user.
+          toast.info('No strong topic ideas found. Try refining your niche or keywords.');
+        } else {
+          toast.info('No new ideas returned. Try refining your niche or keywords.');
+        }
+        return;
       }
+      setIdeasEmpty(false);
+      // Append new ideas to existing ones (for "Generate More" — preserves prior batch)
+      const prevLen = ideas.length;
+      setIdeas((prev) => [...prev, ...generatedIdeas]);
+      // Expand the first newly-appended idea so the user sees fresh content immediately
+      setExpandedIdea(prevLen === 0 ? 0 : prevLen);
+      toast.success(`Generated ${generatedIdeas.length} new article ideas!`);
     },
     onError: (err: Error) => {
+      setIdeasEmpty(false);
       toast.error(err.message || 'Failed to generate ideas');
     },
   });
@@ -835,9 +769,10 @@ export function ContentListPage() {
     setPage(1);
   }, []);
 
-  const handleCreateFromIdea = useCallback(() => {
-    // Navigate to the Automation builder in "generate" mode
-    // This reuses the existing AI Automation workflow for one-time article generation
+  const handleCreateFromIdea = useCallback((_idea?: ArticleIdea) => {
+    // Navigate to the Automation builder in "generate" mode —
+    // reuses the existing AI Automation workflow for one-time article generation.
+    // The automation builder handles the actual article generation; no separate dialog here.
     navigate('automation', null, 'generate');
   }, [navigate]);
 
@@ -1175,21 +1110,73 @@ export function ContentListPage() {
             </button>
           </div>
 
-          {/* Content: CTA or Ideas List */}
+          {/* Content: Empty / Generating / Error / Results */}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {ideas.length === 0 ? (
-              /* CTA State */
-              <div className="flex flex-col items-center justify-center gap-4 px-4 py-10 text-center">
-                <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400/10 text-amber-700">
+            {ideasMutation.isError ? (
+              /* Error state */
+              <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
+                <span className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400">
+                  <AlertCircle className="h-[22px] w-[22px]" />
+                </span>
+                <p className="text-sm font-semibold text-foreground">Couldn&apos;t generate ideas</p>
+                <p className="text-xs text-muted-foreground">Something went wrong. Please try again.</p>
+                <Button
+                  className="rounded-full bg-amber-400 text-zinc-900 text-xs font-semibold hover:bg-amber-400/90 gap-1.5 w-full mt-2"
+                  onClick={() => ideasMutation.mutate()}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Try Again
+                </Button>
+              </div>
+            ) : ideasMutation.isPending ? (
+              /* Generating state */
+              <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
+                <p className="text-sm font-medium text-foreground">Generating SEO content ideas…</p>
+                <p className="text-xs text-muted-foreground">Analyzing your niche and keywords</p>
+              </div>
+            ) : ideasEmpty && ideas.length === 0 ? (
+              /* No ideas returned state */
+              <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
+                <span className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400/10 text-amber-700">
                   <Lightbulb className="h-[22px] w-[22px]" />
                 </span>
-                <p className="text-sm font-semibold text-foreground">Need Content Ideas?</p>
-                <p className="mb-2 text-xs text-muted-foreground">Let AI Help!</p>
-                <p className="mb-4 text-xs text-muted-foreground">
-                  Get AI-generated article title suggestions based on your site&apos;s niche and audience.
+                <p className="text-sm font-semibold text-foreground">No strong topic ideas found.</p>
+                <p className="text-xs text-muted-foreground">Try changing your niche or target keywords.</p>
+                <div className="w-full space-y-2 mt-2">
+                  <Input
+                    value={ideaNiche}
+                    onChange={(e) => setIdeaNiche(e.target.value)}
+                    placeholder="Your niche (e.g., productivity)"
+                    className="h-8 text-xs"
+                  />
+                  <Input
+                    value={ideaKeywords}
+                    onChange={(e) => setIdeaKeywords(e.target.value)}
+                    placeholder="Target keywords (optional)"
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <Button
+                  className="rounded-full bg-amber-400 text-zinc-900 text-xs font-semibold hover:bg-amber-400/90 gap-1.5 w-full mt-1"
+                  onClick={() => ideasMutation.mutate()}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Try Again
+                </Button>
+              </div>
+            ) : ideas.length === 0 ? (
+              /* Empty state */
+              <div className="flex flex-col items-center justify-center gap-4 px-4 py-10 text-center">
+                <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400/10 text-amber-700">
+                  <Sparkles className="h-[22px] w-[22px]" />
+                </span>
+                <p className="text-sm font-semibold text-foreground">Need Content Ideas? Let AI Help!</p>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Get AI-generated article topic suggestions based on your site&apos;s niche and target audience.
                 </p>
 
-                {/* Niche Input */}
+                {/* Niche + Keywords Inputs */}
                 <div className="w-full space-y-2 mb-2">
                   <Input
                     value={ideaNiche}
@@ -1219,9 +1206,9 @@ export function ContentListPage() {
                 </Button>
               </div>
             ) : (
-              /* Ideas List */
+              /* Results state */
               <div className="flex flex-col h-full">
-                <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+                <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 max-h-[60vh] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-track]:bg-transparent">
                   {ideas.map((idea, idx) => (
                     <IdeaCard
                       key={idx}
@@ -1229,20 +1216,9 @@ export function ContentListPage() {
                       index={idx}
                       expanded={expandedIdea === idx}
                       onToggle={() => setExpandedIdea(expandedIdea === idx ? null : idx)}
-                      onSave={() => {
-                        setSavedIdeas((prev) => new Set(prev).add(idx));
-                        toast.success('Idea saved!');
-                      }}
-                      onBookmark={() => {
-                        setBookmarkedIdeas((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(idx)) next.delete(idx);
-                          else next.add(idx);
-                          return next;
-                        });
-                      }}
+                      onSave={() => handleSaveIdea(idx)}
                       onCreateArticle={() => handleCreateFromIdea(idea)}
-                      isBookmarked={bookmarkedIdeas.has(idx)}
+                      isSaved={savedIdeas.has(idx)}
                     />
                   ))}
                 </div>
@@ -1256,14 +1232,14 @@ export function ContentListPage() {
                     onClick={() => ideasMutation.mutate()}
                     disabled={ideasMutation.isPending}
                   >
-                    {ideasMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                    Regenerate
+                    {ideasMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                    Generate More
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-7 text-[11px] gap-1"
-                    onClick={() => { setIdeas([]); setExpandedIdea(null); }}
+                    onClick={() => { setIdeas([]); setExpandedIdea(null); setIdeasEmpty(false); }}
                   >
                     <X className="h-3 w-3" />
                     Clear
@@ -1274,13 +1250,6 @@ export function ContentListPage() {
           </div>
         </div>
       </aside>
-
-      {/* AI Generate Dialog */}
-      <AIGenerateDialog
-        open={generateDialogOpen}
-        onOpenChange={setGenerateDialogOpen}
-        idea={selectedIdea}
-      />
 
       {/* Categories & Tags management modal */}
       <CategoriesTagsDialog open={catTagOpen} onOpenChange={setCatTagOpen} />
