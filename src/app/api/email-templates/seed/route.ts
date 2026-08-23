@@ -166,27 +166,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               <p style="margin:0;font-size:14px;color:#71717a;">If the button doesn\'t work, use this link: {{reset_url}}</p>
     `),
   },
-  // 4. Magic Login
-  {
-    name: 'Magic Login',
-    slug: 'magic-login',
-    subject: 'Your magic login link — {{site.name}}',
-    previewText: 'Click the link below to sign in to your account instantly.',
-    category: 'AUTHENTICATION',
-    htmlBody: buildEmailHtml('Magic Login', `
-              <h2 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Your Magic Login Link</h2>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">Hi {{customer.first_name}}, click the button below to sign in to your {{site.name}} account. This link will expire in 15 minutes.</p>
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
-                <tr>
-                  <td style="background-color:#18181b;border-radius:6px;">
-                    <a href="{{magic_url}}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Sign In to {{site.name}}</a>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:0;font-size:14px;color:#71717a;">If you didn\'t request this link, you can safely ignore it.</p>
-    `),
-  },
-  // 5. Invite User
+  // 4. Invite User
   {
     name: 'Invite User',
     slug: 'invite-user',
@@ -206,7 +186,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               <p style="margin:0;font-size:14px;color:#71717a;">This invitation will expire in 7 days. If you don\'t want to join, you can ignore this email.</p>
     `),
   },
-  // 6. Newsletter Confirmation
+  // 5. Newsletter Confirmation
   {
     name: 'Newsletter Confirmation',
     slug: 'newsletter-confirmation',
@@ -226,7 +206,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               <p style="margin:0;font-size:14px;color:#71717a;">If you didn\'t subscribe, you can safely ignore this email.</p>
     `),
   },
-  // 7. Newsletter Welcome
+  // 6. Newsletter Welcome
   {
     name: 'Newsletter Welcome',
     slug: 'newsletter-welcome',
@@ -245,7 +225,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               <p style="margin:0;font-size:14px;color:#71717a;">You can unsubscribe at any time using the link at the bottom of any email.</p>
     `),
   },
-  // 8. Newsletter Campaign
+  // 7. Newsletter Campaign
   {
     name: 'Newsletter Campaign',
     slug: 'newsletter-campaign',
@@ -266,7 +246,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               <p style="margin:0;font-size:14px;color:#71717a;">You\'re receiving this because you subscribed to the {{site.name}} newsletter.</p>
     `),
   },
-  // 9. Article Published
+  // 8. Article Published
   {
     name: 'Article Published',
     slug: 'article-published',
@@ -288,7 +268,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               </table>
     `),
   },
-  // 10. Article Scheduled
+  // 9. Article Scheduled
   {
     name: 'Article Scheduled',
     slug: 'article-scheduled',
@@ -319,7 +299,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               </table>
     `),
   },
-  // 11. Article Review Request
+  // 10. Article Review Request
   {
     name: 'Article Review Request',
     slug: 'article-review-request',
@@ -348,7 +328,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               </table>
     `),
   },
-  // 12. Review Approved
+  // 11. Review Approved
   {
     name: 'Review Approved',
     slug: 'review-approved',
@@ -375,7 +355,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               </table>
     `),
   },
-  // 13. Review Rejected
+  // 12. Review Rejected
   {
     name: 'Review Rejected',
     slug: 'review-rejected',
@@ -404,7 +384,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               </table>
     `),
   },
-  // 14. Comment Reply
+  // 13. Comment Reply
   {
     name: 'Comment Reply',
     slug: 'comment-reply',
@@ -431,7 +411,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               </table>
     `),
   },
-  // 15. Comment Approved
+  // 14. Comment Approved
   {
     name: 'Comment Approved',
     slug: 'comment-approved',
@@ -450,7 +430,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               </table>
     `),
   },
-  // 16. Comment Rejected
+  // 15. Comment Rejected
   {
     name: 'Comment Rejected',
     slug: 'comment-rejected',
@@ -464,136 +444,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               <p style="margin:0;font-size:14px;color:#71717a;">Thank you for your understanding.</p>
     `),
   },
-  // 17. Invoice Created
-  {
-    name: 'Invoice Created',
-    slug: 'invoice-created',
-    subject: 'Invoice #{{invoice.number}} has been created',
-    previewText: 'A new invoice is ready for your review. View the details and payment options.',
-    category: 'BILLING',
-    htmlBody: buildEmailHtml('Invoice Created', `
-              <h2 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Invoice #{{invoice.number}} 📄</h2>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">Hi {{customer.first_name}}, a new invoice has been generated for your account.</p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border:1px solid #e4e4e7;border-radius:8px;">
-                <tr>
-                  <td style="padding:20px;">
-                    <p style="margin:0 0 12px;font-size:14px;color:#71717a;font-weight:600;">INVOICE NUMBER</p>
-                    <p style="margin:0 0 16px;font-size:16px;color:#18181b;">{{invoice.number}}</p>
-                    <p style="margin:0 0 12px;font-size:14px;color:#71717a;font-weight:600;">AMOUNT DUE</p>
-                    <p style="margin:0 0 16px;font-size:20px;color:#18181b;font-weight:700;">{{invoice.amount}}</p>
-                    <p style="margin:0 0 12px;font-size:14px;color:#71717a;font-weight:600;">DUE DATE</p>
-                    <p style="margin:0;font-size:16px;color:#18181b;">{{invoice.due_date}}</p>
-                  </td>
-                </tr>
-              </table>
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0;">
-                <tr>
-                  <td style="background-color:#18181b;border-radius:6px;">
-                    <a href="{{invoice.url}}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">View Invoice</a>
-                  </td>
-                </tr>
-              </table>
-    `),
-  },
-  // 18. Invoice Paid
-  {
-    name: 'Invoice Paid',
-    slug: 'invoice-paid',
-    subject: 'Payment confirmed — Invoice #{{invoice.number}}',
-    previewText: 'Your payment has been received. Thank you for your business!',
-    category: 'BILLING',
-    htmlBody: buildEmailHtml('Invoice Paid', `
-              <h2 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Payment Confirmed ✅</h2>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">Hi {{customer.first_name}}, we\'ve received your payment. Thank you!</p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border:1px solid #e4e4e7;border-radius:8px;">
-                <tr>
-                  <td style="padding:20px;">
-                    <p style="margin:0 0 12px;font-size:14px;color:#71717a;font-weight:600;">INVOICE</p>
-                    <p style="margin:0 0 16px;font-size:16px;color:#18181b;">#{{invoice.number}}</p>
-                    <p style="margin:0 0 12px;font-size:14px;color:#71717a;font-weight:600;">AMOUNT PAID</p>
-                    <p style="margin:0 0 16px;font-size:20px;color:#18181b;font-weight:700;">{{invoice.amount}}</p>
-                    <p style="margin:0 0 12px;font-size:14px;color:#71717a;font-weight:600;">PAID ON</p>
-                    <p style="margin:0;font-size:16px;color:#18181b;">{{invoice.paid_at}}</p>
-                  </td>
-                </tr>
-              </table>
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0;">
-                <tr>
-                  <td style="background-color:#18181b;border-radius:6px;">
-                    <a href="{{invoice.url}}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Download Receipt</a>
-                  </td>
-                </tr>
-              </table>
-    `),
-  },
-  // 19. Payment Failed
-  {
-    name: 'Payment Failed',
-    slug: 'payment-failed',
-    subject: 'Payment failed — Invoice #{{invoice.number}}',
-    previewText: 'We were unable to process your payment. Please update your billing information.',
-    category: 'BILLING',
-    htmlBody: buildEmailHtml('Payment Failed', `
-              <h2 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Payment Failed ⚠️</h2>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">Hi {{customer.first_name}}, we were unable to process your payment for invoice <strong>#{{invoice.number}}</strong> in the amount of <strong>{{invoice.amount}}</strong>.</p>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">Please check your payment method and try again, or update your billing information.</p>
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0;">
-                <tr>
-                  <td style="background-color:#18181b;border-radius:6px;">
-                    <a href="{{billing_url}}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Update Payment Method</a>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:24px 0 0;font-size:14px;color:#71717a;">If you believe this is an error, please contact our support team.</p>
-    `),
-  },
-  // 20. Subscription Created
-  {
-    name: 'Subscription Created',
-    slug: 'subscription-created',
-    subject: 'Your {{subscription.plan}} subscription is now active',
-    previewText: 'Welcome to {{subscription.plan}}! Your subscription is now active.',
-    category: 'BILLING',
-    htmlBody: buildEmailHtml('Subscription Created', `
-              <h2 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Subscription Active 🎉</h2>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">Hi {{customer.first_name}}, your subscription is now active!</p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border:1px solid #e4e4e7;border-radius:8px;">
-                <tr>
-                  <td style="padding:20px;">
-                    <p style="margin:0 0 12px;font-size:14px;color:#71717a;font-weight:600;">PLAN</p>
-                    <p style="margin:0 0 16px;font-size:16px;color:#18181b;font-weight:600;">{{subscription.plan}}</p>
-                    <p style="margin:0 0 12px;font-size:14px;color:#71717a;font-weight:600;">BILLING CYCLE</p>
-                    <p style="margin:0 0 16px;font-size:16px;color:#18181b;">{{subscription.billing_cycle}}</p>
-                    <p style="margin:0 0 12px;font-size:14px;color:#71717a;font-weight:600;">NEXT BILLING DATE</p>
-                    <p style="margin:0;font-size:16px;color:#18181b;">{{subscription.next_billing}}</p>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:0;font-size:14px;color:#71717a;">You can manage your subscription settings at any time.</p>
-    `),
-  },
-  // 21. Subscription Cancelled
-  {
-    name: 'Subscription Cancelled',
-    slug: 'subscription-cancelled',
-    subject: 'Your subscription has been cancelled',
-    previewText: 'Your subscription has been cancelled. Here\'s what happens next.',
-    category: 'BILLING',
-    htmlBody: buildEmailHtml('Subscription Cancelled', `
-              <h2 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Subscription Cancelled</h2>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">Hi {{customer.first_name}}, your <strong>{{subscription.plan}}</strong> subscription has been cancelled as requested.</p>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">Your access will remain active until <strong>{{subscription.ends_at}}</strong>. After that date, your account will be downgraded to the free plan.</p>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">We\'re sorry to see you go! If you change your mind, you can reactivate your subscription at any time.</p>
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0;">
-                <tr>
-                  <td style="background-color:#18181b;border-radius:6px;">
-                    <a href="{{subscription.reactivate_url}}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Reactivate Subscription</a>
-                  </td>
-                </tr>
-              </table>
-    `),
-  },
-  // 22. Backup Completed
+  // 16. Backup Completed
   {
     name: 'Backup Completed',
     slug: 'backup-completed',
@@ -615,7 +466,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               </table>
     `),
   },
-  // 23. Backup Failed
+  // 17. Backup Failed
   {
     name: 'Backup Failed',
     slug: 'backup-failed',
@@ -642,96 +493,7 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
               </table>
     `),
   },
-  // 24. API Key Created
-  {
-    name: 'API Key Created',
-    slug: 'api-key-created',
-    subject: 'New API key created — {{site.name}}',
-    previewText: 'A new API key has been created for your account. Make sure to store it securely.',
-    category: 'SYSTEM',
-    htmlBody: buildEmailHtml('API Key Created', `
-              <h2 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">New API Key Created 🔑</h2>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">Hi {{customer.first_name}}, a new API key has been created for your account on <strong>{{site.name}}</strong>.</p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border:1px solid #e4e4e7;border-radius:8px;">
-                <tr>
-                  <td style="padding:20px;">
-                    <p style="margin:0 0 8px;font-size:14px;color:#71717a;font-weight:600;">KEY NAME</p>
-                    <p style="margin:0 0 16px;font-size:16px;color:#18181b;">{{api_key.name}}</p>
-                    <p style="margin:0 0 8px;font-size:14px;color:#71717a;font-weight:600;">CREATED</p>
-                    <p style="margin:0;font-size:16px;color:#18181b;">{{api_key.created_at}}</p>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:0 0 16px;font-size:14px;color:#71717a;">⚠️ If you did not create this API key, please revoke it immediately and contact support.</p>
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0;">
-                <tr>
-                  <td style="background-color:#18181b;border-radius:6px;">
-                    <a href="{{api_keys_url}}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Manage API Keys</a>
-                  </td>
-                </tr>
-              </table>
-    `),
-  },
-  // 25. Webhook Failed
-  {
-    name: 'Webhook Failed',
-    slug: 'webhook-failed',
-    subject: 'Webhook delivery failed — {{webhook.name}}',
-    previewText: 'A webhook delivery has failed after multiple retries. Please check the endpoint.',
-    category: 'SYSTEM',
-    htmlBody: buildEmailHtml('Webhook Failed', `
-              <h2 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Webhook Delivery Failed ⚠️</h2>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">A webhook delivery has failed after multiple retries.</p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border:1px solid #e4e4e7;border-radius:8px;">
-                <tr>
-                  <td style="padding:20px;">
-                    <p style="margin:0 0 8px;font-size:14px;color:#71717a;">Webhook: <strong style="color:#18181b;">{{webhook.name}}</strong></p>
-                    <p style="margin:0 0 8px;font-size:14px;color:#71717a;">URL: <strong style="color:#18181b;">{{webhook.url}}</strong></p>
-                    <p style="margin:0 0 8px;font-size:14px;color:#71717a;">Status Code: <strong style="color:#dc2626;">{{webhook.status_code}}</strong></p>
-                    <p style="margin:0 0 8px;font-size:14px;color:#71717a;">Attempts: <strong style="color:#18181b;">{{webhook.attempts}}</strong></p>
-                    <p style="margin:0;font-size:14px;color:#71717a;">Error: <strong style="color:#dc2626;">{{webhook.error}}</strong></p>
-                  </td>
-                </tr>
-              </table>
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0;">
-                <tr>
-                  <td style="background-color:#18181b;border-radius:6px;">
-                    <a href="{{webhooks_url}}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Manage Webhooks</a>
-                  </td>
-                </tr>
-              </table>
-    `),
-  },
-  // 26. SEO Audit Completed
-  {
-    name: 'SEO Audit Completed',
-    slug: 'seo-audit-completed',
-    subject: 'SEO audit completed for "{{page.title}}"',
-    previewText: 'Your SEO audit is complete. Review the score and recommendations.',
-    category: 'SYSTEM',
-    htmlBody: buildEmailHtml('SEO Audit Completed', `
-              <h2 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">SEO Audit Complete 📊</h2>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">The SEO audit for <strong>{{page.title}}</strong> has been completed.</p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border:1px solid #e4e4e7;border-radius:8px;">
-                <tr>
-                  <td style="padding:20px;">
-                    <p style="margin:0 0 16px;font-size:14px;color:#71717a;">Overall Score</p>
-                    <p style="margin:0 0 16px;font-size:32px;color:#18181b;font-weight:700;">{{audit.score}}/100</p>
-                    <p style="margin:0 0 8px;font-size:14px;color:#71717a;">Issues Found: <strong style="color:#18181b;">{{audit.issues}}</strong></p>
-                    <p style="margin:0;font-size:14px;color:#71717a;">Suggestions: <strong style="color:#18181b;">{{audit.suggestions}}</strong></p>
-                  </td>
-                </tr>
-              </table>
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0;">
-                <tr>
-                  <td style="background-color:#18181b;border-radius:6px;">
-                    <a href="{{audit.url}}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">View Full Report</a>
-                  </td>
-                </tr>
-              </table>
-    `),
-  },
-  // 27. AI Generation Finished
+  // 18. AI Generation Finished
   {
     name: 'AI Generation Finished',
     slug: 'ai-generation-finished',
@@ -760,41 +522,6 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
                   </td>
                 </tr>
               </table>
-    `),
-  },
-  // 28. Media Upload Completed
-  {
-    name: 'Media Upload Completed',
-    slug: 'media-upload-completed',
-    subject: 'Media upload complete — {{media.filename}}',
-    previewText: 'Your media file has been successfully uploaded and processed.',
-    category: 'SYSTEM',
-    htmlBody: buildEmailHtml('Media Upload Completed', `
-              <h2 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Upload Complete 📁</h2>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">Your media file has been successfully uploaded to <strong>{{site.name}}</strong>.</p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border:1px solid #e4e4e7;border-radius:8px;">
-                <tr>
-                  <td style="padding:20px;">
-                    <p style="margin:0 0 8px;font-size:14px;color:#71717a;">File: <strong style="color:#18181b;">{{media.filename}}</strong></p>
-                    <p style="margin:0 0 8px;font-size:14px;color:#71717a;">Size: <strong style="color:#18181b;">{{media.size}}</strong></p>
-                    <p style="margin:0;font-size:14px;color:#71717a;">Type: <strong style="color:#18181b;">{{media.type}}</strong></p>
-                  </td>
-                </tr>
-              </table>
-    `),
-  },
-  // 29. System Notification
-  {
-    name: 'System Notification',
-    slug: 'system-notification',
-    subject: '{{notification.title}} — {{site.name}}',
-    previewText: '{{notification.message}}',
-    category: 'SYSTEM',
-    htmlBody: buildEmailHtml('System Notification', `
-              <h2 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">{{notification.title}}</h2>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">Hi {{customer.first_name}},</p>
-              <div style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3f3f46;">{{notification.message}}</div>
-              <p style="margin:0;font-size:14px;color:#71717a;">If you have any questions, please contact our support team.</p>
     `),
   },
 ];

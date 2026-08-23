@@ -53,7 +53,7 @@ function parseHash(hash: string): {
     // Settings — ALL children must be here
     'settings', 'general', 'localization', 'reading', 'discussion',
     'seo', 'media', 'search', 'email', 'security', 'api', 'ai', 'cache',
-    'maintenance', 'multi-site', 'import-export', 'advanced',
+    'maintenance', 'multi-site', 'import-export', 'advanced', 'smtp',
     // Audit
     'audit',
   ]);

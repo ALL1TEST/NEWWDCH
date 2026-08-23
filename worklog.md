@@ -517,3 +517,84 @@ Stage Summary:
 - No broken routes, no dead links, no TypeScript errors.
 - Shared functionality preserved: Settings (separate), Backups (separate), AI (separate) all still work.
 - Also cleaned up stale Monitoring entries from the command palette.
+
+---
+Task ID: SMTP-RECREATE-1
+Agent: main (orchestrator)
+Task: Recreate the complete SMTP Settings system (lost/reverted) — install nodemailer, schema migration, transport helper, API routes, settings page, sidebar nav entry
+
+Work Log:
+
+1. INITIALIZATION
+   - Ran the fullstack init script (skipped code download — uses existing project)
+   - Ran `bun add nodemailer @types/nodemailer` → installed nodemailer@9.0.5 + @types/nodemailer@8.0.1
+
+2. PRISMA SCHEMA MIGRATION
+   - prisma/schema.prisma → SmtpSetting model: added `encryption String @default("STARTTLS")` (comment: none | SSL | TLS | STARTTLS) and `timeout Int @default(10)` (comment: connection timeout in seconds).
+   - Ran `bun run db:push` — schema synced to SQLite db/custom.db; Prisma Client regenerated.
+
+3. SMTP TRANSPORT HELPER (src/lib/smtp/transport.ts)
+   - Exported `SmtpConfigInput` interface (provider, host, port, encryption, username, password, fromName, fromEmail, replyTo, timeout, isActive).
+   - Exported `createSmtpTransport(cfg)` — decrypts password via `decrypt()` from `@/lib/encryption` if it looks encrypted (base64, 100+ chars); throws if password contains masked `•` placeholder; maps encryption (SSL→secure=true, STARTTLS→requireTLS=true, none→ignoreTLS=true); sets connectionTimeout/greetingTimeout/socketTimeout from cfg.timeout.
+   - Exported `resolveFromAddress(cfg)` — returns `"Name <email>"` format.
+
+4. API ROUTES (all use the `{ error: { code, message }, meta: { requestId } }` envelope)
+
+   - src/app/api/settings/smtp/route.ts — GET + PUT:
+     * GET: finds default SMTP setting (isDefault: true, scoped via `getSiteWhere`); returns it with password masked as `••••••••`. Returns a default config object if no record exists.
+     * PUT: validates with `zod/v4` (host, port, encryption enum [none|SSL|STARTTLS], username, password, fromName, fromEmail, replyTo, timeout, isActive, provider as plain string with default 'SMTP'). Encrypts password via `encrypt()` if not the masked placeholder; keeps existing password when placeholder or empty. Upserts the default record.
+
+   - src/app/api/settings/smtp/test/route.ts — POST (test connection):
+     * Accepts optional `{ settings?: SmtpConfigInput }` body. If `settings` is omitted, uses saved DB settings. If `settings.password` contains `•`, falls back to saved DB password (and decrypts it).
+     * Creates transport with `createSmtpTransport()` and calls `transport.verify()`.
+     * Returns `SMTP_CONNECTION_FAILED` (HTTP 422) with detailed message on failure, or success message on pass.
+
+   - src/app/api/settings/smtp/test-email/route.ts — POST (send test email):
+     * Validates `{ email, settings? }` with `zod/v4`. Same password resolution as test route.
+     * Calls `transport.sendMail()` with a styled HTML test email containing host/port/encryption/from/sent-at.
+     * Returns `SMTP_SEND_FAILED` (HTTP 422) or success payload with `messageId`.
+
+5. SMTP SETTINGS PAGE (src/modules/settings/smtp-settings-page.tsx)
+   - Six sections: (1) Email Sending toggle, (2) SMTP Connection (host, port, encryption, timeout), (3) Authentication (username, password w/ show/hide eye), (4) Sender Identity (fromName, fromEmail, replyTo), (5) Save Settings button, (6) Diagnostics (test connection + send test email with input + green/red status boxes), (7) Security note (AES-256-GCM encryption).
+   - Encryption dropdown: STARTTLS (Recommended · port 587), SSL/TLS (Implicit TLS · port 465), None (No encryption · port 25). NO "Force TLS" option. NO provider dropdown.
+   - `handleEncryptionChange` auto-suggests the matching port when encryption changes (STARTTLS→587, SSL→465, None→25).
+   - Password handling: When `passwordInput === PASSWORD_PLACEHOLDER` ('••••••••'), renders a masked display + "Change" button that clears into editable mode. Editable input uses type=password with show/hide eye toggle and strips any stray `•` chars from the typed value (placeholder-replacement edge case). "• saved" indicator shown in emerald when a saved password exists.
+   - Uses `useQuery` to load settings, `useMutation` for save (PUT), test (POST /test), send-test-email (POST /test-email). No `useEffect` — derived state pattern (`draft` overrides + `saved` values → `current`).
+   - shadcn/ui components used: Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Input, Label, Switch, Separator, Select. lucide-react icons: Server, Save, Loader2, CheckCircle2, XCircle, Mail, Eye, EyeOff, Send, ShieldCheck, Plug, Settings as SettingsIcon.
+   - Uses `toast` from sonner, `cn` from `@/lib/utils`, `getApi/putApi/postApi` from `@/lib/api-client`.
+
+6. SETTINGS MODULE ROUTING (src/modules/settings/index.tsx)
+   - Imported `useNavigationStore` and `SmtpSettingsPage`. If `currentSubPage === 'smtp'` → render `<SmtpSettingsPage />`. Otherwise → render `<SettingsPage />` (Discussion). Re-exported `SmtpSettingsPage`.
+
+7. NAVIGATION STORE (src/lib/stores/navigation-store.ts)
+   - Added `'smtp'` to the Settings section of `SUB_PAGE_KEYWORDS` so `#settings/smtp` is parsed as a sub-page (not an item ID).
+
+8. SIDEBAR NAV (src/components/layout/sidebar.tsx)
+   - Added `Server` to lucide-react imports and `'Server': Server` to `ICON_MAP`.
+   - Added `{ label: 'SMTP Settings', href: '#settings/smtp', icon: 'Server' }` as a new child of the Settings NAV_ITEMS entry (alongside Discussion).
+   - `'settings': 'Settings'` was already in `ROUTE_PREFIX_TO_SECTION` (verified).
+
+9. BREADCRUMBS (src/components/layout/breadcrumbs.tsx)
+   - `'settings'` is already in the conditional that hides breadcrumbs for the Settings module — no change needed.
+
+10. END-TO-END API VERIFICATION (via curl against running dev server)
+   - GET /api/settings/smtp → 200, returns default config (id: null, host: '', port: 587, encryption: STARTTLS, isActive: true).
+   - PUT /api/settings/smtp with new password → 200, password masked in response, record created (id: cmt5sa7rw0000...).
+   - PUT again with masked placeholder password → 200, password preserved (still '••••••••'), other fields updated.
+   - POST /api/settings/smtp/test with `{}` (use saved) → SMTP_CONNECTION_FAILED: getaddrinfo ENOTFOUND smtp.example.com (expected — fake host).
+   - POST /api/settings/smtp/test with `settings.password` containing `•` and no saved record → SMTP_NOT_CONFIGURED (correct behavior).
+   - POST /api/settings/smtp/test-email with `{email:'recipient@example.com'}` → SMTP_SEND_FAILED: getaddrinfo ENOTFOUND (expected).
+   - POST /api/settings/smtp/test-email with `{}` → VALIDATION_ERROR: "A valid recipient email is required".
+   - POST /api/settings/smtp/test-email with `{email:'bad-email'}` → VALIDATION_ERROR on email field.
+   - Cleaned up the test record via deleteMany() so the user starts fresh.
+
+11. LINT CHECK
+   - `bun run lint` — 12 problems (6 errors, 6 warnings), ALL in pre-existing files (content-create-page.tsx, content-edit-page.tsx, seo-broken-links-page.tsx, seo-social-preview-page.tsx, data-table.tsx, webhooks-page.tsx, plus duplicate paths in NEWWDCH/). NONE in any new or modified file for this task.
+
+Stage Summary:
+- Complete SMTP Settings system re-created from scratch at `Settings → SMTP Settings`.
+- Files created: src/lib/smtp/transport.ts, src/app/api/settings/smtp/route.ts, src/app/api/settings/smtp/test/route.ts, src/app/api/settings/smtp/test-email/route.ts, src/modules/settings/smtp-settings-page.tsx.
+- Files modified: prisma/schema.prisma (added encryption + timeout fields), src/modules/settings/index.tsx (sub-page routing), src/lib/stores/navigation-store.ts (added 'smtp' keyword), src/components/layout/sidebar.tsx (added Server icon + SMTP Settings nav entry).
+- Password security: encrypted at rest via AES-256-GCM (existing `@/lib/encryption`); masked placeholder returned from GET; existing password preserved on PUT when placeholder submitted; backend decrypts ciphertext (base64, 100+ chars heuristic) before connecting.
+- All three API endpoints verified end-to-end against the running dev server — they correctly return the standard `{ error: { code, message }, meta: { requestId } }` envelope and the right HTTP status codes (200, 400, 422, 500).
+- No new lint errors introduced. Dev server running cleanly on port 3000 (no ⨯ or compile errors in dev.log).

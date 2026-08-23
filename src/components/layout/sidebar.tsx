@@ -46,6 +46,7 @@ import {
   AlertTriangle,
   Gauge,
   Zap,
+  Server,
   type LucideIcon,
 } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
@@ -124,6 +125,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'AlertTriangle': AlertTriangle,
   'Gauge': Gauge,
   'Zap': Zap,
+  'Server': Server,
 };
 
 function getIcon(iconName?: string): LucideIcon {
@@ -205,6 +207,7 @@ const NAV_ITEMS: NavItem[] = [
     requiredRole: 'ADMIN',
     children: [
       { label: 'Discussion', href: '#settings/discussion', icon: 'MessageSquare' },
+      { label: 'SMTP Settings', href: '#settings/smtp', icon: 'Server' },
     ],
   },
 ];

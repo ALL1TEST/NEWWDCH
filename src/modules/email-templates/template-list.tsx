@@ -21,7 +21,6 @@ import {
   ChevronRight,
   Loader2,
   Cpu,
-  Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -270,35 +269,6 @@ function SendTestDialog({
   );
 }
 
-// -------------------- Seed Banner --------------------
-
-function SeedBanner({ onSeed }: { onSeed: () => void }) {
-  return (
-    <div className="flex items-center gap-3 rounded-lg border border-dashed border-amber-300/50 bg-amber-50/50 dark:border-amber-500/20 dark:bg-amber-900/10 px-4 py-3">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
-        <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-foreground">
-          No templates yet
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Get started quickly by seeding 29 professional default system templates.
-        </p>
-      </div>
-      <Button
-        size="sm"
-        variant="outline"
-        className="shrink-0 border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-900/20"
-        onClick={onSeed}
-      >
-        <Cpu className="h-3.5 w-3.5 mr-1.5" />
-        Seed Defaults
-      </Button>
-    </div>
-  );
-}
-
 // -------------------- Category Count Query --------------------
 
 function useCategoryCounts() {
@@ -347,6 +317,7 @@ export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
   const [deleteTarget, setDeleteTarget] = useState<EmailTemplate | null>(null);
   const [revertTarget, setRevertTarget] = useState<EmailTemplate | null>(null);
   const [sendTestTarget, setSendTestTarget] = useState<string | null>(null);
+  const [seedDialogOpen, setSeedDialogOpen] = useState(false);
 
   // -------------------- Derived Sort Values --------------------
   const [sortField, sortOrder] = useMemo(() => {
@@ -464,10 +435,19 @@ export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
   });
 
   const seedMutation = useMutation({
-    mutationFn: () => postApi('/api/email-templates/seed'),
-    onSuccess: () => {
-      toast.success('Default templates seeded successfully');
+    mutationFn: () => postApi<{ seeded: number; skipped: number; total: number }>('/api/email-templates/seed'),
+    onSuccess: (res: any) => {
+      const data = res?.data ?? res ?? { seeded: 0, skipped: 0, total: 0 };
+      const { seeded, skipped } = data;
       queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
+      if (seeded > 0) {
+        toast.success(`${seeded} default template${seeded > 1 ? 's' : ''} created${skipped > 0 ? `, ${skipped} already existed` : ''}`);
+      } else if (skipped > 0) {
+        toast.info('All default email templates are already available.');
+      } else {
+        toast.info('No default templates to seed.');
+      }
+      setSeedDialogOpen(false);
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to seed templates');
@@ -487,17 +467,28 @@ export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
         title="Email Templates"
         description="Manage email templates for all system notifications, newsletters, and transactional emails."
         action={
-          <Button size="sm" onClick={handleCreate}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Template
-          </Button>
+          <div className="flex flex-col items-end gap-2">
+            <Button size="sm" onClick={handleCreate}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Template
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setSeedDialogOpen(true)}
+              disabled={seedMutation.isPending}
+              className="border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40"
+            >
+              {seedMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Cpu className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Seed Defaults
+            </Button>
+          </div>
         }
       />
-
-      {/* Seed Banner */}
-      {totalCount === 0 && !isLoading && (
-        <SeedBanner onSeed={() => seedMutation.mutate()} />
-      )}
 
       {/* Category Tabs */}
       <div className="border-b">
@@ -886,6 +877,17 @@ export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
           if (revertTarget) revertMutation.mutate(revertTarget.id);
         }}
         isLoading={revertMutation.isPending}
+      />
+
+      {/* Seed Defaults Confirm Dialog */}
+      <ConfirmDialog
+        open={seedDialogOpen}
+        onOpenChange={setSeedDialogOpen}
+        title="Seed Default Templates"
+        description="This will add any missing default system email templates. Existing templates (including your custom ones) will not be modified."
+        confirmLabel="Seed Defaults"
+        onConfirm={() => seedMutation.mutate()}
+        isLoading={seedMutation.isPending}
       />
     </div>
   );

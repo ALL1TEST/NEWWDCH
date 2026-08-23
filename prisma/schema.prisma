@@ -2449,6 +2449,8 @@ model SmtpSetting {
   provider  EmailProvider @default(SMTP)
   host      String        @default("")
   port      Int           @default(587)
+  encryption String       @default("STARTTLS") // none | SSL | TLS | STARTTLS
+  timeout   Int           @default(10) // connection timeout in seconds
   username  String        @default("")
   password  String        @default("")
   fromName  String        @default("")
