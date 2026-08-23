@@ -4,7 +4,6 @@ import { useTheme } from 'next-themes';
 import { useState, useCallback, useEffect } from 'react';
 import {
   Search,
-  Bell,
   Sun,
   Moon,
   User,
@@ -26,6 +25,7 @@ import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useSidebarStore } from '@/lib/stores/sidebar-store';
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
 import { useLocaleStore } from '@/lib/i18n';
+import { useSubscriptionStore, getPlanLabel } from '@/lib/stores/subscription-store';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -38,6 +38,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Breadcrumbs } from '@/components/layout/breadcrumbs';
+import { NotificationBell } from '@/components/layout/notification-bell';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -440,6 +441,9 @@ export function Topbar() {
     closeMobile();
   };
 
+  // Current plan for the avatar badge
+  const { currentPlan } = useSubscriptionStore();
+
   return (
     <header className="h-14 shrink-0 border-b bg-background flex items-center gap-2 px-3 sm:px-4">
       {/* Mobile menu toggle + Sidebar trigger */}
@@ -492,26 +496,34 @@ export function Topbar() {
         </Button>
 
         {/* Notifications */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative h-8 w-8"
-          onClick={() => handleNavigate('notifications')}
-        >
-          <Bell className="h-4 w-4" />
-          <span className="sr-only">Notifications</span>
-        </Button>
+        <NotificationBell />
 
         {/* User dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-              <Avatar className="h-8 w-8">
+            <Button variant="ghost" className="relative h-8 w-8 rounded-full ml-2">
+              <Avatar className={cn(
+                'h-8 w-8 rounded-full ring-2 ring-offset-2 ring-offset-background',
+                currentPlan.badgeVariant === 'beta' && 'ring-amber-500',
+                currentPlan.badgeVariant === 'pro' && 'ring-violet-500',
+                currentPlan.badgeVariant === 'max' && 'ring-emerald-500',
+              )}>
                 <AvatarImage src={user?.avatarUrl ?? undefined} alt={user?.name ?? 'User'} />
                 <AvatarFallback className="text-xs">
                   {user ? getInitials(user.name) : 'U'}
                 </AvatarFallback>
               </Avatar>
+              {/* Plan badge centered at the bottom of the avatar */}
+              <span
+                className={cn(
+                  'absolute -bottom-1.5 left-1/2 -translate-x-1/2 flex items-center rounded-md px-1.5 py-0.5 text-[8px] font-bold leading-none whitespace-nowrap ring-2 ring-background',
+                  currentPlan.badgeVariant === 'beta' && 'bg-amber-500 text-white',
+                  currentPlan.badgeVariant === 'pro' && 'bg-violet-500 text-white',
+                  currentPlan.badgeVariant === 'max' && 'bg-emerald-500 text-white',
+                )}
+              >
+                {getPlanLabel(currentPlan.badgeVariant)}
+              </span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56" align="end" forceMount>
@@ -563,11 +575,7 @@ export function Topbar() {
               </div>
               <DropdownMenuItem onClick={() => handleNavigate('billing')}>
                 <CreditCard className="mr-2 h-4 w-4" />
-                Billing
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleNavigate('settings')}>
-                <Settings className="mr-2 h-4 w-4" />
-                Settings
+                Manage Subscription
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
