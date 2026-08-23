@@ -489,37 +489,68 @@ export function AutomationBuilderPage() {
               )}
               <Separator />
               {/* Enhanced Workflow Preview */}
-              <div className="rounded-xl border bg-gradient-to-br from-muted/40 to-muted/10 p-5 space-y-3">
+              <div className="rounded-xl border bg-gradient-to-br from-muted/40 to-muted/10 p-5 space-y-4">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Workflow Preview</p>
-                <div className="space-y-2.5">
+                <div className="space-y-3">
+                  {/* Trigger */}
                   <div className="flex items-start gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 dark:bg-amber-900/20 shrink-0"><Zap className="h-4 w-4 text-amber-600 dark:text-amber-400" /></div>
-                    <div><p className="text-sm font-medium">{triggerType === 'SCHEDULED' ? `Every ${frequency.toLowerCase()} at ${time}` : 'Manual trigger'}</p></div>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 dark:bg-amber-900/20 shrink-0">
+                      <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div className="pt-1">
+                      <p className="text-sm font-medium">{triggerType === 'SCHEDULED' ? `Every ${frequency.toLowerCase()} at ${time}` : 'Manual trigger'}</p>
+                    </div>
                   </div>
                   <div className="ml-4 h-4 w-px bg-border" />
+
+                  {/* Content */}
                   <div className="flex items-start gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-50 dark:bg-sky-900/20 shrink-0"><FileText className="h-4 w-4 text-sky-600 dark:text-sky-400" /></div>
-                    <div className="flex-1">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-50 dark:bg-sky-900/20 shrink-0">
+                      <FileText className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">{topic || 'Untitled'}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">🔑 {kwPreview}</p>
-                      <p className="text-xs text-muted-foreground">✍️ {tone === 'Custom' ? customTone : tone} · {contentLength === 'Custom' ? `${customWordCount} words` : contentLength}</p>
-                      <p className="text-xs text-muted-foreground">📋 {structParts.join(' + ') || 'None'}</p>
+                      <div className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+                        <span className="text-muted-foreground/60">Keywords</span>
+                        <span className="text-muted-foreground">{kwPreview}</span>
+                        <span className="text-muted-foreground/60">Tone</span>
+                        <span className="text-muted-foreground">{tone === 'Custom' ? customTone : tone}</span>
+                        <span className="text-muted-foreground/60">Length</span>
+                        <span className="text-muted-foreground">{contentLength === 'Custom' ? `${customWordCount} words` : contentLength}</span>
+                        <span className="text-muted-foreground/60">Structure</span>
+                        <span className="text-muted-foreground">{structParts.join(' + ') || 'None'}</span>
+                      </div>
                     </div>
                   </div>
                   <div className="ml-4 h-4 w-px bg-border" />
+
+                  {/* SEO + Media */}
                   <div className="flex items-start gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-900/20 shrink-0"><Sparkles className="h-4 w-4 text-violet-600 dark:text-violet-400" /></div>
-                    <div className="flex-1">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-900/20 shrink-0">
+                      <Sparkles className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">SEO + Media</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">🔍 {seoParts.join(', ') || 'None'}</p>
-                      <p className="text-xs text-muted-foreground">🖼 {mediaPreview}</p>
-                      <p className="text-xs text-muted-foreground">📐 {placementLabel}</p>
+                      <div className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+                        <span className="text-muted-foreground/60">SEO</span>
+                        <span className="text-muted-foreground">{seoParts.join(', ') || 'None'}</span>
+                        <span className="text-muted-foreground/60">Media</span>
+                        <span className="text-muted-foreground">{mediaPreview}</span>
+                        <span className="text-muted-foreground/60">Placement</span>
+                        <span className="text-muted-foreground">{placementLabel}</span>
+                      </div>
                     </div>
                   </div>
                   <div className="ml-4 h-4 w-px bg-border" />
+
+                  {/* Final Action */}
                   <div className="flex items-start gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-900/20 shrink-0"><Send className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /></div>
-                    <div><p className="text-sm font-medium">{finalAction === 'DRAFT' ? 'Save as Draft' : finalAction === 'REVIEW' ? 'Send to Review' : finalAction === 'PUBLISH' ? 'Publish Immediately' : `Schedule: ${publishDate || 'TBD'} ${publishTime || ''}`}</p></div>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-900/20 shrink-0">
+                      <Send className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div className="pt-1">
+                      <p className="text-sm font-medium">{finalAction === 'DRAFT' ? 'Save as Draft' : finalAction === 'REVIEW' ? 'Send to Review' : finalAction === 'PUBLISH' ? 'Publish Immediately' : `Schedule: ${publishDate || 'TBD'} ${publishTime || ''}`}</p>
+                    </div>
                   </div>
                 </div>
               </div>
