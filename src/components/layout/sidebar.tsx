@@ -190,13 +190,9 @@ const NAV_ITEMS: NavItem[] = [
     icon: 'Settings',
     requiredRole: 'ADMIN',
     children: [
-      // Communications — email & notifications
-      { label: 'Communications', href: '', isSeparator: true },
       { label: 'Email Templates', href: '#email-templates', icon: 'MailTemplate' },
       { label: 'SMTP Settings', href: '#settings/smtp', icon: 'Server' },
       { label: 'Notifications', href: '#notifications', icon: 'Bell' },
-      // System — backups & data management
-      { label: 'System', href: '', isSeparator: true },
       { label: 'Backups', href: '#backups', icon: 'Database' },
     ],
   },
