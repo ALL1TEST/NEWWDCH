@@ -172,9 +172,9 @@ export function NotificationBell() {
               </div>
             </ScrollArea>
           )}
-          <div className="border-t bg-muted/40">
+          <div className="relative z-10 border-t bg-muted">
             <button type="button" onClick={handleViewAll}
-              className="flex items-center justify-center gap-1.5 w-full py-2.5 text-sm font-medium text-primary hover:bg-muted/70 active:bg-muted transition-colors">
+              className="flex items-center justify-center gap-1.5 w-full py-2.5 text-sm font-medium text-primary hover:bg-muted/80 active:bg-accent transition-colors">
               View All <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
