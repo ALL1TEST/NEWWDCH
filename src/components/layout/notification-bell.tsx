@@ -11,7 +11,6 @@ import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { ConfirmDialog } from '@/components/patterns';
 import { getApi, postApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
@@ -160,7 +159,7 @@ export function NotificationBell() {
               <p className="text-[10px] text-muted-foreground mt-0.5">You're all caught up!</p>
             </div>
           ) : (
-            <ScrollArea className="max-h-80">
+            <div className="max-h-80 overflow-y-auto sidebar-thin-scroll">
               <div className="flex flex-col py-1">
                 {notifications.map((notification) => {
                   const icon = TYPE_ICON[notification.type] ?? TYPE_ICON.INFO;
@@ -193,7 +192,7 @@ export function NotificationBell() {
                   );
                 })}
               </div>
-            </ScrollArea>
+            </div>
           )}
 
           {/* Footer — fully opaque, on top of any overlapping content */}
