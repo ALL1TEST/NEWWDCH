@@ -835,10 +835,11 @@ export function ContentListPage() {
     setPage(1);
   }, []);
 
-  const handleCreateFromIdea = useCallback((idea: ArticleIdea) => {
-    setSelectedIdea(idea);
-    setGenerateDialogOpen(true);
-  }, []);
+  const handleCreateFromIdea = useCallback(() => {
+    // Navigate to the Automation builder in "generate" mode
+    // This reuses the existing AI Automation workflow for one-time article generation
+    navigate('automation', null, 'generate');
+  }, [navigate]);
 
   // Pagination range
   const pageNumbers = useMemo(() => {
@@ -904,7 +905,7 @@ export function ContentListPage() {
                   <Pencil className="mr-2 h-4 w-4" />
                   Article from scratch
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleCreateFromIdea(null)}>
+                <DropdownMenuItem onClick={() => handleCreateFromIdea()}>
                   <Sparkles className="mr-2 h-4 w-4" />
                   Generate with AI
                 </DropdownMenuItem>

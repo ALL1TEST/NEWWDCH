@@ -51,6 +51,11 @@ export function AutomationModule() {
     return <AutomationBuilderPage />;
   }
 
+  // Generate mode — same builder but with one-time manual generation
+  if (currentSubPage === 'generate') {
+    return <AutomationBuilderPage mode="generate" />;
+  }
+
   // Details page (view specific automation)
   if (currentItemId && (currentSubPage === 'details' || (!currentSubPage && false))) {
     return <AutomationDetailsPage automationId={currentItemId} />;

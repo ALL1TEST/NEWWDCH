@@ -67,16 +67,18 @@ function ConditionalBlock({ children }: { children: React.ReactNode }) {
 
 // -------------------- Component --------------------
 
-export function AutomationBuilderPage() {
+export function AutomationBuilderPage({ mode }: { mode?: 'generate' }) {
   const navigate = useNavigationStore((s) => s.navigate);
   const queryClient = useQueryClient();
-  const [step, setStep] = useState(1);
+  const isGenerateMode = mode === 'generate';
+  const [step, setStep] = useState(isGenerateMode ? 2 : 1);
+  const [generating, setGenerating] = useState(false);
   const keywordFileRef = useRef<HTMLInputElement>(null);
 
   // ── State (same as before, no logic changes) ──
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [triggerType, setTriggerType] = useState<'MANUAL' | 'SCHEDULED'>('SCHEDULED');
+  const [triggerType, setTriggerType] = useState<'MANUAL' | 'SCHEDULED'>(isGenerateMode ? 'MANUAL' : 'SCHEDULED');
   const [frequency, setFrequency] = useState('DAILY');
   const [time, setTime] = useState('09:00');
   const [topic, setTopic] = useState('');
@@ -177,9 +179,9 @@ export function AutomationBuilderPage() {
     reader.readAsText(file); if (keywordFileRef.current) keywordFileRef.current.value = '';
   };
 
-  // ── Create mutation (same logic) ──
+  // ── Create + Run mutation (generate mode creates automation, runs it, redirects to article) ──
   const createMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const finalAiKeywordCount = aiKeywordCount === 'Custom' ? parseInt(aiKeywordCustomCount) || 25 : parseInt(aiKeywordCount);
       const finalContentLength = contentLength === 'Custom' ? `Custom (${customWordCount} words)` : contentLength;
       const finalTone = tone === 'Custom' ? customTone : tone;
@@ -187,19 +189,68 @@ export function AutomationBuilderPage() {
       const finalImageStyle = imageStyle === 'Custom' ? customImageStyle : imageStyle;
       const finalAspectRatio = aspectRatio === 'Custom' ? customAspectRatio : aspectRatio;
       const finalImageTone = imageTone === 'Custom' ? customImageTone : imageTone;
+      const actualFinalAction = isGenerateMode ? 'DRAFT' : finalAction;
       const workflowConfig = JSON.stringify({
         contentGeneration: { topic, keywordSource, primaryKeyword: keywordSource === 'MANUAL' ? primaryKeyword : undefined, secondaryKeywords: keywordSource === 'MANUAL' ? secondaryKeywords : undefined, semanticKeywords: keywordSource === 'MANUAL' ? semanticKeywords : undefined, savedKeywordIds: keywordSource === 'SAVED' ? selectedSavedKeywordIds : undefined, aiKeywordCount: keywordSource === 'AI_GENERATE' ? finalAiKeywordCount : undefined, aiKeywordTone: keywordSource === 'AI_GENERATE' ? (aiKeywordTone === 'Custom' ? aiKeywordCustomTone : aiKeywordTone) : undefined, tone: finalTone, contentLength: finalContentLength, articleStructure: { introduction: structIntro, tableOfContents: structToc, h2Sections: structH2, h3Subsections: structH3, faqSection: structFaq, conclusion: structConclusion } },
         seoProcessing: { generateSeoTitle, generateMetaDescription, generateSlug, optimizePrimaryKeyword, includeSecondaryKeywords, includeSemanticKeywords, generateFaq, generateFaqSchema, generateArticleSchema },
         media: { source: mediaSource, folderId: mediaSource === 'MEDIA_LIBRARY' ? selectedFolderId : undefined, selectedMediaIds: mediaSource === 'MEDIA_LIBRARY' && selectedMediaIds.length > 0 ? selectedMediaIds : undefined, imageSelectionMode: mediaSource === 'MEDIA_LIBRARY' ? imageSelectionMode : undefined, generateFeaturedImage: mediaSource === 'AI_GENERATE' ? generateFeaturedImage : undefined, generateSectionImages: mediaSource === 'AI_GENERATE' ? generateSectionImages : undefined, imageCount: mediaSource === 'AI_GENERATE' ? finalImageCount : undefined, imageStyle: mediaSource === 'AI_GENERATE' ? finalImageStyle : undefined, aspectRatio: mediaSource === 'AI_GENERATE' ? finalAspectRatio : undefined, imageTone: mediaSource === 'AI_GENERATE' ? finalImageTone : undefined, imagePromptInstructions: mediaSource === 'AI_GENERATE' ? imagePromptInstructions : undefined, placement: mediaSource !== 'NONE' ? imagePlacement : undefined },
-        finalAction: { action: finalAction, publishDate: finalAction === 'SCHEDULE' ? publishDate : undefined, publishTime: finalAction === 'SCHEDULE' ? publishTime : undefined },
+        finalAction: { action: actualFinalAction, publishDate: actualFinalAction === 'SCHEDULE' ? publishDate : undefined, publishTime: actualFinalAction === 'SCHEDULE' ? publishTime : undefined },
       });
-      return postApi('/api/automations', { name, description, triggerType, scheduleConfig: JSON.stringify({ frequency, time }), workflowConfig });
+      const created = await postApi<any>('/api/automations', { name: isGenerateMode ? `Generate: ${topic}` : name, description, triggerType: isGenerateMode ? 'MANUAL' : triggerType, scheduleConfig: JSON.stringify({ frequency, time }), workflowConfig });
+      const automationId = created?.id || created?.data?.id;
+      queryClient.invalidateQueries({ queryKey: ['automations'] });
+
+      if (isGenerateMode && automationId) {
+        // Run the automation immediately
+        setGenerating(true);
+        await postApi(`/api/automations/${automationId}/run`);
+        // Poll for completion — check the run status until it finishes
+        let articleId: string | null = null;
+        for (let attempt = 0; attempt < 30; attempt++) {
+          await new Promise(r => setTimeout(r, 2000));
+          try {
+            const runRes = await getApi<any>(`/api/automations/${automationId}`);
+            const runData = runRes?.data ?? runRes;
+            // Check the latest run's generatedArticleId
+            const runs = runData?.runs ?? [];
+            const latestRun = runs[0];
+            if (latestRun?.status === 'COMPLETED' && latestRun?.generatedArticleId) {
+              articleId = latestRun.generatedArticleId;
+              break;
+            }
+            if (latestRun?.status === 'FAILED') {
+              throw new Error(latestRun?.errorMessage || 'AI generation failed');
+            }
+          } catch { /* keep polling */ }
+        }
+        return { articleId };
+      }
+      return { articleId: null };
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['automations'] }); toast.success('Automation created'); navigate('automation'); },
-    onError: (err: Error) => toast.error(err.message || 'Failed'),
+    onSuccess: (result: any) => {
+      if (isGenerateMode) {
+        setGenerating(false);
+        if (result?.articleId) {
+          toast.success('Article generated successfully');
+          navigate('content', result.articleId);
+        } else {
+          toast.success('Generation completed — check your articles');
+          navigate('content');
+        }
+      } else {
+        toast.success('Automation created');
+        navigate('automation');
+      }
+    },
+    onError: (err: Error) => {
+      setGenerating(false);
+      toast.error(err.message || 'Failed');
+    },
   });
 
-  const steps = [{ num: 1, label: 'Trigger', icon: Zap, desc: 'When to run' }, { num: 2, label: 'Content', icon: FileText, desc: 'What to generate' }, { num: 3, label: 'SEO + Media', icon: Sparkles, desc: 'Optimization & images' }, { num: 4, label: 'Action', icon: Send, desc: 'Final output' }];
+  const steps = isGenerateMode
+    ? [{ num: 2, label: 'Content', icon: FileText, desc: 'What to generate' }, { num: 3, label: 'SEO + Media', icon: Sparkles, desc: 'Optimization & images' }, { num: 4, label: 'Action', icon: Send, desc: 'Final output' }]
+    : [{ num: 1, label: 'Trigger', icon: Zap, desc: 'When to run' }, { num: 2, label: 'Content', icon: FileText, desc: 'What to generate' }, { num: 3, label: 'SEO + Media', icon: Sparkles, desc: 'Optimization & images' }, { num: 4, label: 'Action', icon: Send, desc: 'Final output' }];
 
   const canProceed = useMemo(() => {
     if (step === 1) return name.trim().length > 0;
@@ -221,15 +272,15 @@ export function AutomationBuilderPage() {
       <div>
         <button
           type="button"
-          onClick={() => navigate('automation')}
+          onClick={() => navigate(isGenerateMode ? 'content' : 'automation')}
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Automations
+          {isGenerateMode ? 'Back to Articles' : 'Back to Automations'}
         </button>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">New Automation</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{isGenerateMode ? 'Generate Article' : 'New Automation'}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Set up your automated publishing workflow in 4 simple steps.
+          {isGenerateMode ? 'Configure your AI article generation and create a draft instantly.' : 'Set up your automated publishing workflow in 4 simple steps.'}
         </p>
       </div>
 
@@ -561,21 +612,22 @@ export function AutomationBuilderPage() {
 
       {/* Footer Navigation — integrated with the page, no container */}
       <div className="flex items-center justify-end gap-4 pt-1">
-        {step > 1 && (
+        {(step > (isGenerateMode ? 2 : 1)) && (
           <Button variant="ghost" onClick={() => setStep(step - 1)} className="gap-1.5 mr-auto">
             <ChevronLeft className="h-4 w-4" /> Back
           </Button>
         )}
         <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground tabular-nums hidden sm:inline">Step {step} of 4</span>
-          <Button variant="ghost" onClick={() => navigate('automation')}>Cancel</Button>
+          <span className="text-xs text-muted-foreground tabular-nums hidden sm:inline">{isGenerateMode ? `Step ${step - 1} of 3` : `Step ${step} of 4`}</span>
+          <Button variant="ghost" onClick={() => navigate(isGenerateMode ? 'content' : 'automation')}>Cancel</Button>
           {step < 4 ? (
             <Button onClick={() => setStep(step + 1)} disabled={!canProceed} className="gap-1.5">
               Next <ChevronRight className="h-4 w-4" />
             </Button>
           ) : (
-            <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !canProceed} className="gap-1.5">
-              {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Create Automation
+            <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || generating || !canProceed} className="gap-1.5">
+              {(createMutation.isPending || generating) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {isGenerateMode ? (generating ? 'Generating...' : 'Generate Article') : 'Create Automation'}
             </Button>
           )}
         </div>

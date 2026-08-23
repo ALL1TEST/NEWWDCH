@@ -45,7 +45,7 @@ function parseHash(hash: string): {
     // Backups
     'backups', 'schedules', 'restore', 'storage', 'logs',
     // Automation
-    'create', 'edit', 'details', 'runs',
+    'create', 'edit', 'details', 'runs', 'generate',
     // Newsletter
     'subscribers', 'campaigns', 'collections',
     // Media
