@@ -206,7 +206,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: 'Settings',
     requiredRole: 'ADMIN',
     children: [
-      { label: 'Discussion', href: '#settings/discussion', icon: 'MessageSquare' },
       { label: 'SMTP Settings', href: '#settings/smtp', icon: 'Server' },
     ],
   },

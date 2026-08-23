@@ -19,11 +19,17 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Loader2,
+  Shield,
+  Save,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,9 +60,10 @@ import {
 } from '@/components/ui/tooltip';
 import { ConfirmDialog } from '@/components/patterns';
 import { AvatarWithFallback } from '@/components/shared';
-import { getApi, deleteApi, patchApi } from '@/lib/api-client';
+import { getApi, deleteApi, patchApi, postApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { cn, formatDate, formatRelativeTime, getInitials } from '@/lib/utils';
+import { toast } from 'sonner';
 import type {
   PaginatedResponse,
   CommentStatus,
@@ -223,6 +230,132 @@ function CommentCardSkeleton() {
         <Skeleton className="h-4 w-3/4 max-w-sm" />
       </div>
     </div>
+  );
+}
+
+// -------------------- Comment Settings Card --------------------
+
+const SPAM_PROVIDERS = [
+  { value: 'none', label: 'None' },
+  { value: 'akismet', label: 'Akismet' },
+  { value: 'custom', label: 'Custom' },
+];
+
+function CommentSettingsCard() {
+  const queryClient = useQueryClient();
+
+  const { data: settingsData, isLoading } = useQuery({
+    queryKey: ['settings', 'discussion', 'comments-page'],
+    queryFn: () => getApi<Record<string, string> | null>('/api/settings?category=DISCUSSION'),
+    staleTime: 10_000,
+  });
+
+  const savedCommentsEnabled = settingsData?.enable_comments !== 'false';
+  const savedSpamDetection = settingsData?.comment_auto_spam_detection === 'true';
+  const savedSpamProvider = settingsData?.comment_spam_provider || 'none';
+
+  const [draft, setDraft] = useState<{ commentsEnabled?: boolean; spamDetection?: boolean; spamProvider?: string }>({});
+
+  const commentsEnabled = draft.commentsEnabled ?? savedCommentsEnabled;
+  const spamDetection = draft.spamDetection ?? savedSpamDetection;
+  const spamProvider = draft.spamProvider ?? savedSpamProvider;
+  const isDirty = Object.keys(draft).length > 0;
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      postApi('/api/settings', {
+        settings: [
+          { key: 'enable_comments', value: String(commentsEnabled), type: 'BOOLEAN', category: 'DISCUSSION' },
+          { key: 'comment_auto_spam_detection', value: String(spamDetection), type: 'BOOLEAN', category: 'DISCUSSION' },
+          { key: 'comment_spam_provider', value: spamProvider, type: 'STRING', category: 'DISCUSSION' },
+        ],
+      }),
+    onSuccess: () => {
+      setDraft({});
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      toast.success('Comment settings saved');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to save settings'),
+  });
+
+  if (isLoading) {
+    return (
+      <Card className="p-4">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-6 w-48" />
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        {/* Enable Comments */}
+        <div className="flex items-center gap-2">
+          <Switch
+            id="enable-comments"
+            checked={commentsEnabled}
+            onCheckedChange={(v) => setDraft((prev) => ({ ...prev, commentsEnabled: v }))}
+          />
+          <Label htmlFor="enable-comments" className="text-sm font-medium cursor-pointer">
+            Enable Comments
+          </Label>
+        </div>
+
+        <Separator orientation="vertical" className="h-6 hidden sm:block" />
+
+        {/* Auto Spam Detection */}
+        <div className="flex items-center gap-2">
+          <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+          <Switch
+            id="spam-detection"
+            checked={spamDetection}
+            onCheckedChange={(v) => setDraft((prev) => ({ ...prev, spamDetection: v }))}
+          />
+          <Label htmlFor="spam-detection" className="text-sm font-medium cursor-pointer">
+            Auto Spam Detection
+          </Label>
+        </div>
+
+        {/* Spam Provider (conditional) */}
+        {spamDetection && (
+          <div className="flex items-center gap-2">
+            <Label className="text-sm text-muted-foreground">Provider:</Label>
+            <Select
+              value={spamProvider}
+              onValueChange={(v) => setDraft((prev) => ({ ...prev, spamProvider: v }))}
+            >
+              <SelectTrigger size="sm" className="w-[120px] h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SPAM_PROVIDERS.map((p) => (
+                  <SelectItem key={p.value} value={p.value}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Save button — only visible when there are unsaved changes */}
+        <Button
+          size="sm"
+          className={cn('ml-auto', !isDirty && 'invisible')}
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending}
+        >
+          {saveMutation.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+          ) : null}
+          Save
+        </Button>
+      </div>
+    </Card>
   );
 }
 
@@ -448,6 +581,9 @@ export function CommentsPage() {
             Moderate and manage user comments across your content
           </p>
         </header>
+
+        {/* Comment Settings (inline — moved from Discussion settings) */}
+        <CommentSettingsCard />
 
         {/* Search + Sort Bar */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">

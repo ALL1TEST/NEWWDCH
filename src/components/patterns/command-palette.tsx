@@ -87,7 +87,6 @@ const NAV_ITEMS: CommandItemDef[] = [
   { id: 'nav-settings', label: 'Settings — General', icon: Settings, module: 'settings', subPage: 'general' },
   { id: 'nav-settings-localization', label: 'Settings — Localization', icon: Settings, module: 'settings', subPage: 'localization' },
   { id: 'nav-settings-reading', label: 'Settings — Reading', icon: Settings, module: 'settings', subPage: 'reading' },
-  { id: 'nav-settings-discussion', label: 'Settings — Discussion', icon: Settings, module: 'settings', subPage: 'discussion' },
   { id: 'nav-settings-seo', label: 'Settings — SEO', icon: Settings, module: 'settings', subPage: 'seo' },
   { id: 'nav-settings-media', label: 'Settings — Media', icon: Settings, module: 'settings', subPage: 'media' },
   { id: 'nav-settings-email', label: 'Settings — Email (SMTP)', icon: Settings, module: 'settings', subPage: 'email' },

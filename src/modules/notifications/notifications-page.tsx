@@ -16,14 +16,18 @@ import {
   BellOff,
   CheckCheck,
   Loader2,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PageHeader } from '@/components/patterns';
-import { getApi, postApi } from '@/lib/api-client';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { PageHeader, ConfirmDialog } from '@/components/patterns';
+import { getApi, postApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn, formatRelativeTime } from '@/lib/utils';
+import { toast } from 'sonner';
 import type { NotificationType, ApiResponse } from '@/shared/types';
 
 // ==================== Types ====================
@@ -167,6 +171,32 @@ function NotificationCard({ notification, onMarkRead }: NotificationCardProps) {
 export function NotificationsPage() {
   const queryClient = useQueryClient();
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>('all');
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+
+  // Comment Notifications setting (moved from Discussion settings)
+  const { data: commentNotifData } = useQuery({
+    queryKey: ['settings', 'discussion', 'comment-notification'],
+    queryFn: () => getApi<Record<string, string> | null>('/api/settings?category=DISCUSSION'),
+    staleTime: 10_000,
+  });
+  const commentNotifsOn = commentNotifData?.comment_notification !== 'false';
+  const toggleCommentNotifs = useMutation({
+    mutationFn: (enabled: boolean) =>
+      postApi('/api/settings', {
+        settings: [{ key: 'comment_notification', value: String(enabled), type: 'BOOLEAN', category: 'DISCUSSION' }],
+      }),
+    onMutate: (enabled) => {
+      queryClient.setQueryData<Record<string, string>>(['settings', 'discussion', 'comment-notification'], (prev) => ({ ...(prev ?? {}), comment_notification: String(enabled) }));
+    },
+    onSuccess: () => {
+      toast.success(`Comment notifications ${commentNotifsOn ? 'enabled' : 'disabled'}`);
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update setting');
+      queryClient.invalidateQueries({ queryKey: ['settings', 'discussion', 'comment-notification'] });
+    },
+  });
 
   // Build query params based on filter
   const queryParams = useMemo(() => {
@@ -247,6 +277,19 @@ export function NotificationsPage() {
     [markReadMutation],
   );
 
+  // Delete ALL notifications
+  const deleteAllMutation = useMutation({
+    mutationFn: () => deleteApi('/api/notifications'),
+    onSuccess: () => {
+      toast.success('All notifications deleted');
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+      setDeleteAllDialogOpen(false);
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete notifications');
+    },
+  });
+
   // Intersection observer for infinite scroll
   const observerRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -276,19 +319,49 @@ export function NotificationsPage() {
             : 'No unread notifications'
         }
         action={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => markAllReadMutation.mutate()}
-            disabled={markAllReadMutation.isPending || unreadCount === 0}
-          >
-            {markAllReadMutation.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <CheckCheck className="h-4 w-4 mr-2" />
-            )}
-            Mark All Read
-          </Button>
+          <div className="flex items-center gap-3">
+            {/* Comment Notifications toggle (moved from Discussion settings) */}
+            <div className="flex items-center gap-2">
+              <Switch
+                id="comment-notif-toggle"
+                checked={commentNotifsOn}
+                onCheckedChange={(v) => toggleCommentNotifs.mutate(v)}
+                disabled={toggleCommentNotifs.isPending}
+              />
+              <Label htmlFor="comment-notif-toggle" className="text-xs text-muted-foreground whitespace-nowrap cursor-pointer hidden sm:inline">
+                Comment Notifications
+              </Label>
+            </div>
+            {/* Mark All Read */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => markAllReadMutation.mutate()}
+              disabled={markAllReadMutation.isPending || unreadCount === 0}
+            >
+              {markAllReadMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <CheckCheck className="h-4 w-4 mr-2" />
+              )}
+              Mark All Read
+            </Button>
+            {/* Delete All */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950/40"
+              onClick={() => setDeleteAllDialogOpen(true)}
+              disabled={deleteAllMutation.isPending || allNotifications.length === 0}
+            >
+              {deleteAllMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Delete All
+            </Button>
+          </div>
         }
       />
 
@@ -341,6 +414,18 @@ export function NotificationsPage() {
           </div>
         )}
       </div>
+
+      {/* Delete All Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteAllDialogOpen}
+        onOpenChange={setDeleteAllDialogOpen}
+        title="Delete All Notifications"
+        description="Are you sure you want to delete ALL notifications? This action cannot be undone and will permanently remove every notification."
+        confirmLabel="Delete All"
+        variant="destructive"
+        onConfirm={() => deleteAllMutation.mutate()}
+        isLoading={deleteAllMutation.isPending}
+      />
     </div>
   );
 }
