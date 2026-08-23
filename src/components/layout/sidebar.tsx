@@ -169,11 +169,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: 'Mail',
   },
   {
-    label: 'Email Templates',
-    href: '#email-templates',
-    icon: 'MailTemplate',
-  },
-  {
     label: 'SEO',
     href: '#seo',
     icon: 'Search',
@@ -182,17 +177,6 @@ const NAV_ITEMS: NavItem[] = [
     label: 'AI',
     href: '#ai',
     icon: 'Sparkles',
-  },
-  {
-    label: 'Notifications',
-    href: '#notifications',
-    icon: 'Bell',
-  },
-  {
-    label: 'Backups',
-    href: '#backups',
-    icon: 'Database',
-    requiredRole: 'ADMIN',
   },
   {
     label: 'Automation',
@@ -206,7 +190,14 @@ const NAV_ITEMS: NavItem[] = [
     icon: 'Settings',
     requiredRole: 'ADMIN',
     children: [
+      // Communications — email & notifications
+      { label: 'Communications', href: '', isSeparator: true },
+      { label: 'Email Templates', href: '#email-templates', icon: 'MailTemplate' },
       { label: 'SMTP Settings', href: '#settings/smtp', icon: 'Server' },
+      { label: 'Notifications', href: '#notifications', icon: 'Bell' },
+      // System — backups & data management
+      { label: 'System', href: '', isSeparator: true },
+      { label: 'Backups', href: '#backups', icon: 'Database' },
     ],
   },
 ];
@@ -217,9 +208,13 @@ const NAV_ITEMS: NavItem[] = [
 
 const ROUTE_PREFIX_TO_SECTION: Record<string, string> = {
   'content': 'Content',
-  'backups': 'Backups',
   'automation': 'Automation',
   'settings': 'Settings',
+  // Modules moved under Settings — keep them mapped to the Settings section
+  // so the Settings submenu auto-expands when navigating to these pages.
+  'backups': 'Settings',
+  'email-templates': 'Settings',
+  'notifications': 'Settings',
 };
 
 /**

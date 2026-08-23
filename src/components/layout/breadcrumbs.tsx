@@ -212,13 +212,10 @@ export function Breadcrumbs() {
     return null;
   }
 
-  // Backups pages — sidebar is the only navigation, hide breadcrumb to avoid duplication.
-  if (currentModule === 'backups') {
-    return null;
-  }
-
-  // Settings pages — sidebar is the only navigation, hide breadcrumb.
-  if (currentModule === 'settings') {
+  // Settings and its sub-pages — sidebar is the only navigation, hide breadcrumb.
+  // This includes modules now grouped under Settings: Backups, Email Templates, Notifications.
+  const SETTINGS_CHILDREN = new Set(['settings', 'backups', 'email-templates', 'notifications']);
+  if (SETTINGS_CHILDREN.has(currentModule)) {
     return null;
   }
 

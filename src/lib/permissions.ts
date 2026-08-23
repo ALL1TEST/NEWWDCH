@@ -147,10 +147,9 @@ export function canAll(userRole: UserRole, permissions: Permission[]): boolean {
 export function getVisibleNavItems(userRole: UserRole, allItems: NavItem[]): NavItem[] {
   return allItems.reduce<NavItem[]>((visible, item) => {
     // Skip separators if there's nothing before them
+    // Always include separators — they're used as group labels in submenus
     if (item.isSeparator) {
-      if (visible.length > 0) {
-        visible.push(item);
-      }
+      visible.push(item);
       return visible;
     }
 
