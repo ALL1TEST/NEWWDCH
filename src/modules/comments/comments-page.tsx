@@ -70,6 +70,32 @@ import type {
 } from '@/shared/types';
 import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Pencil,
+  Flag as FlagIcon,
+  Archive,
+  ExternalLink,
+  Globe,
+  Mail,
+  AlertTriangle,
+  Sparkles as SparklesIcon,
+} from 'lucide-react';
+import {
+  DEMO_COMMENTS,
+  getStatusCounts,
+  type DemoComment,
+  type DemoCommentStatus,
+} from './demo-comments';
+
+// ============================================================
+// DEMO DATA FLAG
+// ============================================================
+// When true, the Comments page renders against the in-memory
+// `DEMO_COMMENTS` dataset (36 realistic comments — 6 per status).
+// This is for UI/UX preview only and does NOT touch the production
+// database. The real `/api/comments` routes are unchanged; flip
+// this flag to `false` to fall back to live API data.
+const USE_DEMO_DATA = true;
 
 // -------------------- Types --------------------
 
@@ -78,6 +104,9 @@ interface CommentAuthor {
   name: string;
   avatar?: string;
   email?: string;
+  // Demo-only fields — ignored by the real API but rendered by the UI.
+  website?: string;
+  ipAddress?: string;
 }
 
 interface ContentItemRef {
@@ -90,9 +119,15 @@ interface CommentRow {
   content: string;
   author: CommentAuthor;
   contentItem: ContentItemRef;
-  status: CommentStatus;
+  // Cast to a wider string type so the demo 'TRASH' value can flow
+  // through without fighting the strict `CommentStatus` union.
+  status: CommentStatus | 'TRASH';
   createdAt: string;
   updatedAt: string;
+  // Demo-only metadata — populated for SPAM / FLAGGED rows.
+  spamScore?: number;
+  flagReason?: string;
+  parentId?: string;
 }
 
 type SentimentType = 'positive' | 'negative' | 'neutral';
@@ -391,20 +426,79 @@ export function CommentsPage() {
     [currentPage, sortField, sortOrder, searchValue, statusTab],
   );
 
-  // Fetch comments
-  const { data, isLoading } = useQuery({
+  // ---------- DEMO DATA STATE ----------
+  // Local copy of the 36 demo comments. All mutations in demo mode
+  // update this state instead of hitting the API. Reload resets it.
+  const [demoComments, setDemoComments] = useState<DemoComment[]>(DEMO_COMMENTS);
+
+  // Fetch comments (only used when USE_DEMO_DATA === false).
+  // The query is preserved so flipping the flag back to false will
+  // immediately resume using live API data with zero code changes.
+  const { data, isLoading: apiIsLoading } = useQuery({
     queryKey: queryKeys.comments.list(queryParams),
     queryFn: () =>
       getApi<PaginatedResponse<CommentRow>>('/api/comments', queryParams),
     staleTime: 10_000,
+    enabled: !USE_DEMO_DATA,
   });
 
-  const comments = data?.data ?? [];
-  const pagination = data?.pagination;
-  const totalItems = pagination?.total ?? 0;
-  const totalPages = pagination?.totalPages ?? 1;
+  // ---------- DEMO: filter / search / sort / paginate ----------
+  // Pre-compute per-status counts from the FULL demo set (so tab
+  // counts stay accurate even when the user is filtering/searching).
+  const statusCounts = useMemo(
+    () => getStatusCounts(demoComments),
+    [demoComments],
+  );
 
-  // Approve mutation
+  // Apply the active status tab + search query + sort locally.
+  const filteredDemoComments = useMemo(() => {
+    let result = demoComments;
+    if (statusTab !== 'all') {
+      result = result.filter((c) => c.status === statusTab);
+    }
+    if (searchValue.trim()) {
+      const q = searchValue.trim().toLowerCase();
+      result = result.filter(
+        (c) =>
+          c.author.name.toLowerCase().includes(q) ||
+          c.content.toLowerCase().includes(q) ||
+          c.contentItem.title.toLowerCase().includes(q) ||
+          (c.author.email ?? '').toLowerCase().includes(q) ||
+          (c.author.website ?? '').toLowerCase().includes(q),
+      );
+    }
+    const sorted = [...result].sort((a, b) => {
+      let cmp: number;
+      if (sortField === 'content') {
+        cmp = a.content.localeCompare(b.content);
+      } else {
+        // createdAt — string comparison works for ISO timestamps.
+        cmp = a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0;
+      }
+      return sortOrder === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
+  }, [demoComments, statusTab, searchValue, sortField, sortOrder]);
+
+  // Paginate the filtered set (mirrors the API pagination shape).
+  const demoTotalItems = filteredDemoComments.length;
+  const demoTotalPages = Math.max(1, Math.ceil(demoTotalItems / DEFAULT_PAGE_SIZE));
+  const demoPageItems = useMemo(() => {
+    const start = (currentPage - 1) * DEFAULT_PAGE_SIZE;
+    return filteredDemoComments.slice(start, start + DEFAULT_PAGE_SIZE);
+  }, [filteredDemoComments, currentPage]);
+
+  // Decide which data the UI renders.
+  const comments: CommentRow[] = USE_DEMO_DATA
+    ? demoPageItems as unknown as CommentRow[]
+    : (data?.data ?? []);
+  const isLoading = USE_DEMO_DATA ? false : apiIsLoading;
+  const totalItems = USE_DEMO_DATA ? demoTotalItems : (data?.pagination?.total ?? 0);
+  const totalPages = USE_DEMO_DATA ? demoTotalPages : (data?.pagination?.totalPages ?? 1);
+
+  // ---------- Mutations ----------
+  // Real API mutations — kept intact so flipping USE_DEMO_DATA to
+  // false restores production behavior with no code changes.
   const approveMutation = useMutation({
     mutationFn: (id: string) =>
       patchApi(`/api/comments/${id}`, { status: 'APPROVED' }),
@@ -413,7 +507,6 @@ export function CommentsPage() {
     },
   });
 
-  // Reject mutation
   const rejectMutation = useMutation({
     mutationFn: (id: string) =>
       patchApi(`/api/comments/${id}`, { status: 'REJECTED' }),
@@ -422,7 +515,6 @@ export function CommentsPage() {
     },
   });
 
-  // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteApi(`/api/comments/${id}`),
     onSuccess: () => {
@@ -432,7 +524,6 @@ export function CommentsPage() {
     },
   });
 
-  // Mark spam mutation
   const markSpamMutation = useMutation({
     mutationFn: (id: string) =>
       patchApi(`/api/comments/${id}`, { status: 'SPAM' }),
@@ -441,7 +532,22 @@ export function CommentsPage() {
     },
   });
 
-  // Bulk approve
+  const flagMutation = useMutation({
+    mutationFn: (id: string) =>
+      patchApi(`/api/comments/${id}`, { status: 'FLAGGED' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
+    },
+  });
+
+  const trashMutation = useMutation({
+    mutationFn: (id: string) =>
+      patchApi(`/api/comments/${id}`, { status: 'TRASH' as CommentStatus }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
+    },
+  });
+
   const bulkApproveMutation = useMutation({
     mutationFn: (ids: string[]) =>
       patchApi('/api/comments/bulk-status', { ids, status: 'APPROVED' }),
@@ -451,7 +557,6 @@ export function CommentsPage() {
     },
   });
 
-  // Bulk reject
   const bulkRejectMutation = useMutation({
     mutationFn: (ids: string[]) =>
       patchApi('/api/comments/bulk-status', { ids, status: 'REJECTED' }),
@@ -461,7 +566,24 @@ export function CommentsPage() {
     },
   });
 
-  // Bulk delete
+  const bulkSpamMutation = useMutation({
+    mutationFn: (ids: string[]) =>
+      patchApi('/api/comments/bulk-status', { ids, status: 'SPAM' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
+      setSelectedIds(new Set());
+    },
+  });
+
+  const bulkTrashMutation = useMutation({
+    mutationFn: (ids: string[]) =>
+      patchApi('/api/comments/bulk-status', { ids, status: 'TRASH' as CommentStatus }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
+      setSelectedIds(new Set());
+    },
+  });
+
   const bulkDeleteMutation = useMutation({
     mutationFn: (ids: string[]) =>
       Promise.all(ids.map((id) => deleteApi(`/api/comments/${id}`))),
@@ -470,6 +592,167 @@ export function CommentsPage() {
       setSelectedIds(new Set());
     },
   });
+
+  // ---------- DEMO: local mutation helpers ----------
+  // When in demo mode, update the in-memory state directly. The real
+  // API mutations above stay defined but are NOT called.
+  const updateDemoStatus = useCallback(
+    (id: string, status: DemoCommentStatus) => {
+      setDemoComments((prev) =>
+        prev.map((c) =>
+          c.id === id
+            ? { ...c, status, updatedAt: new Date().toISOString() }
+            : c,
+        ),
+      );
+    },
+    [],
+  );
+
+  const removeDemoComment = useCallback((id: string) => {
+    setDemoComments((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
+  // Single-comment action wrappers — dispatch to demo or API.
+  const handleApprove = useCallback(
+    (id: string) => {
+      if (USE_DEMO_DATA) {
+        updateDemoStatus(id, 'APPROVED');
+        toast.success('Comment approved');
+      } else {
+        approveMutation.mutate(id);
+      }
+    },
+    [approveMutation, updateDemoStatus],
+  );
+
+  const handleReject = useCallback(
+    (id: string) => {
+      if (USE_DEMO_DATA) {
+        updateDemoStatus(id, 'REJECTED');
+        toast.success('Comment rejected');
+      } else {
+        rejectMutation.mutate(id);
+      }
+    },
+    [rejectMutation, updateDemoStatus],
+  );
+
+  const handleMarkSpam = useCallback(
+    (id: string) => {
+      if (USE_DEMO_DATA) {
+        updateDemoStatus(id, 'SPAM');
+        toast.success('Comment marked as spam');
+      } else {
+        markSpamMutation.mutate(id);
+      }
+    },
+    [markSpamMutation, updateDemoStatus],
+  );
+
+  const handleFlag = useCallback(
+    (id: string) => {
+      if (USE_DEMO_DATA) {
+        updateDemoStatus(id, 'FLAGGED');
+        toast.success('Comment flagged for review');
+      } else {
+        flagMutation.mutate(id);
+      }
+    },
+    [flagMutation, updateDemoStatus],
+  );
+
+  const handleMoveToTrash = useCallback(
+    (id: string) => {
+      if (USE_DEMO_DATA) {
+        updateDemoStatus(id, 'TRASH');
+        toast.success('Comment moved to trash');
+      } else {
+        trashMutation.mutate(id);
+      }
+    },
+    [trashMutation, updateDemoStatus],
+  );
+
+  const handleDelete = useCallback(
+    (id: string) => {
+      if (USE_DEMO_DATA) {
+        removeDemoComment(id);
+        setDeleteTarget(null);
+        setSheetComment(null);
+        toast.success('Comment permanently deleted');
+      } else {
+        deleteMutation.mutate(id);
+      }
+    },
+    [deleteMutation, removeDemoComment],
+  );
+
+  // Bulk action wrappers.
+  const handleBulkApprove = useCallback(
+    (ids: string[]) => {
+      if (USE_DEMO_DATA) {
+        ids.forEach((id) => updateDemoStatus(id, 'APPROVED'));
+        setSelectedIds(new Set());
+        toast.success(`${ids.length} comment${ids.length > 1 ? 's' : ''} approved`);
+      } else {
+        bulkApproveMutation.mutate(ids);
+      }
+    },
+    [bulkApproveMutation, updateDemoStatus],
+  );
+
+  const handleBulkReject = useCallback(
+    (ids: string[]) => {
+      if (USE_DEMO_DATA) {
+        ids.forEach((id) => updateDemoStatus(id, 'REJECTED'));
+        setSelectedIds(new Set());
+        toast.success(`${ids.length} comment${ids.length > 1 ? 's' : ''} rejected`);
+      } else {
+        bulkRejectMutation.mutate(ids);
+      }
+    },
+    [bulkRejectMutation, updateDemoStatus],
+  );
+
+  const handleBulkSpam = useCallback(
+    (ids: string[]) => {
+      if (USE_DEMO_DATA) {
+        ids.forEach((id) => updateDemoStatus(id, 'SPAM'));
+        setSelectedIds(new Set());
+        toast.success(`${ids.length} comment${ids.length > 1 ? 's' : ''} marked as spam`);
+      } else {
+        bulkSpamMutation.mutate(ids);
+      }
+    },
+    [bulkSpamMutation, updateDemoStatus],
+  );
+
+  const handleBulkTrash = useCallback(
+    (ids: string[]) => {
+      if (USE_DEMO_DATA) {
+        ids.forEach((id) => updateDemoStatus(id, 'TRASH'));
+        setSelectedIds(new Set());
+        toast.success(`${ids.length} comment${ids.length > 1 ? 's' : ''} moved to trash`);
+      } else {
+        bulkTrashMutation.mutate(ids);
+      }
+    },
+    [bulkTrashMutation, updateDemoStatus],
+  );
+
+  const handleBulkDelete = useCallback(
+    (ids: string[]) => {
+      if (USE_DEMO_DATA) {
+        ids.forEach((id) => removeDemoComment(id));
+        setSelectedIds(new Set());
+        toast.success(`${ids.length} comment${ids.length > 1 ? 's' : ''} permanently deleted`);
+      } else {
+        bulkDeleteMutation.mutate(ids);
+      }
+    },
+    [bulkDeleteMutation, removeDemoComment],
+  );
 
   // Handlers
   const handleSearchChange = useCallback(
@@ -575,11 +858,21 @@ export function CommentsPage() {
     <TooltipProvider delayDuration={300}>
       <div className="space-y-6">
         {/* Page Header */}
-        <header>
-          <h1 className="text-3xl font-bold tracking-tight">Comments</h1>
-          <p className="text-muted-foreground mt-1">
-            Moderate and manage user comments across your content
-          </p>
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3 flex-wrap">
+              Comments
+              {USE_DEMO_DATA && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-400">
+                  <SparklesIcon className="h-3 w-3" />
+                  Demo Data
+                </span>
+              )}
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Moderate and manage user comments across your content
+            </p>
+          </div>
         </header>
 
         {/* Comment Settings (inline — moved from Discussion settings) */}
@@ -590,7 +883,7 @@ export function CommentsPage() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search comments by content or author..."
+              placeholder="Search by author, content, article or email..."
               value={searchValue}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-9 h-9"
@@ -625,13 +918,16 @@ export function CommentsPage() {
           </Button>
         </div>
 
-        {/* Custom Status Filter Tabs */}
+        {/* Custom Status Filter Tabs — each tab shows its live count */}
         <nav
           className="flex gap-1 overflow-x-auto border-b scrollbar-none -mx-1 px-1"
           aria-label="Comment status filter"
         >
           {STATUS_TABS.map((tab) => {
             const isActive = statusTab === tab.value;
+            const count = USE_DEMO_DATA
+              ? (statusCounts[tab.value as DemoCommentStatus | 'all'] ?? 0)
+              : 0; // In API mode the count would come from the server.
             return (
               <button
                 key={tab.value}
@@ -640,13 +936,25 @@ export function CommentsPage() {
                 aria-selected={isActive}
                 onClick={() => handleTabChange(tab.value)}
                 className={cn(
-                  'relative flex-shrink-0 px-3 py-2.5 text-sm font-medium transition-colors whitespace-nowrap',
+                  'relative flex-shrink-0 px-3 py-2.5 text-sm font-medium transition-colors whitespace-nowrap inline-flex items-center gap-2',
                   isActive
                     ? 'text-foreground'
                     : 'text-muted-foreground hover:text-foreground/80',
                 )}
               >
                 {tab.label}
+                {USE_DEMO_DATA && (
+                  <span
+                    className={cn(
+                      'inline-flex items-center justify-center rounded-full px-1.5 min-w-[1.25rem] h-5 text-[11px] font-semibold leading-none',
+                      isActive
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground',
+                    )}
+                  >
+                    {count}
+                  </span>
+                )}
                 {isActive && (
                   <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-primary" />
                 )}
@@ -700,12 +1008,21 @@ export function CommentsPage() {
                   const showAiReply = aiReplies.has(comment.id);
                   const isSelected = selectedIds.has(comment.id);
                   const isHovered = hoveredId === comment.id;
+                  const isFlagged = comment.status === 'FLAGGED';
+                  const isSpam = comment.status === 'SPAM';
+                  const isTrashed = comment.status === 'TRASH';
 
                   return (
                     <div
                       key={comment.id}
                       className={cn(
                         'flex items-start gap-3 px-4 py-4 border-b last:border-b-0 transition-colors hover:bg-muted/30 cursor-pointer',
+                        // Subtle left tint per status so each row is
+                        // visually distinguishable at a glance without
+                        // breaking the existing card aesthetic.
+                        isSpam && 'bg-red-50/40 dark:bg-red-900/5',
+                        isFlagged && 'bg-orange-50/40 dark:bg-orange-900/5',
+                        isTrashed && 'opacity-60',
                       )}
                       onMouseEnter={() => setHoveredId(comment.id)}
                       onMouseLeave={() => setHoveredId(null)}
@@ -734,21 +1051,78 @@ export function CommentsPage() {
                       <div className="flex-1 min-w-0">
                         {/* Author row */}
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold text-foreground">
+                          <span className="text-sm font-semibold text-foreground truncate max-w-[14rem]">
                             {comment.author?.name ?? 'Anonymous'}
                           </span>
                           <StatusBadgeSmall status={comment.status} />
                           <SentimentBadge sentiment={sentiment} />
+                          {/* Spam indicator — only on SPAM rows */}
+                          {isSpam && typeof comment.spamScore === 'number' && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-1.5 py-0 text-[10px] font-medium leading-4 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-400">
+                              <AlertTriangle className="h-3 w-3" />
+                              Spam {comment.spamScore}%
+                            </span>
+                          )}
+                          {/* Flag indicator — only on FLAGGED rows */}
+                          {isFlagged && comment.flagReason && (
+                            <span
+                              title={comment.flagReason}
+                              className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0 text-[10px] font-medium leading-4 text-orange-700 dark:border-orange-800/60 dark:bg-orange-900/20 dark:text-orange-400"
+                            >
+                              <FlagIcon className="h-3 w-3" />
+                              Flagged
+                            </span>
+                          )}
                           <span className="text-xs text-muted-foreground">
                             {formatRelativeTime(comment.createdAt)}
                           </span>
                         </div>
 
+                        {/* Email + website meta row */}
+                        {(comment.author?.email || comment.author?.website) && (
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-[11px] text-muted-foreground">
+                            {comment.author?.email && (
+                              <span className="inline-flex items-center gap-1 truncate max-w-[16rem]">
+                                <Mail className="h-3 w-3 shrink-0" />
+                                <span className="truncate">{comment.author.email}</span>
+                              </span>
+                            )}
+                            {comment.author?.website && (
+                              <a
+                                href={comment.author.website}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 truncate max-w-[16rem] hover:text-foreground transition-colors"
+                              >
+                                <Globe className="h-3 w-3 shrink-0" />
+                                <span className="truncate">{comment.author.website.replace(/^https?:\/\//, '')}</span>
+                                <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
+                              </a>
+                            )}
+                          </div>
+                        )}
+
                         {/* Article reference */}
                         {comment.contentItem && (
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            on &ldquo;{comment.contentItem.title}&rdquo;
+                            on &ldquo;
+                            <span className="text-foreground/70">{comment.contentItem.title}</span>
+                            &rdquo;
                           </p>
+                        )}
+
+                        {/* Flag reason (if any) — shown above the comment text */}
+                        {isFlagged && comment.flagReason && (
+                          <div className="mt-1.5 rounded-md border border-orange-200 bg-orange-50/60 dark:border-orange-800/40 dark:bg-orange-900/10 px-2.5 py-1.5">
+                            <p className="text-[11px] text-orange-700 dark:text-orange-400 flex items-start gap-1.5">
+                              <FlagIcon className="h-3 w-3 mt-0.5 shrink-0" />
+                              <span className="leading-snug">
+                                <span className="font-semibold">Flag reason:</span>{' '}
+                                {comment.flagReason}
+                              </span>
+                            </p>
+                          </div>
                         )}
 
                         {/* Comment text */}
@@ -826,8 +1200,7 @@ export function CommentsPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                                onClick={() => approveMutation.mutate(comment.id)}
-                                disabled={approveMutation.isPending}
+                                onClick={() => handleApprove(comment.id)}
                               >
                                 <Check className="h-4 w-4" />
                               </Button>
@@ -843,8 +1216,7 @@ export function CommentsPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                onClick={() => rejectMutation.mutate(comment.id)}
-                                disabled={rejectMutation.isPending}
+                                onClick={() => handleReject(comment.id)}
                               >
                                 <X className="h-4 w-4" />
                               </Button>
@@ -859,6 +1231,7 @@ export function CommentsPage() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8"
+                              onClick={() => setSheetComment(comment)}
                             >
                               <Reply className="h-4 w-4" />
                             </Button>
@@ -873,27 +1246,58 @@ export function CommentsPage() {
                               <span className="sr-only">More actions</span>
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                          <DropdownMenuContent align="end" className="w-48">
                             <DropdownMenuItem
                               onClick={() => setSheetComment(comment)}
                             >
                               <Eye className="h-4 w-4 mr-2" />
-                              View Full Comment
+                              View / Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => markSpamMutation.mutate(comment.id)}
-                              disabled={markSpamMutation.isPending}
+                              onClick={() => setSheetComment(comment)}
                             >
-                              <Flag className="h-4 w-4 mr-2" />
-                              Mark Spam
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Edit Comment
                             </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {isFlagged ? (
+                              <DropdownMenuItem
+                                onClick={() => handleApprove(comment.id)}
+                              >
+                                <FlagIcon className="h-4 w-4 mr-2" />
+                                Unflag (Approve)
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                onClick={() => handleFlag(comment.id)}
+                              >
+                                <FlagIcon className="h-4 w-4 mr-2" />
+                                Flag for Review
+                              </DropdownMenuItem>
+                            )}
+                            {comment.status !== 'SPAM' && (
+                              <DropdownMenuItem
+                                onClick={() => handleMarkSpam(comment.id)}
+                              >
+                                <Flag className="h-4 w-4 mr-2" />
+                                Mark as Spam
+                              </DropdownMenuItem>
+                            )}
+                            {comment.status !== 'TRASH' && (
+                              <DropdownMenuItem
+                                onClick={() => handleMoveToTrash(comment.id)}
+                              >
+                                <Archive className="h-4 w-4 mr-2" />
+                                Move to Trash
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               variant="destructive"
                               onClick={() => setDeleteTarget(comment)}
                             >
                               <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
+                              Delete Permanently
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -989,55 +1393,58 @@ export function CommentsPage() {
 
         {/* Bulk Actions Bar */}
         {selectedIds.size > 0 && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-xl border bg-card px-4 py-2.5 shadow-lg animate-in fade-in-0 slide-in-from-bottom-4">
-            <span className="text-sm font-medium">
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-wrap items-center gap-2 rounded-xl border bg-card px-4 py-2.5 shadow-lg animate-in fade-in-0 slide-in-from-bottom-4 max-w-[calc(100vw-2rem)]">
+            <span className="text-sm font-medium whitespace-nowrap">
               {selectedIds.size} selected
             </span>
             <div className="w-px h-5 bg-border" />
             <Button
               size="sm"
               className="h-8 gap-1.5"
-              onClick={() =>
-                bulkApproveMutation.mutate(Array.from(selectedIds))
-              }
-              disabled={bulkApproveMutation.isPending}
+              onClick={() => handleBulkApprove(Array.from(selectedIds))}
             >
-              {bulkApproveMutation.isPending && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              )}
-              <Check className="h-3.5 w-3.5 text-emerald-600" />
+              <Check className="h-3.5 w-3.5 text-emerald-100" />
               Approve
             </Button>
             <Button
               size="sm"
               variant="outline"
               className="h-8 gap-1.5"
-              onClick={() =>
-                bulkRejectMutation.mutate(Array.from(selectedIds))
-              }
-              disabled={bulkRejectMutation.isPending}
+              onClick={() => handleBulkReject(Array.from(selectedIds))}
             >
-              {bulkRejectMutation.isPending && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              )}
               <X className="h-3.5 w-3.5 text-red-600" />
               Reject
             </Button>
             <Button
               size="sm"
               variant="outline"
-              className="h-8 gap-1.5 text-destructive hover:text-destructive"
-              onClick={() =>
-                bulkDeleteMutation.mutate(Array.from(selectedIds))
-              }
-              disabled={bulkDeleteMutation.isPending}
+              className="h-8 gap-1.5"
+              onClick={() => handleBulkSpam(Array.from(selectedIds))}
             >
-              {bulkDeleteMutation.isPending && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              )}
+              <Flag className="h-3.5 w-3.5 text-purple-600" />
+              <span className="hidden sm:inline">Mark as Spam</span>
+              <span className="sm:hidden">Spam</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5"
+              onClick={() => handleBulkTrash(Array.from(selectedIds))}
+            >
+              <Archive className="h-3.5 w-3.5 text-orange-600" />
+              <span className="hidden sm:inline">Move to Trash</span>
+              <span className="sm:hidden">Trash</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 text-destructive hover:text-destructive"
+              onClick={() => handleBulkDelete(Array.from(selectedIds))}
+            >
               <Trash2 className="h-3.5 w-3.5" />
               Delete
             </Button>
+            <div className="w-px h-5 bg-border hidden sm:block" />
             <Button
               size="sm"
               variant="ghost"
@@ -1067,23 +1474,41 @@ export function CommentsPage() {
             {sheetComment && (
               <div className="flex-1 space-y-6 pb-4">
                 {/* Author details */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3 flex-wrap">
                   <AvatarWithFallback
                     src={sheetComment.author?.avatar}
                     name={sheetComment.author?.name ?? 'Anonymous'}
                     size="lg"
                   />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="font-semibold text-sm">
                       {sheetComment.author?.name ?? 'Anonymous'}
                     </p>
                     {sheetComment.author?.email && (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground inline-flex items-center gap-1 mt-0.5">
+                        <Mail className="h-3 w-3 shrink-0" />
                         {sheetComment.author.email}
                       </p>
                     )}
+                    {sheetComment.author?.website && (
+                      <a
+                        href={sheetComment.author.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mt-0.5 break-all"
+                      >
+                        <Globe className="h-3 w-3 shrink-0" />
+                        {sheetComment.author.website.replace(/^https?:\/\//, '')}
+                        <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
+                      </a>
+                    )}
+                    {sheetComment.author?.ipAddress && (
+                      <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+                        IP: {sheetComment.author.ipAddress}
+                      </p>
+                    )}
                   </div>
-                  <div className="ml-auto flex items-center gap-2">
+                  <div className="flex items-center gap-2">
                     <StatusBadgeSmall status={sheetComment.status} />
                     <SentimentBadge
                       sentiment={detectSentiment(sheetComment.content)}
@@ -1098,6 +1523,20 @@ export function CommentsPage() {
                     <span className="font-medium text-primary">
                       {sheetComment.contentItem.title}
                     </span>
+                  </div>
+                )}
+
+                {/* Spam / Flag metadata */}
+                {sheetComment.status === 'SPAM' && typeof sheetComment.spamScore === 'number' && (
+                  <div className="rounded-md border border-red-200 bg-red-50/60 dark:border-red-800/40 dark:bg-red-900/10 px-3 py-2 text-xs text-red-700 dark:text-red-400 flex items-center gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    <span><span className="font-semibold">Spam score:</span> {sheetComment.spamScore}/100</span>
+                  </div>
+                )}
+                {sheetComment.status === 'FLAGGED' && sheetComment.flagReason && (
+                  <div className="rounded-md border border-orange-200 bg-orange-50/60 dark:border-orange-800/40 dark:bg-orange-900/10 px-3 py-2 text-xs text-orange-700 dark:text-orange-400 flex items-start gap-2">
+                    <FlagIcon className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span className="leading-snug"><span className="font-semibold">Flag reason:</span> {sheetComment.flagReason}</span>
                   </div>
                 )}
 
@@ -1155,14 +1594,10 @@ export function CommentsPage() {
                     <Button
                       size="sm"
                       onClick={() => {
-                        approveMutation.mutate(sheetComment.id);
+                        handleApprove(sheetComment.id);
                         setSheetComment(null);
                       }}
-                      disabled={approveMutation.isPending}
                     >
-                      {approveMutation.isPending && (
-                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                      )}
                       <Check className="h-4 w-4 mr-1" />
                       Approve
                     </Button>
@@ -1172,16 +1607,51 @@ export function CommentsPage() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        rejectMutation.mutate(sheetComment.id);
+                        handleReject(sheetComment.id);
                         setSheetComment(null);
                       }}
-                      disabled={rejectMutation.isPending}
                     >
-                      {rejectMutation.isPending && (
-                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                      )}
                       <X className="h-4 w-4 mr-1" />
                       Reject
+                    </Button>
+                  )}
+                  {sheetComment.status !== 'FLAGGED' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        handleFlag(sheetComment.id);
+                        setSheetComment(null);
+                      }}
+                    >
+                      <FlagIcon className="h-4 w-4 mr-1" />
+                      Flag
+                    </Button>
+                  )}
+                  {sheetComment.status !== 'SPAM' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        handleMarkSpam(sheetComment.id);
+                        setSheetComment(null);
+                      }}
+                    >
+                      <Flag className="h-4 w-4 mr-1" />
+                      Mark Spam
+                    </Button>
+                  )}
+                  {sheetComment.status !== 'TRASH' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        handleMoveToTrash(sheetComment.id);
+                        setSheetComment(null);
+                      }}
+                    >
+                      <Archive className="h-4 w-4 mr-1" />
+                      Move to Trash
                     </Button>
                   )}
                   <Button
@@ -1208,15 +1678,15 @@ export function CommentsPage() {
           title="Delete Comment"
           description={
             deleteTarget
-              ? `Are you sure you want to delete this comment by "${deleteTarget.author?.name ?? 'Anonymous'}"? This action cannot be undone.`
+              ? `Are you sure you want to permanently delete this comment by "${deleteTarget.author?.name ?? 'Anonymous'}"? This action cannot be undone.`
               : undefined
           }
-          confirmLabel="Delete"
+          confirmLabel="Delete Permanently"
           variant="destructive"
           onConfirm={() => {
-            if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+            if (deleteTarget) handleDelete(deleteTarget.id);
           }}
-          isLoading={deleteMutation.isPending}
+          isLoading={!USE_DEMO_DATA && deleteMutation.isPending}
         />
       </div>
     </TooltipProvider>

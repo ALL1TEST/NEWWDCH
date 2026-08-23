@@ -784,3 +784,136 @@ Stage Summary:
   * Media grid immediately re-fetches after upload via `invalidateMediaAndFolders()`.
 - DRAG & DROP PARITY: `handleFileInput` (click→browse) and `handleDrop` (drag-and-drop) both call the same `uploadMutation.mutate(uploadFiles)`. Same code path, same behavior — verified by code inspection.
 - DOES NOT FAKE SUCCESS: the frontend only shows "uploaded successfully" when `res.ok && json.data` is true (backend returned 201 with a created Media record). All other cases are reported as failures with the actual reason.
+
+---
+Task ID: COMMENTS-DEMO-1
+Agent: main (orchestrator)
+Task: Improve the existing Comments page UI and populate it with 36 realistic demo comments (6 per status) so the full moderation dashboard can be visually tested without seeding fake records into the production database.
+
+Work Log:
+
+1. INSPECTED EXISTING IMPLEMENTATION
+   - `src/modules/comments/comments-page.tsx` (1224 lines before changes).
+   - Page already has: header (`Comments`), `CommentSettingsCard` (Enable Comments toggle, Auto Spam Detection toggle, Provider dropdown), search input + sort dropdown + Newest/Oldest toggle, 7 status tabs (All/Pending/Approved/Rejected/Flagged/Spam/Trash), comments list with select-all header + per-row checkbox, hover-action card (Approve/Reject/Reply + More dropdown with View/Mark Spam/Delete), pagination, fixed bulk-actions bar (Approve/Reject/Delete/Clear), comment detail Sheet (right side panel), delete ConfirmDialog.
+   - Data fetched via `getApi<PaginatedResponse<CommentRow>>('/api/comments', queryParams)` with TanStack Query. CommentStatus type is `'PENDING' | 'APPROVED' | 'REJECTED' | 'FLAGGED' | 'SPAM'` — 'TRASH' is a UI concept for soft-deleted comments but the page already handles it as a string.
+   - The existing `/api/comments` routes were untouched.
+
+2. CREATED `src/modules/comments/demo-comments.ts` (674 lines)
+   - New module exporting `DemoComment`, `DemoCommentAuthor`, `DemoContentItemRef`, `DemoCommentStatus` (`'PENDING' | 'APPROVED' | 'REJECTED' | 'FLAGGED' | 'SPAM' | 'TRASH'`) types and a `getStatusCounts()` helper.
+   - 36 realistic demo comments — 6 per status — using 6 realistic article titles (SEO Tips, Next.js 16, Bundle Size, TS Generics, A11y 2025, GraphQL switch) and 36 realistic author personas (Sarah Chen, Marcus Williams, Priya Patel, Diego Ramos, Emma Thompson, Yuki Tanaka, Liam O'Sullivan, Aisha Khan, Noah Bergmann, Sofia Garcia, Ethan Park, Hannah Müller, SEO Truth Teller, Framework Troll, Disappointed Reader, Angry Dev, Bitter Veteran, Old School Dev, Concerned Reader, Moderator Alert, Verified Reader, Careful Coder, Accessibility Advocate, Long-time Reader, SEO Guru, Crypto Freedom, Discount Mart, Casino King, Meds Direct, Money Maker, Deleted User, Removed Account, Former Reader, Banned User, Closed Account, Deleted Visitor).
+   - Each demo comment has: id, content (real-sounding, not "Test 1"), author (name + email + website + ipAddress where relevant), contentItem (title + slug), status, createdAt (ISO timestamps computed from "now" so relative-time labels stay fresh), updatedAt, spamScore (for SPAM rows 96-100), flagReason (for FLAGGED rows), parentId (optional).
+   - Trash comments use `[This comment was removed...]` placeholder text matching real CMS soft-delete behavior.
+   - IDs are deterministic (`demo_pnd_1`, `demo_appr_1`, etc.) so React keys + selection state are stable.
+
+3. MODIFIED `src/modules/comments/comments-page.tsx`
+   - Added `USE_DEMO_DATA = true` flag at top of file (flip to `false` to fall back to live API with zero code changes — the existing `useQuery` for `/api/comments` is preserved with `enabled: !USE_DEMO_DATA`).
+   - Added `website`, `ipAddress` to `CommentAuthor` interface; added `spamScore`, `flagReason`, `parentId` to `CommentRow`. Widened `status` type to `CommentStatus | 'TRASH'` so demo TRASH rows flow through cleanly.
+   - Added demo state + filter/search/sort/paginate pipeline:
+     * `useState<DemoComment[]>(DEMO_COMMENTS)` — local copy that mutations update.
+     * `statusCounts = useMemo(() => getStatusCounts(demoComments), …)` — drives the tab counts.
+     * `filteredDemoComments = useMemo(...)` — filters by status tab, searches across author name / content / article title / email / website, sorts by createdAt or content with asc/desc.
+     * `demoPageItems` — paginates the filtered set with `DEFAULT_PAGE_SIZE`.
+   - Decoupled `comments`, `isLoading`, `totalItems`, `totalPages` between demo vs API mode.
+   - Added 3 new API-style mutations (kept intact for production fallback): `flagMutation` (PATCH status to FLAGGED), `trashMutation` (PATCH status to TRASH), `bulkSpamMutation`, `bulkTrashMutation`.
+   - Added local mutation helpers: `updateDemoStatus(id, status)`, `removeDemoComment(id)`.
+   - Added 11 wrapper handlers that dispatch to demo state OR API mutation depending on `USE_DEMO_DATA`:
+     * `handleApprove`, `handleReject`, `handleMarkSpam`, `handleFlag`, `handleMoveToTrash`, `handleDelete` (single-comment).
+     * `handleBulkApprove`, `handleBulkReject`, `handleBulkSpam`, `handleBulkTrash`, `handleBulkDelete` (bulk).
+     * Each wrapper shows the appropriate toast (`"Comment approved"`, `"3 comments marked as spam"`, etc.).
+   - Updated all single-comment button onClick handlers in the comment card + Sheet footer to use the new wrappers instead of the raw `*Mutation.mutate()` calls.
+   - Updated the bulk-actions bar buttons to call `handleBulk*` instead of `bulk*Mutation.mutate`.
+
+4. ADDED STATUS COUNTS TO TABS
+   - `STATUS_TABS` unchanged. The render now computes `count = USE_DEMO_DATA ? statusCounts[tab.value] : 0` and renders a pill next to each tab label.
+   - Pill style: `bg-primary text-primary-foreground` when active, `bg-muted text-muted-foreground` when inactive. Min-width 1.25rem, h-5, rounded-full.
+   - Result: `All 36`, `Pending 6`, `Approved 6`, `Rejected 6`, `Flagged 6`, `Spam 6`, `Trash 6`.
+   - Counts stay accurate across mutations (approving a pending comment moves it to Approved; both counts update live because they're derived from the same `demoComments` state).
+
+5. EXPANDED THE COMMENT CARD
+   - Added subtle per-status row tints (kept subtle to not break the existing aesthetic):
+     * SPAM rows: `bg-red-50/40 dark:bg-red-900/5`
+     * FLAGGED rows: `bg-orange-50/40 dark:bg-orange-900/5`
+     * TRASH rows: `opacity-60`
+   - Added `truncate max-w-[14rem]` on author name to prevent overflow with very long names.
+   - Added a **Spam indicator** pill (red, with `AlertTriangle` icon + `"Spam {score}%"`) on SPAM rows.
+   - Added a **Flag indicator** pill (orange, with `FlagIcon` + "Flagged") on FLAGGED rows.
+   - Added an **Email + website meta row** below the author row: `Mail` icon + email, `Globe` icon + website (as a clickable external link with `ExternalLink` icon). Both truncated to max-w-[16rem] and stop propagation so they don't trigger the row click.
+   - Added a **Flag reason** callout box (orange-tinted) above the comment text on FLAGGED rows: `FlagIcon` + `"Flag reason: ..."` — uses `comment.flagReason`.
+   - Article reference row now wraps the title in a `<span className="text-foreground/70">` so it stands out from the muted "on …" prefix.
+   - Expanded the More dropdown (`DropdownMenuContent`) from 3 items to 6:
+     * View / Edit (opens the Sheet)
+     * Edit Comment (opens the Sheet for editing)
+     * separator
+     * Flag for Review / Unflag (Approve) (toggles FLAGGED status based on `isFlagged`)
+     * Mark as Spam (hidden if already SPAM)
+     * Move to Trash (hidden if already TRASH)
+     * separator
+     * Delete Permanently (red, opens the ConfirmDialog)
+
+6. EXPANDED THE BULK ACTIONS BAR
+   - Added `flex-wrap` + `max-w-[calc(100vw-2rem)]` so the bar wraps on small screens (no horizontal overflow).
+   - Replaced the 3-button bar (Approve/Reject/Delete) with 5 bulk action buttons + Clear:
+     * **Approve** (primary)
+     * **Reject** (outline, red X icon)
+     * **Mark as Spam** (outline, purple Flag icon — "Mark as Spam" on sm+ screens, "Spam" on mobile)
+     * **Move to Trash** (outline, orange Archive icon — "Move to Trash" on sm+ screens, "Trash" on mobile)
+     * **Delete** (outline, destructive, Trash2 icon)
+     * **Clear** (ghost) — dismisses the selection
+   - All buttons call the `handleBulk*` wrappers.
+
+7. UPDATED THE COMMENT DETAIL SHEET
+   - Author block now shows email (with `Mail` icon), website (with `Globe` + `ExternalLink` icons, clickable external link), and IP address (only on spam rows) below the name.
+   - Added a Spam score callout (red, `AlertTriangle` + "Spam score: X/100") on SPAM rows.
+   - Added a Flag reason callout (orange, `FlagIcon` + "Flag reason: ...") on FLAGGED rows.
+   - Sheet footer actions expanded from 3 (Approve/Reject/Delete) to 6:
+     * Approve (if not already approved)
+     * Reject (if not already rejected)
+     * Flag (if not already flagged)
+     * Mark Spam (if not already spam)
+     * Move to Trash (if not already trashed)
+     * Delete (destructive)
+   - Delete confirmation dialog text changed to "permanently delete" + confirm label "Delete Permanently" to differentiate from "Move to Trash".
+
+8. ADDED DEMO DATA BADGE
+   - Page header `<h1>` now reads `Comments` followed by an amber `"Demo Data"` pill (`SparklesIcon` + text) when `USE_DEMO_DATA` is true.
+   - Makes it visually obvious that this is preview data, not production data.
+
+9. UPDATED SEARCH PLACEHOLDER
+   - Search input placeholder changed from "Search comments by content or author..." to "Search by author, content, article or email..." to reflect the expanded search scope (now also searches website).
+
+10. END-TO-END VERIFICATION VIA AGENT BROWSER
+    - Logged in via API (`admin@example.com` / `admin123`), injected `cms_session_token` cookie.
+    - Navigated to `#comments` via `agent-browser eval "window.location.hash = '#comments'"`.
+    - Verified page rendered with:
+      * Page header `Comments Demo Data` (badge visible)
+      * Comment Settings card: Enable Comments [checked], Auto Spam Detection [checked], Provider dropdown "None"
+      * Search placeholder: "Search by author, content, article or email..."
+      * Sort dropdown: "Date" + "Newest" button
+      * Status tabs WITH COUNTS: `All 36`, `Pending 6`, `Approved 6`, `Rejected 6`, `Flagged 6`, `Spam 6`, `Trash 6`
+    - Verified the All tab shows comments from all 6 statuses (Sarah Chen PENDING, SEO Guru SPAM with Spam 98% indicator, Marcus Williams PENDING, Concerned Reader FLAGGED with flag reason, etc.).
+    - Clicked the Spam tab → only the 6 spam comments appeared, each with the Spam indicator (Spam 98%, Spam 99%, Spam 96%, Spam 100%, Spam 97%, Spam 99%).
+    - Selected 2 comment checkboxes via DOM click (Radix checkboxes are `<button role=checkbox>` not `<input>`) → bulk actions bar appeared at the bottom with `2 selected` + Approve / Reject / Mark as Spam / Move to Trash / Delete / Clear buttons.
+    - Opened the first comment's More dropdown via pointer events → confirmed 6 menu items: "View / Edit", "Edit Comment", "Flag for Review", "Mark as Spam", "Move to Trash", "Delete Permanently".
+
+11. LINT CHECK
+    - `bun run lint`: 12 problems (6 errors, 6 warnings) — ALL in pre-existing files (content-create-page.tsx, content-edit-page.tsx, seo-broken-links-page.tsx, seo-social-preview-page.tsx, data-table.tsx, webhooks-page.tsx). ZERO errors in `src/modules/comments/comments-page.tsx` or `src/modules/comments/demo-comments.ts`.
+
+Stage Summary:
+- ROOT APPROACH: Added an in-memory `DEMO_COMMENTS` dataset (36 realistic comments — 6 per status) and a `USE_DEMO_DATA` flag at the top of `comments-page.tsx`. When the flag is true, the page renders against the local dataset with all mutations (approve/reject/flag/spam/trash/delete + bulk versions) operating on local state. When the flag is false, the page resumes using the real `/api/comments` routes with zero code changes (the useQuery + all API mutations stay defined).
+- FILES CHANGED:
+  * **CREATED** `src/modules/comments/demo-comments.ts` (674 lines) — types + 36 realistic demo comments + `getStatusCounts()` helper.
+  * **MODIFIED** `src/modules/comments/comments-page.tsx` (1224 → 1694 lines) — added USE_DEMO_DATA flag, demo state + local filter/search/sort/paginate pipeline, 11 mutation wrappers (single + bulk), status counts on tabs, expanded comment card with email/website/spam-indicator/flag-reason, expanded More dropdown (View/Edit + Edit Comment + Flag for Review + Mark as Spam + Move to Trash + Delete Permanently), expanded bulk bar (Approve + Reject + Mark as Spam + Move to Trash + Delete + Clear), expanded Sheet footer (Approve + Reject + Flag + Mark Spam + Move to Trash + Delete), Demo Data badge in header, search placeholder update.
+- EXISTING FUNCTIONALITY PRESERVED:
+  * Enable Comments toggle, Auto Spam Detection toggle, Provider dropdown — all unchanged.
+  * Search input, sort dropdown, Newest/Oldest toggle — all unchanged (now also drive the local demo filter).
+  * Status tabs (All/Pending/Approved/Rejected/Flagged/Spam/Trash) — same 7 tabs, now with counts.
+  * Per-row checkbox + select-all — unchanged behavior.
+  * Pagination — unchanged UI, just driven by the local filtered set in demo mode.
+  * Comment Detail Sheet (right side panel) — unchanged UI, just expanded author info + new metadata callouts.
+  * Delete confirmation dialog — unchanged, just clearer copy.
+  * Sentiment detection, AI Suggest Reply, Reply button, all hover actions — unchanged.
+  * `/api/comments` GET / PATCH / DELETE / `bulk-status` routes — UNTOUCHED.
+- DEMO DATA INTEGRITY:
+  * No fake records inserted into the production database — the 36 comments live ONLY in browser memory and reset on page reload.
+  * Demo Data badge in the page header makes the preview state obvious.
+  * Flip `USE_DEMO_DATA = false` to resume live API mode (the useQuery + all API mutations are still wired up).
