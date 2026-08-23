@@ -185,15 +185,28 @@ export function NotificationsPage() {
       postApi('/api/settings', {
         settings: [{ key: 'comment_notification', value: String(enabled), type: 'BOOLEAN', category: 'DISCUSSION' }],
       }),
-    onMutate: (enabled) => {
-      queryClient.setQueryData<Record<string, string>>(['settings', 'discussion', 'comment-notification'], (prev) => ({ ...(prev ?? {}), comment_notification: String(enabled) }));
+    onMutate: async (enabled) => {
+      // Cancel any outgoing refetches so they don't overwrite the optimistic update
+      await queryClient.cancelQueries({ queryKey: ['settings', 'discussion', 'comment-notification'] });
+      // Optimistically update the cache
+      const prevData = queryClient.getQueryData<Record<string, string>>(['settings', 'discussion', 'comment-notification']);
+      queryClient.setQueryData<Record<string, string>>(
+        ['settings', 'discussion', 'comment-notification'],
+        (prev) => ({ ...(prev ?? {}), comment_notification: String(enabled) }),
+      );
+      return { prevData };
     },
-    onSuccess: () => {
-      toast.success(`Comment notifications ${commentNotifsOn ? 'enabled' : 'disabled'}`);
+    onSuccess: (_data, variables) => {
+      // Use 'variables' (the new value) for the toast, not 'commentNotifsOn' (the old value)
+      toast.success(`Comment notifications ${variables ? 'enabled' : 'disabled'}`);
       queryClient.invalidateQueries({ queryKey: ['settings'] });
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _variables, context) => {
       toast.error(err.message || 'Failed to update setting');
+      // Rollback to previous data
+      if (context?.prevData) {
+        queryClient.setQueryData(['settings', 'discussion', 'comment-notification'], context.prevData);
+      }
       queryClient.invalidateQueries({ queryKey: ['settings', 'discussion', 'comment-notification'] });
     },
   });

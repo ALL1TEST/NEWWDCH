@@ -725,7 +725,7 @@ export async function getAllSettings(options?: { category?: string; scope?: stri
   if (options?.scope) where.scope = options.scope;
   if (options?.siteId) where.siteId = options.siteId;
 
-  const dbSettings = await db.setting.findMany({ where, orderBy: { key: 'asc' } });
+  const dbSettings = await db.setting.findMany({ where, orderBy: [{ key: 'asc' }, { updatedAt: 'desc' }] });
 
   // Merge with defaults
   const result: Record<string, string> = {};
@@ -781,7 +781,9 @@ export async function batchUpsertSettings(
     const category = s.category ?? getCategoryForKey(s.key) ?? 'GENERAL';
 
     try {
-      // Find existing
+      // Find existing — use findFirst (not upsert's unique key) because
+      // userId and siteId are null, and Prisma unique constraints treat
+      // NULL as distinct, so upsert.where can't match null-valued keys.
       const existing = await db.setting.findFirst({
         where: { key: s.key, scope: 'GLOBAL', userId: null, siteId: null },
       });
@@ -789,34 +791,30 @@ export async function batchUpsertSettings(
       const oldValue = existing?.isEncrypted ? undefined : existing?.value;
       const newValue = (s.type === 'ENCRYPTED' || s.type === 'SECRET') ? '[ENCRYPTED]' : s.value;
 
-      const item = await db.setting.upsert({
-        where: {
-          key_scope_userId_siteId: {
+      const data = {
+        value: s.value,
+        type: (s.type as any) ?? def?.type ?? 'STRING',
+        category: category as any,
+        description: def?.description ?? null,
+        isEncrypted: s.type === 'ENCRYPTED' || s.type === 'SECRET' || def?.type === 'ENCRYPTED' || def?.type === 'SECRET',
+        isPublic: def?.isPublic ?? false,
+      };
+
+      let item;
+      if (existing) {
+        item = await db.setting.update({
+          where: { id: existing.id },
+          data,
+        });
+      } else {
+        item = await db.setting.create({
+          data: {
+            ...data,
             key: s.key,
             scope: 'GLOBAL',
-            userId: '',
-            siteId: '',
           },
-        },
-        update: {
-          value: s.value,
-          type: (s.type as any) ?? def?.type ?? 'STRING',
-          category: category as any,
-          description: def?.description ?? null,
-          isEncrypted: s.type === 'ENCRYPTED' || s.type === 'SECRET' || def?.type === 'ENCRYPTED' || def?.type === 'SECRET',
-          isPublic: def?.isPublic ?? false,
-        },
-        create: {
-          key: s.key,
-          value: s.value,
-          type: (s.type as any) ?? def?.type ?? 'STRING',
-          scope: 'GLOBAL',
-          category: category as any,
-          description: def?.description ?? null,
-          isEncrypted: s.type === 'ENCRYPTED' || s.type === 'SECRET' || def?.type === 'ENCRYPTED' || def?.type === 'SECRET',
-          isPublic: def?.isPublic ?? false,
-        },
-      });
+        });
+      }
 
       // Audit log
       if (oldValue !== s.value) {
