@@ -1140,29 +1140,7 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 5. Categories */}
-                <AccordionItem value="categories">
-                  <AccordionTrigger className="py-3 text-sm">
-                    <span className="flex items-center gap-2">
-                      <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                      Category
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="pb-4">
-                      <Controller control={control} name="categoryId" render={({ field }) => (
-                        <Select value={field.value ?? ''} onValueChange={field.onChange}>
-                          <SelectTrigger className="h-9"><SelectValue placeholder="Select category" /></SelectTrigger>
-                          <SelectContent>
-                            {(categories ?? []).map((cat) => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      )} />
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                {/* 6. Tags */}
+                {/* 5. Tags */}
                 <AccordionItem value="tags">
                   <AccordionTrigger className="py-3 text-sm">
                     <span className="flex items-center gap-2">
