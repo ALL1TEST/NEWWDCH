@@ -90,9 +90,11 @@ export function NotificationBell() {
   }, [markReadMutation, navigate, closeMobile]);
 
   const handleViewAll = useCallback(() => {
-    navigate('notifications');
-    closeMobile();
     setOpen(false);
+    setTimeout(() => {
+      navigate('notifications');
+      closeMobile();
+    }, 50);
   }, [navigate, closeMobile]);
 
   const handleClearAllConfirm = () => {
