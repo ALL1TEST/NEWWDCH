@@ -15,6 +15,7 @@ import {
   Navigation,
   BarChart3,
   Bell,
+  Calendar,
   Sparkles,
   Webhook,
   Settings,
@@ -96,6 +97,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'Navigation': Navigation,
   'BarChart3': BarChart3,
   'Bell': Bell,
+  'Calendar': Calendar,
   'Sparkles': Sparkles,
   'Webhook': Webhook,
   'Settings': Settings,
@@ -145,6 +147,11 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Articles',
     href: '#content',
     icon: 'FileText',
+  },
+  {
+    label: 'Calendar',
+    href: '#calendar',
+    icon: 'Calendar',
   },
   {
     label: 'Media',

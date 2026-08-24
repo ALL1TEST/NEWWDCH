@@ -12,6 +12,7 @@ function ModuleFallback() {
 
 const dashboard = dynamic(() => import('@/modules/dashboard').then(m => ({ default: m.DashboardPage as ComponentType })), { loading: ModuleFallback });
 const content = dynamic(() => import('@/modules/content').then(m => ({ default: m.ContentModule as ComponentType })), { loading: ModuleFallback });
+const calendar = dynamic(() => import('@/modules/calendar').then(m => ({ default: m.CalendarModule as ComponentType })), { loading: ModuleFallback });
 const media = dynamic(() => import('@/modules/media').then(m => ({ default: m.MediaModule as ComponentType })), { loading: ModuleFallback });
 const users = dynamic(() => import('@/modules/users').then(m => ({ default: m.UsersModule as ComponentType })), { loading: ModuleFallback });
 const categories = dynamic(() => import('@/modules/categories').then(m => ({ default: m.CategoriesModule as ComponentType })), { loading: ModuleFallback });
@@ -31,5 +32,5 @@ const profile = dynamic(() => import('@/modules/profile').then(m => ({ default: 
 const billing = dynamic(() => import('@/modules/billing').then(m => ({ default: m.BillingModule as ComponentType })), { loading: ModuleFallback });
 
 export const moduleRegistry: Record<string, ComponentType> = {
-  dashboard, content, media, users, categories, tags, comments, newsletter, 'email-templates': emailTemplates, seo, notifications, settings, ai, audit, backups, automation, jobs, profile, billing,
+  dashboard, content, calendar, media, users, categories, tags, comments, newsletter, 'email-templates': emailTemplates, seo, notifications, settings, ai, audit, backups, automation, jobs, profile, billing,
 };

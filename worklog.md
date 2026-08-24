@@ -1049,3 +1049,33 @@ Stage Summary:
   * article/post relation ✓ (Comment.contentItemId)
   * status ✓ (Comment.status)
   * created_at ✓ (Comment.createdAt)
+
+---
+Task ID: CALENDAR-1
+Agent: main (calendar-developer)
+Task: Build a new "Calendar" page for the CMS Admin showing scheduled Articles + Newsletter Campaigns
+
+Work Log:
+- Created `src/modules/calendar/index.tsx` — module entry exporting `CalendarModule` + `CalendarPage`
+- Created `src/modules/calendar/calendar-page.tsx` (~1100 lines) — full calendar page with:
+  * Header: title/subtitle, Today button, Prev/Next, period label, Month|Week|Day|Agenda switcher, "Schedule Content" dropdown (New Article → #content/create, New Campaign → #newsletter/campaigns)
+  * Filter bar: All | Articles | Newsletter | Drafts | Scheduled | Published | Cancelled (with live counts)
+  * Month view: 7-col Sun–Sat grid, today highlighted, 3 events + "+N more" overflow
+  * Week view: 6am–11pm hour grid, 7 day columns, events absolutely positioned by time, horizontally scrollable on mobile
+  * Day view: single-day time grid with absolutely-positioned events, out-of-range events listed separately
+  * Agenda view: chronological list of upcoming items grouped by day with type + status badges
+  * Event details modal: type/status, scheduled date/time, type-specific fields, View/Edit/Close actions
+  * Empty state: "No scheduled content"
+- Data: uses `useQuery` to fetch `/api/content` (articles with scheduledAt or publishedAt) and `/api/campaigns` (campaigns with scheduledAt), mapped to unified `CalendarEvent[]`, filtered client-side. No new scheduling API created.
+- Registered `calendar` in `src/lib/module-registry.tsx` via dynamic import
+- Added "Calendar" nav item to `src/components/layout/sidebar.tsx` (after Articles) with lucide `Calendar` icon added to ICON_MAP
+- Navigation store: no changes needed — `#calendar` parses cleanly (no sub-pages)
+- Styling: shadcn/ui (Button, Badge, Dialog, DropdownMenu, Separator, Skeleton), patterns (StatusBadge, EmptyState), date-fns v4, amber accent for articles/buttons, violet for campaigns, natural document scroll
+- Lint: fixed 2 initial errors in calendar-page.tsx — refactored `eventTypeIcon()` helper into module-level `<EventTypeIcon>` component (react-hooks/static-components) and moved `groups` useMemo before early-return in AgendaView (react-hooks/rules-of-hooks). Zero lint errors in new/modified files.
+
+Stage Summary:
+- Calendar module is fully functional and accessible via `#calendar` in the sidebar
+- Displays real scheduled content from existing Articles + Campaigns APIs
+- All 4 views (Month/Week/Day/Agenda) work with Prev/Next/Today navigation and client-side filtering
+- Click any event to open details modal with View/Edit actions that navigate to the source module
+- Work record: `agent-ctx/CALENDAR-1-calendar-developer.md`
