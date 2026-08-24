@@ -8,13 +8,10 @@ import {
   Trash2,
   MoreHorizontal,
   MessageSquare,
-  Sparkles,
-  Reply,
   ChevronLeft,
   ChevronRight,
   Search,
   ArrowUpDown,
-  Eye,
   Flag,
   ChevronsLeft,
   ChevronsRight,
@@ -23,7 +20,6 @@ import {
   Save,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
@@ -45,24 +41,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from '@/components/ui/sheet';
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { ConfirmDialog } from '@/components/patterns';
-import { AvatarWithFallback } from '@/components/shared';
 import { getApi, deleteApi, patchApi, postApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
-import { cn, formatDate, formatRelativeTime, getInitials } from '@/lib/utils';
+import { cn, formatRelativeTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import type {
   PaginatedResponse,
@@ -71,13 +58,8 @@ import type {
 import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Pencil,
   Flag as FlagIcon,
   Archive,
-  ExternalLink,
-  Globe,
-  Mail,
-  AlertTriangle,
   RotateCcw,
   Info,
 } from 'lucide-react';
@@ -131,58 +113,6 @@ interface CommentRow {
   parentId?: string;
 }
 
-type SentimentType = 'positive' | 'negative' | 'neutral';
-
-// -------------------- Sentiment Detection --------------------
-
-const POSITIVE_WORDS = new Set([
-  'great', 'love', 'excellent', 'amazing', 'good', 'nice', 'best',
-  'wonderful', 'perfect', 'awesome',
-]);
-
-const NEGATIVE_WORDS = new Set([
-  'bad', 'terrible', 'horrible', 'worst', 'hate', 'awful', 'poor',
-  'disgusting', 'waste', 'disappointed',
-]);
-
-function detectSentiment(text: string): SentimentType {
-  const lower = text.toLowerCase();
-  const words = lower.split(/\W+/);
-  let posCount = 0;
-  let negCount = 0;
-  for (const w of words) {
-    if (POSITIVE_WORDS.has(w)) posCount++;
-    if (NEGATIVE_WORDS.has(w)) negCount++;
-  }
-  if (posCount > negCount) return 'positive';
-  if (negCount > posCount) return 'negative';
-  return 'neutral';
-}
-
-const SENTIMENT_CONFIG: Record<
-  SentimentType,
-  { emoji: string; label: string; className: string }
-> = {
-  positive: {
-    emoji: '\u{1F60A}',
-    label: 'Positive',
-    className:
-      'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800',
-  },
-  negative: {
-    emoji: '\u{1F61E}',
-    label: 'Negative',
-    className:
-      'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800',
-  },
-  neutral: {
-    emoji: '\u{1F610}',
-    label: 'Neutral',
-    className:
-      'bg-zinc-50 text-zinc-600 border-zinc-200 dark:bg-zinc-800/50 dark:text-zinc-400 dark:border-zinc-700',
-  },
-};
-
 // -------------------- Status Tab Config --------------------
 
 const STATUS_TABS: { label: string; value: string }[] = [
@@ -216,21 +146,6 @@ const SORT_OPTIONS = [
 ] as const;
 
 // -------------------- Sub-components --------------------
-
-function SentimentBadge({ sentiment }: { sentiment: SentimentType }) {
-  const config = SENTIMENT_CONFIG[sentiment];
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-4',
-        config.className,
-      )}
-    >
-      <span className="text-xs leading-none">{config.emoji}</span>
-      {config.label}
-    </span>
-  );
-}
 
 function StatusBadgeSmall({ status }: { status: string }) {
   const colorClass =
@@ -600,11 +515,9 @@ export function CommentsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<CommentRow | null>(null);
-  const [sheetComment, setSheetComment] = useState<CommentRow | null>(null);
   const [expandedComments, setExpandedComments] = useState<Set<string>>(
     new Set(),
   );
-  const [aiReplies, setAiReplies] = useState<Set<string>>(new Set());
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   // Build query params
@@ -714,7 +627,6 @@ export function CommentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
       setDeleteTarget(null);
-      setSheetComment(null);
     },
   });
 
@@ -882,7 +794,6 @@ export function CommentsPage() {
       if (USE_DEMO_DATA) {
         removeDemoComment(id);
         setDeleteTarget(null);
-        setSheetComment(null);
         toast.success('Comment permanently deleted');
       } else {
         deleteMutation.mutate(id);
@@ -1020,18 +931,6 @@ export function CommentsPage() {
 
   const toggleExpand = useCallback((id: string) => {
     setExpandedComments((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
-
-  const toggleAiReply = useCallback((id: string) => {
-    setAiReplies((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
@@ -1217,25 +1116,23 @@ export function CommentsPage() {
                   const isFlagged = comment.status === 'FLAGGED';
                   const isSpam = comment.status === 'SPAM';
                   const isTrashed = comment.status === 'TRASH';
+                  const isExpanded = expandedComments.has(comment.id);
+                  const isLongComment = comment.content.length > 160;
 
                   return (
                     <div
                       key={comment.id}
                       className={cn(
-                        'flex items-start gap-3 px-4 py-3 border-b last:border-b-0 transition-colors hover:bg-muted/30 cursor-pointer',
+                        'flex items-start gap-3 px-4 py-3 border-b last:border-b-0 transition-colors hover:bg-muted/30',
                         isSpam && 'bg-red-50/40 dark:bg-red-900/5',
                         isFlagged && 'bg-orange-50/40 dark:bg-orange-900/5',
                         isTrashed && 'opacity-60',
                       )}
                       onMouseEnter={() => setHoveredId(comment.id)}
                       onMouseLeave={() => setHoveredId(null)}
-                      onClick={() => setSheetComment(comment)}
                     >
                       {/* Checkbox */}
-                      <div
-                        className="pt-0.5"
-                        onClick={(e) => e.stopPropagation()}
-                      >
+                      <div className="pt-0.5">
                         <Checkbox
                           checked={isSelected}
                           onCheckedChange={() => toggleSelect(comment.id)}
@@ -1243,7 +1140,7 @@ export function CommentsPage() {
                         />
                       </div>
 
-                      {/* Content area — simplified: Name, Email, Comment, Article link, Date + Status */}
+                      {/* Content area — Name, Email, Comment, Article link, Status */}
                       <div className="flex-1 min-w-0">
                         {/* Name + Email (inline) */}
                         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -1257,19 +1154,37 @@ export function CommentsPage() {
                           )}
                         </div>
 
-                        {/* Comment text */}
-                        <p className="text-sm text-foreground/90 mt-1 leading-relaxed line-clamp-2">
+                        {/* Comment text — with Read More / Read Less toggle */}
+                        <p
+                          className={cn(
+                            'text-sm text-foreground/90 mt-1 leading-relaxed',
+                            !isExpanded && isLongComment && 'line-clamp-2',
+                          )}
+                        >
                           {comment.content}
                         </p>
+                        {isLongComment && (
+                          <button
+                            type="button"
+                            className="text-xs text-primary hover:underline mt-0.5"
+                            onClick={() => toggleExpand(comment.id)}
+                          >
+                            {isExpanded ? 'Read Less' : 'Read More'}
+                          </button>
+                        )}
 
                         {/* Article link + Date + Status badge */}
                         <div className="flex flex-wrap items-center gap-2 mt-1.5">
                           {comment.contentItem && (
                             <span className="text-xs text-muted-foreground">
                               on{' '}
-                              <span className="text-foreground/70 hover:text-primary transition-colors">
+                              <a
+                                href={`#content/${comment.contentItem.id}`}
+                                className="text-foreground/70 hover:text-primary transition-colors"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 {comment.contentItem.title}
-                              </span>
+                              </a>
                             </span>
                           )}
                           <span className="text-xs text-muted-foreground">
@@ -1279,18 +1194,15 @@ export function CommentsPage() {
                         </div>
                       </div>
 
-                      {/* Hover Actions — contextual per comment status.
-                          Only the valid actions for the current status are shown;
-                          secondary actions live in the More dropdown. */}
+                      {/* Actions — contextual per comment status.
+                          All actions are available directly; no drawer/modal. */}
                       <div
                         className={cn(
                           'flex items-center gap-0.5 shrink-0 transition-opacity',
                           isHovered || isSelected ? 'opacity-100' : 'opacity-0',
                         )}
-                        onClick={(e) => e.stopPropagation()}
                       >
-                        {/* Approve / Not Spam — hidden when already approved OR in Trash
-                            (Trash uses Restore instead) */}
+                        {/* Approve — for Pending, Rejected, Flagged, Spam (not Approved/Trash) */}
                         {comment.status !== 'APPROVED' &&
                           comment.status !== 'TRASH' && (
                           <Tooltip>
@@ -1310,8 +1222,9 @@ export function CommentsPage() {
                           </Tooltip>
                         )}
 
-                        {/* Reject — only for Pending, Flagged */}
+                        {/* Reject — for Pending, Approved, Flagged (not Rejected/Spam/Trash) */}
                         {(comment.status === 'PENDING' ||
+                          comment.status === 'APPROVED' ||
                           comment.status === 'FLAGGED') && (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -1324,24 +1237,9 @@ export function CommentsPage() {
                                 <X className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Reject</TooltipContent>
-                          </Tooltip>
-                        )}
-
-                        {/* Unapprove — for Approved only (reject = unapprove) */}
-                        {comment.status === 'APPROVED' && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                onClick={() => handleReject(comment.id)}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Unapprove</TooltipContent>
+                            <TooltipContent>
+                              {comment.status === 'APPROVED' ? 'Unapprove' : 'Reject'}
+                            </TooltipContent>
                           </Tooltip>
                         )}
 
@@ -1362,27 +1260,10 @@ export function CommentsPage() {
                           </Tooltip>
                         )}
 
-                        {/* Reply — hidden for Trash and Spam (no point replying to those) */}
-                        {comment.status !== 'TRASH' &&
-                          comment.status !== 'SPAM' && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => setSheetComment(comment)}
-                              >
-                                <Reply className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Reply</TooltipContent>
-                          </Tooltip>
-                        )}
-
-                        {/* Delete — visible for Rejected, Spam (the "remove" action for those) */}
+                        {/* Delete Permanently — for Rejected, Spam, Trash */}
                         {(comment.status === 'REJECTED' ||
-                          comment.status === 'SPAM') && (
+                          comment.status === 'SPAM' ||
+                          comment.status === 'TRASH') && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
@@ -1398,24 +1279,7 @@ export function CommentsPage() {
                           </Tooltip>
                         )}
 
-                        {/* Delete Permanently — for Trash */}
-                        {comment.status === 'TRASH' && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                onClick={() => setDeleteTarget(comment)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Delete Permanently</TooltipContent>
-                          </Tooltip>
-                        )}
-
-                        {/* More dropdown — secondary actions that aren't in the hover buttons */}
+                        {/* More dropdown — secondary actions (Flag, Spam, Trash) */}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -1424,55 +1288,35 @@ export function CommentsPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem
-                              onClick={() => setSheetComment(comment)}
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              View / Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setSheetComment(comment)}
-                            >
-                              <Pencil className="h-4 w-4 mr-2" />
-                              Edit Comment
-                            </DropdownMenuItem>
-                            {/* Only show the moderation secondary actions that
-                                aren't already hover buttons for this status. */}
+                            {/* Flag / Unflag */}
                             {!isFlagged && comment.status !== 'TRASH' && (
-                              <DropdownMenuItem
-                                onClick={() => handleFlag(comment.id)}
-                              >
+                              <DropdownMenuItem onClick={() => handleFlag(comment.id)}>
                                 <FlagIcon className="h-4 w-4 mr-2" />
                                 Flag for Review
                               </DropdownMenuItem>
                             )}
                             {isFlagged && (
-                              <DropdownMenuItem
-                                onClick={() => handleApprove(comment.id)}
-                              >
+                              <DropdownMenuItem onClick={() => handleApprove(comment.id)}>
                                 <FlagIcon className="h-4 w-4 mr-2" />
                                 Unflag (Approve)
                               </DropdownMenuItem>
                             )}
+                            {/* Mark as Spam — not for Spam/Trash */}
                             {comment.status !== 'SPAM' &&
                               comment.status !== 'TRASH' && (
-                                <DropdownMenuItem
-                                  onClick={() => handleMarkSpam(comment.id)}
-                                >
+                                <DropdownMenuItem onClick={() => handleMarkSpam(comment.id)}>
                                   <Flag className="h-4 w-4 mr-2" />
                                   Mark as Spam
                                 </DropdownMenuItem>
                               )}
+                            {/* Move to Trash — not for Trash */}
                             {comment.status !== 'TRASH' && (
-                              <DropdownMenuItem
-                                onClick={() => handleMoveToTrash(comment.id)}
-                              >
+                              <DropdownMenuItem onClick={() => handleMoveToTrash(comment.id)}>
                                 <Archive className="h-4 w-4 mr-2" />
                                 Move to Trash
                               </DropdownMenuItem>
                             )}
-                            {/* Delete Permanently in More — only when not
-                                already a hover button (Pending, Approved, Flagged). */}
+                            {/* Delete Permanently — only for statuses not already showing it as a hover button */}
                             {comment.status !== 'REJECTED' &&
                               comment.status !== 'SPAM' &&
                               comment.status !== 'TRASH' && (
@@ -1643,234 +1487,6 @@ export function CommentsPage() {
             </Button>
           </div>
         )}
-
-        {/* Comment Detail Sheet */}
-        <Sheet
-          open={!!sheetComment}
-          onOpenChange={(open) => !open && setSheetComment(null)}
-        >
-          <SheetContent side="right" className="sm:max-w-lg overflow-y-auto">
-            <SheetHeader className="pr-8">
-              <SheetTitle>Comment Details</SheetTitle>
-              <SheetDescription>
-                {sheetComment
-                  ? `By ${sheetComment.author?.name ?? 'Anonymous'} on ${formatDate(sheetComment.createdAt)}`
-                  : undefined}
-              </SheetDescription>
-            </SheetHeader>
-
-            {sheetComment && (
-              <div className="flex-1 space-y-6 pb-4">
-                {/* Author details */}
-                <div className="flex items-start gap-3 flex-wrap">
-                  <AvatarWithFallback
-                    src={sheetComment.author?.avatar}
-                    name={sheetComment.author?.name ?? 'Anonymous'}
-                    size="lg"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-sm">
-                      {sheetComment.author?.name ?? 'Anonymous'}
-                    </p>
-                    {sheetComment.author?.email && (
-                      <p className="text-xs text-muted-foreground inline-flex items-center gap-1 mt-0.5">
-                        <Mail className="h-3 w-3 shrink-0" />
-                        {sheetComment.author.email}
-                      </p>
-                    )}
-                    {sheetComment.author?.website && (
-                      <a
-                        href={sheetComment.author.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mt-0.5 break-all"
-                      >
-                        <Globe className="h-3 w-3 shrink-0" />
-                        {sheetComment.author.website.replace(/^https?:\/\//, '')}
-                        <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
-                      </a>
-                    )}
-                    {sheetComment.author?.ipAddress && (
-                      <p className="text-[11px] text-muted-foreground/70 mt-0.5">
-                        IP: {sheetComment.author.ipAddress}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <StatusBadgeSmall status={sheetComment.status} />
-                    <SentimentBadge
-                      sentiment={detectSentiment(sheetComment.content)}
-                    />
-                  </div>
-                </div>
-
-                {/* Article reference */}
-                {sheetComment.contentItem && (
-                  <div className="text-sm text-muted-foreground">
-                    Article:{' '}
-                    <span className="font-medium text-primary">
-                      {sheetComment.contentItem.title}
-                    </span>
-                  </div>
-                )}
-
-                {/* Spam / Flag metadata */}
-                {sheetComment.status === 'SPAM' && typeof sheetComment.spamScore === 'number' && (
-                  <div className="rounded-md border border-red-200 bg-red-50/60 dark:border-red-800/40 dark:bg-red-900/10 px-3 py-2 text-xs text-red-700 dark:text-red-400 flex items-center gap-2">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                    <span><span className="font-semibold">Spam score:</span> {sheetComment.spamScore}/100</span>
-                  </div>
-                )}
-                {sheetComment.status === 'FLAGGED' && sheetComment.flagReason && (
-                  <div className="rounded-md border border-orange-200 bg-orange-50/60 dark:border-orange-800/40 dark:bg-orange-900/10 px-3 py-2 text-xs text-orange-700 dark:text-orange-400 flex items-start gap-2">
-                    <FlagIcon className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <span className="leading-snug"><span className="font-semibold">Flag reason:</span> {sheetComment.flagReason}</span>
-                  </div>
-                )}
-
-                {/* Timestamps */}
-                <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
-                  <div>
-                    <span className="font-medium text-foreground/70">Created</span>
-                    <br />
-                    {formatDate(sheetComment.createdAt)}
-                    <br />
-                    <span className="text-[11px]">
-                      {formatRelativeTime(sheetComment.createdAt)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="font-medium text-foreground/70">Updated</span>
-                    <br />
-                    {formatDate(sheetComment.updatedAt)}
-                    <br />
-                    <span className="text-[11px]">
-                      {formatRelativeTime(sheetComment.updatedAt)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Full comment */}
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                    {sheetComment.content}
-                  </p>
-                </div>
-
-                {/* AI Reply section */}
-                {sheetComment.status === 'PENDING' && (
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-semibold">AI Reply</h4>
-                    <div className="rounded-lg border border-violet-200 bg-violet-50/50 dark:border-violet-800/50 dark:bg-violet-900/10 p-3">
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <Sparkles className="h-3.5 w-3.5 text-violet-500" />
-                        <span className="text-xs font-medium text-violet-600 dark:text-violet-400">
-                          Suggested Reply
-                        </span>
-                      </div>
-                      <p className="text-sm text-foreground/80 leading-relaxed">
-                        Thank you for your feedback! We appreciate you taking
-                        the time to share your thoughts.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <SheetFooter className="flex-row flex-wrap gap-2 sm:justify-start">
-                  {/* Restore — only for Trash */}
-                  {sheetComment.status === 'TRASH' && (
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        handleRestore(sheetComment.id);
-                        setSheetComment(null);
-                      }}
-                    >
-                      <RotateCcw className="h-4 w-4 mr-1" />
-                      Restore
-                    </Button>
-                  )}
-                  {sheetComment.status !== 'APPROVED' && sheetComment.status !== 'TRASH' && (
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        handleApprove(sheetComment.id);
-                        setSheetComment(null);
-                      }}
-                    >
-                      <Check className="h-4 w-4 mr-1" />
-                      Approve
-                    </Button>
-                  )}
-                  {sheetComment.status !== 'REJECTED' && sheetComment.status !== 'TRASH' && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        handleReject(sheetComment.id);
-                        setSheetComment(null);
-                      }}
-                    >
-                      <X className="h-4 w-4 mr-1" />
-                      Reject
-                    </Button>
-                  )}
-                  {sheetComment.status !== 'FLAGGED' && sheetComment.status !== 'TRASH' && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        handleFlag(sheetComment.id);
-                        setSheetComment(null);
-                      }}
-                    >
-                      <FlagIcon className="h-4 w-4 mr-1" />
-                      Flag
-                    </Button>
-                  )}
-                  {sheetComment.status !== 'SPAM' && sheetComment.status !== 'TRASH' && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        handleMarkSpam(sheetComment.id);
-                        setSheetComment(null);
-                      }}
-                    >
-                      <Flag className="h-4 w-4 mr-1" />
-                      Mark Spam
-                    </Button>
-                  )}
-                  {sheetComment.status !== 'TRASH' && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        handleMoveToTrash(sheetComment.id);
-                        setSheetComment(null);
-                      }}
-                    >
-                      <Archive className="h-4 w-4 mr-1" />
-                      Move to Trash
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => {
-                      setDeleteTarget(sheetComment);
-                      setSheetComment(null);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4 mr-1" />
-                    Delete
-                  </Button>
-                </SheetFooter>
-              </div>
-            )}
-          </SheetContent>
-        </Sheet>
 
         {/* Delete Confirmation */}
         <ConfirmDialog
