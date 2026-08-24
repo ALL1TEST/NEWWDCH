@@ -860,8 +860,8 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
 
       {/* Main Grid: Editor (8 cols) + Sidebar (4 cols) — SAME as Create page */}
       <div className={cn('grid grid-cols-1 lg:grid-cols-12 gap-4 transition-all', previewOpen ? 'hidden' : '')}>
-        {/* LEFT: Editor Area */}
-        <div className="lg:col-span-8 h-[calc(100vh-8rem)]">
+        {/* LEFT: Editor Area — uses viewport height minus header + topbar + padding. */}
+        <div className="lg:col-span-8 h-[calc(100vh-10.5rem)] min-h-[400px]">
           <div className="relative h-full border rounded-lg overflow-hidden">
             {/* Tiptap Rich Text Editor */}
             <TiptapEditor
@@ -972,7 +972,7 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
 
         {/* RIGHT: Sidebar — SAME accordion structure as Create page */}
         <div className="hidden lg:block lg:col-span-4">
-          <div className="sticky top-4 max-h-[calc(100vh-6rem)] overflow-y-auto">
+          <div className="sticky top-4 max-h-[calc(100vh-10.5rem)] overflow-y-auto">
             <div className="rounded-lg border bg-card">
               <Accordion type="multiple" defaultValue={['featured-image', 'publishing', 'title-slug', 'excerpt']} className="px-4">
                 {/* 1. Featured Image */}

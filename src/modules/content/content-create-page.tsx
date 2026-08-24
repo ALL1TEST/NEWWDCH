@@ -841,8 +841,10 @@ export function ContentCreatePage() {
 
       {/* Main Grid: Editor (8 cols) + Sidebar (4 cols) */}
       <div className={cn('grid grid-cols-1 lg:grid-cols-12 gap-4 transition-all', previewOpen ? 'hidden' : '')}>
-        {/* LEFT: Editor Area */}
-        <div className="lg:col-span-8 h-[calc(100vh-8rem)]">
+        {/* LEFT: Editor Area — uses viewport height minus header + topbar + padding.
+            The exact offset accounts for: topbar (3.5rem) + main padding (3rem) +
+            header row (3rem) + gap (1rem) = ~10.5rem. */}
+        <div className="lg:col-span-8 h-[calc(100vh-10.5rem)] min-h-[400px]">
           <div className="relative h-full border rounded-lg overflow-hidden">
             {/* Tiptap Rich Text Editor */}
             <TiptapEditor
@@ -952,9 +954,11 @@ export function ContentCreatePage() {
           </div>
         </div>
 
-        {/* RIGHT: Sidebar */}
+        {/* RIGHT: Sidebar — sticky with max height matching the editor area.
+            overflow-y-auto allows the sidebar to scroll independently when
+            its content is taller than the available space. */}
         <div className="hidden lg:block lg:col-span-4">
-          <div className="sticky top-4 max-h-[calc(100vh-6rem)] overflow-y-auto">
+          <div className="sticky top-4 max-h-[calc(100vh-10.5rem)] overflow-y-auto">
             <div className="rounded-lg border bg-card">
               <Accordion type="multiple" defaultValue={['featured-image', 'title-slug', 'excerpt']} className="px-4">
                 {/* 1. Featured Image */}
