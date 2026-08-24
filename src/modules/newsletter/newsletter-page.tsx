@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
@@ -380,6 +380,50 @@ export function NewsletterPage() {
     },
   });
 
+  // View campaign modal state
+  const [viewCampaign, setViewCampaign] = useState<CampaignRow | null>(null);
+
+  // Edit campaign modal state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState<CampaignForm>(INITIAL_CAMPAIGN_FORM);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Update campaign mutation (for Edit)
+  const updateCampaignMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<CampaignForm> }) =>
+      patchApi(`/api/campaigns/${id}`, {
+        name: data.name,
+        subject: data.subject,
+        templateId: data.templateId,
+        contentOverride: data.contentOverride || '',
+        scheduledAt: data.scheduledAt || '',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.newsletterCampaigns.all });
+      setEditOpen(false);
+      setEditingId(null);
+      toast.success('Campaign updated');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update campaign');
+    },
+  });
+
+  // Open Edit modal with existing campaign data
+  const openEditModal = useCallback((campaign: CampaignRow) => {
+    setEditForm({
+      name: campaign.name,
+      subject: campaign.subject,
+      templateId: campaign.templateId || '',
+      contentOverride: campaign.contentOverride || '',
+      scheduledAt: campaign.scheduledAt ? new Date(campaign.scheduledAt).toISOString().slice(0, 16) : '',
+      audience: 'all',
+      selectedSubscriberIds: [],
+    });
+    setEditingId(campaign.id);
+    setEditOpen(true);
+  }, []);
+
   const campaignColumns = useMemo<ColumnDef<CampaignRow>[]>(
     () => [
       ColumnDefHelper.textColumn<CampaignRow>({
@@ -450,7 +494,7 @@ export function NewsletterPage() {
         render: (row) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
                 <MoreHorizontal className="h-4 w-4" />
                 <span className="sr-only">Actions</span>
               </Button>
@@ -459,9 +503,13 @@ export function NewsletterPage() {
               {/* Draft: Edit / Schedule / Send Now / Delete */}
               {row.status === 'DRAFT' && (
                 <>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => openEditModal(row)}>
                     <Pencil className="h-4 w-4 mr-2" />
                     Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setViewCampaign(row)}>
+                    <Eye className="h-4 w-4 mr-2" />
+                    View
                   </DropdownMenuItem>
                   <DropdownMenuItem>
                     <Clock className="h-4 w-4 mr-2" />
@@ -482,12 +530,16 @@ export function NewsletterPage() {
                 </>
               )}
 
-              {/* Scheduled: Edit / Cancel */}
+              {/* Scheduled: Edit / View / Cancel */}
               {row.status === 'SCHEDULED' && (
                 <>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => openEditModal(row)}>
                     <Pencil className="h-4 w-4 mr-2" />
                     Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setViewCampaign(row)}>
+                    <Eye className="h-4 w-4 mr-2" />
+                    View
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => cancelCampaignMutation.mutate(row.id)}
@@ -510,7 +562,7 @@ export function NewsletterPage() {
               {/* Sent: View / Duplicate */}
               {row.status === 'SENT' && (
                 <>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setViewCampaign(row)}>
                     <Eye className="h-4 w-4 mr-2" />
                     View
                   </DropdownMenuItem>
@@ -521,7 +573,7 @@ export function NewsletterPage() {
                 </>
               )}
 
-              {/* Failed: Retry / Edit / Delete */}
+              {/* Failed: Retry / Edit / View / Delete */}
               {row.status === 'FAILED' && (
                 <>
                   <DropdownMenuItem
@@ -531,9 +583,13 @@ export function NewsletterPage() {
                     {retryCampaignMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
                     Retry
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => openEditModal(row)}>
                     <Pencil className="h-4 w-4 mr-2" />
                     Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setViewCampaign(row)}>
+                    <Eye className="h-4 w-4 mr-2" />
+                    View
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onClick={() => setDeleteCampaignTarget(row)}>
@@ -831,6 +887,149 @@ export function NewsletterPage() {
         }}
         isLoading={deleteCampaignMutation.isPending}
       />
+
+      {/* View Campaign Modal (read-only) */}
+      <Dialog open={!!viewCampaign} onOpenChange={(open) => !open && setViewCampaign(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Campaign Details</DialogTitle>
+          </DialogHeader>
+          {viewCampaign && (
+            <div className="space-y-3 py-2">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Name</span>
+                  <p className="font-medium">{viewCampaign.name}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Status</span>
+                  <p><StatusBadge status={viewCampaign.status} size="sm" /></p>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground">Subject</span>
+                  <p className="font-medium">{viewCampaign.subject}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Template</span>
+                  <p className="font-medium">{viewCampaign.template?.name || '—'}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Recipients</span>
+                  <p className="font-medium tabular-nums">{viewCampaign.recipientCount}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Scheduled</span>
+                  <p className="font-medium">{viewCampaign.scheduledAt ? formatDate(viewCampaign.scheduledAt) : '—'}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Sent</span>
+                  <p className="font-medium">{viewCampaign.sentAt ? formatDate(viewCampaign.sentAt) : '—'}</p>
+                </div>
+                {viewCampaign.status === 'SENT' && (
+                  <>
+                    <div>
+                      <span className="text-muted-foreground">Open Rate</span>
+                      <p className="font-medium tabular-nums">{viewCampaign.openRate !== undefined ? `${viewCampaign.openRate}%` : '—'}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Click Rate</span>
+                      <p className="font-medium tabular-nums">{viewCampaign.clickRate !== undefined ? `${viewCampaign.clickRate}%` : '—'}</p>
+                    </div>
+                  </>
+                )}
+                {viewCampaign.errorMessage && (
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Error</span>
+                    <p className="text-sm text-red-600 dark:text-red-400">{viewCampaign.errorMessage}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewCampaign(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Campaign Modal */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Campaign</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-name">Campaign Name <span className="text-destructive">*</span></Label>
+              <Input
+                id="edit-name"
+                placeholder="e.g. August Newsletter"
+                value={editForm.name}
+                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-template">Email Template <span className="text-destructive">*</span></Label>
+              <Select
+                value={editForm.templateId}
+                onValueChange={(v) => setEditForm((f) => ({ ...f, templateId: v }))}
+              >
+                <SelectTrigger id="edit-template">
+                  <SelectValue placeholder="Select a template" />
+                </SelectTrigger>
+                <SelectContent>
+                  {emailTemplates.map((tpl) => (
+                    <SelectItem key={tpl.id} value={tpl.id}>
+                      {tpl.name}{tpl.category ? ` (${tpl.category})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-subject">Subject Line <span className="text-destructive">*</span></Label>
+              <Input
+                id="edit-subject"
+                placeholder="e.g. Your weekly updates"
+                value={editForm.subject}
+                onChange={(e) => setEditForm((f) => ({ ...f, subject: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-content">Content Override <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Textarea
+                id="edit-content"
+                placeholder="Enter custom HTML (optional)"
+                rows={3}
+                value={editForm.contentOverride}
+                onChange={(e) => setEditForm((f) => ({ ...f, contentOverride: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-schedule">Schedule <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Input
+                id="edit-schedule"
+                type="datetime-local"
+                value={editForm.scheduledAt}
+                onChange={(e) => setEditForm((f) => ({ ...f, scheduledAt: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                if (editingId) {
+                  updateCampaignMutation.mutate({ id: editingId, data: editForm });
+                }
+              }}
+              disabled={updateCampaignMutation.isPending || !editForm.name || !editForm.subject || !editForm.templateId}
+            >
+              {updateCampaignMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

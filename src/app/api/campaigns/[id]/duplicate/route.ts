@@ -1,22 +1,24 @@
 // ============================================================
 // POST /api/campaigns/[id]/duplicate — Duplicate a campaign
 // ============================================================
+//
+// Creates a NEW campaign as DRAFT based on the source campaign's
+// configuration. Copies templateId, contentOverride, subject, name
+// (with " (Copy)" suffix). Does NOT copy: status (always DRAFT),
+// scheduledAt, sentAt, recipientCount (recalculated), openCount,
+// clickCount, errorMessage.
+// ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
-
-// ---------- helpers ---------------------------------------------------
+import { countEligibleSubscribers } from '@/lib/campaign-service';
 
 function reqId() {
   return 'req_' + nanoid(8);
 }
 
 type RouteContext = { params: Promise<{ id: string }> };
-
-// =====================================================================
-// POST — duplicate
-// =====================================================================
 
 export async function POST(_request: NextRequest, context: RouteContext) {
   const id = reqId();
@@ -32,12 +34,18 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       );
     }
 
+    // Recalculate recipient count for the duplicate (based on current
+    // eligible subscribers, not the original's count).
+    const recipientCount = await countEligibleSubscribers();
+
     const duplicate = await db.newsletterCampaign.create({
       data: {
         name: `${campaign.name} (Copy)`,
         subject: campaign.subject,
-        content: campaign.content,
+        contentOverride: campaign.contentOverride,
+        templateId: campaign.templateId,
         status: 'DRAFT',
+        recipientCount,
         createdById: campaign.createdById,
       },
     });

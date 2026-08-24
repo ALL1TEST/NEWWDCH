@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Check,
@@ -161,6 +161,80 @@ function StatusBadgeSmall({ status }: { status: string }) {
     >
       {label}
     </span>
+  );
+}
+
+// -------------------- Comment Text (Read More / Read Less) --------------------
+// Measures the actual rendered height of the paragraph against its
+// truncated (2-line) height. If scrollHeight > clientHeight, the text
+// IS being truncated and "Read More" is shown. This is based on the
+// actual rendered content, not an arbitrary character threshold.
+
+function CommentText({
+  content,
+  commentId,
+  isExpanded,
+  onToggle,
+}: {
+  content: string;
+  commentId: string;
+  isExpanded: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const paraRef = useRef<HTMLParagraphElement>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+
+  useEffect(() => {
+    const el = paraRef.current;
+    if (!el) return;
+
+    const check = () => {
+      if (isExpanded) {
+        // When expanded, always show "Read Less"
+        setIsTruncated(true);
+        return;
+      }
+      // Compare scrollHeight (full content) vs clientHeight (visible area).
+      // If scrollHeight > clientHeight, the text IS being clipped by
+      // line-clamp-2 — "Read More" should appear.
+      const isClipped = el.scrollHeight > el.clientHeight + 2;
+      setIsTruncated(isClipped);
+    };
+
+    // Use requestAnimationFrame to ensure the DOM has settled
+    const raf = requestAnimationFrame(check);
+
+    // Re-check on resize (container width may change)
+    const observer = new ResizeObserver(() => requestAnimationFrame(check));
+    observer.observe(el);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, [content, isExpanded]);
+
+  return (
+    <>
+      <p
+        ref={paraRef}
+        className={cn(
+          'text-sm text-foreground/90 mt-1 leading-relaxed',
+          !isExpanded && 'line-clamp-2',
+        )}
+      >
+        {content}
+      </p>
+      {isTruncated && (
+        <button
+          type="button"
+          className="text-xs text-primary hover:underline mt-0.5"
+          onClick={() => onToggle(commentId)}
+        >
+          {isExpanded ? 'Read Less' : 'Read More'}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -1117,10 +1191,6 @@ export function CommentsPage() {
                   const isSpam = comment.status === 'SPAM';
                   const isTrashed = comment.status === 'TRASH';
                   const isExpanded = expandedComments.has(comment.id);
-                  // Read More only appears when the comment is long enough
-                  // that line-clamp-2 would actually truncate it. We use a
-                  // generous threshold so short comments never show the button.
-                  const isLongComment = comment.content.length > 200;
 
                   // Compute which secondary actions belong in the More dropdown
                   // for this status. The dropdown is only rendered if at least
@@ -1176,24 +1246,13 @@ export function CommentsPage() {
                           )}
                         </div>
 
-                        {/* Comment text — with Read More / Read Less toggle */}
-                        <p
-                          className={cn(
-                            'text-sm text-foreground/90 mt-1 leading-relaxed',
-                            !isExpanded && isLongComment && 'line-clamp-2',
-                          )}
-                        >
-                          {comment.content}
-                        </p>
-                        {isLongComment && (
-                          <button
-                            type="button"
-                            className="text-xs text-primary hover:underline mt-0.5"
-                            onClick={() => toggleExpand(comment.id)}
-                          >
-                            {isExpanded ? 'Read Less' : 'Read More'}
-                          </button>
-                        )}
+                        {/* Comment text — Read More/Less based on actual rendered truncation */}
+                        <CommentText
+                          content={comment.content}
+                          commentId={comment.id}
+                          isExpanded={isExpanded}
+                          onToggle={toggleExpand}
+                        />
 
                         {/* Article link + Date + Status badge */}
                         <div className="flex flex-wrap items-center gap-2 mt-1.5">
