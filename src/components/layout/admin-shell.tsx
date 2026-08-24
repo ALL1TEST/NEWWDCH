@@ -37,12 +37,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SidebarProvider>
-      <div className="h-full flex w-full bg-background">
+    <SidebarProvider className="h-auto min-h-svh overflow-visible">
+      <div className="min-h-svh flex w-full bg-background">
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <Topbar />
-          <main className="flex-1 overflow-auto p-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{children}</main>
+          <main className="flex-1 p-6">{children}</main>
         </div>
       </div>
       <CommandPalette />
