@@ -10,6 +10,14 @@ import {
   Trash2,
   Users,
   Mail,
+  Loader2,
+  Send,
+  Eye,
+  Play,
+  Clock,
+  XCircle,
+  RotateCcw,
+  Ban,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -44,6 +52,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DataTable,
   useDataTable,
@@ -52,7 +61,7 @@ import {
   PageHeader,
   ConfirmDialog,
 } from '@/components/patterns';
-import { getApi, postApi, deleteApi } from '@/lib/api-client';
+import { getApi, postApi, deleteApi, patchApi } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { queryKeys } from '@/lib/query-keys';
 import { formatDate, cn } from '@/lib/utils';
@@ -78,15 +87,27 @@ interface SubscriberRow {
 
 // -------------------- Campaign Types --------------------
 
+interface CampaignTemplate {
+  id: string;
+  name: string;
+  subject?: string;
+  category?: string;
+}
+
 interface CampaignRow {
   id: string;
   name: string;
   subject: string;
+  contentOverride?: string | null;
+  templateId?: string | null;
+  template?: CampaignTemplate | null;
   status: CampaignStatus;
   recipientCount: number;
   openRate?: number;
   clickRate?: number;
-  scheduledAt?: string;
+  scheduledAt?: string | null;
+  sentAt?: string | null;
+  errorMessage?: string | null;
   createdAt: string;
 }
 
@@ -95,15 +116,21 @@ interface CampaignRow {
 interface CampaignForm {
   name: string;
   subject: string;
-  content: string;
+  templateId: string;
+  contentOverride: string;
   scheduledAt: string;
+  audience: 'all' | 'selected';
+  selectedSubscriberIds: string[];
 }
 
 const INITIAL_CAMPAIGN_FORM: CampaignForm = {
   name: '',
   subject: '',
-  content: '',
+  templateId: '',
+  contentOverride: '',
   scheduledAt: '',
+  audience: 'all',
+  selectedSubscriberIds: [],
 };
 
 // -------------------- Campaign Status Options --------------------
@@ -114,8 +141,8 @@ const CAMPAIGN_STATUS_OPTIONS: { label: string; value: string }[] = [
   { label: 'Scheduled', value: 'SCHEDULED' },
   { label: 'Sending', value: 'SENDING' },
   { label: 'Sent', value: 'SENT' },
-  { label: 'Paused', value: 'PAUSED' },
   { label: 'Failed', value: 'FAILED' },
+  { label: 'Cancelled', value: 'CANCELLED' },
 ];
 
 // -------------------- Component --------------------
@@ -234,6 +261,25 @@ export function NewsletterPage() {
   const campaigns = (Array.isArray(campRaw?.data) ? campRaw.data : []) as CampaignRow[];
   const totalCampaigns = campRaw?.meta?.pagination?.total ?? 0;
 
+  // Fetch email templates for the Create Campaign dialog's template selector.
+  // Only ENABLED templates are shown.
+  const { data: templatesData } = useQuery({
+    queryKey: ['email-templates', 'enabled'],
+    queryFn: () => getApi<{ id: string; name: string; subject?: string; category?: string }[]>('/api/email-templates?status=ENABLED&pageSize=100'),
+    staleTime: 30_000,
+  });
+  const emailTemplates = templatesData ?? [];
+
+  // Fetch eligible subscribers (status=SUBSCRIBED) for the audience selector
+  // + live recipient count preview.
+  const { data: eligibleSubsData } = useQuery({
+    queryKey: ['campaigns', 'eligible-subscribers'],
+    queryFn: () => getApi<{ id: string; email: string; name?: string }[]>('/api/campaigns/eligible-subscribers'),
+    staleTime: 30_000,
+  });
+  const eligibleSubscribers = eligibleSubsData ?? [];
+  const eligibleCount = eligibleSubscribers.length;
+
   // Delete campaign mutation
   const deleteCampaignMutation = useMutation({
     mutationFn: (id: string) => deleteApi(`/api/campaigns/${id}`),
@@ -264,9 +310,30 @@ export function NewsletterPage() {
   const [campaignForm, setCampaignForm] = useState<CampaignForm>(INITIAL_CAMPAIGN_FORM);
   const authUser = useAuthStore((s) => s.user);
 
+  // Compute the live recipient count for the Create Campaign dialog
+  // (must be after campaignForm state declaration)
+  const liveRecipientCount = campaignForm.audience === 'all'
+    ? eligibleCount
+    : campaignForm.selectedSubscriberIds.length;
+
   const createCampaignMutation = useMutation({
-    mutationFn: (payload: CampaignForm) =>
-      postApi('/api/campaigns', { ...payload, createdById: authUser?.id }),
+    mutationFn: (payload: CampaignForm) => {
+      // Build the API payload — audience is 'all' or an array of IDs
+      const apiPayload: Record<string, unknown> = {
+        name: payload.name,
+        subject: payload.subject,
+        templateId: payload.templateId,
+        contentOverride: payload.contentOverride || '',
+        scheduledAt: payload.scheduledAt || '',
+        createdById: authUser?.id,
+      };
+      if (payload.audience === 'all') {
+        apiPayload.audience = 'all';
+      } else {
+        apiPayload.audience = payload.selectedSubscriberIds;
+      }
+      return postApi('/api/campaigns', apiPayload);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.newsletterCampaigns.all });
       setCreateOpen(false);
@@ -275,6 +342,42 @@ export function NewsletterPage() {
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to create campaign');
+    },
+  });
+
+  // Send campaign now (Draft → Sending → Sent/Failed)
+  const sendCampaignMutation = useMutation({
+    mutationFn: (id: string) => postApi(`/api/campaigns/${id}/send`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.newsletterCampaigns.all });
+      toast.success('Campaign sent');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to send campaign');
+    },
+  });
+
+  // Cancel a scheduled campaign
+  const cancelCampaignMutation = useMutation({
+    mutationFn: (id: string) => postApi(`/api/campaigns/${id}/cancel`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.newsletterCampaigns.all });
+      toast.success('Campaign cancelled');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to cancel campaign');
+    },
+  });
+
+  // Retry a failed campaign
+  const retryCampaignMutation = useMutation({
+    mutationFn: (id: string) => postApi(`/api/campaigns/${id}/retry`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.newsletterCampaigns.all });
+      toast.success('Campaign retry started');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to retry campaign');
     },
   });
 
@@ -353,29 +456,114 @@ export function NewsletterPage() {
                 <span className="sr-only">Actions</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>
-                <Pencil className="h-4 w-4 mr-2" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => duplicateCampaignMutation.mutate(row.id)}>
-                <Copy className="h-4 w-4 mr-2" />
-                Duplicate
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => setDeleteCampaignTarget(row)}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </DropdownMenuItem>
+            <DropdownMenuContent align="end" className="w-48">
+              {/* Draft: Edit / Schedule / Send Now / Delete */}
+              {row.status === 'DRAFT' && (
+                <>
+                  <DropdownMenuItem>
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Clock className="h-4 w-4 mr-2" />
+                    Schedule
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => sendCampaignMutation.mutate(row.id)}
+                    disabled={sendCampaignMutation.isPending}
+                  >
+                    {sendCampaignMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                    Send Now
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={() => setDeleteCampaignTarget(row)}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
+
+              {/* Scheduled: Edit / Cancel */}
+              {row.status === 'SCHEDULED' && (
+                <>
+                  <DropdownMenuItem>
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => cancelCampaignMutation.mutate(row.id)}
+                    disabled={cancelCampaignMutation.isPending}
+                  >
+                    <Ban className="h-4 w-4 mr-2" />
+                    Cancel
+                  </DropdownMenuItem>
+                </>
+              )}
+
+              {/* Sending: show state, no actions */}
+              {row.status === 'SENDING' && (
+                <DropdownMenuItem disabled>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </DropdownMenuItem>
+              )}
+
+              {/* Sent: View / Duplicate */}
+              {row.status === 'SENT' && (
+                <>
+                  <DropdownMenuItem>
+                    <Eye className="h-4 w-4 mr-2" />
+                    View
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => duplicateCampaignMutation.mutate(row.id)}>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Duplicate
+                  </DropdownMenuItem>
+                </>
+              )}
+
+              {/* Failed: Retry / Edit / Delete */}
+              {row.status === 'FAILED' && (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => retryCampaignMutation.mutate(row.id)}
+                    disabled={retryCampaignMutation.isPending}
+                  >
+                    {retryCampaignMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+                    Retry
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={() => setDeleteCampaignTarget(row)}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
+
+              {/* Cancelled: Duplicate / Delete */}
+              {row.status === 'CANCELLED' && (
+                <>
+                  <DropdownMenuItem onClick={() => duplicateCampaignMutation.mutate(row.id)}>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Duplicate
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={() => setDeleteCampaignTarget(row)}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         ),
       }),
     ],
-    [duplicateCampaignMutation],
+    [duplicateCampaignMutation, sendCampaignMutation, cancelCampaignMutation, retryCampaignMutation],
   );
 
   // Campaign filter content
@@ -450,16 +638,17 @@ export function NewsletterPage() {
                   Create Campaign
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-lg">
+              <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Create Campaign</DialogTitle>
                   <DialogDescription>
-                    Fill in the details below to create a new newsletter campaign.
+                    Select an email template and audience to send a newsletter campaign.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
+                  {/* Campaign Name */}
                   <div className="space-y-2">
-                    <Label htmlFor="camp-name">Campaign Name</Label>
+                    <Label htmlFor="camp-name">Campaign Name <span className="text-destructive">*</span></Label>
                     <Input
                       id="camp-name"
                       placeholder="e.g. Weekly Digest #42"
@@ -467,25 +656,129 @@ export function NewsletterPage() {
                       onChange={(e) => setCampaignForm((f) => ({ ...f, name: e.target.value }))}
                     />
                   </div>
+
+                  {/* Email Template Selector */}
                   <div className="space-y-2">
-                    <Label htmlFor="camp-subject">Subject Line</Label>
+                    <Label htmlFor="camp-template">Email Template <span className="text-destructive">*</span></Label>
+                    {emailTemplates.length === 0 ? (
+                      <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-400">
+                        No email templates found. Create a template first in Settings → Email Templates before creating a campaign.
+                      </div>
+                    ) : (
+                      <Select
+                        value={campaignForm.templateId}
+                        onValueChange={(v) => setCampaignForm((f) => ({ ...f, templateId: v }))}
+                      >
+                        <SelectTrigger id="camp-template">
+                          <SelectValue placeholder="Select an email template..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {emailTemplates.map((tpl) => (
+                            <SelectItem key={tpl.id} value={tpl.id}>
+                              {tpl.name}{tpl.category ? ` (${tpl.category})` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      The template provides the email design. You can override the content below without modifying the original template.
+                    </p>
+                  </div>
+
+                  {/* Subject Line */}
+                  <div className="space-y-2">
+                    <Label htmlFor="camp-subject">Subject Line <span className="text-destructive">*</span></Label>
                     <Input
                       id="camp-subject"
                       placeholder="e.g. Your weekly updates"
                       value={campaignForm.subject}
                       onChange={(e) => setCampaignForm((f) => ({ ...f, subject: e.target.value }))}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      This is the actual subject subscribers will see. It can differ from the template's subject.
+                    </p>
                   </div>
+
+                  {/* Content Override (optional) */}
                   <div className="space-y-2">
-                    <Label htmlFor="camp-content">Content</Label>
+                    <Label htmlFor="camp-content">Content Override (optional)</Label>
                     <Textarea
                       id="camp-content"
-                      placeholder="Write your newsletter content here..."
-                      rows={6}
-                      value={campaignForm.content}
-                      onChange={(e) => setCampaignForm((f) => ({ ...f, content: e.target.value }))}
+                      placeholder="Leave empty to use the template's HTML body. Or paste custom HTML to override the template content for this campaign only."
+                      rows={4}
+                      value={campaignForm.contentOverride}
+                      onChange={(e) => setCampaignForm((f) => ({ ...f, contentOverride: e.target.value }))}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Editing this does NOT modify the original Email Template.
+                    </p>
                   </div>
+
+                  {/* Audience Selector */}
+                  <div className="space-y-2">
+                    <Label>Audience / Recipients <span className="text-destructive">*</span></Label>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="audience"
+                          checked={campaignForm.audience === 'all'}
+                          onChange={() => setCampaignForm((f) => ({ ...f, audience: 'all' }))}
+                          className="h-4 w-4"
+                        />
+                        <span className="text-sm">All subscribed subscribers</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="audience"
+                          checked={campaignForm.audience === 'selected'}
+                          onChange={() => setCampaignForm((f) => ({ ...f, audience: 'selected' }))}
+                          className="h-4 w-4"
+                        />
+                        <span className="text-sm">Select specific subscribers</span>
+                      </label>
+                    </div>
+
+                    {/* Live recipient count */}
+                    <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
+                      <strong className="text-foreground">{liveRecipientCount}</strong>
+                      <span className="text-muted-foreground"> subscriber{liveRecipientCount !== 1 ? 's' : ''} will receive this campaign</span>
+                      {eligibleCount === 0 && (
+                        <span className="text-amber-600 dark:text-amber-400 ml-2">(no eligible subscribers — status=SUBSCRIBED required)</span>
+                      )}
+                    </div>
+
+                    {/* Selected subscribers list (only when audience=selected) */}
+                    {campaignForm.audience === 'selected' && (
+                      <div className="border rounded-md max-h-48 overflow-y-auto">
+                        {eligibleSubscribers.length === 0 ? (
+                          <p className="px-3 py-2 text-sm text-muted-foreground">No eligible subscribers available.</p>
+                        ) : (
+                          eligibleSubscribers.map((sub) => (
+                            <label key={sub.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/30 cursor-pointer border-b last:border-b-0">
+                              <Checkbox
+                                checked={campaignForm.selectedSubscriberIds.includes(sub.id)}
+                                onCheckedChange={(checked) => {
+                                  setCampaignForm((f) => ({
+                                    ...f,
+                                    selectedSubscriberIds: checked
+                                      ? [...f.selectedSubscriberIds, sub.id]
+                                      : f.selectedSubscriberIds.filter((id) => id !== sub.id),
+                                  }));
+                                }}
+                              />
+                              <span className="text-sm truncate">{sub.name || sub.email}</span>
+                              {sub.name && <span className="text-xs text-muted-foreground truncate">{sub.email}</span>}
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Schedule (optional) */}
                   <div className="space-y-2">
                     <Label htmlFor="camp-schedule">Schedule (optional)</Label>
                     <Input
@@ -494,6 +787,9 @@ export function NewsletterPage() {
                       value={campaignForm.scheduledAt}
                       onChange={(e) => setCampaignForm((f) => ({ ...f, scheduledAt: e.target.value }))}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Leave empty to save as Draft. Select a future date/time to schedule the campaign.
+                    </p>
                   </div>
                 </div>
                 <DialogFooter>
@@ -502,7 +798,14 @@ export function NewsletterPage() {
                   </Button>
                   <Button
                     onClick={() => createCampaignMutation.mutate(campaignForm)}
-                    disabled={createCampaignMutation.isPending || !campaignForm.name || !campaignForm.subject}
+                    disabled={
+                      createCampaignMutation.isPending ||
+                      !campaignForm.name ||
+                      !campaignForm.subject ||
+                      !campaignForm.templateId ||
+                      liveRecipientCount === 0 ||
+                      (campaignForm.audience === 'selected' && campaignForm.selectedSubscriberIds.length === 0)
+                    }
                   >
                     {createCampaignMutation.isPending ? 'Creating...' : 'Create Campaign'}
                   </Button>

@@ -177,8 +177,8 @@ enum CampaignStatus {
   SCHEDULED
   SENDING
   SENT
-  PAUSED
   FAILED
+  CANCELLED
 }
 
 enum NotificationType {
@@ -1539,7 +1539,8 @@ model NewsletterSubscriber {
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 
-  site Site? @relation(fields: [siteId], references: [id])
+  site       Site? @relation(fields: [siteId], references: [id])
+  deliveries CampaignDelivery[]
 
   @@unique([email, siteId])
   @@index([email])
@@ -1548,27 +1549,55 @@ model NewsletterSubscriber {
 }
 
 model NewsletterCampaign {
-  id           String          @id @default(cuid())
-  name         String
-  subject      String
-  content      String?
-  status       CampaignStatus  @default(DRAFT)
-  scheduledAt  DateTime?
-  sentAt       DateTime?
-  recipientCount Int           @default(0)
-  openCount    Int             @default(0)
-  clickCount   Int             @default(0)
-  createdById  String
-  siteId       String?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id              String          @id @default(cuid())
+  name            String
+  subject         String
+  content         String?
+  contentOverride String?         // optional campaign-specific content that overrides the template's htmlBody
+  templateId      String?         // references EmailTemplate — the reusable email design
+  status          CampaignStatus  @default(DRAFT)
+  scheduledAt     DateTime?
+  sentAt          DateTime?
+  recipientCount  Int             @default(0)
+  openCount       Int             @default(0)
+  clickCount      Int             @default(0)
+  errorMessage    String?         // populated when status=FAILED
+  createdById     String
+  siteId          String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
-  site      Site? @relation(fields: [siteId], references: [id])
-  createdBy User @relation("CampaignAuthor", fields: [createdById], references: [id])
+  site        Site?          @relation(fields: [siteId], references: [id])
+  createdBy   User           @relation("CampaignAuthor", fields: [createdById], references: [id])
+  template    EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  deliveries  CampaignDelivery[]
 
   @@index([status])
   @@index([scheduledAt])
   @@index([siteId])
+  @@index([templateId])
+}
+
+// One row per subscriber per campaign — tracks individual delivery status,
+// open events, and click events. This is what makes open/click rates real.
+model CampaignDelivery {
+  id          String   @id @default(cuid())
+  campaignId  String
+  subscriberId String
+  status      String   @default("PENDING") // PENDING | SENT | FAILED | BOUNCED
+  sentAt      DateTime?
+  openedAt    DateTime?
+  clickedAt   DateTime?
+  errorMessage String?
+  createdAt   DateTime @default(now())
+
+  campaign   NewsletterCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  subscriber NewsletterSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, subscriberId])
+  @@index([campaignId])
+  @@index([subscriberId])
+  @@index([status])
 }
 
 // ============================================================
@@ -2416,6 +2445,7 @@ model EmailTemplate {
   site      Site?   @relation(fields: [siteId], references: [id])
   createdBy User    @relation("EmailTemplateCreator", fields: [createdById], references: [id])
   versions  EmailTemplateVersion[]
+  campaigns NewsletterCampaign[]
 
   @@index([category])
   @@index([status])

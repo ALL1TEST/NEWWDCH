@@ -17,6 +17,7 @@ function reqId() {
 
 const fullIncludes = {
   createdBy: { select: { id: true, name: true, email: true, avatar: true } },
+  template: { select: { id: true, name: true, subject: true, htmlBody: true, category: true, fromName: true, fromEmail: true, replyTo: true } },
 } as const;
 
 // ---------- validation ------------------------------------------------
@@ -25,7 +26,9 @@ const updateSchema = z.object({
   name: z.string().min(1).max(200).trim().optional(),
   subject: z.string().min(1).max(500).trim().optional(),
   content: z.string().optional().or(z.literal('')),
-  status: z.enum(['DRAFT', 'SCHEDULED', 'SENDING', 'SENT', 'PAUSED', 'FAILED']).optional(),
+  contentOverride: z.string().optional().or(z.literal('')),
+  templateId: z.string().optional().or(z.literal('')),
+  status: z.enum(['DRAFT', 'SCHEDULED', 'SENDING', 'SENT', 'FAILED', 'CANCELLED']).optional(),
   scheduledAt: z.string().datetime({ offset: true }).optional().or(z.literal('')),
   recipientCount: z.number().int().min(0).optional(),
   openCount: z.number().int().min(0).optional(),
@@ -115,6 +118,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (d.name !== undefined) updateData.name = d.name;
     if (d.subject !== undefined) updateData.subject = d.subject;
     if (d.content !== undefined) updateData.content = d.content === '' ? null : d.content;
+    if (d.contentOverride !== undefined) updateData.contentOverride = d.contentOverride === '' ? null : d.contentOverride;
+    if (d.templateId !== undefined) updateData.templateId = d.templateId === '' ? null : d.templateId;
     if (d.status !== undefined) {
       updateData.status = d.status;
       if (d.status === 'SENT' && !existing.sentAt) {

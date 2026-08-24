@@ -105,8 +105,8 @@ export type CampaignStatus =
   | 'SCHEDULED'
   | 'SENDING'
   | 'SENT'
-  | 'PAUSED'
-  | 'FAILED';
+  | 'FAILED'
+  | 'CANCELLED';
 
 export type NotificationType =
   | 'INFO'
