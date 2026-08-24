@@ -18,16 +18,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-  SheetClose,
-} from '@/components/ui/sheet';
 import {
   Dialog,
   DialogContent,
@@ -61,7 +51,6 @@ import {
 import { AvatarWithFallback } from '@/components/shared';
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
-import { useNavigationStore } from '@/lib/stores/navigation-store';
 import {
   cn,
   formatDate,
@@ -106,15 +95,6 @@ interface UserRow {
   createdAt: string;
   updatedAt: string;
   authorProfile?: AuthorProfileData | null;
-}
-
-interface EditFormData {
-  name: string;
-  email: string;
-  role: UserRole;
-  status: UserStatus;
-  bio: string;
-  avatar: string;
 }
 
 // -------------------- Constants --------------------
@@ -229,11 +209,15 @@ function InviteUserDialog({
   onOpenChange,
   onSubmit,
   isLoading,
+  editMode = false,
+  initialData,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: InviteFormData) => void;
   isLoading: boolean;
+  editMode?: boolean;
+  initialData?: InviteFormData | null;
 }) {
   const [form, setForm] = useState<InviteFormData>({ email: '', name: '', role: 'AUTHOR', assignedSites: [], sitePermissions: [] });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -261,12 +245,16 @@ function InviteUserDialog({
 
   React.useEffect(() => {
     if (open) {
-      setForm({ email: '', name: '', role: 'AUTHOR', assignedSites: [], sitePermissions: [] });
+      if (editMode && initialData) {
+        setForm(initialData);
+      } else {
+        setForm({ email: '', name: '', role: 'AUTHOR', assignedSites: [], sitePermissions: [] });
+      }
       setErrors({});
       setSiteSearch('');
       setPermissionsExpanded(false);
     }
-  }, [open]);
+  }, [open, editMode, initialData]);
 
   const filteredSites = React.useMemo(() => {
     if (!siteSearch.trim()) return sites;
@@ -321,9 +309,11 @@ function InviteUserDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Invite User</DialogTitle>
+          <DialogTitle>{editMode ? 'Edit User' : 'Invite User'}</DialogTitle>
           <DialogDescription>
-            Send an invitation email to add a new team member to your organization.
+            {editMode
+              ? 'Update user details, role, and permissions.'
+              : 'Send an invitation email to add a new team member to your organization.'}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-6 py-2">
@@ -455,7 +445,7 @@ function InviteUserDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={isLoading || !form.email.trim()}>
             {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Send Invitation
+            {editMode ? 'Save Changes' : 'Send Invitation'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -463,23 +453,9 @@ function InviteUserDialog({
   );
 }
 
-// -------------------- Helpers --------------------
-
-function getInitialFormData(user: UserRow): EditFormData {
-  return {
-    name: user.name ?? '',
-    email: user.email,
-    role: user.role,
-    status: user.status,
-    bio: user.bio ?? '',
-    avatar: user.avatar ?? '',
-  };
-}
-
 // -------------------- Component --------------------
 
 export function UsersListPage() {
-  const navigate = useNavigationStore((s) => s.navigate);
   const queryClient = useQueryClient();
 
   // Table state
@@ -493,23 +469,10 @@ export function UsersListPage() {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  // Drawer & dialog state
-  const [editUser, setEditUser] = useState<UserRow | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // Dialog state
   const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
   const [suspendTarget, setSuspendTarget] = useState<UserRow | null>(null);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-
-  // Form state
-  const [formData, setFormData] = useState<EditFormData>({
-    name: '',
-    email: '',
-    role: 'AUTHOR',
-    status: 'ACTIVE',
-    bio: '',
-    avatar: '',
-  });
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Build query params
   const queryParams = useMemo(
@@ -559,18 +522,6 @@ export function UsersListPage() {
     },
   });
 
-  // Update mutation
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<EditFormData> }) =>
-      patchApi(`/api/users/${id}`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
-      setDrawerOpen(false);
-      setEditUser(null);
-      setFormErrors({});
-    },
-  });
-
   // Suspend/Activate toggle mutation
   const toggleStatusMutation = useMutation({
     mutationFn: ({
@@ -596,49 +547,34 @@ export function UsersListPage() {
     },
   });
 
-  // Navigation helpers
-  const goToDetail = useCallback(
-    (id: string) => navigate('users', id),
-    [navigate],
-  );
+  // Edit dialog state — reuses the Invite User form in edit mode
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserRow | null>(null);
 
-  // Edit handlers
-  const openEditDrawer = useCallback((user: UserRow) => {
-    setEditUser(user);
-    setFormData(getInitialFormData(user));
-    setFormErrors({});
-    setDrawerOpen(true);
+  // Open the Invite User-style dialog in edit mode
+  const openEditDialog = useCallback((user: UserRow) => {
+    setEditingUser(user);
+    setEditDialogOpen(true);
   }, []);
 
-  const closeEditDrawer = useCallback(() => {
-    setDrawerOpen(false);
-    setEditUser(null);
-    setFormErrors({});
-  }, []);
-
-  const handleSave = useCallback(() => {
-    const errors: Record<string, string> = {};
-    if (!formData.name.trim()) errors.name = 'Name is required';
-    if (!formData.email.trim()) errors.email = 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
-      errors.email = 'Invalid email address';
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors);
-      return;
-    }
-    if (!editUser) return;
-    updateMutation.mutate({
-      id: editUser.id,
-      data: {
-        name: formData.name.trim(),
-        email: formData.email.trim(),
-        role: formData.role,
-        status: formData.status,
-        bio: formData.bio.trim() || undefined,
-        avatar: formData.avatar.trim() || '',
-      },
-    });
-  }, [formData, editUser, updateMutation]);
+  // Edit mutation (updates existing user)
+  const editMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: InviteFormData }) =>
+      patchApi(`/api/users/${id}`, {
+        name: data.name,
+        email: data.email,
+        role: data.role,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
+      setEditDialogOpen(false);
+      setEditingUser(null);
+      toast.success('User updated successfully');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update user');
+    },
+  });
 
   const handleSuspendToggle = useCallback(
     (user: UserRow) => {
@@ -648,18 +584,6 @@ export function UsersListPage() {
       setSuspendTarget(null);
     },
     [toggleStatusMutation],
-  );
-
-  // Handle drawer state change — clean up when closed
-  const handleDrawerOpenChange = useCallback(
-    (open: boolean) => {
-      setDrawerOpen(open);
-      if (!open) {
-        setEditUser(null);
-        setFormErrors({});
-      }
-    },
-    [],
   );
 
   // Column definitions
@@ -687,7 +611,7 @@ export function UsersListPage() {
               className="flex items-center gap-2.5 hover:opacity-80 transition-opacity text-left w-full"
               onClick={(e) => {
                 e.stopPropagation();
-                goToDetail(user.id);
+                openEditDialog(row);
               }}
             >
               <AvatarWithFallback
@@ -698,9 +622,6 @@ export function UsersListPage() {
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium text-sm">
                   {user.name || 'Unnamed'}
-                </div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {user.email}
                 </div>
               </div>
             </button>
@@ -765,11 +686,7 @@ export function UsersListPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => goToDetail(row.id)}>
-                <Pencil className="h-4 w-4 mr-2" />
-                View
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => openEditDrawer(row)}>
+              <DropdownMenuItem onClick={() => openEditDialog(row)}>
                 <Pencil className="h-4 w-4 mr-2" />
                 Edit
               </DropdownMenuItem>
@@ -802,7 +719,7 @@ export function UsersListPage() {
         ),
       }),
     ],
-    [goToDetail, openEditDrawer],
+    [openEditDialog],
   );
 
   // Filter controls
@@ -876,7 +793,7 @@ export function UsersListPage() {
         onSortChange={(field, order) => table.setSortField(field, order)}
         sortField={table.sortField}
         sortOrder={table.sortOrder}
-        onRowClick={(row) => goToDetail(row.id)}
+        onRowClick={(row) => openEditDialog(row)}
         searchPlaceholder="Search users..."
         searchValue={table.searchValue}
         onSearch={(v) => {
@@ -896,173 +813,28 @@ export function UsersListPage() {
         isLoading={inviteMutation.isPending}
       />
 
-      {/* Edit Drawer (Sheet) */}
-      <Sheet open={drawerOpen} onOpenChange={handleDrawerOpenChange}>
-        <SheetContent
-          side="right"
-          className="sm:max-w-[640px] w-full overflow-y-auto p-0"
-        >
-          <SheetHeader className="p-6 pb-4 border-b">
-            <SheetTitle>Edit User</SheetTitle>
-            <SheetDescription>
-              Update user details, role, and status.
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="p-6 space-y-5">
-            {/* Avatar preview */}
-            <div className="flex items-center gap-4">
-              <AvatarWithFallback
-                src={formData.avatar || undefined}
-                name={formData.name || 'User'}
-                size="lg"
-              />
-              <div>
-                <p className="font-medium text-sm">
-                  {formData.name || 'Unnamed'}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {formData.email}
-                </p>
-              </div>
-            </div>
-
-            {/* Name */}
-            <div className="space-y-2">
-              <Label htmlFor="edit-name">
-                Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="edit-name"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, name: e.target.value }))
-                }
-                placeholder="Full name"
-              />
-              {formErrors.name && (
-                <p className="text-xs text-destructive">{formErrors.name}</p>
-              )}
-            </div>
-
-            {/* Email */}
-            <div className="space-y-2">
-              <Label htmlFor="edit-email">
-                Email <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="edit-email"
-                type="email"
-                value={formData.email}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, email: e.target.value }))
-                }
-                placeholder="email@example.com"
-              />
-              {formErrors.email && (
-                <p className="text-xs text-destructive">{formErrors.email}</p>
-              )}
-            </div>
-
-            {/* Role */}
-            <div className="space-y-2">
-              <Label htmlFor="edit-role">Role</Label>
-              <Select
-                value={formData.role}
-                onValueChange={(v) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    role: v as UserRole,
-                  }))
-                }
-              >
-                <SelectTrigger id="edit-role">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROLE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Status */}
-            <div className="space-y-2">
-              <Label htmlFor="edit-status">Status</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(v) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    status: v as UserStatus,
-                  }))
-                }
-              >
-                <SelectTrigger id="edit-status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUS_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Bio */}
-            <div className="space-y-2">
-              <Label htmlFor="edit-bio">Bio</Label>
-              <Textarea
-                id="edit-bio"
-                value={formData.bio}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, bio: e.target.value }))
-                }
-                placeholder="Short biography..."
-                rows={3}
-              />
-            </div>
-
-            {/* Avatar URL */}
-            <div className="space-y-2">
-              <Label htmlFor="edit-avatar">Avatar URL</Label>
-              <Input
-                id="edit-avatar"
-                value={formData.avatar}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, avatar: e.target.value }))
-                }
-                placeholder="https://example.com/avatar.jpg"
-              />
-            </div>
-          </div>
-
-          <SheetFooter className="p-6 pt-4 border-t">
-            <div className="flex items-center justify-end gap-2 w-full">
-              <SheetClose asChild>
-                <Button variant="outline" size="sm" onClick={closeEditDrawer}>
-                  Cancel
-                </Button>
-              </SheetClose>
-              <Button
-                size="sm"
-                onClick={handleSave}
-                disabled={updateMutation.isPending}
-              >
-                {updateMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Save Changes
-              </Button>
-            </div>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      {/* Edit User Dialog — reuses InviteUserDialog in edit mode */}
+      <InviteUserDialog
+        open={editDialogOpen}
+        onOpenChange={(open) => {
+          setEditDialogOpen(open);
+          if (!open) setEditingUser(null);
+        }}
+        onSubmit={(data) => {
+          if (editingUser) {
+            editMutation.mutate({ id: editingUser.id, data });
+          }
+        }}
+        isLoading={editMutation.isPending}
+        editMode
+        initialData={editingUser ? {
+          email: editingUser.email,
+          name: editingUser.name ?? '',
+          role: editingUser.role,
+          assignedSites: [],
+          sitePermissions: [],
+        } : null}
+      />
 
       {/* Delete Confirmation */}
       <ConfirmDialog
