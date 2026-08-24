@@ -66,8 +66,37 @@ export async function GET(request: NextRequest) {
       db.newsletterCampaign.count({ where }),
     ]);
 
+    // Transform DB records: compute openRate/clickRate percentages from
+    // openCount/clickCount + recipientCount. The frontend's CampaignRow
+    // type expects `openRate` and `clickRate` as percentages (numbers),
+    // not raw counts.
+    const transformed = items.map((item) => {
+      const recipientCount = item.recipientCount || 0;
+      const openRate = recipientCount > 0 ? (item.openCount / recipientCount) * 100 : undefined;
+      const clickRate = recipientCount > 0 ? (item.clickCount / recipientCount) * 100 : undefined;
+      return {
+        id: item.id,
+        name: item.name,
+        subject: item.subject,
+        content: item.content,
+        status: item.status,
+        scheduledAt: item.scheduledAt?.toISOString() ?? null,
+        sentAt: item.sentAt?.toISOString() ?? null,
+        recipientCount: item.recipientCount,
+        openCount: item.openCount,
+        clickCount: item.clickCount,
+        openRate: openRate !== undefined ? Math.round(openRate * 10) / 10 : undefined,
+        clickRate: clickRate !== undefined ? Math.round(clickRate * 10) / 10 : undefined,
+        createdById: item.createdById,
+        createdBy: item.createdBy,
+        siteId: item.siteId,
+        createdAt: item.createdAt.toISOString(),
+        updatedAt: item.updatedAt.toISOString(),
+      };
+    });
+
     return NextResponse.json({
-      data: items,
+      data: transformed,
       meta: {
         requestId: id,
         pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
