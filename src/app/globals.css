@@ -143,3 +143,14 @@
 .sidebar-thin-scroll:hover::-webkit-scrollbar-thumb {
   background-color: oklch(0.7 0 0 / 30%);
 }
+
+/* Mask (hide) the page-level vertical scrollbar while keeping scroll functional.
+   Applied on the <html> element for specific CMS pages. */
+html.scrollbar-masked {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+html.scrollbar-masked::-webkit-scrollbar {
+  width: 0;
+  display: none; /* Chrome/Safari/Opera */
+}
