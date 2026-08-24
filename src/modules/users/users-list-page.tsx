@@ -533,16 +533,21 @@ export function UsersListPage() {
     ],
   );
 
-  // Fetch users
-  const { data, isLoading } = useQuery({
+  // Fetch users — use raw:true to get the full ApiResponse envelope
+  // (getApi without raw unwraps the `data` field, losing pagination info)
+  const { data: rawData, isLoading } = useQuery({
     queryKey: queryKeys.users.list(queryParams),
     queryFn: () =>
-      getApi<PaginatedResponse<UserRow>>('/api/users', queryParams),
+      getApi<{ data: UserRow[]; meta: { pagination: { page: number; pageSize: number; total: number; totalPages: number } } }>(
+        '/api/users',
+        queryParams,
+        { raw: true },
+      ),
     staleTime: 10_000,
   });
 
-  const users = data?.data ?? [];
-  const pagination = data?.pagination;
+  const users = rawData?.data ?? [];
+  const pagination = rawData?.meta?.pagination;
   const totalItems = pagination?.total ?? 0;
 
   // Delete mutation
