@@ -11,11 +11,7 @@ import {
   Users,
   Mail,
   Loader2,
-  Send,
   Eye,
-  Play,
-  Clock,
-  XCircle,
   RotateCcw,
   Ban,
 } from 'lucide-react';
@@ -517,27 +513,12 @@ export function NewsletterPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              {/* Draft: Edit / Schedule / Send Now / Delete */}
+              {/* DRAFT: Edit, Delete */}
               {row.status === 'DRAFT' && (
                 <>
                   <DropdownMenuItem onClick={() => openEditModal(row)}>
                     <Pencil className="h-4 w-4 mr-2" />
                     Edit
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setViewCampaign(row)}>
-                    <Eye className="h-4 w-4 mr-2" />
-                    View
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Clock className="h-4 w-4 mr-2" />
-                    Schedule
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => sendCampaignMutation.mutate(row.id)}
-                    disabled={sendCampaignMutation.isPending}
-                  >
-                    {sendCampaignMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
-                    Send Now
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onClick={() => setDeleteCampaignTarget(row)}>
@@ -547,16 +528,16 @@ export function NewsletterPage() {
                 </>
               )}
 
-              {/* Scheduled: Edit / View / Cancel */}
+              {/* SCHEDULED: View, Edit, Cancel, Delete */}
               {row.status === 'SCHEDULED' && (
                 <>
-                  <DropdownMenuItem onClick={() => openEditModal(row)}>
-                    <Pencil className="h-4 w-4 mr-2" />
-                    Edit
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setViewCampaign(row)}>
                     <Eye className="h-4 w-4 mr-2" />
                     View
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => openEditModal(row)}>
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => cancelCampaignMutation.mutate(row.id)}
@@ -565,18 +546,23 @@ export function NewsletterPage() {
                     <Ban className="h-4 w-4 mr-2" />
                     Cancel
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={() => setDeleteCampaignTarget(row)}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
                 </>
               )}
 
-              {/* Sending: show state, no actions */}
+              {/* SENDING: View */}
               {row.status === 'SENDING' && (
-                <DropdownMenuItem disabled>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Sending...
+                <DropdownMenuItem onClick={() => setViewCampaign(row)}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  View
                 </DropdownMenuItem>
               )}
 
-              {/* Sent: View / Duplicate */}
+              {/* SENT: View, Duplicate */}
               {row.status === 'SENT' && (
                 <>
                   <DropdownMenuItem onClick={() => setViewCampaign(row)}>
@@ -590,7 +576,7 @@ export function NewsletterPage() {
                 </>
               )}
 
-              {/* Failed: Retry / Edit / View / Delete */}
+              {/* FAILED: Retry, Edit, View, Delete */}
               {row.status === 'FAILED' && (
                 <>
                   <DropdownMenuItem
@@ -616,7 +602,7 @@ export function NewsletterPage() {
                 </>
               )}
 
-              {/* Cancelled: Duplicate / Delete */}
+              {/* CANCELLED: Duplicate, Delete */}
               {row.status === 'CANCELLED' && (
                 <>
                   <DropdownMenuItem onClick={() => duplicateCampaignMutation.mutate(row.id)}>
@@ -635,7 +621,7 @@ export function NewsletterPage() {
         ),
       }),
     ],
-    [duplicateCampaignMutation, sendCampaignMutation, cancelCampaignMutation, retryCampaignMutation],
+    [duplicateCampaignMutation, cancelCampaignMutation, retryCampaignMutation],
   );
 
   // Campaign filter content
