@@ -25,7 +25,6 @@ import { Label } from '@/components/ui/label';
 import { PageHeader, ConfirmDialog } from '@/components/patterns';
 import { getApi, postApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { NotificationType, ApiResponse } from '@/shared/types';
@@ -279,7 +278,7 @@ export function NotificationsPage() {
 
   // Build query params based on filter
   const queryParams = useMemo(() => {
-    const params: Record<string, unknown> = { pageSize: PAGE_SIZE };
+    const params: Record<string, string | number | boolean | undefined> = { pageSize: PAGE_SIZE };
     if (activeFilter === 'unread') {
       params.isRead = false;
     } else if (activeFilter !== 'all') {
@@ -310,7 +309,8 @@ export function NotificationsPage() {
       const { page, totalPages } = pagination;
       return page < totalPages ? page + 1 : undefined;
     },
-    staleTime: 10_000,
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   // Flatten all pages
@@ -444,16 +444,24 @@ export function NotificationsPage() {
         }
       />
 
-      {/* Filter tabs */}
-      <Tabs value={activeFilter} onValueChange={(v) => setActiveFilter(v as NotificationFilter)}>
-        <TabsList className="flex-wrap h-auto gap-1">
-          {FILTER_TABS.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value} className="text-xs px-3">
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      {/* Filter tabs — custom pill buttons (not Radix Tabs, which requires TabsContent) */}
+      <div className="flex flex-wrap gap-1">
+        {FILTER_TABS.map((tab) => (
+          <button
+            key={tab.value}
+            type="button"
+            onClick={() => setActiveFilter(tab.value)}
+            className={cn(
+              'text-xs px-3 py-1.5 rounded-md font-medium transition-colors',
+              activeFilter === tab.value
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
       {/* Notification list */}
       <div className="space-y-2">
