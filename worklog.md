@@ -1079,3 +1079,136 @@ Stage Summary:
 - All 4 views (Month/Week/Day/Agenda) work with Prev/Next/Today navigation and client-side filtering
 - Click any event to open details modal with View/Edit actions that navigate to the source module
 - Work record: `agent-ctx/CALENDAR-1-calendar-developer.md`
+
+---
+Task ID: ROLES-SIMPLIFY-1
+Agent: main (roles-simplifier)
+Task: Replace the legacy 5-role system (SUPER_ADMIN/ADMIN/EDITOR/AUTHOR/CONTRIBUTOR) with a simplified 2-role system (ADMIN/EDITOR) backed by per-user `pagePermissions` arrays + admin-defined `CustomPermission` records.
+
+Work Log:
+
+1. PRISMA SCHEMA (prisma/schema.prisma)
+   - Shrunk `enum UserRole` from {SUPER_ADMIN, ADMIN, EDITOR, AUTHOR, CONTRIBUTOR} → {ADMIN, EDITOR}.
+   - Changed `User.role` default from `AUTHOR` to `EDITOR` (required because the old default is no longer a valid enum value).
+   - Added `pagePermissions String?` to the `User` model — stores a JSON array of page keys, e.g. `'["content","media","calendar"]'`. Null means full access (ADMIN).
+   - Added new `CustomPermission` model: `id`, `name` (unique), `description?`, `route?`, `createdBy?`, `createdAt`, `updatedAt`. The derived `key` (name lowercased + hyphenated) is what gets stored in users' `pagePermissions` arrays.
+   - Ran `bun run db:push` — schema synced, Prisma Client regenerated.
+
+2. SHARED TYPES & CONSTANTS
+   - `src/shared/types/index.ts`: `UserRole` trimmed to `'ADMIN' | 'EDITOR'`.
+   - `src/shared/constants/index.ts`: `ROLE_HIERARCHY` trimmed to `['ADMIN', 'EDITOR']`.
+   - `src/lib/validators.ts`: `userCreateSchema.role` and `userUpdateSchema.role` enums trimmed; default role changed AUTHOR → EDITOR.
+
+3. CENTRALIZED PERMISSION SYSTEM (src/lib/permissions.ts)
+   Replaced the legacy `ROLE_PERMISSIONS` map with a page-based system:
+   - `BUILTIN_PAGES` — 11 entries (dashboard, calendar, content, media, users, comments, newsletter, seo, ai, automation, settings) with key/label/icon.
+   - `SETTINGS_SUBPAGES` — 4 entries (email-templates, smtp, notifications, backups).
+   - `customPermissionKeyFromName(name)` — "Manage Authors" → "manage-authors".
+   - `canAccessPage(role, pagePermissions, pageKey)` — ADMIN always true; EDITOR true iff pageKey in their pagePermissions (with settings sub-pages auto-granted when 'settings' is present).
+   - `getAccessiblePages(role, pagePermissions)` — expands an EDITOR's pagePermissions to include all settings sub-pages; returns all pages for ADMIN.
+   - `parsePagePermissions(raw)` / `serializePagePermissions(pages)` — JSON string ↔ string[] helpers.
+   - `getVisibleNavItems(userRole, allItems, pagePermissions)` — sidebar filter: ADMIN sees everything; EDITOR sees only items whose hash-derived page key is in their pagePermissions (with children filtered the same way).
+   - `hasPermission(userRole, requiredRole)` — kept for backward compat with `NavItem.requiredRole`.
+
+4. CUSTOM PERMISSIONS API (src/app/api/custom-permissions/)
+   - `route.ts` (GET / POST): GET lists all CustomPermission rows with derived `key` field added; POST accepts {name, description?, route?, createdBy?}, validates with zod, enforces uniqueness on the derived key, returns created record with `key`.
+   - `[id]/route.ts` (DELETE): deletes the CustomPermission row, then walks every user whose pagePermissions column is non-null and removes the deleted permission's key from their array — no dangling references survive a delete.
+
+5. USERS API
+   - `src/app/api/users/route.ts` (GET/POST): added pagePermissions to userSelect; GET response parses pagePermissions from JSON string → string[] | null; POST accepts pagePermissions (serialized only for EDITOR; ADMIN gets null); default role EDITOR.
+   - `src/app/api/users/[id]/route.ts` (GET/PATCH/DELETE): same select/parse changes; PATCH accepts pagePermissions; if role is being switched to ADMIN in the same PATCH, pagePermissions is forced to null.
+   - `src/app/api/users/invite/route.ts` (POST): added pagePermissions; trimmed role enum to ['ADMIN', 'EDITOR'] (was previously allowing SUPER_ADMIN/AUTHOR/CONTRIBUTOR/VIEWER/SEO_MANAGER/CONTENT_MANAGER/MARKETING_MANAGER).
+
+6. AUTH API
+   - `src/app/api/auth/me/route.ts`: removed the legacy `permissions: ROLE_PERMISSIONS[role]` field; returns `pagePermissions: parsePagePermissions(user.pagePermissions)` in the user payload.
+   - `src/app/api/auth/login/route.ts`: same change — `pagePermissions` replaces the old `permissions` array in the login response.
+
+7. AUTH STORE (src/lib/stores/auth-store.ts)
+   - Added `pagePermissions?: string[] | null` to CurrentUser + ApiUser interfaces.
+   - `mapApiUser` copies pagePermissions through (defensive: only when it's actually an array).
+   - Persistent localStorage cache (`cms_auth_user`) now stores pagePermissions alongside the other user fields, so the sidebar can render with the correct nav items before /api/auth/me resolves.
+
+8. SIDEBAR (src/components/layout/sidebar.tsx)
+   - `AppSidebar` now reads `user.pagePermissions` from useAuthStore and passes it as the third arg to `getVisibleNavItems(userRole, NAV_ITEMS, pagePermissions)`.
+   - ADMIN sees every item; EDITOR sees only items whose hash-derived page key is in their pagePermissions array. Settings expandable submenu only shows the sub-pages the EDITOR has access to.
+   - Existing sidebar styling, accordion, route-derived section tracking, footer user badge — unchanged.
+
+9. ADMIN APP (src/components/layout/admin-app.tsx)
+   - Wrapped the module renderer with a `canAccessPage(user.role, user.pagePermissions, pageKey)` check.
+   - When the current user lacks access, an "Access Denied" panel is rendered instead (amber ShieldAlert icon + heading + explanation). Defense-in-depth on top of the sidebar filter — direct hash navigation to a forbidden page now shows a clean denial state instead of a half-rendered module.
+
+10. USERS PAGE (src/modules/users/users-list-page.tsx)
+    - Role options reduced to ADMIN / EDITOR (was 5 options). Role colors trimmed to ADMIN (orange) + EDITOR (emerald — switched from blue to comply with the no-blue rule).
+    - InviteFormData simplified to {email, name, role, pagePermissions} (removed unused assignedSites + sitePermissions plumbing).
+    - When role is ADMIN, Page Access section is replaced with an amber info box: "Admin users have full access to every page — no per-page configuration needed."
+    - When role is EDITOR, Page Access multi-select shown inside a scrollable bordered card (max-h-72 overflow-y-auto):
+      * Checkbox row for each BUILTIN_PAGES entry (11 rows).
+      * Settings row expands inline to reveal the 4 SETTINGS_SUBPAGES as indented checkboxes.
+      * "Custom Permissions" sub-section listing every CustomPermission fetched from /api/custom-permissions, each with a Checkbox + trash icon (revealed on hover) that opens a ConfirmDialog before deleting.
+      * "+ Custom" button opens CreateCustomPermissionDialog — small modal with Name (required), Description (optional), Route (optional), live "Key:" preview, Create button. On success, query invalidated and new permission appears immediately.
+    - Table: added a new "Page Access" column between Status and Last Login — ADMIN rows show "Full access" badge; EDITOR rows show "N pages" (or "No access" if 0).
+    - editMutation now sends pagePermissions alongside name/email/role; inviteMutation posts {email, name, role, pagePermissions} to /api/users/invite.
+    - Added toast (sonner) for invite/edit/delete success + error feedback.
+    - editMode + initialData plumbing preserved; initialData now hydrates pagePermissions from the row's parsed array.
+
+11. USERS DETAIL PAGE (src/modules/users/users-detail-page.tsx)
+    - Trimmed ROLE_OPTIONS to ADMIN + EDITOR. Trimmed ROLE_COLORS to ADMIN (orange) + EDITOR (emerald). Default form role changed AUTHOR → EDITOR.
+
+12. MIGRATION SCRIPT (prisma/migrate-roles.ts)
+    - Idempotent script using raw SQL (db.$queryRawUnsafe + db.$executeRawUnsafe) to bypass Prisma's enum validation (the new client refuses to load rows whose role column still holds SUPER_ADMIN/AUTHOR/CONTRIBUTOR).
+    - Rules: SUPER_ADMIN → ADMIN (null pagePermissions); ADMIN → ADMIN (null); EDITOR → EDITOR (all 15 builtin + settings sub-pages); AUTHOR → EDITOR (content, media, calendar, comments); CONTRIBUTOR → EDITOR (content, media).
+    - For rows already on the new schema, enforces consistency: ADMINs with non-null pagePermissions get cleared; EDITORs with null/empty pagePermissions get the full builtin list assigned.
+    - Run: `bun run prisma/migrate-roles.ts` → migrated 14 existing users (4 → ADMIN, 10 → EDITOR).
+
+13. SEED SCRIPT (prisma/seed-users.ts)
+    - Rewritten to seed 10 sample users: 2 ADMIN (pagePermissions = null) + 8 EDITOR with varied pagePermissions:
+      * 2 with most pages (dashboard, calendar, content, media, comments, newsletter)
+      * 2 with content + media only
+      * 2 with content + media + seo + ai
+      * 2 with minimal (dashboard + content only)
+    - Mix of statuses across EDITORs: ACTIVE, SUSPENDED, DEACTIVATED.
+    - Uses raw SQL INSERT/UPDATE so the script can run even on a fresh DB before any legacy migration.
+    - Run: `bun run prisma/seed-users.ts` → 1 created, 9 updated. Final DB: 4 ADMIN + 11 EDITOR.
+
+14. MAIN SEED (src/lib/seed.ts)
+    - admin@example.com role: SUPER_ADMIN → ADMIN. author@example.com role: AUTHOR → EDITOR. editor@example.com unchanged (EDITOR). Login credentials unchanged.
+
+15. LINT + VERIFICATION
+    - `bun run db:push` — schema synced.
+    - `bun run prisma/migrate-roles.ts` — 14 users migrated.
+    - `bun run prisma/seed-users.ts` — 10 sample users upserted.
+    - `bun run lint`: 11 problems (5 errors, 6 warnings) — ALL in pre-existing files I did NOT touch:
+      * data-table.tsx, content-create-page.tsx, content-edit-page.tsx (warnings about incompatible libraries — TanStack Table + React Hook Form)
+      * seo-broken-links-page.tsx (pre-existing manual memoization error)
+      * seo-social-preview-page.tsx (pre-existing missing Search import)
+      * Plus mirror copies under NEWWDCH/ (legacy cloned source tree, not in active src/)
+      * ZERO errors and ZERO warnings in any file I created or modified.
+    - API verification via curl against live dev server:
+      * POST /api/auth/login with admin@example.com/admin123 → role: "ADMIN", pagePermissions: null ✓
+      * POST /api/auth/login with editor@example.com/editor123 → role: "EDITOR", pagePermissions: [15 entries] ✓
+      * GET /api/auth/me → returns pagePermissions parsed correctly ✓
+      * GET /api/users?pageSize=3 → returns users with role ∈ {ADMIN, EDITOR} and pagePermissions as string[] | null ✓
+      * POST /api/custom-permissions {name: "Manage Authors"} → 201 with derived key: "manage-authors" ✓
+      * PATCH /api/users/[id] {pagePermissions: ["content","media"]} → persists, GET returns new array ✓
+      * PATCH /api/users/[id] {role: "ADMIN"} → role flips, pagePermissions auto-cleared to null ✓
+      * PATCH /api/users/[id] {role: "EDITOR", pagePermissions: [...]} → role flips back, pagePermissions set ✓
+      * DELETE /api/custom-permissions/[id] → 200, deleted: true; subsequent GET returns [] ✓
+
+Stage Summary:
+- ROOT APPROACH: Replaced the 5-role enum with a 2-role enum (ADMIN/EDITOR) backed by a per-user `pagePermissions` JSON array. ADMIN = full access (null). EDITOR = explicit allow-list of page keys. A new `CustomPermission` table lets admins define extra page-level permissions that flow into the same `pagePermissions` array. The sidebar + module renderer both consult `canAccessPage()` so direct hash navigation to a forbidden page shows an Access Denied panel instead of a half-rendered module.
+- FILES CHANGED (16 modified, 4 created):
+  * MODIFIED: prisma/schema.prisma, src/shared/types/index.ts, src/shared/constants/index.ts, src/lib/validators.ts, src/lib/permissions.ts (full rewrite), src/app/api/users/route.ts, src/app/api/users/[id]/route.ts, src/app/api/users/invite/route.ts, src/app/api/auth/me/route.ts, src/app/api/auth/login/route.ts, src/lib/stores/auth-store.ts, src/components/layout/sidebar.tsx, src/components/layout/admin-app.tsx, src/modules/users/users-list-page.tsx, src/modules/users/users-detail-page.tsx, src/lib/seed.ts, prisma/seed-users.ts (full rewrite)
+  * CREATED: src/app/api/custom-permissions/route.ts, src/app/api/custom-permissions/[id]/route.ts, prisma/migrate-roles.ts, agent-ctx/ROLES-SIMPLIFY-1-roles-simplifier.md
+- EXISTING FUNCTIONALITY PRESERVED:
+  * Sidebar styling, accordion behavior, route-derived section tracking — unchanged.
+  * Users table layout, search/sort/pagination, role/status filters — unchanged (just trimmed role options).
+  * Invite / edit dialog opens the same way (top-right "Invite User" button + row click + "Edit" menu item).
+  * Suspend/Activate + Delete confirmation flows — unchanged.
+  * Login flow, session cookie, /api/auth/me response shape — unchanged except for the pagePermissions addition.
+  * All /api/comments, /api/content, /api/campaigns, etc. routes — untouched.
+  * hasPermission(userRole, requiredRole) API kept for backward compat with NavItem.requiredRole.
+- DATA STATE:
+  * 15 users in DB: 4 ADMIN (pagePermissions = null) + 11 EDITOR (pagePermissions = various arrays).
+  * Login credentials unchanged: admin@example.com/admin123 (ADMIN), editor@example.com/editor123 (EDITOR, full builtin page access), author@example.com/author123 (now EDITOR with ["content","media","calendar","comments"]).
+  * CustomPermission table starts empty — admins create custom permissions on demand via the "+ Custom" button in the Invite/Edit dialog.
+- Work record: agent-ctx/ROLES-SIMPLIFY-1-roles-simplifier.md

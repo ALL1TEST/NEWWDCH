@@ -6,11 +6,8 @@
 // -------------------- Prisma Enum Mirrors --------------------
 
 export type UserRole =
-  | 'SUPER_ADMIN'
   | 'ADMIN'
-  | 'EDITOR'
-  | 'AUTHOR'
-  | 'CONTRIBUTOR';
+  | 'EDITOR';
 
 export type PostStatus =
   | 'DRAFT'

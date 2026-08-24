@@ -2,6 +2,7 @@
 
 import React, { useCallback, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
   UserPlus,
   Pencil,
@@ -10,14 +11,14 @@ import {
   UserX,
   UserCheck,
   Loader2,
-  Globe,
-  Github,
-  Linkedin,
+  Plus,
+  ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -56,7 +57,6 @@ import {
   formatDate,
   formatRelativeTime,
   labelize,
-  truncate,
 } from '@/lib/utils';
 import type {
   PaginatedResponse,
@@ -64,6 +64,12 @@ import type {
   UserStatus,
   SelectOption,
 } from '@/shared/types';
+import {
+  BUILTIN_PAGES,
+  SETTINGS_SUBPAGES,
+  canAccessPage,
+  customPermissionKeyFromName,
+} from '@/lib/permissions';
 import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -94,30 +100,31 @@ interface UserRow {
   lastLoginAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  pagePermissions?: string[] | null;
   authorProfile?: AuthorProfileData | null;
+}
+
+interface CustomPermissionRow {
+  id: string;
+  name: string;
+  description?: string | null;
+  route?: string | null;
+  key: string;
+  createdAt: string;
 }
 
 // -------------------- Constants --------------------
 
 const ROLE_OPTIONS: SelectOption<UserRole>[] = [
-  { label: 'Super Admin', value: 'SUPER_ADMIN' },
   { label: 'Admin', value: 'ADMIN' },
   { label: 'Editor', value: 'EDITOR' },
-  { label: 'Author', value: 'AUTHOR' },
-  { label: 'Contributor', value: 'CONTRIBUTOR' },
 ];
 
 const ROLE_COLORS: Record<UserRole, string> = {
-  SUPER_ADMIN:
-    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800/50',
   ADMIN:
     'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-orange-200 dark:border-orange-800/50',
   EDITOR:
-    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800/50',
-  AUTHOR:
-    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800/50',
-  CONTRIBUTOR:
-    'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700',
+    'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50',
 };
 
 const STATUS_OPTIONS: SelectOption<UserStatus>[] = [
@@ -143,66 +150,133 @@ function RoleBadge({ role }: { role: UserRole }) {
   );
 }
 
-// -------------------- Invite Dialog --------------------
+// -------------------- Custom Permission Dialog --------------------
 
-interface SiteOption {
-  id: string;
+interface CustomPermFormData {
   name: string;
-  slug: string;
-  domain: string | null;
-  logo: string | null;
-}
-
-interface PermissionDef {
-  key: string;
-  label: string;
   description: string;
+  route: string;
 }
 
-const SITE_PERMISSIONS: PermissionDef[] = [
-  { key: 'full_access', label: 'Full Site Access', description: 'Complete access to all site features and settings.' },
-  { key: 'site_settings', label: 'Site Settings', description: 'Modify site name, domain, theme and general configuration.' },
-  { key: 'content_management', label: 'Content Management', description: 'Create, edit and delete articles.' },
-  { key: 'articles', label: 'Articles', description: 'Write, edit, publish and manage articles.' },
-  { key: 'categories', label: 'Categories', description: 'Create and organize content categories.' },
-  { key: 'tags', label: 'Tags', description: 'Manage content tags and tag groups.' },
-  { key: 'comments', label: 'Comments', description: 'Moderate, approve and delete reader comments.' },
-  { key: 'media_library', label: 'Media Library', description: 'Upload, organize and manage media files.' },
-  { key: 'seo', label: 'SEO', description: 'Manage meta tags, schema and indexing.' },
-  { key: 'forms', label: 'Forms', description: 'Create and manage contact forms.' },
-  { key: 'newsletter', label: 'Newsletter', description: 'Manage subscribers and campaigns.' },
-  { key: 'analytics', label: 'Analytics', description: 'View traffic reports and analytics data.' },
-  { key: 'api_management', label: 'API Management', description: 'Create and manage API keys.' },
-  { key: 'integrations', label: 'Integrations', description: 'Configure webhooks and third-party integrations.' },
-  { key: 'view_reports', label: 'View Reports', description: 'Access site performance and content reports.' },
-  { key: 'publish_content', label: 'Publish Content', description: 'Publish and schedule content for publication.' },
-  { key: 'schedule_articles', label: 'Schedule Articles', description: 'Schedule articles for future publication.' },
-  { key: 'manage_ai', label: 'Manage AI', description: 'Configure AI providers and use AI features.' },
-  { key: 'manage_team', label: 'Manage Team', description: 'Invite and manage team members.' },
-  { key: 'delete_content', label: 'Delete Content', description: 'Permanently delete articles and media.' },
-  { key: 'billing_access', label: 'Billing Access', description: 'View and manage billing and subscription details.' },
-  { key: 'backup_access', label: 'Backup Access', description: 'Create, download and restore site backups.' },
-];
+function CreateCustomPermissionDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: (perm: CustomPermissionRow) => void;
+}) {
+  const [form, setForm] = useState<CustomPermFormData>({
+    name: '',
+    description: '',
+    route: '',
+  });
+  const [error, setError] = useState<string | null>(null);
 
-const ROLE_PRESETS: Record<string, string[]> = {
-  SUPER_ADMIN: SITE_PERMISSIONS.map((p) => p.key),
-  ADMIN: ['full_access'],
-  EDITOR: ['content_management', 'articles', 'categories', 'tags', 'comments', 'media_library', 'seo', 'publish_content', 'schedule_articles'],
-  AUTHOR: ['articles', 'categories', 'tags', 'media_library'],
-  CONTRIBUTOR: ['articles', 'media_library'],
-  VIEWER: ['view_reports', 'analytics'],
-  SEO_MANAGER: ['seo', 'analytics', 'view_reports', 'articles', 'categories', 'tags'],
-  CONTENT_MANAGER: ['content_management', 'articles', 'categories', 'tags', 'comments', 'media_library', 'publish_content', 'schedule_articles', 'manage_ai'],
-  MARKETING_MANAGER: ['newsletter', 'analytics', 'view_reports', 'seo', 'forms', 'integrations'],
-};
+  const createMutation = useMutation({
+    mutationFn: (data: CustomPermFormData) =>
+      postApi<CustomPermissionRow>('/api/custom-permissions', {
+        name: data.name.trim(),
+        description: data.description.trim() || undefined,
+        route: data.route.trim() || undefined,
+      }),
+    onSuccess: (perm) => {
+      toast.success(`Custom permission "${perm.name}" created`);
+      onCreated(perm);
+      setForm({ name: '', description: '', route: '' });
+      setError(null);
+      onOpenChange(false);
+    },
+    onError: (err: Error) => {
+      setError(err.message || 'Failed to create custom permission');
+    },
+  });
+
+  const derivedKey = customPermissionKeyFromName(form.name);
+
+  const handleSubmit = () => {
+    if (!form.name.trim()) {
+      setError('Name is required');
+      return;
+    }
+    if (!derivedKey) {
+      setError('Name must contain at least one letter or number');
+      return;
+    }
+    setError(null);
+    createMutation.mutate(form);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>New Custom Permission</DialogTitle>
+          <DialogDescription>
+            Create a custom page-level permission that can be granted to Editor users.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-2">
+          <div className="grid gap-2">
+            <Label htmlFor="cp-name">Name <span className="text-destructive">*</span></Label>
+            <Input
+              id="cp-name"
+              value={form.name}
+              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+              placeholder="e.g. Manage Authors"
+              autoFocus
+            />
+            {derivedKey && (
+              <p className="text-xs text-muted-foreground">
+                Key: <code className="font-mono bg-muted px-1 py-0.5 rounded">{derivedKey}</code>
+              </p>
+            )}
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="cp-desc">Description</Label>
+            <Input
+              id="cp-desc"
+              value={form.description}
+              onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+              placeholder="Optional — short description"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="cp-route">Route</Label>
+            <Input
+              id="cp-route"
+              value={form.route}
+              onChange={(e) => setForm((p) => ({ ...p, route: e.target.value }))}
+              placeholder="Optional — e.g. #authors"
+            />
+          </div>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={createMutation.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={createMutation.isPending || !form.name.trim()}>
+            {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Create
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// -------------------- Invite / Edit Dialog --------------------
 
 interface InviteFormData {
   email: string;
   name: string;
-  role: string;
-  assignedSites: string[];
-  sitePermissions: string[];
+  role: UserRole;
+  pagePermissions: string[];
 }
+
+const DEFAULT_EDITOR_PAGES: string[] = ['dashboard', 'content', 'media'];
 
 function InviteUserDialog({
   open,
@@ -219,237 +293,313 @@ function InviteUserDialog({
   editMode?: boolean;
   initialData?: InviteFormData | null;
 }) {
-  const [form, setForm] = useState<InviteFormData>({ email: '', name: '', role: 'AUTHOR', assignedSites: [], sitePermissions: [] });
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<InviteFormData>({
+    email: '',
+    name: '',
+    role: 'EDITOR',
+    pagePermissions: DEFAULT_EDITOR_PAGES,
+  });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [siteSearch, setSiteSearch] = useState('');
-  const [showSiteDropdown, setShowSiteDropdown] = useState(false);
-  const [permissionsExpanded, setPermissionsExpanded] = useState(false);
-  const dropdownRef = React.useRef<HTMLDivElement>(null);
+  const [showCreateCustom, setShowCreateCustom] = useState(false);
+  const [deleteCustomTarget, setDeleteCustomTarget] = useState<CustomPermissionRow | null>(null);
 
-  const { data: sitesData } = useQuery({
-    queryKey: ['sites-list-invite'],
-    queryFn: () => getApi<SiteOption[]>('/api/sites'),
+  // Fetch custom permissions
+  const { data: customPerms } = useQuery({
+    queryKey: ['custom-permissions-list'],
+    queryFn: () => getApi<CustomPermissionRow[]>('/api/custom-permissions'),
     enabled: open,
   });
-  const sites = sitesData ?? [];
+  const customPermissions = customPerms ?? [];
 
-  React.useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowSiteDropdown(false);
-      }
-    };
-    if (showSiteDropdown) document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showSiteDropdown]);
+  // Delete custom permission (also removes from all users' pagePermissions arrays)
+  const deleteCustomMutation = useMutation({
+    mutationFn: (id: string) => deleteApi(`/api/custom-permissions/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['custom-permissions-list'] });
+      // Also refresh users list since their pagePermissions may have changed
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
+      toast.success('Custom permission deleted');
+      setDeleteCustomTarget(null);
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete custom permission');
+    },
+  });
 
   React.useEffect(() => {
     if (open) {
       if (editMode && initialData) {
         setForm(initialData);
       } else {
-        setForm({ email: '', name: '', role: 'AUTHOR', assignedSites: [], sitePermissions: [] });
+        setForm({
+          email: '',
+          name: '',
+          role: 'EDITOR',
+          pagePermissions: DEFAULT_EDITOR_PAGES,
+        });
       }
       setErrors({});
-      setSiteSearch('');
-      setPermissionsExpanded(false);
     }
   }, [open, editMode, initialData]);
 
-  const filteredSites = React.useMemo(() => {
-    if (!siteSearch.trim()) return sites;
-    const q = siteSearch.toLowerCase();
-    return sites.filter((s) => s.name.toLowerCase().includes(q) || (s.domain && s.domain.toLowerCase().includes(q)));
-  }, [sites, siteSearch]);
-
-  const selectedSiteObjects = React.useMemo(() => {
-    return form.assignedSites.map((id) => sites.find((s) => s.id === id)).filter(Boolean) as SiteOption[];
-  }, [form.assignedSites, sites]);
-
   const handleRoleChange = (role: string) => {
-    const presetPerms = ROLE_PRESETS[role] ?? [];
-    setForm((p) => ({ ...p, role, sitePermissions: presetPerms }));
-  };
-
-  const togglePermission = (key: string) => {
     setForm((p) => ({
       ...p,
-      sitePermissions: p.sitePermissions.includes(key)
-        ? p.sitePermissions.filter((k) => k !== key)
-        : [...p.sitePermissions, key],
+      role: role as UserRole,
+      // When switching to ADMIN, clear pagePermissions (they have full access)
+      pagePermissions: role === 'ADMIN' ? [] : p.pagePermissions.length > 0 ? p.pagePermissions : DEFAULT_EDITOR_PAGES,
     }));
   };
 
-  const addSite = (id: string) => {
-    if (!form.assignedSites.includes(id)) {
-      setForm((p) => ({ ...p, assignedSites: [...p.assignedSites, id] }));
-    }
-    setShowSiteDropdown(false);
-    setSiteSearch('');
-  };
-
-  const removeSite = (id: string) => {
-    setForm((p) => ({ ...p, assignedSites: p.assignedSites.filter((s) => s !== id) }));
-  };
-
-  const addAllSites = () => {
-    setForm((p) => ({ ...p, assignedSites: sites.map((s) => s.id) }));
-    setShowSiteDropdown(false);
+  const togglePage = (key: string) => {
+    setForm((p) => ({
+      ...p,
+      pagePermissions: p.pagePermissions.includes(key)
+        ? p.pagePermissions.filter((k) => k !== key)
+        : [...p.pagePermissions, key],
+    }));
   };
 
   const handleSubmit = () => {
     const errs: Record<string, string> = {};
     if (!form.email.trim()) errs.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = 'Invalid email address';
-    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      return;
+    }
     onSubmit({ ...form, email: form.email.trim(), name: form.name.trim() });
   };
 
+  const isEditor = form.role === 'EDITOR';
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{editMode ? 'Edit User' : 'Invite User'}</DialogTitle>
-          <DialogDescription>
-            {editMode
-              ? 'Update user details, role, and permissions.'
-              : 'Send an invitation email to add a new team member to your organization.'}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-6 py-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="invite-email">Email <span className="text-destructive">*</span></Label>
-              <Input id="invite-email" type="email" value={form.email}
-                onChange={(e) => { setForm((p) => ({ ...p, email: e.target.value })); setErrors((p) => { const n = { ...p }; delete n.email; return n; }); }}
-                placeholder="user@example.com" autoFocus />
-              {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="invite-name">Name</Label>
-              <Input id="invite-name" value={form.name}
-                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                placeholder="Full name (optional)" />
-            </div>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="invite-role">Role Preset</Label>
-            <Select value={form.role} onValueChange={handleRoleChange}>
-              <SelectTrigger id="invite-role"><SelectValue placeholder="Select a role" /></SelectTrigger>
-              <SelectContent>
-                {Object.keys(ROLE_PRESETS).map((role) => (
-                  <SelectItem key={role} value={role}>
-                    {role === 'SUPER_ADMIN' ? 'Super Admin' : role.charAt(0) + role.slice(1).toLowerCase().replace(/_/g, ' ')}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">Selecting a role automatically sets recommended permissions. You can customize below.</p>
-          </div>
-          <div className="grid gap-2">
-            <Label>Assigned Sites</Label>
-            <div className="relative" ref={dropdownRef}>
-              <div className="flex flex-wrap gap-1.5 min-h-[42px] p-2 border rounded-md bg-background cursor-text"
-                onClick={() => setShowSiteDropdown(true)}>
-                {selectedSiteObjects.length === 0 && !showSiteDropdown && (
-                  <span className="text-sm text-muted-foreground">Search and select sites...</span>
-                )}
-                {selectedSiteObjects.map((site) => (
-                  <Badge key={site.id} variant="secondary" className="gap-1.5 pr-1 py-1 text-xs font-normal">
-                    {site.logo ? <img src={site.logo} alt="" className="h-3.5 w-3.5 rounded-sm object-cover" /> : <Globe className="h-3.5 w-3.5 text-muted-foreground" />}
-                    <span>{site.name}</span>
-                    {site.domain && <span className="text-muted-foreground">({site.domain})</span>}
-                    <button type="button" className="ml-0.5 hover:bg-muted rounded-full p-0.5"
-                      onClick={(e) => { e.stopPropagation(); removeSite(site.id); }}>
-                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                    </button>
-                  </Badge>
-                ))}
-                {showSiteDropdown && (
-                  <input type="text" className="flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm"
-                    placeholder="Search sites..." value={siteSearch} onChange={(e) => setSiteSearch(e.target.value)}
-                    autoFocus onKeyDown={(e) => { if (e.key === 'Escape') setShowSiteDropdown(false); }} />
-                )}
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editMode ? 'Edit User' : 'Invite User'}</DialogTitle>
+            <DialogDescription>
+              {editMode
+                ? 'Update user details, role, and page access.'
+                : 'Send an invitation email to add a new team member to your organization.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-6 py-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="invite-email">Email <span className="text-destructive">*</span></Label>
+                <Input
+                  id="invite-email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => {
+                    setForm((p) => ({ ...p, email: e.target.value }));
+                    setErrors((p) => { const n = { ...p }; delete n.email; return n; });
+                  }}
+                  placeholder="user@example.com"
+                  autoFocus
+                />
+                {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
               </div>
-              {showSiteDropdown && (
-                <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
-                  <button type="button" className="w-full px-3 py-2 text-sm text-left hover:bg-accent flex items-center gap-2 border-b"
-                    onClick={addAllSites}>
-                    <Globe className="h-4 w-4 text-muted-foreground" />
-                    <span>Select All Sites</span>
-                    <span className="text-xs text-muted-foreground ml-auto">({sites.length})</span>
-                  </button>
-                  {filteredSites.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-muted-foreground">No sites found</div>
-                  ) : (
-                    filteredSites.map((site) => {
-                      const isSelected = form.assignedSites.includes(site.id);
-                      return (
-                        <button key={site.id} type="button"
-                          className={cn('w-full px-3 py-2 text-sm text-left hover:bg-accent flex items-center gap-3', isSelected && 'bg-accent')}
-                          onClick={() => isSelected ? removeSite(site.id) : addSite(site.id)}>
-                          {site.logo ? <img src={site.logo} alt="" className="h-5 w-5 rounded object-cover" />
-                            : <div className="h-5 w-5 rounded bg-muted flex items-center justify-center"><Globe className="h-3 w-3 text-muted-foreground" /></div>}
-                          <div className="flex-1 min-w-0">
-                            <div className="truncate font-medium">{site.name}</div>
-                            {site.domain && <div className="text-xs text-muted-foreground truncate">{site.domain}</div>}
-                          </div>
-                          {isSelected && <div className="h-4 w-4 rounded-full bg-primary flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>}
-                        </button>
-                      );
-                    })
-                  )}
+              <div className="grid gap-2">
+                <Label htmlFor="invite-name">Name</Label>
+                <Input
+                  id="invite-name"
+                  value={form.name}
+                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="Full name (optional)"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="invite-role">Role</Label>
+              <Select value={form.role} onValueChange={handleRoleChange}>
+                <SelectTrigger id="invite-role">
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                <strong>Admin</strong> has full access to all pages. <strong>Editor</strong> only sees the pages
+                selected below.
+              </p>
+            </div>
+
+            {isEditor ? (
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between">
+                  <Label>Page Access</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {form.pagePermissions.length} selected
+                  </span>
                 </div>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">Assign the user to one or multiple websites. Leave empty for all sites.</p>
-          </div>
-          <div className="grid gap-2">
-            <div className="flex items-center justify-between">
-              <Label>Site Permissions</Label>
-              <button type="button" className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setPermissionsExpanded(!permissionsExpanded)}>
-                {permissionsExpanded ? 'Collapse' : `Expand (${form.sitePermissions.length} selected)`}
-              </button>
-            </div>
-            {permissionsExpanded ? (
-              <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
-                {SITE_PERMISSIONS.map((perm) => (
-                  <label key={perm.key} className="flex items-start gap-3 px-3 py-2.5 hover:bg-accent/50 cursor-pointer transition-colors">
-                    <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-input"
-                      checked={form.sitePermissions.includes(perm.key)} onChange={() => togglePermission(perm.key)} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium">{perm.label}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">{perm.description}</div>
+                <div className="border rounded-lg divide-y max-h-72 overflow-y-auto">
+                  {BUILTIN_PAGES.map((page) => {
+                    const checked = form.pagePermissions.includes(page.key);
+                    const isSettings = page.key === 'settings';
+                    return (
+                      <div key={page.key}>
+                        <label className="flex items-center gap-3 px-3 py-2.5 hover:bg-accent/50 cursor-pointer transition-colors">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={() => togglePage(page.key)}
+                          />
+                          <span className="text-sm font-medium flex-1">{page.label}</span>
+                          {isSettings && (
+                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                              grants all sub-pages
+                            </span>
+                          )}
+                        </label>
+                        {isSettings && (
+                          <div className="pl-8 pb-1">
+                            {SETTINGS_SUBPAGES.map((sub) => {
+                              const subChecked = form.pagePermissions.includes(sub.key);
+                              return (
+                                <label
+                                  key={sub.key}
+                                  className="flex items-center gap-3 px-3 py-1.5 hover:bg-accent/50 cursor-pointer transition-colors"
+                                >
+                                  <Checkbox
+                                    checked={subChecked}
+                                    onCheckedChange={() => togglePage(sub.key)}
+                                  />
+                                  <span className="text-sm text-muted-foreground">{sub.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Custom permissions section */}
+                  <div className="bg-muted/30">
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Custom Permissions
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => setShowCreateCustom(true)}
+                      >
+                        <Plus className="h-3.5 w-3.5 mr-1" />
+                        Custom
+                      </Button>
                     </div>
-                  </label>
-                ))}
+                    {customPermissions.length === 0 ? (
+                      <div className="px-3 pb-3 text-xs text-muted-foreground">
+                        No custom permissions yet. Click &quot;+ Custom&quot; to create one.
+                      </div>
+                    ) : (
+                      customPermissions.map((perm) => {
+                        const checked = form.pagePermissions.includes(perm.key);
+                        return (
+                          <div
+                            key={perm.id}
+                            className="group flex items-center gap-3 px-3 py-2 hover:bg-accent/50 transition-colors"
+                          >
+                            <label className="flex items-center gap-3 flex-1 cursor-pointer">
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={() => togglePage(perm.key)}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{perm.name}</div>
+                                {perm.description && (
+                                  <div className="text-xs text-muted-foreground truncate">
+                                    {perm.description}
+                                  </div>
+                                )}
+                              </div>
+                            </label>
+                            <button
+                              type="button"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10 text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteCustomTarget(perm);
+                              }}
+                              aria-label={`Delete custom permission ${perm.name}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
               </div>
             ) : (
-              <div className="border rounded-lg p-3">
-                <div className="flex flex-wrap gap-1.5">
-                  {form.sitePermissions.length === 0 ? (
-                    <span className="text-sm text-muted-foreground">No permissions selected</span>
-                  ) : (
-                    form.sitePermissions.map((key) => {
-                      const perm = SITE_PERMISSIONS.find((p) => p.key === key);
-                      return perm ? <Badge key={key} variant="secondary" className="text-xs font-normal">{perm.label}</Badge> : null;
-                    })
-                  )}
-                </div>
+              <div className="flex items-center gap-2 p-3 rounded-md bg-orange-50 border border-orange-200 text-orange-800 dark:bg-orange-950/30 dark:border-orange-900/50 dark:text-orange-300">
+                <ShieldCheck className="h-4 w-4 shrink-0" />
+                <span className="text-sm">
+                  Admin users have full access to every page — no per-page configuration needed.
+                </span>
               </div>
             )}
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={isLoading || !form.email.trim()}>
-            {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            {editMode ? 'Save Changes' : 'Send Invitation'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={isLoading || !form.email.trim()}>
+              {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {editMode ? 'Save Changes' : 'Send Invitation'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <CreateCustomPermissionDialog
+        open={showCreateCustom}
+        onOpenChange={setShowCreateCustom}
+        onCreated={() => {
+          // customPermissions query is invalidated automatically by TanStack Query
+          // when we refetch — but the mutation in CreateCustomPermissionDialog
+          // doesn't invalidate, so we trigger a refetch here.
+          queryClient.invalidateQueries({ queryKey: ['custom-permissions-list'] });
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!deleteCustomTarget}
+        onOpenChange={(o) => !o && setDeleteCustomTarget(null)}
+        title="Delete Custom Permission"
+        description={
+          deleteCustomTarget
+            ? `Delete "${deleteCustomTarget.name}"? It will also be removed from every user's page access list.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteCustomTarget) {
+            // Also remove from the local form state
+            setForm((p) => ({
+              ...p,
+              pagePermissions: p.pagePermissions.filter((k) => k !== deleteCustomTarget.key),
+            }));
+            deleteCustomMutation.mutate(deleteCustomTarget.id);
+          }
+        }}
+        isLoading={deleteCustomMutation.isPending}
+      />
+    </>
   );
 }
 
@@ -497,7 +647,6 @@ export function UsersListPage() {
   );
 
   // Fetch users — use raw:true to get the full ApiResponse envelope
-  // (getApi without raw unwraps the `data` field, losing pagination info)
   const { data: rawData, isLoading } = useQuery({
     queryKey: queryKeys.users.list(queryParams),
     queryFn: () =>
@@ -524,13 +673,7 @@ export function UsersListPage() {
 
   // Suspend/Activate toggle mutation
   const toggleStatusMutation = useMutation({
-    mutationFn: ({
-      id,
-      status,
-    }: {
-      id: string;
-      status: UserStatus;
-    }) =>
+    mutationFn: ({ id, status }: { id: string; status: UserStatus }) =>
       patchApi(`/api/users/${id}`, { status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
@@ -540,10 +683,20 @@ export function UsersListPage() {
 
   // Invite mutation
   const inviteMutation = useMutation({
-    mutationFn: (data: InviteFormData) => postApi('/api/users/invite', data),
+    mutationFn: (data: InviteFormData) =>
+      postApi('/api/users/invite', {
+        email: data.email,
+        name: data.name || undefined,
+        role: data.role,
+        pagePermissions: data.pagePermissions,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
       setInviteDialogOpen(false);
+      toast.success('Invitation sent');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to invite user');
     },
   });
 
@@ -551,7 +704,6 @@ export function UsersListPage() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
 
-  // Open the Invite User-style dialog in edit mode
   const openEditDialog = useCallback((user: UserRow) => {
     setEditingUser(user);
     setEditDialogOpen(true);
@@ -564,6 +716,7 @@ export function UsersListPage() {
         name: data.name,
         email: data.email,
         role: data.role,
+        pagePermissions: data.pagePermissions,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
@@ -657,6 +810,28 @@ export function UsersListPage() {
           return <StatusBadge status={status} size="sm" />;
         },
       } as ColumnDef<UserRow>,
+      {
+        id: 'access',
+        header: 'Page Access',
+        size: 200,
+        enableSorting: false,
+        cell: ({ row }) => {
+          const user = row.original;
+          if (user.role === 'ADMIN') {
+            return (
+              <Badge variant="secondary" className="text-xs font-normal">
+                Full access
+              </Badge>
+            );
+          }
+          const count = user.pagePermissions?.length ?? 0;
+          return (
+            <span className="text-xs text-muted-foreground">
+              {count === 0 ? 'No access' : `${count} page${count === 1 ? '' : 's'}`}
+            </span>
+          );
+        },
+      } as ColumnDef<UserRow>,
       ColumnDefHelper.dateColumn<UserRow>({
         id: 'lastLoginAt',
         header: 'Last Login',
@@ -691,9 +866,7 @@ export function UsersListPage() {
                 Edit
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setSuspendTarget(row)}
-              >
+              <DropdownMenuItem onClick={() => setSuspendTarget(row)}>
                 {row.status === 'SUSPENDED' ? (
                   <>
                     <UserCheck className="h-4 w-4 mr-2" />
@@ -772,10 +945,7 @@ export function UsersListPage() {
         title="Users"
         description="Manage user accounts and permissions"
         action={
-          <Button
-            size="sm"
-            onClick={() => setInviteDialogOpen(true)}
-          >
+          <Button size="sm" onClick={() => setInviteDialogOpen(true)}>
             <UserPlus className="h-4 w-4 mr-2" />
             Invite User
           </Button>
@@ -827,13 +997,16 @@ export function UsersListPage() {
         }}
         isLoading={editMutation.isPending}
         editMode
-        initialData={editingUser ? {
-          email: editingUser.email,
-          name: editingUser.name ?? '',
-          role: editingUser.role,
-          assignedSites: [],
-          sitePermissions: [],
-        } : null}
+        initialData={
+          editingUser
+            ? {
+                email: editingUser.email,
+                name: editingUser.name ?? '',
+                role: editingUser.role,
+                pagePermissions: editingUser.pagePermissions ?? [],
+              }
+            : null
+        }
       />
 
       {/* Delete Confirmation */}
@@ -859,9 +1032,7 @@ export function UsersListPage() {
         open={!!suspendTarget}
         onOpenChange={(open) => !open && setSuspendTarget(null)}
         title={
-          suspendTarget?.status === 'SUSPENDED'
-            ? 'Activate User'
-            : 'Suspend User'
+          suspendTarget?.status === 'SUSPENDED' ? 'Activate User' : 'Suspend User'
         }
         description={
           suspendTarget
@@ -870,12 +1041,8 @@ export function UsersListPage() {
               : `Are you sure you want to suspend "${suspendTarget.name || suspendTarget.email}"? They will lose access immediately.`
             : undefined
         }
-        confirmLabel={
-          suspendTarget?.status === 'SUSPENDED' ? 'Activate' : 'Suspend'
-        }
-        variant={
-          suspendTarget?.status === 'SUSPENDED' ? 'default' : 'destructive'
-        }
+        confirmLabel={suspendTarget?.status === 'SUSPENDED' ? 'Activate' : 'Suspend'}
+        variant={suspendTarget?.status === 'SUSPENDED' ? 'default' : 'destructive'}
         onConfirm={() => {
           if (suspendTarget) handleSuspendToggle(suspendTarget);
         }}
@@ -884,3 +1051,7 @@ export function UsersListPage() {
     </div>
   );
 }
+
+// -------------------- Re-exports --------------------
+// Re-export canAccessPage so other modules can use the same helper.
+export { canAccessPage };

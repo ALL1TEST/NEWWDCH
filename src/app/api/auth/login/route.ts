@@ -6,8 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { loginSchema } from '@/lib/validators';
 import { generateRequestId } from '@/lib/utils';
-import { ROLE_PERMISSIONS } from '@/lib/permissions';
-import type { UserRole } from '@/shared/types';
+import { parsePagePermissions } from '@/lib/permissions';
 
 const SESSION_COOKIE_NAME = 'cms_session_token';
 const SESSION_EXPIRY_DAYS = 30;
@@ -148,9 +147,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 8. Build user response with permissions
-    const permissions = ROLE_PERMISSIONS[user.role as UserRole] ?? [];
-
+    // 8. Build user response with pagePermissions (parsed from JSON string)
     const userData = {
       id: user.id,
       email: user.email,
@@ -161,6 +158,7 @@ export async function POST(request: NextRequest) {
       status: user.status,
       emailVerified: user.emailVerified,
       mfaEnabled: user.mfaEnabled,
+      pagePermissions: parsePagePermissions(user.pagePermissions),
       authorProfile: user.authorProfile
         ? {
             id: user.authorProfile.id,
@@ -171,7 +169,6 @@ export async function POST(request: NextRequest) {
             avatar: user.authorProfile.avatar,
           }
         : null,
-      permissions,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
     };

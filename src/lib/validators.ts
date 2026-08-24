@@ -107,7 +107,7 @@ export const userCreateSchema = z.object({
   email: emailSchema,
   name: nameSchema,
   password: passwordSchema,
-  role: z.enum(['SUPER_ADMIN', 'ADMIN', 'EDITOR', 'AUTHOR', 'CONTRIBUTOR']).default('AUTHOR'),
+  role: z.enum(['ADMIN', 'EDITOR']).default('EDITOR'),
 });
 
 export type UserCreateInput = z.infer<typeof userCreateSchema>;
@@ -115,7 +115,7 @@ export type UserCreateInput = z.infer<typeof userCreateSchema>;
 export const userUpdateSchema = z.object({
   email: emailSchema.optional(),
   name: nameSchema.optional(),
-  role: z.enum(['SUPER_ADMIN', 'ADMIN', 'EDITOR', 'AUTHOR', 'CONTRIBUTOR']).optional(),
+  role: z.enum(['ADMIN', 'EDITOR']).optional(),
   status: z.enum(['INVITED', 'ACTIVE', 'SUSPENDED', 'DEACTIVATED']).optional(),
   bio: z.string().max(2000).optional(),
   avatar: optionalStringSchema,

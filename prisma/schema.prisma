@@ -21,11 +21,8 @@ enum PostStatus {
 }
 
 enum UserRole {
-  SUPER_ADMIN
   ADMIN
   EDITOR
-  AUTHOR
-  CONTRIBUTOR
 }
 
 enum UserStatus {
@@ -642,7 +639,7 @@ model User {
   avatar        String?
   bio           String?
   website       String?
-  role          UserRole  @default(AUTHOR)
+  role          UserRole  @default(EDITOR)
   status        UserStatus @default(ACTIVE)
   password      String?
   emailVerified Boolean   @default(false)
@@ -653,9 +650,10 @@ model User {
   lastLoginIp   String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
-  assignedSites  String?
+  deletedAt       DateTime?
+  assignedSites   String?
   sitePermissions String?
+  pagePermissions String?  // JSON array of page keys, e.g. ["articles","media","calendar"]
 
   // Relations
   authoredContent   ContentItem[]
@@ -1661,6 +1659,25 @@ model Setting {
   @@index([scope])
   @@index([category])
   @@index([siteId])
+}
+
+// ============================================================
+// CUSTOM PERMISSIONS — admin-defined page-level permissions
+// that can be granted to EDITOR users via their pagePermissions
+// array. The custom permission "key" (name lowercased, hyphenated)
+// is what gets stored in user.pagePermissions.
+// ============================================================
+
+model CustomPermission {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  route       String?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([name])
 }
 
 model SettingsAuditLog {

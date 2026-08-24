@@ -13,6 +13,7 @@ export interface CurrentUser {
   avatarUrl?: string | null;
   role: UserRole;
   status: string;
+  pagePermissions?: string[] | null;
   createdAt?: string | null;
   lastLoginAt?: string | null;
 }
@@ -28,6 +29,7 @@ interface ApiUser {
   status: string;
   emailVerified?: boolean;
   mfaEnabled?: boolean;
+  pagePermissions?: string[] | null;
   createdAt?: string | null;
   lastLoginAt?: string | null;
   authorProfile?: unknown;
@@ -43,6 +45,7 @@ function mapApiUser(raw: ApiUser): CurrentUser {
     avatarUrl: raw.avatar ?? null,
     role: raw.role as UserRole,
     status: raw.status,
+    pagePermissions: Array.isArray(raw.pagePermissions) ? raw.pagePermissions : null,
     createdAt: raw.createdAt ?? null,
     lastLoginAt: raw.lastLoginAt ?? null,
   };

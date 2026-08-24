@@ -8,6 +8,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import crypto from 'crypto';
+import { parsePagePermissions } from '@/lib/permissions';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -28,6 +29,7 @@ const userSelect = {
   lastLoginAt: true,
   createdAt: true,
   updatedAt: true,
+  pagePermissions: true,
   authorProfile: {
     select: {
       id: true,
@@ -48,7 +50,8 @@ const userSelect = {
 const createSchema = z.object({
   email: z.email('Please enter a valid email address'),
   name: z.string().max(200).trim().optional(),
-  role: z.enum(['SUPER_ADMIN', 'ADMIN', 'EDITOR', 'AUTHOR', 'CONTRIBUTOR']).optional(),
+  role: z.enum(['ADMIN', 'EDITOR']).optional(),
+  pagePermissions: z.array(z.string()).optional(),
 });
 
 // ---------- allowed sort columns -------------------------------------
@@ -95,8 +98,14 @@ export async function GET(request: NextRequest) {
       db.user.count({ where }),
     ]);
 
+    // Parse pagePermissions (stored as JSON string) into a string[] for the client
+    const itemsWithParsed = items.map((u) => ({
+      ...u,
+      pagePermissions: parsePagePermissions(u.pagePermissions),
+    }));
+
     return NextResponse.json({
-      data: items,
+      data: itemsWithParsed,
       meta: {
         requestId: id,
         pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
@@ -161,18 +170,28 @@ export async function POST(request: NextRequest) {
     // Generate a random password placeholder (user will set via invite flow)
     const randomPassword = crypto.randomBytes(32).toString('hex');
 
+    // Serialize pagePermissions (EDITOR only) — ADMIN has full access, so null
+    const serializedPagePerms =
+      d.role === 'ADMIN' || !d.pagePermissions || d.pagePermissions.length === 0
+        ? null
+        : JSON.stringify(Array.from(new Set(d.pagePermissions)));
+
     const item = await db.user.create({
       data: {
         email: d.email,
         name: d.name || null,
-        role: d.role || 'AUTHOR',
+        role: d.role || 'EDITOR',
         status: 'INVITED',
         password: randomPassword,
+        pagePermissions: serializedPagePerms,
       },
       select: userSelect,
     });
 
-    return NextResponse.json({ data: item, meta: { requestId: id } }, { status: 201 });
+    return NextResponse.json({
+      data: { ...item, pagePermissions: parsePagePermissions(item.pagePermissions) },
+      meta: { requestId: id },
+    }, { status: 201 });
   } catch (error) {
     console.error(`[USERS:CREATE] ${id} —`, error);
     return NextResponse.json(

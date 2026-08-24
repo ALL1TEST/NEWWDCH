@@ -1,183 +1,197 @@
-// ============================================================// PERMISSION SYSTEM — Enterprise CMS Admin Dashboard// ============================================================
+// ============================================================
+// PERMISSION SYSTEM — Simplified CMS Admin Dashboard
+// ============================================================
+// Two roles: ADMIN (full access) and EDITOR (limited to the
+// pages in their `pagePermissions` array). Custom permissions
+// (created via /api/custom-permissions) are referenced by their
+// generated key in the same `pagePermissions` array.
+// ============================================================
 
-import type { UserRole, Permission, NavItem } from '@/shared/types';
-import { ROLE_HIERARCHY, PERMISSIONS as PERM_CONST } from '@/shared/constants';
+import type { UserRole, NavItem } from '@/shared/types';
 
-// -------------------- Role Hierarchy Check --------------------
+// -------------------- Built-in CMS Pages --------------------
+
+export const BUILTIN_PAGES = [
+  { key: 'dashboard', label: 'Dashboard', icon: 'LayoutDashboard' },
+  { key: 'calendar', label: 'Calendar', icon: 'Calendar' },
+  { key: 'content', label: 'Articles', icon: 'FileText' },
+  { key: 'media', label: 'Media', icon: 'Image' },
+  { key: 'users', label: 'Users', icon: 'Users' },
+  { key: 'comments', label: 'Comments', icon: 'MessageSquare' },
+  { key: 'newsletter', label: 'Newsletter', icon: 'Mail' },
+  { key: 'seo', label: 'SEO', icon: 'Search' },
+  { key: 'ai', label: 'AI', icon: 'Sparkles' },
+  { key: 'automation', label: 'Automation', icon: 'Workflow' },
+  { key: 'settings', label: 'Settings', icon: 'Settings' },
+] as const;
+
+// -------------------- Settings Sub-pages --------------------
+
+export const SETTINGS_SUBPAGES = [
+  { key: 'email-templates', label: 'Email Templates', parent: 'settings' },
+  { key: 'smtp', label: 'SMTP Settings', parent: 'settings' },
+  { key: 'notifications', label: 'Notifications', parent: 'settings' },
+  { key: 'backups', label: 'Backups', parent: 'settings' },
+] as const;
+
+// -------------------- Custom Permission key helper --------------------
 
 /**
- * Returns true if `userRole` meets or exceeds `requiredRole` in the hierarchy.
- * SUPER_ADMIN > ADMIN > EDITOR > AUTHOR > CONTRIBUTOR
+ * Convert a custom permission name (e.g. "Manage Authors")
+ * into the key that gets stored in user.pagePermissions
+ * (e.g. "manage-authors").
  */
+export function customPermissionKeyFromName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+}
+
+// -------------------- Page Access Helpers --------------------
+
+/**
+ * Check whether a user with the given role + pagePermissions array
+ * is allowed to access the page identified by `pageKey`.
+ */
+export function canAccessPage(
+  role: string,
+  pagePermissions: string[] | null | undefined,
+  pageKey: string,
+): boolean {
+  // ADMIN always has full access
+  if (role === 'ADMIN') return true;
+
+  // EDITOR: check pagePermissions
+  if (role === 'EDITOR') {
+    if (!pagePermissions || pagePermissions.length === 0) return false;
+
+    // If they have 'settings', they can access all settings sub-pages
+    if (pagePermissions.includes('settings')) {
+      const subpage = SETTINGS_SUBPAGES.find((s) => s.key === pageKey);
+      if (subpage) return true;
+    }
+    return pagePermissions.includes(pageKey);
+  }
+  return false;
+}
+
+/**
+ * Return the full list of page keys a user can access.
+ * For ADMIN: all built-in pages + all settings sub-pages.
+ * For EDITOR: their pagePermissions, expanded to include all
+ * settings sub-pages if 'settings' is included.
+ */
+export function getAccessiblePages(
+  role: string,
+  pagePermissions: string[] | null | undefined,
+): string[] {
+  if (role === 'ADMIN') {
+    return [
+      ...BUILTIN_PAGES.map((p) => p.key),
+      ...SETTINGS_SUBPAGES.map((s) => s.key),
+    ];
+  }
+  if (role === 'EDITOR' && pagePermissions && pagePermissions.length > 0) {
+    let pages = [...pagePermissions];
+    if (pages.includes('settings')) {
+      pages = [...pages, ...SETTINGS_SUBPAGES.map((s) => s.key)];
+    }
+    return Array.from(new Set(pages));
+  }
+  return [];
+}
+
+// -------------------- JSON Serialization Helpers --------------------
+
+export function parsePagePermissions(raw: string | null | undefined): string[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every((v) => typeof v === 'string')) {
+      return parsed as string[];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function serializePagePermissions(pages: string[] | null | undefined): string | null {
+  if (!pages || pages.length === 0) return null;
+  return JSON.stringify(Array.from(new Set(pages)));
+}
+
+// -------------------- Legacy API: hasPermission --------------------
+// Kept for backward compat with sidebar nav items that use `requiredRole`.
+// ADMIN meets any requirement; EDITOR meets EDITOR but not ADMIN.
+
 export function hasPermission(userRole: UserRole, requiredRole: UserRole): boolean {
-  const userLevel = ROLE_HIERARCHY.indexOf(userRole);
-  const requiredLevel = ROLE_HIERARCHY.indexOf(requiredRole);
-  if (userLevel === -1 || requiredLevel === -1) return false;
-  return userLevel <= requiredLevel;
-}
-
-// -------------------- Permission Map --------------------
-
-/**
- * Maps each role to the set of permissions it grants.
- * Higher roles inherit all permissions from roles below them.
- */
-export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  SUPER_ADMIN: [
-    ...Object.values(PERM_CONST.content),
-    ...Object.values(PERM_CONST.media),
-    ...Object.values(PERM_CONST.users),
-    ...Object.values(PERM_CONST.categories),
-    ...Object.values(PERM_CONST.tags),
-    ...Object.values(PERM_CONST.comments),
-    ...Object.values(PERM_CONST.newsletters),
-    ...Object.values(PERM_CONST.seo),
-    ...Object.values(PERM_CONST.analytics),
-    ...Object.values(PERM_CONST.notifications),
-    ...Object.values(PERM_CONST.ai),
-    ...Object.values(PERM_CONST.settings),
-    ...Object.values(PERM_CONST.security),
-    ...Object.values(PERM_CONST.backups),
-    ...Object.values(PERM_CONST.emailTemplates),
-  ],
-  ADMIN: [
-    ...Object.values(PERM_CONST.content),
-    ...Object.values(PERM_CONST.media),
-    ...Object.values(PERM_CONST.users),
-    ...Object.values(PERM_CONST.categories),
-    ...Object.values(PERM_CONST.tags),
-    ...Object.values(PERM_CONST.comments),
-    ...Object.values(PERM_CONST.newsletters),
-    ...Object.values(PERM_CONST.seo),
-    ...Object.values(PERM_CONST.analytics),
-    ...Object.values(PERM_CONST.notifications),
-    ...Object.values(PERM_CONST.ai),
-    ...Object.values(PERM_CONST.settings),
-    ...Object.values(PERM_CONST.security),
-    ...Object.values(PERM_CONST.backups),
-    ...Object.values(PERM_CONST.emailTemplates),
-  ],
-  EDITOR: [
-    PERM_CONST.content.create,
-    PERM_CONST.content.read,
-    PERM_CONST.content.update,
-    PERM_CONST.content.publish,
-    PERM_CONST.content.review,
-    PERM_CONST.content.translate,
-    ...Object.values(PERM_CONST.media),
-    PERM_CONST.categories.create,
-    PERM_CONST.categories.read,
-    PERM_CONST.categories.update,
-    PERM_CONST.tags.create,
-    PERM_CONST.tags.read,
-    PERM_CONST.tags.update,
-    PERM_CONST.comments.read,
-    PERM_CONST.comments.update,
-    PERM_CONST.comments.moderate,
-    PERM_CONST.seo.read,
-    PERM_CONST.seo.update,
-    PERM_CONST.analytics.read,
-    PERM_CONST.notifications.read,
-    PERM_CONST.notifications.update,
-    PERM_CONST.ai.read,
-    PERM_CONST.ai.use,
-  ],
-  AUTHOR: [
-    PERM_CONST.content.create,
-    PERM_CONST.content.read,
-    PERM_CONST.content.update,
-    ...Object.values(PERM_CONST.media),
-    PERM_CONST.categories.read,
-    PERM_CONST.tags.read,
-    PERM_CONST.comments.read,
-    PERM_CONST.analytics.read,
-    PERM_CONST.notifications.read,
-    PERM_CONST.ai.read,
-    PERM_CONST.ai.use,
-  ],
-  CONTRIBUTOR: [
-    PERM_CONST.content.create,
-    PERM_CONST.content.read,
-    PERM_CONST.media.read,
-    PERM_CONST.categories.read,
-    PERM_CONST.tags.read,
-    PERM_CONST.comments.read,
-    PERM_CONST.notifications.read,
-  ],
-};
-
-// Build a flat set for O(1) lookups
-const PERMISSION_SETS: Record<UserRole, Set<string>> = Object.fromEntries(
-  Object.entries(ROLE_PERMISSIONS).map(([role, perms]) => [role, new Set(perms)]),
-) as Record<UserRole, Set<string>>;
-
-// -------------------- can() --------------------
-
-/**
- * Check whether a user with the given role has a specific permission.
- */
-export function can(userRole: UserRole, permission: Permission): boolean {
-  return PERMISSION_SETS[userRole]?.has(permission) ?? false;
-}
-
-/**
- * Check whether a user with the given role has ANY of the listed permissions.
- */
-export function canAny(userRole: UserRole, permissions: Permission[]): boolean {
-  const set = PERMISSION_SETS[userRole];
-  if (!set) return false;
-  return permissions.some((p) => set.has(p));
-}
-
-/**
- * Check whether a user with the given role has ALL of the listed permissions.
- */
-export function canAll(userRole: UserRole, permissions: Permission[]): boolean {
-  const set = PERMISSION_SETS[userRole];
-  if (!set) return false;
-  return permissions.every((p) => set.has(p));
+  if (userRole === 'ADMIN') return true;
+  if (userRole === 'EDITOR') return requiredRole === 'EDITOR';
+  return false;
 }
 
 // -------------------- Navigation Filtering --------------------
 
 /**
- * Filter navigation items based on the user's role.
- * Removes items the user has no access to, including nested children.
+ * Derive the page key from a hash href like "#content" or "#settings/smtp".
+ * Returns "dashboard" for "#", "content" for "#content", etc.
  */
-export function getVisibleNavItems(userRole: UserRole, allItems: NavItem[]): NavItem[] {
-  return allItems.reduce<NavItem[]>((visible, item) => {
-    // Skip separators if there's nothing before them
-    // Always include separators — they're used as group labels in submenus
-    if (item.isSeparator) {
-      visible.push(item);
-      return visible;
-    }
+function hrefToPageKey(href: string): string {
+  const hash = href.replace(/^#/, '');
+  if (!hash) return 'dashboard';
+  return hash.split('/')[0];
+}
 
-    // Check role requirement
-    if (item.requiredRole && !hasPermission(userRole, item.requiredRole)) {
-      return visible;
-    }
-
-    // Check permission requirement
-    if (item.requiredPermission && !can(userRole, item.requiredPermission)) {
-      return visible;
-    }
-
-    // Recursively filter children
-    const filteredChildren = item.children
-      ? getVisibleNavItems(userRole, item.children)
-      : undefined;
-
-    // If this item had children but all were filtered out, skip the parent
-    if (item.children && item.children.length > 0 && filteredChildren && filteredChildren.length === 0) {
-      return visible;
-    }
-
-    visible.push({
+/**
+ * Filter navigation items based on the user's role + pagePermissions.
+ * - ADMIN: sees all items
+ * - EDITOR: sees only items whose page key is in their pagePermissions,
+ *           plus settings sub-pages if 'settings' is included.
+ */
+export function getVisibleNavItems(
+  userRole: UserRole,
+  allItems: NavItem[],
+  pagePermissions: string[] | null | undefined = null,
+): NavItem[] {
+  // ADMIN sees everything
+  if (userRole === 'ADMIN') {
+    return allItems.map((item) => ({
       ...item,
-      children: filteredChildren,
-    });
+      children: item.children ? [...item.children] : undefined,
+    }));
+  }
 
-    return visible;
-  }, []);
+  // EDITOR: filter by pagePermissions
+  if (userRole === 'EDITOR') {
+    const accessible = pagePermissions ?? [];
+    return allItems.reduce<NavItem[]>((visible, item) => {
+      // Separators always pass through
+      if (item.isSeparator) {
+        visible.push(item);
+        return visible;
+      }
+
+      const pageKey = hrefToPageKey(item.href);
+
+      // Direct match in pagePermissions
+      if (accessible.includes(pageKey)) {
+        // Recursively filter children (only show accessible sub-pages)
+        const filteredChildren = item.children
+          ? item.children.filter((child) => {
+              const childKey = hrefToPageKey(child.href);
+              return accessible.includes(childKey);
+            })
+          : undefined;
+
+        visible.push({
+          ...item,
+          children: filteredChildren,
+        });
+        return visible;
+      }
+
+      return visible;
+    }, []);
+  }
+
+  return [];
 }

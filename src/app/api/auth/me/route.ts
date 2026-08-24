@@ -5,8 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { generateRequestId } from '@/lib/utils';
-import { ROLE_PERMISSIONS } from '@/lib/permissions';
-import type { UserRole } from '@/shared/types';
+import { parsePagePermissions } from '@/lib/permissions';
 
 const SESSION_COOKIE_NAME = 'cms_session_token';
 
@@ -109,9 +108,7 @@ export async function GET(request: NextRequest) {
       data: { lastActiveAt: new Date() },
     });
 
-    // 6. Build user response with permissions
-    const permissions = ROLE_PERMISSIONS[user.role as UserRole] ?? [];
-
+    // 6. Build user response with pagePermissions (parsed from JSON string)
     const userData = {
       id: user.id,
       email: user.email,
@@ -122,6 +119,7 @@ export async function GET(request: NextRequest) {
       status: user.status,
       emailVerified: user.emailVerified,
       mfaEnabled: user.mfaEnabled,
+      pagePermissions: parsePagePermissions(user.pagePermissions),
       authorProfile: user.authorProfile
         ? {
             id: user.authorProfile.id,
@@ -132,7 +130,6 @@ export async function GET(request: NextRequest) {
             avatar: user.authorProfile.avatar,
           }
         : null,
-      permissions,
       session: {
         id: session.id,
         expiresAt: session.expiresAt,

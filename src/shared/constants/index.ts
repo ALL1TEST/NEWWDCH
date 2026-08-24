@@ -305,11 +305,8 @@ export const PERMISSIONS = {
 // -------------------- Role Hierarchy --------------------
 
 export const ROLE_HIERARCHY: UserRole[] = [
-  'SUPER_ADMIN',
   'ADMIN',
   'EDITOR',
-  'AUTHOR',
-  'CONTRIBUTOR',
 ];
 
 // -------------------- Status Colors --------------------

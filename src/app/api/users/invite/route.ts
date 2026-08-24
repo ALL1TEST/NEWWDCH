@@ -7,6 +7,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import crypto from 'crypto';
+import { parsePagePermissions, serializePagePermissions } from '@/lib/permissions';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -27,6 +28,7 @@ const userSelect = {
   lastLoginAt: true,
   assignedSites: true,
   sitePermissions: true,
+  pagePermissions: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -36,9 +38,10 @@ const userSelect = {
 const inviteSchema = z.object({
   email: z.email('Please enter a valid email address'),
   name: z.string().max(200).trim().optional(),
-  role: z.enum(['SUPER_ADMIN', 'ADMIN', 'EDITOR', 'AUTHOR', 'CONTRIBUTOR', 'VIEWER', 'SEO_MANAGER', 'CONTENT_MANAGER', 'MARKETING_MANAGER']).optional(),
+  role: z.enum(['ADMIN', 'EDITOR']).optional(),
   assignedSites: z.array(z.string()).optional(),
   sitePermissions: z.array(z.string()).optional(),
+  pagePermissions: z.array(z.string()).optional(),
 });
 
 // =====================================================================
@@ -91,20 +94,31 @@ export async function POST(request: NextRequest) {
     // Generate a random password placeholder (user will set via invite flow)
     const randomPassword = crypto.randomBytes(32).toString('hex');
 
+    // Serialize pagePermissions (EDITOR only) — ADMIN has full access, so null
+    const effectiveRole = d.role ?? 'EDITOR';
+    const serializedPagePerms =
+      effectiveRole === 'ADMIN' || !d.pagePermissions || d.pagePermissions.length === 0
+        ? null
+        : serializePagePermissions(d.pagePermissions);
+
     const item = await db.user.create({
       data: {
         email: d.email,
         name: d.name || null,
-        role: d.role || 'AUTHOR',
+        role: effectiveRole,
         status: 'INVITED',
         password: randomPassword,
         assignedSites: d.assignedSites && d.assignedSites.length > 0 ? JSON.stringify(d.assignedSites) : null,
         sitePermissions: d.sitePermissions && d.sitePermissions.length > 0 ? JSON.stringify(d.sitePermissions) : null,
+        pagePermissions: serializedPagePerms,
       },
       select: userSelect,
     });
 
-    return NextResponse.json({ data: item, meta: { requestId: id } }, { status: 201 });
+    return NextResponse.json({
+      data: { ...item, pagePermissions: parsePagePermissions(item.pagePermissions) },
+      meta: { requestId: id },
+    }, { status: 201 });
   } catch (error) {
     console.error(`[USERS:INVITE] ${id} —`, error);
     return NextResponse.json(

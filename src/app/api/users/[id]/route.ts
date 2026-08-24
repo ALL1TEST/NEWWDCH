@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
+import { parsePagePermissions, serializePagePermissions } from '@/lib/permissions';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -28,6 +29,7 @@ const userSelect = {
   lastLoginAt: true,
   createdAt: true,
   updatedAt: true,
+  pagePermissions: true,
   authorProfile: {
     select: {
       id: true,
@@ -48,10 +50,11 @@ const userSelect = {
 const updateSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200, 'Name must be 200 characters or less').trim().optional(),
   email: z.email('Please enter a valid email address').optional(),
-  role: z.enum(['SUPER_ADMIN', 'ADMIN', 'EDITOR', 'AUTHOR', 'CONTRIBUTOR']).optional(),
+  role: z.enum(['ADMIN', 'EDITOR']).optional(),
   status: z.enum(['INVITED', 'ACTIVE', 'SUSPENDED', 'DEACTIVATED']).optional(),
   bio: z.string().max(2000).optional(),
   avatar: z.string().trim().optional().or(z.literal('')),
+  pagePermissions: z.array(z.string()).optional(),
 });
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -78,7 +81,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       );
     }
 
-    return NextResponse.json({ data: item, meta: { requestId: id } });
+    return NextResponse.json({
+      data: { ...item, pagePermissions: parsePagePermissions(item.pagePermissions) },
+      meta: { requestId: id },
+    });
   } catch (error) {
     console.error(`[USERS:GET] ${id} —`, error);
     return NextResponse.json(
@@ -137,10 +143,28 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const updateData: Record<string, unknown> = {};
     if (d.name !== undefined) updateData.name = d.name;
     if (d.email !== undefined) updateData.email = d.email;
-    if (d.role !== undefined) updateData.role = d.role;
+    if (d.role !== undefined) {
+      updateData.role = d.role;
+      // When switching to ADMIN, clear pagePermissions (ADMIN has full access)
+      if (d.role === 'ADMIN') {
+        updateData.pagePermissions = null;
+      }
+    }
     if (d.status !== undefined) updateData.status = d.status;
     if (d.bio !== undefined) updateData.bio = d.bio;
     if (d.avatar !== undefined) updateData.avatar = d.avatar === '' ? null : d.avatar;
+    if (d.pagePermissions !== undefined) {
+      // Serialize pagePermissions only when role is EDITOR.
+      // If role is being switched to ADMIN in this same PATCH, we already
+      // force pagePermissions to null above; otherwise we use the
+      // existing role.
+      const effectiveRole = (updateData.role as string | undefined) ?? existing.role;
+      if (effectiveRole === 'ADMIN') {
+        updateData.pagePermissions = null;
+      } else {
+        updateData.pagePermissions = serializePagePermissions(d.pagePermissions);
+      }
+    }
 
     const item = await db.user.update({
       where: { id: userId },
@@ -148,7 +172,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       select: userSelect,
     });
 
-    return NextResponse.json({ data: item, meta: { requestId: id } });
+    return NextResponse.json({
+      data: { ...item, pagePermissions: parsePagePermissions(item.pagePermissions) },
+      meta: { requestId: id },
+    });
   } catch (error) {
     console.error(`[USERS:UPDATE] ${id} —`, error);
     return NextResponse.json(

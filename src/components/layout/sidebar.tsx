@@ -463,10 +463,11 @@ export function AppSidebar() {
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
 
   const userRole = user?.role;
+  const pagePermissions = user?.pagePermissions ?? null;
   const visibleItems = useMemo(() => {
     if (!userRole) return [];
-    return getVisibleNavItems(userRole, NAV_ITEMS);
-  }, [userRole]);
+    return getVisibleNavItems(userRole, NAV_ITEMS, pagePermissions);
+  }, [userRole, pagePermissions]);
 
   /*
    * SINGLE SOURCE OF TRUTH for the expanded top-level section.
