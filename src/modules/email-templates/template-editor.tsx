@@ -478,7 +478,7 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [originalData, setOriginalData] = useState<{ subject: string; htmlBody: string; settings: TemplateSettings } | null>(null);
+  const [originalData, setOriginalData] = useState<{ name: string; subject: string; htmlBody: string; settings: TemplateSettings } | null>(null);
 
   // Refs
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -489,11 +489,12 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
   const isDirty = useMemo(() => {
     if (!originalData) return false;
     return (
+      originalData.name !== templateName ||
       originalData.subject !== subject ||
       originalData.htmlBody !== htmlBody ||
       JSON.stringify(originalData.settings) !== JSON.stringify(settings)
     );
-  }, [subject, htmlBody, settings, originalData]);
+  }, [templateName, subject, htmlBody, settings, originalData]);
 
   // Derive display save state: saving/saved take priority over dirty/idle
   const displaySaveState = useMemo((): SaveState => {
@@ -539,11 +540,13 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
         status: template.status,
       };
       const orig = {
+        name: template.name,
         subject: template.subject,
         htmlBody: template.htmlBody,
         settings: newSettings,
       };
       React.startTransition(() => {
+        setTemplateName(template.name);
         setSubject(template.subject);
         setHtmlBody(template.htmlBody);
         setSettings(newSettings);
@@ -556,6 +559,7 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
 
   const saveMutation = useMutation({
     mutationFn: (data: {
+      name: string;
       subject: string;
       htmlBody: string;
       category?: EmailTemplateCategory;
@@ -570,6 +574,7 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
         status: updated.status,
       };
       setOriginalData({
+        name: updated.name,
         subject: updated.subject,
         htmlBody: updated.htmlBody,
         settings: newSettings,
@@ -589,14 +594,19 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
 
   const performSave = useCallback(() => {
     if (!isDirty || saveMutation.isPending) return;
+    if (!templateName.trim()) {
+      toast.error('Template name is required');
+      return;
+    }
     setSaveState('saving');
     saveMutation.mutate({
+      name: templateName.trim(),
       subject,
       htmlBody,
       category: settings.category,
       status: settings.status,
     });
-  }, [isDirty, saveMutation, subject, htmlBody, settings]);
+  }, [isDirty, saveMutation, templateName, subject, htmlBody, settings]);
 
   useEffect(() => {
     if (isNew || !isDirty) {
@@ -607,7 +617,7 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [isNew, isDirty, subject, htmlBody, settings, performSave]);
+  }, [isNew, isDirty, templateName, subject, htmlBody, settings, performSave]);
 
   // -------------------- Variable Insertion --------------------
 
@@ -781,25 +791,20 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
 
   const editorContent = (
     <>
-      {/* ---- Name Field (create mode only) ---- */}
-      {isNew && (
-        <div className="space-y-1.5">
-          <Label htmlFor="template-name" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Template Name <span className="text-red-500">*</span>
-          </Label>
-          <Input
-            id="template-name"
-            value={templateName}
-            onChange={(e) => setTemplateName(e.target.value)}
-            placeholder="e.g. Welcome Email, Order Confirmation..."
-            className="h-10 text-sm"
-            autoFocus
-          />
-          <p className="text-xs text-muted-foreground">
-            A descriptive name for internal reference.
-          </p>
-        </div>
-      )}
+      {/* ---- Template Name Field (shown in both create and edit mode) ---- */}
+      <div className="space-y-1.5">
+        <Label htmlFor="template-name" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          Template Name <span className="text-red-500">*</span>
+        </Label>
+        <Input
+          id="template-name"
+          value={templateName}
+          onChange={(e) => setTemplateName(e.target.value)}
+          placeholder="e.g. Weekly SEO Newsletter"
+          className="h-10 text-sm"
+          autoFocus={isNew}
+        />
+      </div>
 
       {/* ---- Subject Field ---- */}
       <div className="space-y-1.5">
