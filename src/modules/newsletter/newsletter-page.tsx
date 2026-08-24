@@ -260,14 +260,31 @@ export function NewsletterPage() {
   const campaigns = (Array.isArray(campRaw?.data) ? campRaw.data : []) as CampaignRow[];
   const totalCampaigns = campRaw?.meta?.pagination?.total ?? 0;
 
-  // Fetch email templates for the Create Campaign dialog's template selector.
-  // Only ENABLED templates are shown.
-  const { data: templatesData } = useQuery({
-    queryKey: ['email-templates', 'enabled'],
-    queryFn: () => getApi<{ id: string; name: string; subject?: string; category?: string }[]>('/api/email-templates?status=ENABLED&pageSize=100'),
+  // Fetch email templates for the Create/Edit Campaign dialog's template selector.
+  // Loads ALL ENABLED templates dynamically from the Email Templates API —
+  // no hardcoded list. The API supports filtering by status + category.
+  // We fetch all ENABLED templates and filter to campaign-eligible categories
+  // (MARKETING, NEWSLETTER, and any non-TRANSACTIONAL/non-SYSTEM categories)
+  // on the client side so the dropdown always reflects the latest templates.
+  const CAMPAIGN_ELIGIBLE_CATEGORIES = new Set(['MARKETING', 'NEWSLETTER', 'CUSTOMER_EMAILS']);
+
+  const { data: templatesData, isLoading: templatesLoading } = useQuery({
+    queryKey: ['email-templates', 'campaign-eligible'],
+    queryFn: () => getApi<{ id: string; name: string; subject?: string; category?: string }[]>(
+      '/api/email-templates?status=ENABLED&pageSize=100',
+    ),
     staleTime: 30_000,
   });
-  const emailTemplates = templatesData ?? [];
+
+  // Filter to campaign-eligible categories (MARKETING, NEWSLETTER, CUSTOMER_EMAILS).
+  // TRANSACTIONAL, SYSTEM, AUTHENTICATION, NOTIFICATIONS, BILLING templates are
+  // not appropriate for manual campaign sending.
+  const emailTemplates = useMemo(
+    () => (templatesData ?? []).filter(
+      (tpl) => !tpl.category || CAMPAIGN_ELIGIBLE_CATEGORIES.has(tpl.category),
+    ),
+    [templatesData, CAMPAIGN_ELIGIBLE_CATEGORIES],
+  );
 
   // Fetch eligible subscribers (status=SUBSCRIBED) for the audience selector
   // + live recipient count preview.
@@ -709,12 +726,17 @@ export function NewsletterPage() {
                     />
                   </div>
 
-                  {/* Email Template Selector */}
+                  {/* Email Template Selector — dynamically loads from Email Templates API */}
                   <div className="space-y-1.5">
                     <Label htmlFor="camp-template">Email Template <span className="text-destructive">*</span></Label>
-                    {emailTemplates.length === 0 ? (
+                    {templatesLoading ? (
+                      <div className="flex items-center gap-2 h-9 px-3 rounded-md border text-sm text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Loading templates...
+                      </div>
+                    ) : emailTemplates.length === 0 ? (
                       <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-400">
-                        No email templates found. Create a template first in Settings → Email Templates.
+                        No eligible templates found. Create a Marketing or Newsletter template in Settings → Email Templates.
                       </div>
                     ) : (
                       <Select
@@ -970,6 +992,16 @@ export function NewsletterPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-template">Email Template <span className="text-destructive">*</span></Label>
+              {templatesLoading ? (
+                <div className="flex items-center gap-2 h-9 px-3 rounded-md border text-sm text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading templates...
+                </div>
+              ) : emailTemplates.length === 0 ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-400">
+                  No eligible templates found.
+                </div>
+              ) : (
               <Select
                 value={editForm.templateId}
                 onValueChange={(v) => setEditForm((f) => ({ ...f, templateId: v }))}
@@ -985,6 +1017,7 @@ export function NewsletterPage() {
                   ))}
                 </SelectContent>
               </Select>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-subject">Subject Line <span className="text-destructive">*</span></Label>

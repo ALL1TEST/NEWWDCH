@@ -60,7 +60,7 @@ async function main() {
       fromName: 'NEWWDCH Team',
       fromEmail: 'welcome@example.com',
       replyTo: 'support@example.com',
-      category: 'TRANSACTIONAL',
+      category: 'NEWSLETTER',
       status: 'ENABLED',
     },
     {
