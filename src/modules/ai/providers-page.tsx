@@ -109,8 +109,11 @@ interface ProviderFormData {
 
 // -------------------- Constants --------------------
 
+// Provider kinds that can be selected when creating/editing a provider.
+// Legacy kinds (OPENROUTER, OLLAMA, AZURE_OPENAI) are kept in PROVIDER_CONFIGS
+// for display of existing rows but are no longer selectable.
 const PROVIDER_KINDS: AiProviderKind[] = [
-  'OPENAI', 'ANTHROPIC', 'GEMINI', 'OPENROUTER', 'GROQ', 'DEEPSEEK', 'OLLAMA', 'AZURE_OPENAI',
+  'OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK',
 ];
 
 const PROVIDER_CONFIGS: Record<AiProviderKind, { label: string; defaultUrl: string; color: string }> = {
@@ -123,6 +126,11 @@ const PROVIDER_CONFIGS: Record<AiProviderKind, { label: string; defaultUrl: stri
   OLLAMA: { label: 'Ollama', defaultUrl: 'http://localhost:11434/v1', color: 'bg-zinc-100 text-zinc-700' },
   AZURE_OPENAI: { label: 'Azure OpenAI', defaultUrl: '', color: 'bg-teal-100 text-teal-700' },
 };
+
+function kindConfig(kind: string): { label: string; color: string } {
+  const cfg = (PROVIDER_CONFIGS as Record<string, { label: string; defaultUrl: string; color: string }>)[kind];
+  return cfg ?? { label: kind, color: 'bg-zinc-100 text-zinc-700' };
+}
 
 const CONNECTION_STATUS_CONFIG: Record<AiConnectionStatus, { color: string; label: string }> = {
   CONNECTED: { color: 'bg-green-500', label: 'Connected' },
@@ -182,6 +190,7 @@ export function ProvidersPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiProviders.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
       toast.success(editingProvider ? 'Provider updated' : 'Provider created');
       handleCloseDialog();
     },
@@ -195,6 +204,8 @@ export function ProvidersPage() {
     mutationFn: (id: string) => deleteApi(`/api/ai/providers/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiProviders.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       toast.success('Provider deleted');
       setDeleteDialogOpen(false);
       setDeletingProvider(null);
@@ -208,11 +219,11 @@ export function ProvidersPage() {
   const testMutation = useMutation({
     mutationFn: (id: string) => postApi(`/api/ai/providers/${id}/test`),
     onSuccess: (result: unknown) => {
-      const res = result as { success?: boolean; latency?: number; message?: string };
+      const res = result as { success?: boolean; latency?: number; message?: string; status?: string };
       if (res.success) {
         toast.success(`Connection successful (${res.latency ?? 0}ms)`);
       } else {
-        toast.error(res.message || 'Connection failed');
+        toast.error(res.message || `Connection ${res.status || 'failed'}`);
       }
       queryClient.invalidateQueries({ queryKey: queryKeys.aiProviders.all });
     },
@@ -225,8 +236,8 @@ export function ProvidersPage() {
   const syncMutation = useMutation({
     mutationFn: (id: string) => postApi(`/api/ai/providers/${id}/sync-models`),
     onSuccess: (result: unknown) => {
-      const res = result as { count?: number };
-      toast.success(`Synced ${res.count ?? 0} models`);
+      const res = result as { syncedCount?: number; count?: number };
+      toast.success(`Synced ${res.syncedCount ?? res.count ?? 0} models`);
       queryClient.invalidateQueries({ queryKey: queryKeys.aiProviders.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
     },
@@ -253,6 +264,7 @@ export function ProvidersPage() {
       patchApi(`/api/ai/providers/${id}`, { isActive }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiProviders.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to update provider');
@@ -433,14 +445,14 @@ export function ProvidersPage() {
                   </TableRow>
                 ) : (
                   providers.map((provider) => {
-                    const kindConfig = PROVIDER_CONFIGS[provider.kind];
+                    const kc = kindConfig(provider.kind);
                     const statusConfig = CONNECTION_STATUS_CONFIG[provider.connectionStatus];
                     return (
                       <TableRow key={provider.id}>
                         <TableCell className="font-medium">{provider.name}</TableCell>
                         <TableCell>
-                          <Badge variant="secondary" className={kindConfig.color}>
-                            {kindConfig.label}
+                          <Badge variant="secondary" className={kc.color}>
+                            {kc.label}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -607,15 +619,9 @@ export function ProvidersPage() {
               </div>
             </div>
             {formData.kind === 'AZURE_OPENAI' && (
-              <div className="grid gap-2">
-                <Label htmlFor="provider-version">API Version</Label>
-                <Input
-                  id="provider-version"
-                  placeholder="2024-02-01"
-                  value={formData.apiVersion}
-                  onChange={(e) => setFormData((p) => ({ ...p, apiVersion: e.target.value }))}
-                />
-              </div>
+              <p className="text-xs text-muted-foreground">
+                Note: Azure OpenAI is a legacy kind and no longer configurable from this form.
+              </p>
             )}
             <div className="flex items-center justify-between">
               <Label htmlFor="provider-active">Active</Label>

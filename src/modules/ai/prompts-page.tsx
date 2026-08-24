@@ -580,14 +580,23 @@ export function PromptsPage() {
               </div>
               <div className="grid gap-2">
                 <Label>Model</Label>
-                <Select value={formData.modelId} onValueChange={(v) => setFormData((p) => ({ ...p, modelId: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Select model" /></SelectTrigger>
+                <Select
+                  value={formData.modelId}
+                  onValueChange={(v) => setFormData((p) => ({ ...p, modelId: v }))}
+                  disabled={!formData.providerId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={formData.providerId ? 'Select model' : 'Select provider first'} />
+                  </SelectTrigger>
                   <SelectContent>
                     {models.map((m) => (
                       <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {formData.providerId && models.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No active models for this provider. Add models in the Models tab.</p>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

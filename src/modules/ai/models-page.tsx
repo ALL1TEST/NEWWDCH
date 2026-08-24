@@ -84,12 +84,12 @@ export function ModelsPage() {
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [deleteTarget, setDeleteTarget] = useState<AiModel | null>(null);
 
-  // Fetch providers
+  // Fetch providers — also used for the filter and the Add/Edit dialog
   const { data: providersData } = useQuery({
-    queryKey: queryKeys.aiProviders.list(),
+    queryKey: queryKeys.aiProviders.list({ pageSize: 100 }),
     queryFn: () => getApi<PaginatedResponse<AiProvider>>('/api/ai/providers', { pageSize: 100 }),
   });
-  const providers = (providersData as unknown as AiProvider[] | undefined) ?? [];
+  const providers = providersData?.data ?? [];
 
   // Fetch models
   const queryParams = useMemo(() => ({
@@ -104,8 +104,8 @@ export function ModelsPage() {
     queryFn: () => getApi<PaginatedResponse<AiModel>>('/api/ai/models', queryParams),
   });
 
-  const models = (data as unknown as AiModel[] | undefined) ?? [];
-  const pagination = (data as { pagination?: { page: number; pageSize: number; total: number; totalPages: number } } | undefined)?.pagination;
+  const models = data?.data ?? [];
+  const pagination = data?.pagination;
 
   // Create mutation
   const createMutation = useMutation({

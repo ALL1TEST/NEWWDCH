@@ -162,8 +162,8 @@ export function LogsPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={modelFilter} onValueChange={(v) => { setModelFilter(v); setPage(1); }}>
-              <SelectTrigger className="w-full sm:w-[170px]"><SelectValue placeholder="Model" /></SelectTrigger>
+            <Select value={modelFilter} onValueChange={(v) => { setModelFilter(v); setPage(1); }} disabled={providerFilter === 'all'}>
+              <SelectTrigger className="w-full sm:w-[170px]"><SelectValue placeholder={providerFilter !== 'all' ? 'Model' : 'Select provider first'} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Models</SelectItem>
                 {models.map((m) => (

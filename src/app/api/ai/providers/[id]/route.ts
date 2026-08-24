@@ -24,7 +24,7 @@ function err(message: string, status = 400, code = 'VALIDATION_ERROR') {
 
 const updateSchema = z.object({
   name: z.string().min(1).max(200).trim().optional(),
- kind: z.enum(['OPENAI', 'ANTHROPIC', 'GEMINI', 'OPENROUTER', 'GROQ', 'DEEPSEEK', 'OLLAMA', 'AZURE_OPENAI']).optional(),
+ kind: z.enum(['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK']).optional(),
  baseUrl: z.string().max(2048).optional().or(z.literal('')),
  apiKey: z.string().max(1000).optional().or(z.literal('')),
   apiVersion: z.string().max(100).optional().or(z.literal('')),

@@ -42,6 +42,10 @@ export async function GET(request: NextRequest) {
     const where: Record<string, unknown> = {};
     if (search) where.name = { contains: search };
     if (providerId) where.providerId = providerId;
+    const type = sp.get('type')?.trim();
+    if (type) where.type = type.toUpperCase();
+    const isActive = sp.get('isActive');
+    if (isActive !== null && isActive !== undefined && isActive !== '') where.isActive = isActive === 'true';
     if (supportsVision === 'true') where.supportsVision = true;
     if (supportsFunctionCalling === 'true') where.supportsFunctionCalling = true;
 
@@ -61,11 +65,10 @@ export async function GET(request: NextRequest) {
     ]);
 
     return NextResponse.json({
-      data: items,
+      data: { data: items, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } },
       meta: {
         requestId: id,
         timestamp: new Date().toISOString(),
-        pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
       },
     });
   } catch (error) {

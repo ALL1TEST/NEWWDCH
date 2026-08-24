@@ -19,14 +19,55 @@ function err(message: string, status = 400, code = 'VALIDATION_ERROR') {
   return NextResponse.json({ error: { code, message }, meta: { requestId: reqId(), timestamp: new Date().toISOString() } } satisfies ApiError, { status });
 }
 
+// ---------- parsing helpers ------------------------------------------
+// The Prisma schema stores `tags` and `variables` as JSON strings.
+// The frontend expects them as parsed objects/arrays.
+
+function parseTags(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.filter((t): t is string => typeof t === 'string');
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter((t): t is string => typeof t === 'string');
+      return raw.split(',').map((t) => t.trim()).filter(Boolean);
+    } catch {
+      return raw.split(',').map((t) => t.trim()).filter(Boolean);
+    }
+  }
+  return [];
+}
+
+function parseVariables(raw: unknown): Record<string, unknown> | null {
+  if (raw == null) return null;
+  if (typeof raw === 'object') return raw as Record<string, unknown>;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed as Record<string, unknown>;
+    } catch {
+      // fallthrough
+    }
+  }
+  return null;
+}
+
+function serializePrompt<T extends Record<string, unknown>>(item: T): T {
+  if (!item) return item;
+  return {
+    ...item,
+    tags: parseTags(item.tags),
+    variables: parseVariables(item.variables),
+  } as T;
+}
+
 // ---------- validation ------------------------------------------------
 
 const updateSchema = z.object({
   name: z.string().min(1).max(200).trim().optional(),
   category: z.enum(['CONTENT_GENERATION', 'IMAGE_GENERATION', 'SEO', 'TRANSLATION', 'SUMMARIZATION', 'MARKETING', 'SOCIAL_MEDIA', 'EMAIL', 'CODING', 'ANALYSIS', 'CUSTOM']).optional(),
   description: z.string().max(2000).optional().or(z.literal('')),
-  tags: z.string().max(2000).optional().or(z.literal('')),
-  variables: z.string().max(10000).optional().or(z.literal('')),
+  tags: z.union([z.string().max(2000), z.array(z.string()).max(100)]).optional(),
+  variables: z.union([z.string().max(10000), z.record(z.string(), z.unknown())]).optional(),
   systemPrompt: z.string().max(50000).optional().or(z.literal('')),
   userPrompt: z.string().max(50000).optional().or(z.literal('')),
   providerId: z.string().optional().or(z.literal('')),
@@ -57,7 +98,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     });
 
     if (!item) return err('Prompt not found', 404, 'NOT_FOUND');
-    return ok(item);
+    return ok(serializePrompt(item as unknown as Record<string, unknown>));
   } catch (error) {
     console.error(`[AI/PROMPTS:GET] ${id} —`, error);
     return err('Failed to fetch prompt', 500, 'INTERNAL_ERROR');
@@ -97,8 +138,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (d.name !== undefined) data.name = d.name;
     if (d.category !== undefined) data.category = d.category;
     if (d.description !== undefined) data.description = d.description === '' ? null : d.description;
-    if (d.tags !== undefined) data.tags = d.tags === '' ? null : d.tags;
-    if (d.variables !== undefined) data.variables = d.variables === '' ? null : d.variables;
+    if (d.tags !== undefined) {
+      data.tags = Array.isArray(d.tags) ? JSON.stringify(d.tags) : (d.tags === '' ? null : d.tags);
+    }
+    if (d.variables !== undefined) {
+      data.variables = (typeof d.variables === 'object' && d.variables !== null)
+        ? JSON.stringify(d.variables)
+        : (d.variables === '' ? null : d.variables);
+    }
     if (d.providerId !== undefined) data.providerId = d.providerId === '' ? null : d.providerId;
     if (d.modelId !== undefined) data.modelId = d.modelId === '' ? null : d.modelId;
     if (d.temperature !== undefined) data.temperature = d.temperature;
@@ -123,9 +170,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         data: {
           templateId: promptId,
           version: newVersion,
-          systemPrompt: data.systemPrompt as string | null ?? existing.systemPrompt,
-          userPrompt: data.userPrompt as string | null ?? existing.userPrompt,
-          variables: data.variables as string | null ?? existing.variables,
+          systemPrompt: (data.systemPrompt as string | null) ?? existing.systemPrompt,
+          userPrompt: (data.userPrompt as string | null) ?? existing.userPrompt,
+          variables: (data.variables as string | null) ?? existing.variables,
           temperature: (data.temperature as number | undefined) ?? existing.temperature,
           maxTokens: (data.maxTokens as number | undefined) ?? existing.maxTokens,
           createdById: existing.createdById,
@@ -138,7 +185,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       data,
     });
 
-    return ok(item);
+    return ok(serializePrompt(item as unknown as Record<string, unknown>));
   } catch (error) {
     console.error(`[AI/PROMPTS:UPDATE] ${id} —`, error);
     return err('Failed to update prompt', 500, 'INTERNAL_ERROR');

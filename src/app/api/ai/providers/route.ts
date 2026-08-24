@@ -24,12 +24,13 @@ function err(message: string, status = 400, code = 'VALIDATION_ERROR') {
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200).trim(),
-  kind: z.enum(['OPENAI', 'ANTHROPIC', 'GEMINI', 'OPENROUTER', 'GROQ', 'DEEPSEEK', 'OLLAMA', 'AZURE_OPENAI']),
+  kind: z.enum(['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK']),
   baseUrl: z.string().max(2048).optional().or(z.literal('')),
   apiKey: z.string().max(1000).optional().or(z.literal('')),
   apiVersion: z.string().max(100).optional().or(z.literal('')),
   config: z.string().max(50000).optional().or(z.literal('')),
   siteId: z.string().optional().or(z.literal('')),
+  isActive: z.boolean().optional(),
   isDefault: z.boolean().optional(),
 });
 
@@ -96,11 +97,10 @@ export async function GET(request: NextRequest) {
     }));
 
     return NextResponse.json({
-      data: masked,
+      data: { data: masked, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } },
       meta: {
         requestId: id,
         timestamp: new Date().toISOString(),
-        pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
       },
     });
   } catch (error) {
@@ -139,6 +139,12 @@ export async function POST(request: NextRequest) {
       encryptedKey = await encrypt(d.apiKey);
     }
 
+    // Resolve a createdById — pick the first ADMIN (or any user) since there is
+    // no auth in this setup. The User.createdBy relation is required.
+    let creator = await db.user.findFirst({ where: { role: 'ADMIN' }, select: { id: true } });
+    if (!creator) creator = await db.user.findFirst({ select: { id: true } });
+    if (!creator) return err('No user exists to attribute the provider to', 500, 'NO_USER');
+
     // If isDefault, unset all others first
     if (d.isDefault) {
       await db.aiProvider.updateMany({ where: { isDefault: true }, data: { isDefault: false } });
@@ -153,8 +159,9 @@ export async function POST(request: NextRequest) {
         apiVersion: d.apiVersion === '' ? null : d.apiVersion ?? null,
         config: d.config === '' ? null : d.config ?? null,
         siteId: d.siteId === '' ? null : d.siteId ?? null,
+        isActive: d.isActive ?? true,
         isDefault: d.isDefault ?? false,
-        createdById: 'system', // no auth in current setup
+        createdById: creator.id,
       },
     });
 

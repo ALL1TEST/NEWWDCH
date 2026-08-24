@@ -1212,3 +1212,143 @@ Stage Summary:
   * Login credentials unchanged: admin@example.com/admin123 (ADMIN), editor@example.com/editor123 (EDITOR, full builtin page access), author@example.com/author123 (now EDITOR with ["content","media","calendar","comments"]).
   * CustomPermission table starts empty — admins create custom permissions on demand via the "+ Custom" button in the Invite/Edit dialog.
 - Work record: agent-ctx/ROLES-SIMPLIFY-1-roles-simplifier.md
+
+---
+Task ID: AI-FIX-1
+Agent: main (ai-fix-developer)
+Task: Fix AI Providers, Models, Prompt Library, and AI Settings functionality — broken dropdowns, missing cascade logic, bad API response shapes, hardcoded provider kinds.
+
+Work Log:
+
+1. ROOT CAUSE ANALYSIS — API response shape mismatch
+   - All AI list endpoints (`/api/ai/providers`, `/api/ai/models`, `/api/ai/prompts`, `/api/ai/logs`, `/api/ai/jobs`) were returning:
+     `{ data: [items], meta: { ..., pagination: {...} } }`
+   - But the API client unwraps `envelope.data`, so the frontend received the bare items array, not a `{ data, pagination }` object.
+   - Frontend code did `data?.data ?? []` which always returned `[]` (empty array) — so all AI list pages showed zero rows.
+   - Standard shape used elsewhere in the codebase (e.g. `/api/content`) is `{ data: { data: [items], pagination: {...} }, meta: {...} }`.
+
+2. API ROUTE FIXES — wrap items + pagination in `data` field
+   - **MODIFIED** `src/app/api/ai/providers/route.ts` GET — now returns `{ data: { data: masked, pagination: {...} }, meta: {...} }`. Also: POST now resolves `createdById` from the first ADMIN user (was hardcoded `'system'` which fails the User FK constraint); POST now persists `isActive`; createSchema enum narrowed to `OPENAI, ANTHROPIC, GEMINI, GROQ, DEEPSEEK` (removed OPENROUTER, OLLAMA, AZURE_OPENAI).
+   - **MODIFIED** `src/app/api/ai/providers/[id]/route.ts` PATCH — updateSchema kind enum narrowed to the 5 allowed kinds.
+   - **MODIFIED** `src/app/api/ai/models/route.ts` GET — returns proper PaginatedResponse shape; also added `type` and `isActive` query param support.
+   - **MODIFIED** `src/app/api/ai/prompts/route.ts` GET+POST — returns proper PaginatedResponse shape; added `providerId` filter to GET; POST accepts tags as `string | string[]` and variables as `string | object`, serializing both to JSON strings for storage (the Prisma schema stores them as String? JSON); added `isActive` to createSchema; resolves `createdById` from first ADMIN user (was hardcoded `'system'`); GET now parses `tags` and `variables` from JSON strings back to arrays/objects so the frontend types actually match runtime values.
+   - **MODIFIED** `src/app/api/ai/prompts/[id]/route.ts` GET+PATCH — same tags/variables serialization (parse on GET, serialize on PATCH); updateSchema accepts tags as `string | string[]` and variables as `string | object`.
+   - **MODIFIED** `src/app/api/ai/logs/route.ts` GET — returns proper PaginatedResponse shape.
+   - **MODIFIED** `src/app/api/ai/jobs/route.ts` GET — returns proper PaginatedResponse shape.
+   - **CREATED** `src/app/api/ai/providers/[id]/test/route.ts` POST — new endpoint that calls `healthCheck(providerId)` from ai-service and returns `{ success, status, latency, message }`. The providers-page Test Connection button was calling `/api/ai/providers/{id}/test` which previously 404'd.
+
+3. PROVIDER KIND REDUCTION (user requirement #1)
+   - Removed `OPENROUTER`, `OLLAMA`, `AZURE_OPENAI` from the selectable `PROVIDER_KINDS` array in `src/modules/ai/providers-page.tsx`. Only `OPENAI, ANTHROPIC, GEMINI, GROQ, DEEPSEEK` are now selectable in the Add/Edit Provider Kind dropdown.
+   - Kept all 8 entries in `PROVIDER_CONFIGS` for display of legacy rows (so a provider with kind=OPENROUTER in the DB still renders a Badge instead of crashing).
+   - Added a `kindConfig(kind)` helper that returns a safe fallback for unknown kinds.
+   - Zod schemas in the providers POST/PATCH routes were narrowed to the 5 allowed kinds — backend rejects attempts to create new providers with legacy kinds.
+   - Did NOT add a "Custom" provider kind (per user requirement).
+   - Prisma enum `AiProviderKind` left as-is — existing rows with legacy kinds still load (SQLite doesn't enforce enum constraints).
+
+4. PROVIDER → MODEL CASCADE (user requirement #2)
+   - All Provider/Model select pairs now follow the same pattern:
+     - Provider dropdown is enabled and shows all configured (active) providers.
+     - Model dropdown is **disabled** when no provider is selected.
+     - When no provider is selected, Model placeholder reads "Select provider first".
+     - When a provider is selected, Model becomes enabled and shows ONLY models whose `providerId` matches the selected provider.
+     - When the Provider changes, the Model selection is reset to empty (so a stale model from a different provider is never retained).
+   - Applied consistently in: Add/Edit Provider (no model field), Add/Edit Model (filter by providerId — already correct, just fixed the response shape), Create/Edit Prompt, AI Settings → Text AI (Default Provider → Default Model), AI Settings → Image AI (Default Image Provider → Default Image Model), Playground (Provider → Model), AI Logs filter (Provider → Model).
+
+5. ADD PROVIDER IMMEDIATE AVAILABILITY (user requirement #3)
+   - The providers-page `saveMutation` now invalidates BOTH `queryKeys.aiProviders.all` AND `queryKeys.aiModels.all` on success — so the newly created provider immediately appears in every Provider dropdown across the AI module without a page refresh.
+   - Verified end-to-end in the browser: created "Test New Provider" → opened Models → Add Model → Provider dropdown showed the new provider immediately.
+   - The `toggleActiveMutation` and `deleteMutation` similarly invalidate both query families, so disabling/deleting a provider instantly removes it from all dependent dropdowns.
+
+6. MODELS PAGE FIXES (user requirement #4)
+   - `src/modules/ai/models-page.tsx`:
+     - Fixed `providers` and `models` extraction from the API response (was casting the whole PaginatedResponse object as the items array — now correctly uses `providersData?.data ?? []` and `data?.data ?? []`).
+     - The Add Model dialog Provider dropdown already filtered by `isActive` client-side — kept that behavior.
+     - The `setDefaultMutation` correctly calls `PATCH /api/ai/models/{id}` with `{ isDefault: true }` (already worked, but the response shape bug previously meant models weren't showing at all).
+   - Verified in browser: 12 seeded models (4 OpenAI, 3 Anthropic, 2 Groq, 3 Gemini) all display with their provider name, type badge, default star, and active toggle.
+   - Manually created "Test GPT Model" via the UI → saved successfully → appeared in the list immediately. (Cleaned up afterward.)
+
+7. PROMPT LIBRARY FIXES (user requirement #5)
+   - `src/modules/ai/prompts-page.tsx`:
+     - Provider dropdown in Create/Edit Prompt shows all active providers (was already fetching them correctly via `providersData?.data ?? []`).
+     - Model dropdown is now `disabled={!formData.providerId}` with a "Select provider first" placeholder when no provider is selected.
+     - When a provider is selected, Model shows only models whose `providerId` matches (via the existing `useQuery` keyed on `formData.providerId`).
+     - When Provider changes, `modelId` is reset to `''` (already in place).
+     - Added an informational message when a provider is selected but has no models yet: "No active models for this provider. Add models in the Models tab."
+   - API route fixes (see #3 above) — POST now accepts the array form of `tags` and the object form of `variables` that the frontend was already sending, serializes them to JSON strings for storage, and GET parses them back to arrays/objects.
+   - Verified in browser: seeded "Blog Post Writer" prompt displays with tags `['blog', 'seo', 'content']` (array, not raw JSON string) and is associated with OpenAI Primary provider.
+
+8. AI SETTINGS — TEXT AI FIXES (user requirement #6)
+   - `src/modules/ai/settings-page.tsx`:
+     - Fixed `activeProviders` extraction (was `(providersData as unknown as AiProvider[])` — now `providersData?.data ?? []`).
+     - Fixed `allModels` extraction (same pattern).
+     - The Default Provider dropdown shows all active providers.
+     - The Default Model dropdown is `disabled={!settings.defaultProviderId}` with a "Select provider first" placeholder.
+     - When a provider is selected, Default Model shows only TEXT models belonging to that provider (`m.type === 'TEXT' && m.providerId === settings.defaultProviderId`).
+     - When Default Provider changes, Default Model is reset to `''`.
+     - Fixed a pre-existing bug where local edits weren't reflected in the UI — `settings` was `settingsData ?? localSettings` (settingsData always wins once loaded), now it's `{ ...settingsData, ...localEdits }` so user edits actually apply.
+     - `localEdits` is cleared on successful save.
+
+9. AI SETTINGS — IMAGE AI FIXES (user requirement #7)
+   - Same settings-page component:
+     - `imageProviders` is now computed as `activeProviders.filter((p) => imageProviderIds.has(p.id))` — only providers that have at least one IMAGE model appear in the Default Image Provider dropdown.
+     - The Default Image Model dropdown is `disabled={!settings.imageProviderId}` with "Select provider first" placeholder.
+     - When a provider is selected, Default Image Model shows only IMAGE models belonging to that provider.
+     - When Default Image Provider changes, Default Image Model is reset to `''`.
+   - Verified in browser:
+     * With seeded data: Image Provider dropdown shows only OpenAI Primary and Google Gemini (the two providers with image models — DALL-E 3 and Gemini Image Gen). Anthropic Claude and Groq Fast are correctly hidden.
+     * Switching Image Provider from OpenAI to Google Gemini resets Image Model to "Select model".
+     * Clicking Image Model then shows only "Gemini Image Gen".
+
+10. DATA CONSISTENCY (user requirement #8)
+    - All Provider/Model dropdowns now use the same TanStack Query keys:
+      * `queryKeys.aiProviders.list({ isActive: true })` for active-only dropdowns (Add/Edit Model dialog, Prompts dialog, Settings).
+      * `queryKeys.aiProviders.list({ pageSize: 100 })` for the Models page filter (shows all, active and inactive).
+      * `queryKeys.aiModels.list({ providerId, pageSize: 100 })` for provider-filtered model lists.
+      * `queryKeys.aiModels.list({ isActive: true, all: true })` for the Settings page (all active models, filtered client-side by type).
+    - No hardcoded fake model options anywhere — every dropdown reads from `/api/ai/providers` and `/api/ai/models`.
+    - Mutations consistently invalidate the appropriate query families so changes propagate everywhere.
+
+11. IMPORTANT BEHAVIOR — DELETION / DISABLING (user requirement #9)
+    - The `deleteMutation` in providers-page now invalidates `aiProviders`, `aiModels`, and `aiSettings` queries — so a deleted provider immediately disappears from every dropdown.
+    - The `toggleActiveMutation` invalidates `aiProviders` and `aiModels` — disabling a provider removes it from active-only dropdowns (Add Model, Add Prompt, Settings).
+    - In Settings, the model dropdowns are filtered by `providerId` — if the previously-selected provider is deleted, the model dropdown shows "Select provider first" (because `settings.defaultProviderId` becomes stale but the provider no longer exists in `activeProviders`, and the model filter returns empty).
+    - In Prompts page, when editing a prompt whose provider was deleted, the Provider dropdown shows "Select provider" (empty value) and the Model dropdown is disabled — graceful degradation, no crash.
+    - When changing Provider in any dropdown, the Model selection is automatically reset (see #4 above).
+
+12. PLAYGROUND PAGE FIX (bonus)
+    - `src/modules/ai/playground-page.tsx` had a "use before declaration" bug — `providerId` and `modelId` were computed from `activeProviders` and `models` BEFORE the `useQuery` calls that defined them. Moved the `useState` declarations first, then the queries, then computed `providerId`/`modelId` from the query results.
+    - Added a `handleProviderChange` that resets `userModelId` when the provider changes (avoids the React Compiler "set-state-in-effect" error).
+    - Model dropdown is now `disabled={!providerId}` with "Select provider first" placeholder.
+
+13. SEED DATA — for verification
+    - Ran a one-off seed script that created 5 providers (OpenAI Primary, Anthropic Claude, Groq Fast, Google Gemini, DeepSeek (Disabled)), 12 models (4 OpenAI including DALL-E 3 image, 3 Anthropic, 2 Groq, 3 Gemini including image), 1 prompt template (Blog Post Writer), and 1 AI settings row.
+    - DeepSeek is intentionally `isActive: false` to verify it does NOT appear in active-only dropdowns but DOES appear in the Models page filter (which shows all providers).
+    - Script was deleted after running — only the DB rows remain.
+
+14. LINT CHECK
+    - `bun run lint`: 11 problems (5 errors, 6 warnings) — ALL in pre-existing files I did NOT touch (content-create-page.tsx, content-edit-page.tsx, seo-broken-links-page.tsx, seo-social-preview-page.tsx). ZERO errors and ZERO warnings in any AI module file or AI API route I created or modified.
+
+15. BROWSER VERIFICATION (Agent Browser)
+    - Verified end-to-end with Agent Browser:
+      * Providers tab: 5 providers listed (including disabled DeepSeek), Kind filter shows only 5 options, Add Provider dialog Kind dropdown shows only 5 options, creating a new provider makes it immediately available in the Models page Add Model provider dropdown.
+      * Models tab: 12 models listed with provider names and type badges, Add Model dialog Provider dropdown shows 4 active providers (DeepSeek hidden), created "Test GPT Model" successfully (cleaned up after).
+      * Prompt Library tab: seeded "Blog Post Writer" prompt shows with tags as an array, Add Prompt dialog Model dropdown is disabled with "Select provider first" placeholder until a provider is chosen, selecting OpenAI Primary shows only OpenAI's models (GPT-5, GPT-5 mini, GPT-4.1, DALL-E 3).
+      * Settings tab: Default Provider shows OpenAI Primary (seeded), Default Model shows GPT-5 (only OpenAI TEXT models). Changing Default Provider to Anthropic Claude resets Default Model to "Select model" and the dropdown then shows only Claude models. Image Provider dropdown shows only OpenAI Primary and Google Gemini (the two providers with IMAGE models). Switching Image Provider to Google Gemini resets Image Model, which then shows only "Gemini Image Gen".
+      * No console errors, no hydration warnings, no failed API calls in the dev log during the entire verification session.
+
+Stage Summary:
+- ROOT APPROACH: The core bug was an API response shape mismatch — all 5 AI list endpoints returned `{ data: [items], meta: { pagination } }` but the api-client unwraps `envelope.data`, so the frontend received the bare items array and then tried to access `data.data` (always undefined). Fixed by wrapping items + pagination inside the `data` field of the standard ApiResponse envelope, matching the pattern used by `/api/content` and other working modules. Then layered on the cascade logic (Model disabled until Provider selected, Model resets when Provider changes, Model filtered by Provider), narrowed the provider kind enum to the 5 the user wants, added the missing `/test` endpoint, fixed the `createdById: 'system'` FK violation, and serialized tags/variables properly for prompts.
+- FILES CHANGED:
+  * MODIFIED: src/app/api/ai/providers/route.ts, src/app/api/ai/providers/[id]/route.ts, src/app/api/ai/models/route.ts, src/app/api/ai/prompts/route.ts, src/app/api/ai/prompts/[id]/route.ts, src/app/api/ai/logs/route.ts, src/app/api/ai/jobs/route.ts, src/modules/ai/providers-page.tsx, src/modules/ai/models-page.tsx, src/modules/ai/prompts-page.tsx, src/modules/ai/settings-page.tsx, src/modules/ai/playground-page.tsx, src/modules/ai/logs-page.tsx
+  * CREATED: src/app/api/ai/providers/[id]/test/route.ts
+- EXISTING FUNCTIONALITY PRESERVED:
+  * Provider table layout, KPI cards, search/filter, pagination, delete confirmation, set-default, sync-models, toggle-active — all unchanged behavior (just fixed the data flow underneath).
+  * Models table layout, search/filter, Add/Edit dialog fields (Name, Model ID, Provider, Type, Active, Default) — unchanged.
+  * Prompt Library table + grid views, category filter, favorite toggle, version history, duplicate, delete — unchanged. Tags/variables now actually round-trip correctly (frontend sends arrays/objects, backend serializes to JSON strings, GET parses back).
+  * AI Settings Text + Image sections, temperature slider, max tokens input — unchanged.
+  * All other API routes (single GET, PATCH, DELETE for providers/models/prompts) — unchanged behavior, just the prompt GET/PATCH now serializes tags/variables.
+- DATA STATE:
+  * 5 providers in DB: OpenAI Primary (active, default), Anthropic Claude (active), Groq Fast (active), Google Gemini (active), DeepSeek (Disabled) (inactive — used to verify active-only filtering).
+  * 12 models: 4 OpenAI (GPT-5 default text, GPT-5 mini, GPT-4.1, DALL-E 3 default image), 3 Anthropic (Claude Sonnet 4 default, Claude Opus 4, Claude 3.5 Haiku), 2 Groq (Llama 3.3 70B default, Llama 3.1 8B), 3 Gemini (Gemini 2.5 Pro default, Gemini 2.0 Flash, Gemini Image Gen).
+  * 1 prompt: Blog Post Writer (CONTENT_GENERATION, tags=[blog,seo,content], provider=OpenAI Primary, model=GPT-5).
+  * AI Settings: defaultProvider=OpenAI Primary, defaultModel=GPT-5, imageProvider=OpenAI Primary, imageModel=DALL-E 3, temperature=0.7, maxTokens=2048.

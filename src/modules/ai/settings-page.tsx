@@ -76,10 +76,10 @@ function SettingsPageInner() {
     imageModelId: '',
   };
 
-  // Form state
-  const [localSettings, setLocalSettings] = useState<AiSettings>(defaultSettings);
+  // Form state — local edits layered on top of the fetched settings.
+  const [localEdits, setLocalEdits] = useState<Partial<AiSettings>>({});
   const updateField = <K extends keyof AiSettings>(key: K, value: AiSettings[K]) => {
-    setLocalSettings((prev) => ({ ...prev, [key]: value }));
+    setLocalEdits((prev) => ({ ...prev, [key]: value }));
   };
 
   // Fetch settings
@@ -88,28 +88,35 @@ function SettingsPageInner() {
     queryFn: () => getApi<AiSettings>('/api/ai/settings', { scope: 'global' }),
   });
 
-  // settings = fetched data ?? local fallback (MUST be after useQuery that defines settingsData)
-  const settings = settingsData ?? localSettings;
+  // settings = fetched data with local edits applied on top
+  const settings: AiSettings = { ...(settingsData ?? defaultSettings), ...localEdits } as AiSettings;
 
-  // Fetch active providers
+  // Fetch all providers (we want active ones for the dropdowns, but keep all for display)
   const { data: providersData } = useQuery({
     queryKey: queryKeys.aiProviders.list({ isActive: true }),
     queryFn: () => getApi<PaginatedResponse<AiProvider>>('/api/ai/providers', { isActive: true, pageSize: 100 }),
   });
-  const activeProviders = (providersData as unknown as AiProvider[] | undefined) ?? [];
+  const activeProviders = providersData?.data ?? [];
 
-  // Fetch all active models (we filter client-side by type)
+  // Fetch all active models — we filter client-side by provider + type
   const { data: allModelsData } = useQuery({
-    queryKey: queryKeys.aiModels.list({ all: true }),
+    queryKey: queryKeys.aiModels.list({ isActive: true, all: true }),
     queryFn: () => getApi<PaginatedResponse<AiModel>>('/api/ai/models', { pageSize: 200, isActive: true }),
   });
-  const allModels = (allModelsData as unknown as AiModel[] | undefined) ?? [];
+  const allModels = allModelsData?.data ?? [];
 
-  // Filter models by type + provider
+  // Filter models for the Text AI dropdown: same provider + type=TEXT
   const textModels = allModels.filter(
     (m) => (!settings.defaultProviderId || m.providerId === settings.defaultProviderId) && m.type?.toUpperCase() === 'TEXT',
   );
-  const imageProviders = activeProviders; // image providers = same as text providers (all providers)
+
+  // Image providers: any provider that has at least one IMAGE model.
+  const imageProviderIds = new Set(
+    allModels.filter((m) => m.type?.toUpperCase() === 'IMAGE').map((m) => m.providerId),
+  );
+  const imageProviders = activeProviders.filter((p) => imageProviderIds.has(p.id));
+
+  // Image models: same provider + type=IMAGE
   const imageModels = allModels.filter(
     (m) => (!settings.imageProviderId || m.providerId === settings.imageProviderId) && m.type?.toUpperCase() === 'IMAGE',
   );
@@ -119,6 +126,7 @@ function SettingsPageInner() {
     mutationFn: (body: AiSettings) => postApi('/api/ai/settings', { ...body, scope: 'global' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
+      setLocalEdits({});
       toast.success('Settings saved');
     },
     onError: (err: Error) => toast.error(err.message || 'Failed to save'),
@@ -163,6 +171,9 @@ function SettingsPageInner() {
                   ))}
                 </SelectContent>
               </Select>
+              {activeProviders.length === 0 && (
+                <p className="text-xs text-muted-foreground">No active providers. Add a provider in the Providers tab.</p>
+              )}
             </div>
 
             {/* Default Text Model (filtered by provider + type=TEXT) */}
@@ -236,6 +247,9 @@ function SettingsPageInner() {
                   ))}
                 </SelectContent>
               </Select>
+              {imageProviders.length === 0 && (
+                <p className="text-xs text-muted-foreground">No providers with image models. Add an IMAGE model in the Models tab first.</p>
+              )}
             </div>
 
             {/* Default Image Model (filtered by provider + type=IMAGE) */}

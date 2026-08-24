@@ -59,8 +59,6 @@ interface PlaygroundResponse {
 export function PlaygroundPage() {
   const [userProviderId, setUserProviderId] = useState('');
   const [userModelId, setUserModelId] = useState('');
-  const providerId = userProviderId || (activeProviders.length > 0 ? activeProviders[0].id : '');
-  const modelId = userModelId || (models.length > 0 ? models[0].id : '');
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(2048);
   const [topP, setTopP] = useState(1);
@@ -81,6 +79,9 @@ export function PlaygroundPage() {
   });
   const activeProviders = providersData?.data ?? [];
 
+  // Resolve the selected provider (explicit user choice, else first active provider).
+  const providerId = userProviderId || (activeProviders.length > 0 ? activeProviders[0].id : '');
+
   // Fetch models for selected provider
   const { data: modelsData } = useQuery({
     queryKey: queryKeys.aiModels.list({ providerId: providerId || undefined }),
@@ -91,6 +92,16 @@ export function PlaygroundPage() {
     enabled: !!providerId,
   });
   const models = modelsData?.data ?? [];
+
+  // Resolve the selected model (explicit user choice, else first model of this provider).
+  const modelId = userModelId || (models.length > 0 ? models[0].id : '');
+
+  // When the user changes the provider, reset the model selection so we
+  // don't end up with a model that doesn't belong to the new provider.
+  const handleProviderChange = (id: string) => {
+    setUserProviderId(id);
+    setUserModelId('');
+  };
 
   // Scroll to bottom
   useEffect(() => {
@@ -172,7 +183,7 @@ export function PlaygroundPage() {
           <div className="space-y-4 pb-4">
             <div className="grid gap-2">
               <Label className="text-xs">Provider</Label>
-              <Select value={providerId} onValueChange={setUserProviderId}>
+              <Select value={providerId} onValueChange={handleProviderChange}>
                 <SelectTrigger className="text-sm"><SelectValue placeholder="Select provider" /></SelectTrigger>
                 <SelectContent>
                   {activeProviders.map((p) => (
@@ -183,8 +194,8 @@ export function PlaygroundPage() {
             </div>
             <div className="grid gap-2">
               <Label className="text-xs">Model</Label>
-              <Select value={modelId} onValueChange={setUserModelId}>
-                <SelectTrigger className="text-sm"><SelectValue placeholder="Select model" /></SelectTrigger>
+              <Select value={modelId} onValueChange={setUserModelId} disabled={!providerId}>
+                <SelectTrigger className="text-sm"><SelectValue placeholder={providerId ? 'Select model' : 'Select provider first'} /></SelectTrigger>
                 <SelectContent>
                   {models.map((m) => (
                     <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
