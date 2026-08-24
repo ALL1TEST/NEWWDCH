@@ -43,7 +43,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -641,28 +640,25 @@ export function NewsletterPage() {
               <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Create Campaign</DialogTitle>
-                  <DialogDescription>
-                    Select an email template and audience to send a newsletter campaign.
-                  </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
                   {/* Campaign Name */}
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label htmlFor="camp-name">Campaign Name <span className="text-destructive">*</span></Label>
                     <Input
                       id="camp-name"
-                      placeholder="e.g. Weekly Digest #42"
+                      placeholder="e.g. August Newsletter"
                       value={campaignForm.name}
                       onChange={(e) => setCampaignForm((f) => ({ ...f, name: e.target.value }))}
                     />
                   </div>
 
                   {/* Email Template Selector */}
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label htmlFor="camp-template">Email Template <span className="text-destructive">*</span></Label>
                     {emailTemplates.length === 0 ? (
                       <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-400">
-                        No email templates found. Create a template first in Settings → Email Templates before creating a campaign.
+                        No email templates found. Create a template first in Settings → Email Templates.
                       </div>
                     ) : (
                       <Select
@@ -670,7 +666,7 @@ export function NewsletterPage() {
                         onValueChange={(v) => setCampaignForm((f) => ({ ...f, templateId: v }))}
                       >
                         <SelectTrigger id="camp-template">
-                          <SelectValue placeholder="Select an email template..." />
+                          <SelectValue placeholder="Select a template" />
                         </SelectTrigger>
                         <SelectContent>
                           {emailTemplates.map((tpl) => (
@@ -681,13 +677,10 @@ export function NewsletterPage() {
                         </SelectContent>
                       </Select>
                     )}
-                    <p className="text-xs text-muted-foreground">
-                      The template provides the email design. You can override the content below without modifying the original template.
-                    </p>
                   </div>
 
                   {/* Subject Line */}
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label htmlFor="camp-subject">Subject Line <span className="text-destructive">*</span></Label>
                     <Input
                       id="camp-subject"
@@ -695,29 +688,23 @@ export function NewsletterPage() {
                       value={campaignForm.subject}
                       onChange={(e) => setCampaignForm((f) => ({ ...f, subject: e.target.value }))}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      This is the actual subject subscribers will see. It can differ from the template's subject.
-                    </p>
                   </div>
 
                   {/* Content Override (optional) */}
-                  <div className="space-y-2">
-                    <Label htmlFor="camp-content">Content Override (optional)</Label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="camp-content">Content Override <span className="text-muted-foreground font-normal">(optional)</span></Label>
                     <Textarea
                       id="camp-content"
-                      placeholder="Leave empty to use the template's HTML body. Or paste custom HTML to override the template content for this campaign only."
-                      rows={4}
+                      placeholder="Enter custom HTML (optional)"
+                      rows={3}
                       value={campaignForm.contentOverride}
                       onChange={(e) => setCampaignForm((f) => ({ ...f, contentOverride: e.target.value }))}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Editing this does NOT modify the original Email Template.
-                    </p>
                   </div>
 
-                  {/* Audience Selector */}
-                  <div className="space-y-2">
-                    <Label>Audience / Recipients <span className="text-destructive">*</span></Label>
+                  {/* Recipients */}
+                  <div className="space-y-1.5">
+                    <Label>Recipients <span className="text-destructive">*</span></Label>
                     <div className="flex items-center gap-4">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -727,7 +714,7 @@ export function NewsletterPage() {
                           onChange={() => setCampaignForm((f) => ({ ...f, audience: 'all' }))}
                           className="h-4 w-4"
                         />
-                        <span className="text-sm">All subscribed subscribers</span>
+                        <span className="text-sm">All subscribed</span>
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -737,24 +724,21 @@ export function NewsletterPage() {
                           onChange={() => setCampaignForm((f) => ({ ...f, audience: 'selected' }))}
                           className="h-4 w-4"
                         />
-                        <span className="text-sm">Select specific subscribers</span>
+                        <span className="text-sm">Select specific</span>
                       </label>
                     </div>
 
                     {/* Live recipient count */}
-                    <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
+                    <div className="rounded-md bg-muted/50 px-3 py-1.5 text-sm">
                       <strong className="text-foreground">{liveRecipientCount}</strong>
                       <span className="text-muted-foreground"> subscriber{liveRecipientCount !== 1 ? 's' : ''} will receive this campaign</span>
-                      {eligibleCount === 0 && (
-                        <span className="text-amber-600 dark:text-amber-400 ml-2">(no eligible subscribers — status=SUBSCRIBED required)</span>
-                      )}
                     </div>
 
                     {/* Selected subscribers list (only when audience=selected) */}
                     {campaignForm.audience === 'selected' && (
                       <div className="border rounded-md max-h-48 overflow-y-auto">
                         {eligibleSubscribers.length === 0 ? (
-                          <p className="px-3 py-2 text-sm text-muted-foreground">No eligible subscribers available.</p>
+                          <p className="px-3 py-2 text-sm text-muted-foreground">No eligible subscribers.</p>
                         ) : (
                           eligibleSubscribers.map((sub) => (
                             <label key={sub.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/30 cursor-pointer border-b last:border-b-0">
@@ -779,17 +763,15 @@ export function NewsletterPage() {
                   </div>
 
                   {/* Schedule (optional) */}
-                  <div className="space-y-2">
-                    <Label htmlFor="camp-schedule">Schedule (optional)</Label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="camp-schedule">Schedule <span className="text-muted-foreground font-normal">(optional)</span></Label>
                     <Input
                       id="camp-schedule"
                       type="datetime-local"
+                      placeholder="Select date & time"
                       value={campaignForm.scheduledAt}
                       onChange={(e) => setCampaignForm((f) => ({ ...f, scheduledAt: e.target.value }))}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Leave empty to save as Draft. Select a future date/time to schedule the campaign.
-                    </p>
                   </div>
                 </div>
                 <DialogFooter>
