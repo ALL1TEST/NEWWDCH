@@ -1352,3 +1352,95 @@ Stage Summary:
   * 12 models: 4 OpenAI (GPT-5 default text, GPT-5 mini, GPT-4.1, DALL-E 3 default image), 3 Anthropic (Claude Sonnet 4 default, Claude Opus 4, Claude 3.5 Haiku), 2 Groq (Llama 3.3 70B default, Llama 3.1 8B), 3 Gemini (Gemini 2.5 Pro default, Gemini 2.0 Flash, Gemini Image Gen).
   * 1 prompt: Blog Post Writer (CONTENT_GENERATION, tags=[blog,seo,content], provider=OpenAI Primary, model=GPT-5).
   * AI Settings: defaultProvider=OpenAI Primary, defaultModel=GPT-5, imageProvider=OpenAI Primary, imageModel=DALL-E 3, temperature=0.7, maxTokens=2048.
+
+---
+Task ID: AI-SEED-1
+Agent: main (ai-seed-developer)
+Task: Populate the AI section with realistic demo/test data so Provider → Model relationships and all dependent dropdowns can be properly tested.
+
+Work Log:
+
+1. EXISTING DATA CHECK
+   - Found 5 providers, 12 models, 1 prompt, and 1 settings row from the previous AI-FIX-1 session's seed (all prefixed `seed-`).
+   - These were test/demo data (not real user data) with different names than the user's new spec (e.g. "OpenAI Primary" vs "OpenAI Test", "Claude Sonnet 4" vs "Claude Sonnet", "DALL-E 3" vs "GPT Image").
+   - Decision: replace the old test data with the exact spec the user provided, since both sets are test data.
+
+2. SEED SCRIPT (prisma/seed-ai-demo.ts)
+   - Idempotent script using `upsert` with stable IDs (ai-openai-test, ai-anthropic-test, etc.) — safe to run multiple times.
+   - Resolves `createdById` from the first ADMIN user (required FK to User).
+   - Cleans up old `seed-*` records before inserting new ones (deletes PromptTemplateVersion → PromptTemplate → AiModel → AiProvider in that order to respect FK constraints).
+   - All API keys are clearly fake: `sk-test-openai-fake-key-1234567890`, `sk-ant-test-anthropic-fake-key-1234567890`, `AIza-test-gemini-fake-key-1234567890`, `gsk-test-groq-fake-key-1234567890`, `ds-test-deepseek-fake-key-1234567890`.
+   - All providers have `connectionStatus: 'CONNECTED'`, `isActive: true`, `lastSyncAt: now`, `lastHealthCheckAt: now`, and a fake `latencyMs` (45-210ms).
+
+3. AI PROVIDERS (5 created)
+   - OpenAI Test (OPENAI, Connected, Active, **Default**) → baseUrl https://api.openai.com/v1
+   - Anthropic Test (ANTHROPIC, Connected, Active) → baseUrl https://api.anthropic.com/v1
+   - Google Gemini Test (GEMINI, Connected, Active) → baseUrl https://generativelanguage.googleapis.com/v1beta
+   - Groq Test (GROQ, Connected, Active) → baseUrl https://api.groq.com/openai/v1
+   - DeepSeek Test (DEEPSEEK, Connected, Active) → baseUrl https://api.deepseek.com/v1
+
+4. AI MODELS (13 created: 11 text + 2 image)
+   - OpenAI Test: GPT-5 (default text), GPT-5 mini, GPT-4.1, **GPT Image (default image)**
+   - Anthropic Test: Claude Sonnet (default), Claude Haiku
+   - Google Gemini Test: Gemini 2.5 Pro (default), Gemini 2.5 Flash, **Gemini Image**
+   - Groq Test: Llama 3.3 70B (default), Llama 4 Scout
+   - DeepSeek Test: DeepSeek V3 (default), DeepSeek R1
+   - Each model has: name, modelId, providerId, type (TEXT/IMAGE), isActive=true, realistic contextLength, inputCostPer1k, outputCostPer1k, and capability flags (supportsVision, supportsFunctionCalling, supportsImages).
+
+5. AI SETTINGS (upserted)
+   - defaultProviderId: OpenAI Test (ai-openai-test)
+   - defaultModelId: GPT-5 (m-openai-gpt5)
+   - imageProviderId: OpenAI Test (ai-openai-test)
+   - imageModelId: GPT Image (m-openai-gpt-image)
+   - defaultTemperature: 0.7, defaultMaxTokens: 2048
+   - streamingEnabled: true, functionCallingEnabled: true
+
+6. PROMPT TEMPLATES (3 created)
+   - Blog Article Writer (CONTENT_GENERATION, tags=[blog, seo, writing]) → OpenAI Test / GPT-5, temp=0.7, maxTokens=2048, favorite
+   - SEO Meta Description (SEO, tags=[seo, meta, description]) → OpenAI Test / GPT-5 mini, temp=0.4, maxTokens=100
+   - Image Prompt Generator (IMAGE_GENERATION, tags=[image, generation]) → Google Gemini Test / Gemini 2.5 Pro, temp=0.8, maxTokens=300, favorite
+   - Each prompt has: systemPrompt, userPrompt with {{variables}}, variables JSON, version 1 + a PromptTemplateVersion row.
+
+7. API VERIFICATION (curl)
+   - GET /api/ai/providers → 5 providers, all Connected + Active, OpenAI Test is Default.
+   - GET /api/ai/models → 13 models, each with correct provider association and type.
+   - GET /api/ai/models?providerId=ai-openai-test → 4 models (GPT-5, GPT-5 mini, GPT-4.1, GPT Image).
+   - GET /api/ai/models?providerId=ai-anthropic-test → 2 models (Claude Sonnet, Claude Haiku).
+   - GET /api/ai/models?providerId=ai-gemini-test → 3 models (Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini Image).
+   - GET /api/ai/models?providerId=ai-groq-test → 2 models (Llama 3.3 70B, Llama 4 Scout).
+   - GET /api/ai/models?providerId=ai-deepseek-test → 2 models (DeepSeek V3, DeepSeek R1).
+   - GET /api/ai/prompts → 3 prompts with tags as arrays, provider names resolved.
+   - GET /api/ai/settings → defaultProvider=OpenAI Test, defaultModel=GPT-5, imageProvider=OpenAI Test, imageModel=GPT Image.
+
+8. BROWSER VERIFICATION (Agent Browser)
+   - **Providers page**: KPI cards show Total Providers=5, Connected=5, Default Provider="OpenAI Test". Table shows all 5 providers with "Connected" status, correct Kind badges, Active toggles ON, OpenAI Test has "Default" badge.
+   - **Models page**: Table shows all 13 models with correct Provider names and Text/Image type badges. Default stars on GPT-5, Claude Sonnet, Gemini 2.5 Pro, Llama 3.3 70B, DeepSeek V3, GPT Image. Provider filter dropdown shows all 5 test providers. Selecting "Anthropic Test" filters the table to only Claude Haiku + Claude Sonnet.
+   - **Prompt Library**: Table shows all 3 prompts with correct categories (Content Generation, SEO, Image Generation), tags (blog/seo/writing, seo/meta/description, image/generation), and Active status.
+   - **Add Prompt dialog → Provider/Model cascade**:
+     * Initially: Model dropdown is **disabled** with "Select provider first" placeholder.
+     * Select "OpenAI Test" → Model becomes enabled, dropdown shows ONLY GPT-5, GPT-5 mini, GPT-4.1, GPT Image.
+     * Switch to "Anthropic Test" → Model resets to "Select model", dropdown shows ONLY Claude Haiku, Claude Sonnet.
+   - **Edit Prompt dialog**: Opened "SEO Meta Description" → Provider=OpenAI Test, Model=GPT-5 mini (correctly pre-selected). Model dropdown shows only OpenAI's models with GPT-5 mini marked as selected. Tags loaded as comma-separated string, variables loaded as formatted JSON.
+   - **AI Settings → Text AI**:
+     * Default Provider = OpenAI Test, Default Model = GPT-5 (both pre-selected from seed).
+     * Default Model dropdown shows ONLY GPT-5, GPT-5 mini, GPT-4.1 (TEXT models only — GPT Image correctly excluded).
+   - **AI Settings → Image AI**:
+     * Default Image Provider = OpenAI Test, Default Image Model = GPT Image (both pre-selected from seed).
+     * Default Image Provider dropdown shows ONLY OpenAI Test and Google Gemini Test (the 2 providers that have IMAGE models — Anthropic, Groq, DeepSeek correctly hidden).
+     * Switched Image Provider to Google Gemini Test → Image Model reset to "Select model", dropdown showed ONLY "Gemini Image".
+     * Switched back to OpenAI Test, reselected GPT Image, clicked "Save Settings" → persisted successfully (verified via API: defaultProviderId=ai-openai-test, imageModelId=m-openai-gpt-image).
+   - No console errors, no failed API calls, no hydration warnings during the entire verification session.
+
+9. LINT CHECK
+   - `bun run lint`: ZERO errors in any AI module file, AI API route, or the seed script.
+
+Stage Summary:
+- ROOT APPROACH: Created an idempotent seed script (`prisma/seed-ai-demo.ts`) that replaces the previous session's test data with the exact 5-provider / 13-model / 3-prompt / 1-settings spec the user provided. All providers are Connected + Active with clearly-fake API keys. All models are correctly associated with their providers. AI Settings point to OpenAI Test / GPT-5 for text and OpenAI Test / GPT Image for images. Verified end-to-end via API (curl) and browser (Agent Browser) that every Provider → Model dropdown cascade works correctly across Providers, Models, Prompt Library, and Settings pages.
+- FILES CREATED:
+  * prisma/seed-ai-demo.ts — idempotent seed script (run with `bun run prisma/seed-ai-demo.ts`)
+- DATA STATE (all persisted in SQLite at db/custom.db):
+  * 5 providers: OpenAI Test (default), Anthropic Test, Google Gemini Test, Groq Test, DeepSeek Test — all Connected + Active.
+  * 13 models: GPT-5/GPT-5 mini/GPT-4.1/GPT Image (OpenAI), Claude Sonnet/Claude Haiku (Anthropic), Gemini 2.5 Pro/Gemini 2.5 Flash/Gemini Image (Gemini), Llama 3.3 70B/Llama 4 Scout (Groq), DeepSeek V3/DeepSeek R1 (DeepSeek).
+  * 3 prompts: Blog Article Writer, SEO Meta Description, Image Prompt Generator.
+  * AI Settings: default=OpenAI Test/GPT-5, image=OpenAI Test/GPT Image.
+- RE-RUN INSTRUCTIONS: `bun run prisma/seed-ai-demo.ts` — safe to run repeatedly (upserts by stable ID, cleans up old `seed-*` records first).
