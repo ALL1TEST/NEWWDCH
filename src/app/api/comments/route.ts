@@ -1,6 +1,6 @@
 // ============================================================
 // GET  /api/comments      — List comments (paginated, filterable)
-// POST /api/comments      — Create a comment
+// POST /api/comments      — Create a comment (with auto spam detection)
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -8,6 +8,8 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { getSiteWhere } from '@/lib/site-context';
+import { getSettingValue } from '@/lib/settings-service';
+import { checkCommentSpam } from '@/lib/akismet';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -84,7 +86,7 @@ export async function GET(request: NextRequest) {
 }
 
 // =====================================================================
-// POST — create
+// POST — create (with auto spam detection via Akismet when configured)
 // =====================================================================
 
 export async function POST(request: NextRequest) {
@@ -119,6 +121,57 @@ export async function POST(request: NextRequest) {
     const d = parsed.data;
     const siteId = request.nextUrl.searchParams.get('siteId');
 
+    // ---------- Auto spam detection (Akismet) ----------
+    // When the admin has configured Akismet (API key + blog URL saved in
+    // settings) AND auto spam detection is enabled, we check the comment
+    // against Akismet BEFORE creating the record. If Akismet says it's
+    // spam, the comment is created with status=SPAM instead of PENDING
+    // so it never appears on the public site without moderator approval.
+    let initialStatus: 'PENDING' | 'SPAM' = 'PENDING';
+
+    try {
+      const autoSpamEnabled = await getSettingValue('comment_auto_spam_detection');
+      const spamProvider = await getSettingValue('comment_spam_provider');
+
+      if (autoSpamEnabled === 'true' && spamProvider === 'akismet') {
+        // Fetch the author + content item so we can pass full context to Akismet.
+        const [author, contentItem] = await Promise.all([
+          db.user.findUnique({
+            where: { id: d.authorId },
+            select: { name: true, email: true, website: true },
+          }),
+          db.contentItem.findUnique({
+            where: { id: d.contentItemId },
+            select: { id: true, title: true, slug: true },
+          }),
+        ]);
+
+        if (author && contentItem) {
+          const result = await checkCommentSpam({
+            commentContent: d.content,
+            commentAuthor: author.name ?? 'Anonymous',
+            commentAuthorEmail: author.email ?? undefined,
+            commentAuthorUrl: author.website ?? undefined,
+            permalink: contentItem.slug
+              ? `${request.nextUrl.origin}/blog/${contentItem.slug}`
+              : request.nextUrl.origin,
+            userAgentIp: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || undefined,
+            userAgent: request.headers.get('user-agent') || undefined,
+            referrer: request.headers.get('referer') || undefined,
+          });
+
+          if (result.isSpam) {
+            initialStatus = 'SPAM';
+          }
+        }
+      }
+    } catch (spamErr) {
+      // If the spam check throws, we FAIL OPEN — create the comment as
+      // PENDING rather than blocking legitimate comments when the spam
+      // service is temporarily unreachable.
+      console.warn(`[COMMENTS:CREATE] ${id} — spam check failed, failing open:`, spamErr);
+    }
+
     const item = await db.comment.create({
       data: {
         content: d.content,
@@ -126,6 +179,7 @@ export async function POST(request: NextRequest) {
         contentItemId: d.contentItemId,
         parentId: d.parentId === '' ? null : d.parentId ?? null,
         siteId: siteId || undefined,
+        status: initialStatus,
       },
       include: commentIncludes,
     });

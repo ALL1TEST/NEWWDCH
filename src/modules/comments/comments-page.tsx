@@ -79,6 +79,7 @@ import {
   Mail,
   AlertTriangle,
   RotateCcw,
+  Info,
 } from 'lucide-react';
 import {
   DEMO_COMMENTS,
@@ -468,6 +469,17 @@ function CommentSettingsCard() {
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-muted-foreground" />
               <h3 className="text-sm font-semibold">Custom Spam Provider</h3>
+              {/* Helper text as a small info tooltip to keep the UI clean */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground transition-colors" onClick={(e) => e.preventDefault()}>
+                    <Info className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-xs leading-relaxed">
+                  The custom endpoint receives POST requests with the comment payload and must respond with JSON: {`{ "spam": true|false, "score": 0-100 }`}
+                </TooltipContent>
+              </Tooltip>
             </div>
             <div className="flex items-center gap-2">
               <Label htmlFor="custom-enabled" className="text-xs text-muted-foreground cursor-pointer">
@@ -480,7 +492,7 @@ function CommentSettingsCard() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1">
               <Label htmlFor="custom-provider-name" className="text-xs font-medium">
                 Provider Name
@@ -520,11 +532,6 @@ function CommentSettingsCard() {
               {hasSavedCustomApiKey && !draft.customApiKey && (
                 <p className="text-[10px] text-muted-foreground">Leave as {API_KEY_MASK} to keep the saved key.</p>
               )}
-            </div>
-            <div className="space-y-1 flex items-end">
-              <span className="text-[10px] text-muted-foreground">
-                The custom endpoint receives <code>POST</code> requests with the comment payload and must respond with <code>{'{ "spam": true|false, "score": 0-100 }'}</code>.
-              </span>
             </div>
           </div>
         </div>
@@ -576,12 +583,7 @@ function CommentSettingsCard() {
         </div>
       )}
 
-      {/* None — no extra config needed */}
-      {spamDetection && spamProvider === 'none' && (
-        <p className="mt-3 text-xs text-muted-foreground">
-          No spam provider selected — comments marked as spam will rely on manual moderation only.
-        </p>
-      )}
+      {/* None — no config fields shown */}
     </Card>
   );
 }
