@@ -144,13 +144,14 @@
   background-color: oklch(0.7 0 0 / 30%);
 }
 
-/* Mask (hide) the page-level vertical scrollbar while keeping scroll functional.
-   Applied on the <html> element for specific CMS pages. */
-html.scrollbar-masked {
+/* Mask (hide) the page-level vertical scrollbar globally while keeping
+   scroll fully functional. The scrollbar is hidden visually but users
+   can still scroll via mouse wheel, trackpad, keyboard, or drag. */
+html {
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE/Edge */
 }
-html.scrollbar-masked::-webkit-scrollbar {
+html::-webkit-scrollbar {
   width: 0;
   display: none; /* Chrome/Safari/Opera */
 }
