@@ -28,12 +28,10 @@ import {
   endOfMonth,
   endOfWeek,
   format,
-  isBefore,
   isSameDay,
   isSameMonth,
   isToday as isDateToday,
   parseISO,
-  startOfDay,
   startOfMonth,
   startOfWeek,
 } from 'date-fns';
@@ -45,7 +43,6 @@ import {
   Clock,
   Eye,
   FileText,
-  List,
   Mail,
   Pencil,
   Plus,
@@ -79,7 +76,7 @@ import type { PaginatedResponse, PostStatus, CampaignStatus } from '@/shared/typ
 
 // -------------------- Types --------------------
 
-type CalendarView = 'month' | 'week' | 'day' | 'agenda';
+type CalendarView = 'month' | 'week' | 'day';
 
 type FilterKey =
   | 'all'
@@ -129,7 +126,6 @@ const VIEW_OPTIONS: { value: CalendarView; label: string; icon: LucideIcon }[] =
   { value: 'month', label: 'Month', icon: CalendarDays },
   { value: 'week', label: 'Week', icon: CalendarRange },
   { value: 'day', label: 'Day', icon: CalendarIcon },
-  { value: 'agenda', label: 'Agenda', icon: List },
 ];
 
 const FILTER_OPTIONS: { value: FilterKey; label: string }[] = [
@@ -299,7 +295,7 @@ export function CalendarPage() {
     setReferenceDate((d) => {
       if (view === 'month') return addMonths(d, -1);
       if (view === 'week') return addWeeks(d, -1);
-      return addDays(d, -1); // day + agenda
+      return addDays(d, -1); // day
     });
   }, [view]);
 
@@ -307,7 +303,7 @@ export function CalendarPage() {
     setReferenceDate((d) => {
       if (view === 'month') return addMonths(d, 1);
       if (view === 'week') return addWeeks(d, 1);
-      return addDays(d, 1); // day + agenda
+      return addDays(d, 1); // day
     });
   }, [view]);
 
@@ -326,7 +322,7 @@ export function CalendarPage() {
       return `${format(ws, 'MMM d')} – ${format(we, 'MMM d, yyyy')}`;
     }
     if (view === 'day') return format(referenceDate, 'EEEE, MMMM d, yyyy');
-    return format(referenceDate, 'MMMM d, yyyy'); // agenda
+    return format(referenceDate, 'MMMM yyyy');
   }, [view, referenceDate]);
 
   // -------- Schedule Content actions --------
@@ -395,13 +391,7 @@ export function CalendarPage() {
             events={filteredEvents}
             onSelectEvent={handleSelectEvent}
           />
-        ) : (
-          <AgendaView
-            referenceDate={referenceDate}
-            events={filteredEvents}
-            onSelectEvent={handleSelectEvent}
-          />
-        )}
+        ) : null}
       </div>
 
       {/* Event details modal */}
@@ -500,7 +490,7 @@ function CalendarHeader({
           })}
         </div>
 
-        {/* Schedule Content dropdown */}
+        {/* Schedule Content dropdown — placed right after the view switcher */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" className="bg-amber-500 text-white hover:bg-amber-600">
@@ -982,116 +972,6 @@ function DayView({ referenceDate, events, onSelectEvent }: DayViewProps) {
             })}
         </div>
       </div>
-    </div>
-  );
-}
-
-// ============================================================
-// Agenda View
-// ============================================================
-
-interface AgendaViewProps {
-  referenceDate: Date;
-  events: CalendarEvent[];
-  onSelectEvent: (ev: CalendarEvent) => void;
-}
-
-function AgendaView({ referenceDate, events, onSelectEvent }: AgendaViewProps) {
-  const upcoming = useMemo(() => {
-    const cutoff = startOfDay(referenceDate);
-    return events
-      .filter((ev) => !isBefore(ev.date, cutoff))
-      .sort((a, b) => a.date.getTime() - b.date.getTime())
-      .slice(0, 50);
-  }, [events, referenceDate]);
-
-  // Group by day
-  const groups = useMemo(() => {
-    const map = new Map<string, CalendarEvent[]>();
-    for (const ev of upcoming) {
-      const key = format(ev.date, 'yyyy-MM-dd');
-      const arr = map.get(key) ?? [];
-      arr.push(ev);
-      map.set(key, arr);
-    }
-    return Array.from(map.entries());
-  }, [upcoming]);
-
-  if (upcoming.length === 0) {
-    return (
-      <EmptyState
-        icon={CalendarIcon}
-        title="No upcoming scheduled content"
-        description="There are no scheduled items from this date forward."
-        className="py-16"
-      />
-    );
-  }
-
-  return (
-    <div className="divide-y divide-border">
-      {groups.map(([dayKey, dayEvents]) => {
-        const dayDate = parseISO(dayKey);
-        return (
-          <div key={dayKey} className="flex flex-col sm:flex-row">
-            {/* Date column */}
-            <div className="w-full sm:w-44 shrink-0 px-4 py-3 sm:border-r sm:border-border bg-muted/20">
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-foreground">
-                  {format(dayDate, 'd')}
-                </span>
-                <span className="text-sm font-medium text-muted-foreground">
-                  {format(dayDate, 'MMM')}
-                </span>
-              </div>
-              <div className="mt-0.5 text-xs font-medium text-muted-foreground">
-                {format(dayDate, 'EEEE')}
-                {isDateToday(dayDate) && (
-                  <span className="ml-1.5 inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-                    Today
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Events list */}
-            <div className="flex-1 p-2">
-              <div className="flex flex-col gap-1.5">
-                {dayEvents.map((ev) => {
-                  return (
-                    <button
-                      key={ev.id}
-                      type="button"
-                      onClick={() => onSelectEvent(ev)}
-                      className={cn(
-                        'flex flex-col gap-2 rounded-lg border px-3 py-2 text-left transition-colors sm:flex-row sm:items-center',
-                        eventColorClasses(ev.type),
-                      )}
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <EventTypeIcon type={ev.type} className="h-4 w-4 shrink-0" />
-                        <span className="truncate text-sm font-semibold">
-                          {ev.title}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="inline-flex items-center gap-1 text-xs font-medium opacity-80">
-                          <Clock className="h-3 w-3" />
-                          {format(ev.date, 'h:mm a')}
-                        </span>
-                        <Badge variant="outline" className="border-transparent bg-white/60 text-[10px] dark:bg-black/20">
-                          {eventTypeLabel(ev.type)}
-                        </Badge>
-                        <StatusBadge status={ev.status} size="sm" />
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
