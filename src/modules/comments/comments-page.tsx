@@ -1117,7 +1117,29 @@ export function CommentsPage() {
                   const isSpam = comment.status === 'SPAM';
                   const isTrashed = comment.status === 'TRASH';
                   const isExpanded = expandedComments.has(comment.id);
-                  const isLongComment = comment.content.length > 160;
+                  // Read More only appears when the comment is long enough
+                  // that line-clamp-2 would actually truncate it. We use a
+                  // generous threshold so short comments never show the button.
+                  const isLongComment = comment.content.length > 200;
+
+                  // Compute which secondary actions belong in the More dropdown
+                  // for this status. The dropdown is only rendered if at least
+                  // one item exists — no empty "..." menus.
+                  // Note: "Unflag (Approve)" is NOT in the More dropdown because
+                  // the Approve hover button already handles unflagging for
+                  // flagged comments (approving a flagged comment = unflagging).
+                  const showFlagInMore = !isFlagged && comment.status !== 'TRASH';
+                  const showMarkSpamInMore = comment.status !== 'SPAM' && comment.status !== 'TRASH';
+                  const showMoveToTrashInMore = comment.status !== 'TRASH';
+                  const showDeleteInMore =
+                    comment.status !== 'REJECTED' &&
+                    comment.status !== 'SPAM' &&
+                    comment.status !== 'TRASH';
+                  const hasMoreActions =
+                    showFlagInMore ||
+                    showMarkSpamInMore ||
+                    showMoveToTrashInMore ||
+                    showDeleteInMore;
 
                   return (
                     <div
@@ -1222,10 +1244,10 @@ export function CommentsPage() {
                           </Tooltip>
                         )}
 
-                        {/* Reject — for Pending, Approved, Flagged (not Rejected/Spam/Trash) */}
+                        {/* Reject — for Pending, Approved (not Rejected/Flagged/Spam/Trash)
+                            Flagged uses Approve to unflag, not Reject. */}
                         {(comment.status === 'PENDING' ||
-                          comment.status === 'APPROVED' ||
-                          comment.status === 'FLAGGED') && (
+                          comment.status === 'APPROVED') && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
@@ -1279,7 +1301,11 @@ export function CommentsPage() {
                           </Tooltip>
                         )}
 
-                        {/* More dropdown — secondary actions (Flag, Spam, Trash) */}
+                        {/* More dropdown — only rendered when there are
+                            secondary actions that aren't already hover buttons.
+                            Trash comments have Restore + Delete as hover buttons
+                            and NO secondary actions, so no "..." menu appears. */}
+                        {hasMoreActions && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -1288,51 +1314,43 @@ export function CommentsPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-48">
-                            {/* Flag / Unflag */}
-                            {!isFlagged && comment.status !== 'TRASH' && (
+                            {/* Flag for Review */}
+                            {showFlagInMore && (
                               <DropdownMenuItem onClick={() => handleFlag(comment.id)}>
                                 <FlagIcon className="h-4 w-4 mr-2" />
                                 Flag for Review
                               </DropdownMenuItem>
                             )}
-                            {isFlagged && (
-                              <DropdownMenuItem onClick={() => handleApprove(comment.id)}>
-                                <FlagIcon className="h-4 w-4 mr-2" />
-                                Unflag (Approve)
+                            {/* Mark as Spam */}
+                            {showMarkSpamInMore && (
+                              <DropdownMenuItem onClick={() => handleMarkSpam(comment.id)}>
+                                <Flag className="h-4 w-4 mr-2" />
+                                Mark as Spam
                               </DropdownMenuItem>
                             )}
-                            {/* Mark as Spam — not for Spam/Trash */}
-                            {comment.status !== 'SPAM' &&
-                              comment.status !== 'TRASH' && (
-                                <DropdownMenuItem onClick={() => handleMarkSpam(comment.id)}>
-                                  <Flag className="h-4 w-4 mr-2" />
-                                  Mark as Spam
-                                </DropdownMenuItem>
-                              )}
-                            {/* Move to Trash — not for Trash */}
-                            {comment.status !== 'TRASH' && (
+                            {/* Move to Trash */}
+                            {showMoveToTrashInMore && (
                               <DropdownMenuItem onClick={() => handleMoveToTrash(comment.id)}>
                                 <Archive className="h-4 w-4 mr-2" />
                                 Move to Trash
                               </DropdownMenuItem>
                             )}
-                            {/* Delete Permanently — only for statuses not already showing it as a hover button */}
-                            {comment.status !== 'REJECTED' &&
-                              comment.status !== 'SPAM' &&
-                              comment.status !== 'TRASH' && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    variant="destructive"
-                                    onClick={() => setDeleteTarget(comment)}
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete Permanently
-                                  </DropdownMenuItem>
-                                </>
-                              )}
+                            {/* Delete Permanently */}
+                            {showDeleteInMore && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={() => setDeleteTarget(comment)}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Permanently
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
+                        )}
                       </div>
                     </div>
                   );
