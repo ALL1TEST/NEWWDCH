@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   useQuery,
   useMutation,
@@ -85,6 +85,76 @@ const FILTER_TABS: { value: NotificationFilter; label: string }[] = [
 
 const PAGE_SIZE = 25;
 
+// ==================== Notification Message (Read More / Read Less) ====================
+// Uses ResizeObserver to detect whether the message text is actually being
+// truncated by line-clamp-2. "Read More" only appears when the text
+// genuinely overflows the 2-line preview. Each notification expands/collapses
+// independently via its own local state.
+
+function NotificationMessage({
+  message,
+  isUnread,
+}: {
+  message: string;
+  isUnread: boolean;
+}) {
+  const paraRef = useRef<HTMLParagraphElement>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isTruncated, setIsTruncated] = useState(false);
+
+  useEffect(() => {
+    const el = paraRef.current;
+    if (!el) return;
+
+    const check = () => {
+      if (isExpanded) {
+        // When expanded, always show "Read Less"
+        setIsTruncated(true);
+        return;
+      }
+      // scrollHeight > clientHeight means line-clamp-2 is clipping content
+      const isClipped = el.scrollHeight > el.clientHeight + 2;
+      setIsTruncated(isClipped);
+    };
+
+    const raf = requestAnimationFrame(check);
+    const observer = new ResizeObserver(() => requestAnimationFrame(check));
+    observer.observe(el);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, [message, isExpanded]);
+
+  return (
+    <>
+      <p
+        ref={paraRef}
+        className={cn(
+          'text-sm text-muted-foreground mt-1',
+          !isExpanded && 'line-clamp-2',
+          isUnread && 'text-foreground/70',
+        )}
+      >
+        {message}
+      </p>
+      {isTruncated && (
+        <button
+          type="button"
+          className="text-xs text-primary hover:underline mt-0.5"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsExpanded((prev) => !prev);
+          }}
+        >
+          {isExpanded ? 'Read Less' : 'Read More'}
+        </button>
+      )}
+    </>
+  );
+}
+
 // ==================== Notification Card ====================
 
 interface NotificationCardProps {
@@ -141,14 +211,10 @@ function NotificationCard({ notification, onMarkRead }: NotificationCardProps) {
               )}
             </div>
           </div>
-          <p
-            className={cn(
-              'text-sm text-muted-foreground mt-1 line-clamp-2',
-              !notification.isRead && 'text-foreground/70',
-            )}
-          >
-            {notification.message}
-          </p>
+          <NotificationMessage
+            message={notification.message}
+            isUnread={!notification.isRead}
+          />
           <div className="flex items-center gap-2 mt-2">
             <Badge variant="outline" className="text-[10px]">
               {config.label}
