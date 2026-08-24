@@ -1210,29 +1210,17 @@ export function CommentsPage() {
               {/* Comment Cards — natural page scroll (no nested scrollbar) */}
               <div>
                 {comments.map((comment) => {
-                  const isExpanded = expandedComments.has(comment.id);
-                  const showAiReply = aiReplies.has(comment.id);
                   const isSelected = selectedIds.has(comment.id);
                   const isHovered = hoveredId === comment.id;
                   const isFlagged = comment.status === 'FLAGGED';
                   const isSpam = comment.status === 'SPAM';
                   const isTrashed = comment.status === 'TRASH';
-                  // Spam score is only relevant when actively reviewing Spam
-                  // or Flagged comments — hidden from All/other tabs to keep
-                  // the card compact and free of secondary metadata.
-                  const showSpamScore =
-                    (statusTab === 'SPAM' || statusTab === 'FLAGGED') &&
-                    isSpam &&
-                    typeof comment.spamScore === 'number';
 
                   return (
                     <div
                       key={comment.id}
                       className={cn(
-                        'flex items-start gap-3 px-4 py-4 border-b last:border-b-0 transition-colors hover:bg-muted/30 cursor-pointer',
-                        // Subtle left tint per status so each row is
-                        // visually distinguishable at a glance without
-                        // breaking the existing card aesthetic.
+                        'flex items-start gap-3 px-4 py-3 border-b last:border-b-0 transition-colors hover:bg-muted/30 cursor-pointer',
                         isSpam && 'bg-red-50/40 dark:bg-red-900/5',
                         isFlagged && 'bg-orange-50/40 dark:bg-orange-900/5',
                         isTrashed && 'opacity-60',
@@ -1253,139 +1241,39 @@ export function CommentsPage() {
                         />
                       </div>
 
-                      {/* Avatar */}
-                      <AvatarWithFallback
-                        src={comment.author?.avatar}
-                        name={comment.author?.name ?? 'Anonymous'}
-                        className="h-10 w-10 shrink-0"
-                      />
-
-                      {/* Content area — vertical stack: Name, Email/Website, Article, Comment text, Date + Status badges */}
+                      {/* Content area — simplified: Name, Email, Comment, Article link, Date + Status */}
                       <div className="flex-1 min-w-0">
-                        {/* Author Name */}
-                        <p className="text-sm font-semibold text-foreground truncate">
-                          {comment.author?.name ?? 'Anonymous'}
-                        </p>
-
-                        {/* Email + Website row (immediately below name) */}
-                        {(comment.author?.email || comment.author?.website) && (
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-[11px] text-muted-foreground">
-                            {comment.author?.email && (
-                              <span className="inline-flex items-center gap-1 truncate max-w-[16rem]">
-                                <Mail className="h-3 w-3 shrink-0" />
-                                <span className="truncate">{comment.author.email}</span>
-                              </span>
-                            )}
-                            {comment.author?.website && (
-                              <a
-                                href={comment.author.website}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1 truncate max-w-[16rem] hover:text-foreground transition-colors"
-                              >
-                                <Globe className="h-3 w-3 shrink-0" />
-                                <span className="truncate">{comment.author.website.replace(/^https?:\/\//, '')}</span>
-                                <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
-                              </a>
-                            )}
-                          </div>
-                        )}
-
-                        {/* on "Article Title" */}
-                        {comment.contentItem && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            on &ldquo;
-                            <span className="text-foreground/70">{comment.contentItem.title}</span>
-                            &rdquo;
-                          </p>
-                        )}
-
-                        {/* Flag reason (if any) — shown above the comment text */}
-                        {isFlagged && comment.flagReason && (
-                          <div className="mt-1.5 rounded-md border border-orange-200 bg-orange-50/60 dark:border-orange-800/40 dark:bg-orange-900/10 px-2.5 py-1.5">
-                            <p className="text-[11px] text-orange-700 dark:text-orange-400 flex items-start gap-1.5">
-                              <FlagIcon className="h-3 w-3 mt-0.5 shrink-0" />
-                              <span className="leading-snug">
-                                <span className="font-semibold">Flag reason:</span>{' '}
-                                {comment.flagReason}
-                              </span>
-                            </p>
-                          </div>
-                        )}
+                        {/* Name + Email (inline) */}
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <span className="text-sm font-semibold text-foreground truncate">
+                            {comment.author?.name ?? 'Anonymous'}
+                          </span>
+                          {comment.author?.email && (
+                            <span className="text-[11px] text-muted-foreground truncate max-w-[16rem]">
+                              {comment.author.email}
+                            </span>
+                          )}
+                        </div>
 
                         {/* Comment text */}
-                        <p
-                          className={cn(
-                            'text-sm text-foreground/90 mt-1.5 leading-relaxed',
-                            !isExpanded && 'line-clamp-2',
-                          )}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleExpand(comment.id);
-                          }}
-                        >
+                        <p className="text-sm text-foreground/90 mt-1 leading-relaxed line-clamp-2">
                           {comment.content}
                         </p>
-                        {comment.content.length > 120 && (
-                          <button
-                            type="button"
-                            className="text-xs text-primary hover:underline mt-0.5"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleExpand(comment.id);
-                            }}
-                          >
-                            {isExpanded ? 'Show less' : 'Read more'}
-                          </button>
-                        )}
 
-                        {/* AI Suggest Reply (pending only) */}
-                        {comment.status === 'PENDING' && !showAiReply && (
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300 transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleAiReply(comment.id);
-                            }}
-                          >
-                            <Sparkles className="h-3 w-3" />
-                            AI Suggest Reply
-                          </button>
-                        )}
-
-                        {showAiReply && (
-                          <div
-                            className="mt-2 rounded-lg border border-violet-200 bg-violet-50/50 dark:border-violet-800/50 dark:bg-violet-900/10 p-3"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <div className="flex items-center gap-1.5 mb-1.5">
-                              <Sparkles className="h-3 w-3 text-violet-500" />
-                              <span className="text-[11px] font-medium text-violet-600 dark:text-violet-400">
-                                AI Suggested Reply
+                        {/* Article link + Date + Status badge */}
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          {comment.contentItem && (
+                            <span className="text-xs text-muted-foreground">
+                              on{' '}
+                              <span className="text-foreground/70 hover:text-primary transition-colors">
+                                {comment.contentItem.title}
                               </span>
-                            </div>
-                            <p className="text-xs text-foreground/80 leading-relaxed">
-                              Thank you for your feedback! We appreciate you taking
-                              the time to share your thoughts.
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Date / time + Status badge — below comment text.
-                            Spam score only appears on Spam/Flagged views where it's actionable. */}
-                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                            </span>
+                          )}
                           <span className="text-xs text-muted-foreground">
                             {formatRelativeTime(comment.createdAt)}
                           </span>
                           <StatusBadgeSmall status={comment.status} />
-                          {showSpamScore && (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-1.5 py-0 text-[10px] font-medium leading-4 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-400">
-                              <AlertTriangle className="h-3 w-3" />
-                              Spam {comment.spamScore}%
-                            </span>
-                          )}
                         </div>
                       </div>
 
