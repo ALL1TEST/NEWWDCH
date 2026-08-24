@@ -68,7 +68,6 @@ import {
   BUILTIN_PAGES,
   SETTINGS_SUBPAGES,
   canAccessPage,
-  customPermissionKeyFromName,
 } from '@/lib/permissions';
 import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -102,15 +101,6 @@ interface UserRow {
   updatedAt: string;
   pagePermissions?: string[] | null;
   authorProfile?: AuthorProfileData | null;
-}
-
-interface CustomPermissionRow {
-  id: string;
-  name: string;
-  description?: string | null;
-  route?: string | null;
-  key: string;
-  createdAt: string;
 }
 
 // -------------------- Constants --------------------
@@ -150,123 +140,6 @@ function RoleBadge({ role }: { role: UserRole }) {
   );
 }
 
-// -------------------- Custom Permission Dialog --------------------
-
-interface CustomPermFormData {
-  name: string;
-  description: string;
-  route: string;
-}
-
-function CreateCustomPermissionDialog({
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated: (perm: CustomPermissionRow) => void;
-}) {
-  const [form, setForm] = useState<CustomPermFormData>({
-    name: '',
-    description: '',
-    route: '',
-  });
-  const [error, setError] = useState<string | null>(null);
-
-  const createMutation = useMutation({
-    mutationFn: (data: CustomPermFormData) =>
-      postApi<CustomPermissionRow>('/api/custom-permissions', {
-        name: data.name.trim(),
-        description: data.description.trim() || undefined,
-        route: data.route.trim() || undefined,
-      }),
-    onSuccess: (perm) => {
-      toast.success(`Custom permission "${perm.name}" created`);
-      onCreated(perm);
-      setForm({ name: '', description: '', route: '' });
-      setError(null);
-      onOpenChange(false);
-    },
-    onError: (err: Error) => {
-      setError(err.message || 'Failed to create custom permission');
-    },
-  });
-
-  const derivedKey = customPermissionKeyFromName(form.name);
-
-  const handleSubmit = () => {
-    if (!form.name.trim()) {
-      setError('Name is required');
-      return;
-    }
-    if (!derivedKey) {
-      setError('Name must contain at least one letter or number');
-      return;
-    }
-    setError(null);
-    createMutation.mutate(form);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>New Custom Permission</DialogTitle>
-          <DialogDescription>
-            Create a custom page-level permission that can be granted to Editor users.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4 py-2">
-          <div className="grid gap-2">
-            <Label htmlFor="cp-name">Name <span className="text-destructive">*</span></Label>
-            <Input
-              id="cp-name"
-              value={form.name}
-              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-              placeholder="e.g. Manage Authors"
-              autoFocus
-            />
-            {derivedKey && (
-              <p className="text-xs text-muted-foreground">
-                Key: <code className="font-mono bg-muted px-1 py-0.5 rounded">{derivedKey}</code>
-              </p>
-            )}
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="cp-desc">Description</Label>
-            <Input
-              id="cp-desc"
-              value={form.description}
-              onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-              placeholder="Optional — short description"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="cp-route">Route</Label>
-            <Input
-              id="cp-route"
-              value={form.route}
-              onChange={(e) => setForm((p) => ({ ...p, route: e.target.value }))}
-              placeholder="Optional — e.g. #authors"
-            />
-          </div>
-          {error && <p className="text-xs text-destructive">{error}</p>}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={createMutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={createMutation.isPending || !form.name.trim()}>
-            {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Create
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // -------------------- Invite / Edit Dialog --------------------
 
 interface InviteFormData {
@@ -293,7 +166,6 @@ function InviteUserDialog({
   editMode?: boolean;
   initialData?: InviteFormData | null;
 }) {
-  const queryClient = useQueryClient();
   const [form, setForm] = useState<InviteFormData>({
     email: '',
     name: '',
@@ -301,31 +173,6 @@ function InviteUserDialog({
     pagePermissions: DEFAULT_EDITOR_PAGES,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [showCreateCustom, setShowCreateCustom] = useState(false);
-  const [deleteCustomTarget, setDeleteCustomTarget] = useState<CustomPermissionRow | null>(null);
-
-  // Fetch custom permissions
-  const { data: customPerms } = useQuery({
-    queryKey: ['custom-permissions-list'],
-    queryFn: () => getApi<CustomPermissionRow[]>('/api/custom-permissions'),
-    enabled: open,
-  });
-  const customPermissions = customPerms ?? [];
-
-  // Delete custom permission (also removes from all users' pagePermissions arrays)
-  const deleteCustomMutation = useMutation({
-    mutationFn: (id: string) => deleteApi(`/api/custom-permissions/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['custom-permissions-list'] });
-      // Also refresh users list since their pagePermissions may have changed
-      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
-      toast.success('Custom permission deleted');
-      setDeleteCustomTarget(null);
-    },
-    onError: (err: Error) => {
-      toast.error(err.message || 'Failed to delete custom permission');
-    },
-  });
 
   React.useEffect(() => {
     if (open) {
@@ -482,66 +329,6 @@ function InviteUserDialog({
                       </div>
                     );
                   })}
-
-                  {/* Custom permissions section */}
-                  <div className="bg-muted/30">
-                    <div className="flex items-center justify-between px-3 py-2">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Custom Permissions
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => setShowCreateCustom(true)}
-                      >
-                        <Plus className="h-3.5 w-3.5 mr-1" />
-                        Custom
-                      </Button>
-                    </div>
-                    {customPermissions.length === 0 ? (
-                      <div className="px-3 pb-3 text-xs text-muted-foreground">
-                        No custom permissions yet. Click &quot;+ Custom&quot; to create one.
-                      </div>
-                    ) : (
-                      customPermissions.map((perm) => {
-                        const checked = form.pagePermissions.includes(perm.key);
-                        return (
-                          <div
-                            key={perm.id}
-                            className="group flex items-center gap-3 px-3 py-2 hover:bg-accent/50 transition-colors"
-                          >
-                            <label className="flex items-center gap-3 flex-1 cursor-pointer">
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={() => togglePage(perm.key)}
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium truncate">{perm.name}</div>
-                                {perm.description && (
-                                  <div className="text-xs text-muted-foreground truncate">
-                                    {perm.description}
-                                  </div>
-                                )}
-                              </div>
-                            </label>
-                            <button
-                              type="button"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10 text-destructive"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteCustomTarget(perm);
-                              }}
-                              aria-label={`Delete custom permission ${perm.name}`}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
                 </div>
               </div>
             ) : (
@@ -564,41 +351,6 @@ function InviteUserDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <CreateCustomPermissionDialog
-        open={showCreateCustom}
-        onOpenChange={setShowCreateCustom}
-        onCreated={() => {
-          // customPermissions query is invalidated automatically by TanStack Query
-          // when we refetch — but the mutation in CreateCustomPermissionDialog
-          // doesn't invalidate, so we trigger a refetch here.
-          queryClient.invalidateQueries({ queryKey: ['custom-permissions-list'] });
-        }}
-      />
-
-      <ConfirmDialog
-        open={!!deleteCustomTarget}
-        onOpenChange={(o) => !o && setDeleteCustomTarget(null)}
-        title="Delete Custom Permission"
-        description={
-          deleteCustomTarget
-            ? `Delete "${deleteCustomTarget.name}"? It will also be removed from every user's page access list.`
-            : undefined
-        }
-        confirmLabel="Delete"
-        variant="destructive"
-        onConfirm={() => {
-          if (deleteCustomTarget) {
-            // Also remove from the local form state
-            setForm((p) => ({
-              ...p,
-              pagePermissions: p.pagePermissions.filter((k) => k !== deleteCustomTarget.key),
-            }));
-            deleteCustomMutation.mutate(deleteCustomTarget.id);
-          }
-        }}
-        isLoading={deleteCustomMutation.isPending}
-      />
     </>
   );
 }
