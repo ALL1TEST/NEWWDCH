@@ -78,6 +78,7 @@ import {
   Globe,
   Mail,
   AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
 import {
   DEMO_COMMENTS,
@@ -739,6 +740,15 @@ export function CommentsPage() {
     },
   });
 
+  // Restore = move a trashed comment back to Pending.
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) =>
+      patchApi(`/api/comments/${id}`, { status: 'PENDING' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
+    },
+  });
+
   const bulkApproveMutation = useMutation({
     mutationFn: (ids: string[]) =>
       patchApi('/api/comments/bulk-status', { ids, status: 'APPROVED' }),
@@ -877,6 +887,20 @@ export function CommentsPage() {
       }
     },
     [deleteMutation, removeDemoComment],
+  );
+
+  // Restore a trashed comment back to Pending (the previous status is not
+  // tracked, so Pending is the safe default — moderators can re-classify).
+  const handleRestore = useCallback(
+    (id: string) => {
+      if (USE_DEMO_DATA) {
+        updateDemoStatus(id, 'PENDING');
+        toast.success('Comment restored');
+      } else {
+        restoreMutation.mutate(id);
+      }
+    },
+    [restoreMutation, updateDemoStatus],
   );
 
   // Bulk action wrappers.
@@ -1186,7 +1210,6 @@ export function CommentsPage() {
               {/* Comment Cards — natural page scroll (no nested scrollbar) */}
               <div>
                 {comments.map((comment) => {
-                  const sentiment = detectSentiment(comment.content);
                   const isExpanded = expandedComments.has(comment.id);
                   const showAiReply = aiReplies.has(comment.id);
                   const isSelected = selectedIds.has(comment.id);
@@ -1194,6 +1217,13 @@ export function CommentsPage() {
                   const isFlagged = comment.status === 'FLAGGED';
                   const isSpam = comment.status === 'SPAM';
                   const isTrashed = comment.status === 'TRASH';
+                  // Spam score is only relevant when actively reviewing Spam
+                  // or Flagged comments — hidden from All/other tabs to keep
+                  // the card compact and free of secondary metadata.
+                  const showSpamScore =
+                    (statusTab === 'SPAM' || statusTab === 'FLAGGED') &&
+                    isSpam &&
+                    typeof comment.spamScore === 'number';
 
                   return (
                     <div
@@ -1343,32 +1373,25 @@ export function CommentsPage() {
                           </div>
                         )}
 
-                        {/* Date / time + Status badges — below comment text */}
+                        {/* Date / time + Status badge — below comment text.
+                            Spam score only appears on Spam/Flagged views where it's actionable. */}
                         <div className="flex flex-wrap items-center gap-2 mt-2">
                           <span className="text-xs text-muted-foreground">
                             {formatRelativeTime(comment.createdAt)}
                           </span>
                           <StatusBadgeSmall status={comment.status} />
-                          <SentimentBadge sentiment={sentiment} />
-                          {isSpam && typeof comment.spamScore === 'number' && (
+                          {showSpamScore && (
                             <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-1.5 py-0 text-[10px] font-medium leading-4 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-400">
                               <AlertTriangle className="h-3 w-3" />
                               Spam {comment.spamScore}%
                             </span>
                           )}
-                          {isFlagged && comment.flagReason && (
-                            <span
-                              title={comment.flagReason}
-                              className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0 text-[10px] font-medium leading-4 text-orange-700 dark:border-orange-800/60 dark:bg-orange-900/20 dark:text-orange-400"
-                            >
-                              <FlagIcon className="h-3 w-3" />
-                              Flagged
-                            </span>
-                          )}
                         </div>
                       </div>
 
-                      {/* Hover Actions */}
+                      {/* Hover Actions — contextual per comment status.
+                          Only the valid actions for the current status are shown;
+                          secondary actions live in the More dropdown. */}
                       <div
                         className={cn(
                           'flex items-center gap-0.5 shrink-0 transition-opacity',
@@ -1376,7 +1399,10 @@ export function CommentsPage() {
                         )}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {comment.status !== 'APPROVED' && (
+                        {/* Approve / Not Spam — hidden when already approved OR in Trash
+                            (Trash uses Restore instead) */}
+                        {comment.status !== 'APPROVED' &&
+                          comment.status !== 'TRASH' && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
@@ -1388,11 +1414,15 @@ export function CommentsPage() {
                                 <Check className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Approve</TooltipContent>
+                            <TooltipContent>
+                              {isSpam ? 'Not Spam (Approve)' : 'Approve'}
+                            </TooltipContent>
                           </Tooltip>
                         )}
 
-                        {comment.status !== 'REJECTED' && (
+                        {/* Reject — only for Pending, Flagged */}
+                        {(comment.status === 'PENDING' ||
+                          comment.status === 'FLAGGED') && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
@@ -1408,20 +1438,94 @@ export function CommentsPage() {
                           </Tooltip>
                         )}
 
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => setSheetComment(comment)}
-                            >
-                              <Reply className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Reply</TooltipContent>
-                        </Tooltip>
+                        {/* Unapprove — for Approved only (reject = unapprove) */}
+                        {comment.status === 'APPROVED' && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                onClick={() => handleReject(comment.id)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Unapprove</TooltipContent>
+                          </Tooltip>
+                        )}
 
+                        {/* Restore — for Trash only */}
+                        {comment.status === 'TRASH' && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                                onClick={() => handleRestore(comment.id)}
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Restore</TooltipContent>
+                          </Tooltip>
+                        )}
+
+                        {/* Reply — hidden for Trash and Spam (no point replying to those) */}
+                        {comment.status !== 'TRASH' &&
+                          comment.status !== 'SPAM' && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => setSheetComment(comment)}
+                              >
+                                <Reply className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Reply</TooltipContent>
+                          </Tooltip>
+                        )}
+
+                        {/* Delete — visible for Rejected, Spam (the "remove" action for those) */}
+                        {(comment.status === 'REJECTED' ||
+                          comment.status === 'SPAM') && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                onClick={() => setDeleteTarget(comment)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete Permanently</TooltipContent>
+                          </Tooltip>
+                        )}
+
+                        {/* Delete Permanently — for Trash */}
+                        {comment.status === 'TRASH' && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                onClick={() => setDeleteTarget(comment)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete Permanently</TooltipContent>
+                          </Tooltip>
+                        )}
+
+                        {/* More dropdown — secondary actions that aren't in the hover buttons */}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -1442,15 +1546,9 @@ export function CommentsPage() {
                               <Pencil className="h-4 w-4 mr-2" />
                               Edit Comment
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {isFlagged ? (
-                              <DropdownMenuItem
-                                onClick={() => handleApprove(comment.id)}
-                              >
-                                <FlagIcon className="h-4 w-4 mr-2" />
-                                Unflag (Approve)
-                              </DropdownMenuItem>
-                            ) : (
+                            {/* Only show the moderation secondary actions that
+                                aren't already hover buttons for this status. */}
+                            {!isFlagged && comment.status !== 'TRASH' && (
                               <DropdownMenuItem
                                 onClick={() => handleFlag(comment.id)}
                               >
@@ -1458,14 +1556,23 @@ export function CommentsPage() {
                                 Flag for Review
                               </DropdownMenuItem>
                             )}
-                            {comment.status !== 'SPAM' && (
+                            {isFlagged && (
                               <DropdownMenuItem
-                                onClick={() => handleMarkSpam(comment.id)}
+                                onClick={() => handleApprove(comment.id)}
                               >
-                                <Flag className="h-4 w-4 mr-2" />
-                                Mark as Spam
+                                <FlagIcon className="h-4 w-4 mr-2" />
+                                Unflag (Approve)
                               </DropdownMenuItem>
                             )}
+                            {comment.status !== 'SPAM' &&
+                              comment.status !== 'TRASH' && (
+                                <DropdownMenuItem
+                                  onClick={() => handleMarkSpam(comment.id)}
+                                >
+                                  <Flag className="h-4 w-4 mr-2" />
+                                  Mark as Spam
+                                </DropdownMenuItem>
+                              )}
                             {comment.status !== 'TRASH' && (
                               <DropdownMenuItem
                                 onClick={() => handleMoveToTrash(comment.id)}
@@ -1474,14 +1581,22 @@ export function CommentsPage() {
                                 Move to Trash
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={() => setDeleteTarget(comment)}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete Permanently
-                            </DropdownMenuItem>
+                            {/* Delete Permanently in More — only when not
+                                already a hover button (Pending, Approved, Flagged). */}
+                            {comment.status !== 'REJECTED' &&
+                              comment.status !== 'SPAM' &&
+                              comment.status !== 'TRASH' && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    onClick={() => setDeleteTarget(comment)}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete Permanently
+                                  </DropdownMenuItem>
+                                </>
+                              )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -1773,7 +1888,20 @@ export function CommentsPage() {
 
                 {/* Actions */}
                 <SheetFooter className="flex-row flex-wrap gap-2 sm:justify-start">
-                  {sheetComment.status !== 'APPROVED' && (
+                  {/* Restore — only for Trash */}
+                  {sheetComment.status === 'TRASH' && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        handleRestore(sheetComment.id);
+                        setSheetComment(null);
+                      }}
+                    >
+                      <RotateCcw className="h-4 w-4 mr-1" />
+                      Restore
+                    </Button>
+                  )}
+                  {sheetComment.status !== 'APPROVED' && sheetComment.status !== 'TRASH' && (
                     <Button
                       size="sm"
                       onClick={() => {
@@ -1785,7 +1913,7 @@ export function CommentsPage() {
                       Approve
                     </Button>
                   )}
-                  {sheetComment.status !== 'REJECTED' && (
+                  {sheetComment.status !== 'REJECTED' && sheetComment.status !== 'TRASH' && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -1798,7 +1926,7 @@ export function CommentsPage() {
                       Reject
                     </Button>
                   )}
-                  {sheetComment.status !== 'FLAGGED' && (
+                  {sheetComment.status !== 'FLAGGED' && sheetComment.status !== 'TRASH' && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -1811,7 +1939,7 @@ export function CommentsPage() {
                       Flag
                     </Button>
                   )}
-                  {sheetComment.status !== 'SPAM' && (
+                  {sheetComment.status !== 'SPAM' && sheetComment.status !== 'TRASH' && (
                     <Button
                       size="sm"
                       variant="outline"
