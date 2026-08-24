@@ -205,7 +205,7 @@ export type OAuthGrantType = 'AUTHORIZATION_CODE' | 'CLIENT_CREDENTIALS' | 'PKCE
 
 export type OAuthClientStatus = 'ACTIVE' | 'INACTIVE' | 'REVOKED';
 
-export type AiProviderKind = 'OPENAI' | 'ANTHROPIC' | 'GEMINI' | 'OPENROUTER' | 'GROQ' | 'DEEPSEEK' | 'OLLAMA' | 'AZURE_OPENAI';
+export type AiProviderKind = 'OPENAI' | 'ANTHROPIC' | 'GEMINI' | 'GROQ' | 'DEEPSEEK';
 
 export type AiConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'ERROR';
 
@@ -223,8 +223,7 @@ export type PromptCategoryNew =
   | 'SOCIAL_MEDIA'
   | 'EMAIL'
   | 'CODING'
-  | 'ANALYSIS'
-  | 'CUSTOM';
+  | 'ANALYSIS';
 
 export type WebhookDeliveryStatus =
   | 'SUCCESS'

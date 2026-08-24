@@ -69,6 +69,17 @@ export async function POST(request: NextRequest) {
       modelId: d.modelId,
     });
 
+    // Resolve an uploader — the Media.uploadedBy relation requires a valid User FK.
+    // Pick the first ADMIN (or any user) since there is no auth in this setup.
+    let uploader = await db.user.findFirst({ where: { role: 'ADMIN' }, select: { id: true } });
+    if (!uploader) uploader = await db.user.findFirst({ select: { id: true } });
+    if (!uploader) {
+      return NextResponse.json(
+        { error: { code: 'NO_USER', message: 'No user exists to attribute the upload to' }, meta: { requestId, timestamp: new Date().toISOString() } },
+        { status: 500 },
+      );
+    }
+
     const item = await db.media.create({
       data: {
         filename,
@@ -82,7 +93,7 @@ export async function POST(request: NextRequest) {
         alt: d.alt || null,
         folderId: d.folderId === '' ? null : d.folderId ?? null,
         siteId: d.siteId || undefined,
-        uploadedById: 'system',
+        uploadedById: uploader.id,
         processingStatus: 'READY',
         metadata,
       },

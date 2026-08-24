@@ -112,6 +112,8 @@ export function ModelsPage() {
     mutationFn: (data: typeof EMPTY_FORM) => postApi('/api/ai/models', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
       toast.success('Model created');
       setFormOpen(false);
     },
@@ -124,6 +126,8 @@ export function ModelsPage() {
       patchApi(`/api/ai/models/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
       toast.success('Model updated');
       setFormOpen(false);
     },
@@ -135,6 +139,8 @@ export function ModelsPage() {
     mutationFn: (id: string) => deleteApi(`/api/ai/models/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
       toast.success('Model deleted');
       setDeleteTarget(null);
     },
@@ -145,7 +151,11 @@ export function ModelsPage() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       patchApi(`/api/ai/models/${id}`, { isActive }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to update model'),
   });
 
   // Set default
@@ -153,6 +163,7 @@ export function ModelsPage() {
     mutationFn: (id: string) => patchApi(`/api/ai/models/${id}`, { isDefault: true }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       toast.success('Default model updated');
     },
     onError: (err: Error) => toast.error(err.message || 'Failed to set default'),
@@ -165,8 +176,8 @@ export function ModelsPage() {
       let totalSynced = 0;
       for (const provider of active) {
         try {
-          const res = await postApi<{ count?: number }>(`/api/ai/providers/${provider.id}/sync-models`);
-          totalSynced += res?.count ?? 0;
+          const res = await postApi<{ syncedCount?: number; count?: number }>(`/api/ai/providers/${provider.id}/sync-models`);
+          totalSynced += res?.syncedCount ?? res?.count ?? 0;
         } catch { /* continue */ }
       }
       return totalSynced;
@@ -296,7 +307,7 @@ export function ModelsPage() {
                   <TableRow key={model.id}>
                     <TableCell className="font-medium">{model.name}</TableCell>
                     <TableCell><span className="font-mono text-xs text-muted-foreground">{model.modelId}</span></TableCell>
-                    <TableCell>{model.provider?.name ?? model.providerId}</TableCell>
+                    <TableCell>{model.provider?.name ?? 'Unknown provider'}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={model.type?.toUpperCase() === 'IMAGE'
                         ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-transparent'
@@ -392,7 +403,7 @@ export function ModelsPage() {
               >
                 <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
                 <SelectContent>
-                  {providers.filter((p) => p.isActive).map((p) => (
+                  {providers.filter((p) => p.isActive || p.id === formData.providerId).map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
                 </SelectContent>

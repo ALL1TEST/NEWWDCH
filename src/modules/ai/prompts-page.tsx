@@ -98,7 +98,7 @@ interface PromptVersion {
 
 const PROMPT_CATEGORIES: PromptCategoryNew[] = [
   'CONTENT_GENERATION', 'IMAGE_GENERATION', 'SEO', 'TRANSLATION',
-  'SUMMARIZATION', 'MARKETING', 'SOCIAL_MEDIA', 'EMAIL', 'CODING', 'ANALYSIS', 'CUSTOM',
+  'SUMMARIZATION', 'MARKETING', 'SOCIAL_MEDIA', 'EMAIL', 'CODING', 'ANALYSIS',
 ];
 
 const CATEGORY_LABELS: Record<PromptCategoryNew, string> = {
@@ -112,7 +112,6 @@ const CATEGORY_LABELS: Record<PromptCategoryNew, string> = {
   EMAIL: 'Email',
   CODING: 'Coding',
   ANALYSIS: 'Analysis',
-  CUSTOM: 'Custom',
 };
 
 const CATEGORY_COLORS: Record<PromptCategoryNew, string> = {
@@ -126,12 +125,11 @@ const CATEGORY_COLORS: Record<PromptCategoryNew, string> = {
   EMAIL: 'bg-amber-100 text-amber-700',
   CODING: 'bg-teal-100 text-teal-700',
   ANALYSIS: 'bg-zinc-100 text-zinc-700',
-  CUSTOM: 'bg-stone-100 text-stone-700',
 };
 
 const emptyForm: PromptFormData = {
   name: '',
-  category: 'CUSTOM',
+  category: 'CONTENT_GENERATION',
   description: '',
   tags: '',
   variables: '{}',
@@ -188,17 +186,18 @@ export function PromptsPage() {
 
   // Fetch models filtered by selected provider
   const { data: modelsData } = useQuery({
-    queryKey: queryKeys.aiModels.list({ providerId: formData.providerId || undefined }),
+    queryKey: queryKeys.aiModels.list({ providerId: formData.providerId || undefined, isActive: true }),
     queryFn: () => getApi<PaginatedResponse<AiModel>>('/api/ai/models', {
       providerId: formData.providerId || undefined,
       pageSize: 100,
+      isActive: true,
     }),
     enabled: !!formData.providerId,
   });
   const models = modelsData?.data ?? [];
 
   // Fetch versions
-  const { data: versionsData } = useQuery({
+  const { data: versionsData, isLoading: versionsLoading } = useQuery({
     queryKey: queryKeys.aiPrompts.nested('versions').list(versionsPrompt?.id ?? ''),
     queryFn: () => getApi<PromptVersion[]>(`/api/ai/prompts/${versionsPrompt!.id}/versions`),
     enabled: !!versionsPrompt,
@@ -208,10 +207,19 @@ export function PromptsPage() {
   // Create / Update mutation
   const saveMutation = useMutation({
     mutationFn: (body: PromptFormData) => {
+      let parsedVariables: Record<string, unknown> = {};
+      const trimmed = body.variables?.trim();
+      if (trimmed) {
+        try {
+          parsedVariables = JSON.parse(trimmed);
+        } catch {
+          throw new Error('Variables must be valid JSON');
+        }
+      }
       const payload = {
         ...body,
         tags: body.tags.split(',').map((t) => t.trim()).filter(Boolean),
-        variables: (() => { try { return JSON.parse(body.variables); } catch { return {}; } })(),
+        variables: parsedVariables,
         providerId: body.providerId || null,
         modelId: body.modelId || null,
       };
@@ -246,6 +254,7 @@ export function PromptsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
     },
+    onError: (err: Error) => toast.error(err.message || 'Failed to toggle favorite'),
   });
 
   // Duplicate mutation
@@ -631,7 +640,14 @@ export function PromptsPage() {
             <DialogTitle>Version History — {versionsPrompt?.name}</DialogTitle>
           </DialogHeader>
           <ScrollArea className="max-h-[500px]">
-            {versions.length === 0 ? (
+            {versionsLoading ? (
+              <div className="space-y-3 p-1">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 w-full" />
+                ))}
+                <p className="text-center text-sm text-zinc-500">Loading versions...</p>
+              </div>
+            ) : versions.length === 0 ? (
               <p className="text-center py-8 text-zinc-500">No versions found.</p>
             ) : (
               <div className="space-y-4 p-1">

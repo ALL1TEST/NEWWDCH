@@ -83,13 +83,24 @@ function SettingsPageInner() {
   };
 
   // Fetch settings
-  const { data: settingsData, isLoading: settingsLoading } = useQuery({
+  const { data: settingsData, isLoading: settingsLoading, isError: settingsIsError } = useQuery({
     queryKey: queryKeys.aiSettings.list({ scope: 'global' }),
     queryFn: () => getApi<AiSettings>('/api/ai/settings', { scope: 'global' }),
   });
 
   // settings = fetched data with local edits applied on top
   const settings: AiSettings = { ...(settingsData ?? defaultSettings), ...localEdits } as AiSettings;
+
+  // Clear local edits when settingsData changes after a refetch so stale edits
+  // don't persist over freshly-fetched server state. Uses the
+  // "storing information from previous renders" pattern documented in React docs
+  // (calling setState during render — safe because React will retry the render
+  // with the updated state before committing).
+  const [prevSettings, setPrevSettings] = useState(settingsData);
+  if (prevSettings !== settingsData) {
+    setPrevSettings(settingsData);
+    setLocalEdits({});
+  }
 
   // Fetch all providers (we want active ones for the dropdowns, but keep all for display)
   const { data: providersData } = useQuery({
@@ -100,7 +111,7 @@ function SettingsPageInner() {
 
   // Fetch all active models — we filter client-side by provider + type
   const { data: allModelsData } = useQuery({
-    queryKey: queryKeys.aiModels.list({ isActive: true, all: true }),
+    queryKey: queryKeys.aiModels.list({ isActive: true, pageSize: 200 }),
     queryFn: () => getApi<PaginatedResponse<AiModel>>('/api/ai/models', { pageSize: 200, isActive: true }),
   });
   const allModels = allModelsData?.data ?? [];
@@ -138,6 +149,18 @@ function SettingsPageInner() {
 
   if (settingsLoading) {
     return <div className="space-y-6">{[1, 2].map((i) => <Card key={i}><CardContent className="p-6"><Skeleton className="h-40 w-full" /></CardContent></Card>)}</div>;
+  }
+
+  if (settingsIsError) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-destructive">Failed to load AI settings. Please refresh the page.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (

@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { executeImageGeneration } from '@/lib/ai/ai-service';
+import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
 
@@ -73,6 +74,27 @@ export async function POST(request: NextRequest) {
 
     const d = parsed.data;
 
+    // Pre-validate that the provider is active and supports image generation
+    const provider = await db.aiProvider.findUnique({ where: { id: d.providerId } });
+    if (!provider) return err('Provider not found', 404, 'NOT_FOUND');
+    if (!provider.isActive) return err('Provider is disabled. Please activate it first.', 400, 'PROVIDER_INACTIVE');
+    if (!['OPENAI', 'GEMINI'].includes(provider.kind)) {
+      return err(`${provider.kind} does not support image generation. Please use OpenAI or Gemini.`, 400, 'UNSUPPORTED');
+    }
+
+    // Pre-validate the model is an IMAGE-type model belonging to this provider
+    if (d.modelId) {
+      const model = await db.aiModel.findUnique({ where: { id: d.modelId } });
+      if (!model) return err('Selected model not found', 404, 'NOT_FOUND');
+      if (model.providerId !== d.providerId) {
+        return err('The selected model does not belong to the selected provider', 400, 'MODEL_PROVIDER_MISMATCH');
+      }
+      if (!model.isActive) return err('Selected model is inactive', 400, 'MODEL_INACTIVE');
+      if (model.type?.toUpperCase() !== 'IMAGE') {
+        return err('The selected model is not an image generation model. Please select an IMAGE-type model.', 400, 'MODEL_TYPE_MISMATCH');
+      }
+    }
+
     const result = await executeImageGeneration({
       providerId: d.providerId,
       modelId: d.modelId,
@@ -90,6 +112,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Image generation failed';
     console.error(`[AI/IMAGES/GENERATE] ${id} —`, error);
-    return err(msg, 500, 'IMAGE_GENERATION_ERROR');
+    // Validation errors from the service are user errors (400), upstream API errors are 502
+    const isUserError = /inactive|not found|does not belong|does not support|not an image|not a text/i.test(msg);
+    return err(msg, isUserError ? 400 : 502, isUserError ? 'VALIDATION_ERROR' : 'IMAGE_GENERATION_ERROR');
   }
 }
+

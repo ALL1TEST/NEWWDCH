@@ -120,7 +120,7 @@ export function JobsPage() {
   }, [hasRunning, refetch]);
 
   // Fetch single job detail
-  const { data: jobDetail } = useQuery({
+  const { data: jobDetail, isLoading: detailLoading } = useQuery({
     queryKey: queryKeys.aiJobs.detail(detailJob?.id ?? ''),
     queryFn: () => getApi<AiJob>(`/api/ai/jobs/${detailJob!.id}`),
     enabled: !!detailJob,
@@ -149,6 +149,10 @@ export function JobsPage() {
   });
 
   // KPI calculations
+  // NOTE: `runningCount`, `failedCount`, and `completedToday` are computed from
+  // the `jobs` array, which only contains the CURRENT PAGE of results (max 25).
+  // Without a dedicated stats endpoint, these KPIs reflect the current page,
+  // not the full dataset. This is a known limitation.
   const totalCount = pagination?.total ?? 0;
   const runningCount = jobs.filter((j) => j.status === 'RUNNING').length;
   const failedCount = jobs.filter((j) => j.status === 'FAILED').length;
@@ -323,7 +327,19 @@ export function JobsPage() {
           <DialogHeader>
             <DialogTitle>Job Details{jobDetail ? ` — ${jobDetail.title}` : ''}</DialogTitle>
           </DialogHeader>
-          {jobDetail && (
+          {detailLoading ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i}>
+                    <Skeleton className="h-3 w-20 mb-1" />
+                    <Skeleton className="h-5 w-24" />
+                  </div>
+                ))}
+              </div>
+              <p className="text-center text-sm text-zinc-500">Loading...</p>
+            </div>
+          ) : jobDetail && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div><p className="text-xs text-zinc-500">Status</p><Badge variant="secondary" className={JOB_STATUS_CONFIG[jobDetail.status].color}>{jobDetail.status}</Badge></div>
@@ -365,7 +381,12 @@ export function JobsPage() {
                   </Button>
                 )}
                 {(jobDetail.status === 'PENDING' || jobDetail.status === 'RUNNING') && (
-                  <Button variant="outline" className="text-red-600" onClick={() => cancelMutation.mutate(jobDetail.id)}>
+                  <Button
+                    variant="outline"
+                    className="text-red-600"
+                    onClick={() => cancelMutation.mutate(jobDetail.id)}
+                    disabled={cancelMutation.isPending && cancelMutation.variables === jobDetail?.id}
+                  >
                     <XIcon className="h-4 w-4 mr-2" /> Cancel
                   </Button>
                 )}

@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeChat } from '@/lib/ai/ai-service';
 import type { ChatMessage } from '@/lib/ai/ai-service';
+import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
 
@@ -65,6 +66,25 @@ export async function POST(request: NextRequest) {
 
     const d = parsed.data;
 
+    // Pre-validate the provider exists + is active
+    const provider = await db.aiProvider.findUnique({ where: { id: d.providerId } });
+    if (!provider) return err('Provider not found', 404, 'NOT_FOUND');
+    if (!provider.isActive) return err('Provider is disabled. Please activate it first.', 400, 'PROVIDER_INACTIVE');
+    if (!provider.apiKeyEncrypted) return err('API key not configured for this provider.', 400, 'NO_API_KEY');
+
+    // Pre-validate the model is a TEXT-type model belonging to this provider
+    if (d.modelId) {
+      const model = await db.aiModel.findUnique({ where: { id: d.modelId } });
+      if (!model) return err('Selected model not found', 404, 'NOT_FOUND');
+      if (model.providerId !== d.providerId) {
+        return err('The selected model does not belong to the selected provider', 400, 'MODEL_PROVIDER_MISMATCH');
+      }
+      if (!model.isActive) return err('Selected model is inactive', 400, 'MODEL_INACTIVE');
+      if (model.type?.toUpperCase() !== 'TEXT') {
+        return err('The selected model is not a text model. Please select a TEXT-type model for chat.', 400, 'MODEL_TYPE_MISMATCH');
+      }
+    }
+
     const result = await executeChat({
       providerId: d.providerId,
       modelId: d.modelId,
@@ -82,6 +102,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Chat execution failed';
     console.error(`[AI/PLAYGROUND] ${id} —`, error);
-    return err(msg, 500, 'CHAT_ERROR');
+    // Validation errors from the service are user errors (400), upstream API errors are 502
+    const isUserError = /inactive|not found|does not belong|does not support|not an image|not a text|No active/i.test(msg);
+    return err(msg, isUserError ? 400 : 502, isUserError ? 'VALIDATION_ERROR' : 'CHAT_ERROR');
   }
 }
+

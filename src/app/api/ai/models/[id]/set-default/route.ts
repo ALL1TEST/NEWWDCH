@@ -17,7 +17,10 @@ function err(message: string, status = 400, code = 'VALIDATION_ERROR') {
 }
 
 // =====================================================================
-// POST — set as default model for its provider
+// POST — set as default model for its TYPE (TEXT or IMAGE).
+// Clears any other default of the same type across all providers/models,
+// so there is exactly one default TEXT model and one default IMAGE model
+// system-wide.
 // =====================================================================
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -28,20 +31,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const model = await db.aiModel.findUnique({ where: { id: modelId } });
     if (!model) return err('Model not found', 404, 'NOT_FOUND');
+    if (!model.isActive) {
+      return err('Cannot set an inactive model as default. Please activate it first.', 400, 'INACTIVE');
+    }
 
-    // Unset all other defaults for the same provider
-    await db.aiModel.updateMany({
-      where: { providerId: model.providerId, isDefault: true },
-      data: { isDefault: false },
-    });
+    const modelType = model.type?.toUpperCase() === 'IMAGE' ? 'IMAGE' : 'TEXT';
 
-    // Set this one as default
-    await db.aiModel.update({
-      where: { id: modelId },
-      data: { isDefault: true },
-    });
+    // Atomically: clear all other defaults of the same TYPE, then set this one.
+    await db.$transaction([
+      db.aiModel.updateMany({
+        where: { type: modelType, isDefault: true, id: { not: modelId } },
+        data: { isDefault: false },
+      }),
+      db.aiModel.update({ where: { id: modelId }, data: { isDefault: true } }),
+    ]);
 
-    return ok({ isDefault: true });
+    return ok({ isDefault: true, type: modelType });
   } catch (error) {
     console.error(`[AI/MODELS:SET_DEFAULT] ${id} —`, error);
     return err('Failed to set default model', 500, 'INTERNAL_ERROR');

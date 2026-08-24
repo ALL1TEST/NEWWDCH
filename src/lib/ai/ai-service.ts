@@ -4,7 +4,7 @@
 
 import { db } from '@/lib/db';
 import { encrypt, decrypt } from '@/lib/encryption';
-import { getProviderConfig, type ProviderModel } from './providers';
+import { getProviderConfig, isImageModelId, type ProviderModel } from './providers';
 import type { Prisma } from '@prisma/client';
 
 // -------------------- Types --------------------
@@ -47,6 +47,82 @@ export interface HealthCheckResult {
   availableModels?: ProviderModel[];
 }
 
+// -------------------- Model Resolution Helper --------------------
+// The frontend sends DB cuids as `modelId` (e.g. "m-openai-gpt5"), but the
+// upstream provider APIs need the actual model string (e.g. "gpt-5").
+// This helper resolves a DB cuid to the AiModel row, validates ownership +
+// active status + type, and returns the model row. If no modelId is provided,
+// it falls back to AI Settings defaults, then the provider's default model.
+
+interface ResolvedModel {
+  modelId: string;        // upstream model string (e.g. "gpt-5")
+  modelDbId: string;      // DB cuid (e.g. "m-openai-gpt5")
+  inputCostPer1k: number | null;
+  outputCostPer1k: number | null;
+  type: string;           // 'TEXT' | 'IMAGE'
+}
+
+async function resolveModel(
+  providerId: string,
+  modelId: string | undefined,
+  expectedType: 'TEXT' | 'IMAGE',
+  providerModels: Array<{ id: string; modelId: string; isActive: boolean; isDefault: boolean; type: string; inputCostPer1k: number | null; outputCostPer1k: number | null }>,
+): Promise<ResolvedModel> {
+  // If a modelId is provided, it's a DB cuid — look it up
+  if (modelId) {
+    const model = providerModels.find((m) => m.id === modelId);
+    if (!model) {
+      throw new Error('The selected model was not found for this provider. Please select a valid model.');
+    }
+    if (model.providerId !== undefined && model.providerId !== providerId) {
+      throw new Error('The selected model does not belong to the selected provider.');
+    }
+    if (!model.isActive) {
+      throw new Error('The selected model is inactive. Please activate it or select another model.');
+    }
+    if (model.type?.toUpperCase() !== expectedType) {
+      throw new Error(`The selected model is not a ${expectedType.toLowerCase()} model. Please select a ${expectedType.toLowerCase()} model.`);
+    }
+    return {
+      modelId: model.modelId,
+      modelDbId: model.id,
+      inputCostPer1k: model.inputCostPer1k,
+      outputCostPer1k: model.outputCostPer1k,
+      type: model.type,
+    };
+  }
+
+  // No modelId provided — fall back to AI Settings defaults
+  const settings = await db.aiSettings.findUnique({ where: { scope: 'global' } });
+  const settingsModelId = expectedType === 'TEXT' ? settings?.defaultModelId : settings?.imageModelId;
+  if (settingsModelId) {
+    const model = providerModels.find((m) => m.id === settingsModelId && m.isActive && m.type?.toUpperCase() === expectedType);
+    if (model) {
+      return {
+        modelId: model.modelId,
+        modelDbId: model.id,
+        inputCostPer1k: model.inputCostPer1k,
+        outputCostPer1k: model.outputCostPer1k,
+        type: model.type,
+      };
+    }
+  }
+
+  // Fall back to the provider's default model of the correct type
+  const defaultModel = providerModels.find((m) => m.isActive && m.isDefault && m.type?.toUpperCase() === expectedType)
+    ?? providerModels.find((m) => m.isActive && m.type?.toUpperCase() === expectedType);
+  if (!defaultModel) {
+    throw new Error(`No active ${expectedType.toLowerCase()} model is configured for this provider. Please add or activate a model.`);
+  }
+  return {
+    modelId: defaultModel.modelId,
+    modelDbId: defaultModel.id,
+    inputCostPer1k: defaultModel.inputCostPer1k,
+    outputCostPer1k: defaultModel.outputCostPer1k,
+    type: defaultModel.type,
+  };
+}
+
 // -------------------- Core AI Service --------------------
 
 export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
@@ -56,56 +132,48 @@ export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
   });
 
   if (!provider) throw new Error('Provider not found');
-  if (!provider.isActive) throw new Error('Provider is disabled');
-  if (!provider.apiKeyEncrypted) throw new Error('API key not configured');
+  if (!provider.isActive) throw new Error('Provider is disabled. Please activate it first.');
+  if (!provider.apiKeyEncrypted) throw new Error('API key not configured for this provider.');
+
+  // Resolve + validate the model (handles DB cuid → model string, type=TEXT, active, belongs-to-provider)
+  const resolved = await resolveModel(req.providerId, req.modelId, 'TEXT', provider.models);
+  const modelId = resolved.modelId;
+
+  // Apply AI Settings defaults for temperature/maxTokens if not provided
+  const settings = await db.aiSettings.findUnique({ where: { scope: 'global' } });
+  const temperature = req.temperature ?? settings?.defaultTemperature ?? 0.7;
+  const maxTokens = req.maxTokens ?? settings?.defaultMaxTokens ?? 2048;
 
   const apiKey = await decrypt(provider.apiKeyEncrypted);
   const config = getProviderConfig(provider.kind);
   const baseUrl = provider.baseUrl || config.defaultBaseUrl;
-  const modelId = req.modelId || provider.models.find(m => m.isDefault)?.modelId || provider.models[0]?.modelId;
-  if (!modelId) throw new Error('No model available');
 
   const startTime = Date.now();
   let inputTokens = 0;
   let outputTokens = 0;
   let content = '';
+  let usedProvider = provider;
+  let usedModelId = modelId;
 
   try {
     if (provider.kind === 'ANTHROPIC') {
       const result = await callAnthropic(baseUrl, apiKey, modelId, req.messages, {
-        temperature: req.temperature,
-        maxTokens: req.maxTokens,
-        jsonMode: req.jsonMode,
+        temperature, maxTokens, jsonMode: req.jsonMode,
       });
       inputTokens = result.inputTokens;
       outputTokens = result.outputTokens;
       content = result.content;
     } else if (provider.kind === 'GEMINI') {
       const result = await callGemini(baseUrl, apiKey, modelId, req.messages, {
-        temperature: req.temperature,
-        maxTokens: req.maxTokens,
-        jsonMode: req.jsonMode,
+        temperature, maxTokens, jsonMode: req.jsonMode,
       });
       inputTokens = result.inputTokens;
       outputTokens = result.outputTokens;
       content = result.content;
-    } else if (provider.kind === 'AZURE_OPENAI') {
-      const azureConfig = JSON.parse(provider.config || '{}');
-      const result = await callOpenAI(
-        `${baseUrl}/openai/deployments/${azureConfig.deployment || modelId}`,
-        apiKey,
-        modelId,
-        req.messages,
-        { temperature: req.temperature, maxTokens: req.maxTokens, jsonMode: req.jsonMode, apiVersion: provider.apiVersion || '2024-02-01' },
-      );
-      inputTokens = result.inputTokens;
-      outputTokens = result.outputTokens;
-      content = result.content;
     } else {
-      // OpenAI-compatible (OpenAI, Groq, DeepSeek, OpenRouter, Ollama)
+      // OpenAI-compatible (OpenAI, Groq, DeepSeek)
       const result = await callOpenAI(baseUrl, apiKey, modelId, req.messages, {
-        temperature: req.temperature,
-        maxTokens: req.maxTokens,
+        temperature, maxTokens,
         topP: req.topP,
         frequencyPenalty: req.frequencyPenalty,
         presencePenalty: req.presencePenalty,
@@ -123,42 +191,70 @@ export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
       orderBy: { priority: 'asc' },
     });
 
+    let lastError = err instanceof Error ? err : new Error('Unknown error');
+
     for (const fb of fallbacks) {
       if (!fb.fallback.isActive || !fb.fallback.apiKeyEncrypted) continue;
       try {
+        const fbResolved = await resolveModel(fb.fallback.id, undefined, 'TEXT', fb.fallback.models);
         const fbApiKey = await decrypt(fb.fallback.apiKeyEncrypted);
         const fbConfig = getProviderConfig(fb.fallback.kind);
         const fbBaseUrl = fb.fallback.baseUrl || fbConfig.defaultBaseUrl;
-        const fbModel = req.modelId || fb.fallback.models.find(m => m.isDefault)?.modelId || fb.fallback.models[0]?.modelId;
-        if (!fbModel) continue;
 
-        const result = await callOpenAI(fbBaseUrl, fbApiKey, fbModel, req.messages, {
-          temperature: req.temperature,
-          maxTokens: req.maxTokens,
-          jsonMode: req.jsonMode,
-        });
-        inputTokens = result.inputTokens;
-        outputTokens = result.outputTokens;
-        content = result.content;
+        let fbResult: { content: string; inputTokens: number; outputTokens: number };
+        if (fb.fallback.kind === 'ANTHROPIC') {
+          fbResult = await callAnthropic(fbBaseUrl, fbApiKey, fbResolved.modelId, req.messages, { temperature, maxTokens });
+        } else if (fb.fallback.kind === 'GEMINI') {
+          fbResult = await callGemini(fbBaseUrl, fbApiKey, fbResolved.modelId, req.messages, { temperature, maxTokens });
+        } else {
+          fbResult = await callOpenAI(fbBaseUrl, fbApiKey, fbResolved.modelId, req.messages, { temperature, maxTokens });
+        }
+        inputTokens = fbResult.inputTokens;
+        outputTokens = fbResult.outputTokens;
+        content = fbResult.content;
+        usedProvider = fb.fallback;
+        usedModelId = fbResolved.modelId;
+        lastError = null as unknown as Error;
         break;
-      } catch {
+      } catch (fbErr) {
+        lastError = fbErr instanceof Error ? fbErr : new Error('Fallback failed');
         continue;
       }
     }
 
-    if (!content) throw err;
+    if (!content) {
+      // Log the failed request
+      const durationMs = Date.now() - startTime;
+      await db.aiLog.create({
+        data: {
+          providerId: provider.id,
+          providerName: provider.name,
+          modelId,
+          question: req.messages.map((m) => m.content).join('\n'),
+          response: null,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: 0,
+          durationMs,
+          status: 'error',
+          errorMessage: lastError?.message ?? 'Unknown error',
+          siteId: req.siteId,
+          userId: req.userId,
+        },
+      }).catch(() => { /* logging failure shouldn't mask the original error */ });
+      throw lastError ?? new Error('Chat request failed');
+    }
   }
 
   const durationMs = Date.now() - startTime;
   const totalTokens = inputTokens + outputTokens;
-  const model = provider.models.find(m => m.modelId === modelId);
-  const costUsd = model
-    ? (inputTokens / 1000) * (model.inputCostPer1k || 0) + (outputTokens / 1000) * (model.outputCostPer1k || 0)
-    : 0;
+  const costUsd = (inputTokens / 1000) * (resolved.inputCostPer1k || 0)
+    + (outputTokens / 1000) * (resolved.outputCostPer1k || 0);
 
   // Update provider
   await db.aiProvider.update({
-    where: { id: provider.id },
+    where: { id: usedProvider.id },
     data: {
       lastUsedAt: new Date(),
       latencyMs: durationMs,
@@ -170,10 +266,10 @@ export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
   // Log the request
   await db.aiLog.create({
     data: {
-      providerId: provider.id,
-      providerName: provider.name,
-      modelId,
-      question: req.messages.map(m => m.content).join('\n'),
+      providerId: usedProvider.id,
+      providerName: usedProvider.name,
+      modelId: usedModelId,
+      question: req.messages.map((m) => m.content).join('\n'),
       response: content,
       inputTokens,
       outputTokens,
@@ -188,13 +284,13 @@ export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
 
   return {
     content,
-    model: modelId,
+    model: usedModelId,
     inputTokens,
     outputTokens,
     totalTokens,
     costUsd,
     durationMs,
-    providerName: provider.name,
+    providerName: usedProvider.name,
   };
 }
 
@@ -333,7 +429,10 @@ async function callGemini(
 // -------------------- Health Check --------------------
 
 export async function healthCheck(providerId: string): Promise<HealthCheckResult> {
-  const provider = await db.aiProvider.findUnique({ where: { id: providerId } });
+  const provider = await db.aiProvider.findUnique({
+    where: { id: providerId },
+    include: { models: { where: { isActive: true } } },
+  });
   if (!provider) throw new Error('Provider not found');
   if (!provider.apiKeyEncrypted) return { status: 'DISCONNECTED', latencyMs: 0, error: 'No API key configured' };
 
@@ -346,25 +445,39 @@ export async function healthCheck(providerId: string): Promise<HealthCheckResult
     let models: ProviderModel[] = [];
 
     if (provider.kind === 'ANTHROPIC') {
-      // Anthropic has no models endpoint, just test with a simple request
+      // Anthropic has no /models endpoint — send a minimal chat request to verify the API key.
+      // Use the provider's first active TEXT model, or fall back to a known-good default.
+      const testModel = provider.models.find((m) => m.type?.toUpperCase() === 'TEXT')?.modelId
+        ?? config.defaultModels.find((m) => !isImageModelId(m.modelId))?.modelId
+        ?? 'claude-3-5-haiku-20241022';
       const res = await fetch(`${baseUrl}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: 'claude-3-haiku-20240307', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] }),
+        body: JSON.stringify({ model: testModel, max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${errBody ? `: ${errBody.slice(0, 200)}` : ''}`);
+      }
       models = config.defaultModels;
     } else if (provider.kind === 'GEMINI') {
       const res = await fetch(`${baseUrl}/models?key=${apiKey}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${errBody ? `: ${errBody.slice(0, 200)}` : ''}`);
+      }
       models = config.defaultModels;
     } else if (config.modelsEndpoint) {
+      // OpenAI-compatible (OpenAI, Groq, DeepSeek)
       const res = await fetch(`${baseUrl}${config.modelsEndpoint}`, {
-        headers: provider.kind === 'OLLAMA' ? {} : { 'Authorization': `Bearer ${apiKey}` },
+        headers: { 'Authorization': `Bearer ${apiKey}` },
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${errBody ? `: ${errBody.slice(0, 200)}` : ''}`);
+      }
       const data = await res.json();
-      if (data.data) {
+      if (data.data && Array.isArray(data.data)) {
         models = data.data.map((m: { id: string }) => ({
           modelId: m.id, name: m.id, contextLength: 0,
           inputCostPer1k: 0, outputCostPer1k: 0,
@@ -372,6 +485,8 @@ export async function healthCheck(providerId: string): Promise<HealthCheckResult
           supportsFunctionCalling: false, supportsJsonMode: false,
           supportsStreaming: true, supportsTools: false,
         }));
+      } else {
+        models = config.defaultModels;
       }
     }
 
@@ -411,7 +526,7 @@ export async function healthCheck(providerId: string): Promise<HealthCheckResult
 export async function syncModels(providerId: string): Promise<number> {
   const provider = await db.aiProvider.findUnique({ where: { id: providerId } });
   if (!provider) throw new Error('Provider not found');
-  if (!provider.apiKeyEncrypted) throw new Error('No API key');
+  if (!provider.apiKeyEncrypted) throw new Error('No API key configured for this provider.');
 
   const apiKey = await decrypt(provider.apiKeyEncrypted);
   const config = getProviderConfig(provider.kind);
@@ -419,16 +534,16 @@ export async function syncModels(providerId: string): Promise<number> {
 
   let fetchedModels: ProviderModel[] = config.defaultModels;
 
-  // Try to fetch from API if endpoint exists
-  if (config.modelsEndpoint && provider.kind !== 'ANTHROPIC' && provider.kind !== 'AZURE_OPENAI') {
+  // Try to fetch from API if endpoint exists (Anthropic has no /models endpoint)
+  if (config.modelsEndpoint && provider.kind !== 'ANTHROPIC') {
     try {
       const res = await fetch(`${baseUrl}${config.modelsEndpoint}`, {
-        headers: provider.kind === 'OLLAMA' ? {} : { 'Authorization': `Bearer ${apiKey}` },
+        headers: { 'Authorization': `Bearer ${apiKey}` },
       });
       if (res.ok) {
         const data = await res.json();
         if (data.data && Array.isArray(data.data)) {
-          const existingIds = new Set(config.defaultModels.map(m => m.modelId));
+          const existingIds = new Set(config.defaultModels.map((m) => m.modelId));
           const newModels = data.data
             .filter((m: { id: string }) => !existingIds.has(m.id))
             .map((m: { id: string }) => ({
@@ -444,15 +559,61 @@ export async function syncModels(providerId: string): Promise<number> {
     } catch { /* use defaults */ }
   }
 
-  // Upsert models
+  // Determine the correct type for each model
+  const isImage = (mid: string) => isImageModelId(mid);
+
+  // Upsert models + set type correctly
   let count = 0;
   for (const model of fetchedModels) {
+    const modelType = isImage(model.modelId) ? 'IMAGE' : 'TEXT';
     await db.aiModel.upsert({
       where: { providerId_modelId: { providerId, modelId: model.modelId } },
-      update: { name: model.name, contextLength: model.contextLength, inputCostPer1k: model.inputCostPer1k, outputCostPer1k: model.outputCostPer1k, supportsImages: model.supportsImages, supportsVision: model.supportsVision, supportsFunctionCalling: model.supportsFunctionCalling, supportsJsonMode: model.supportsJsonMode, supportsStreaming: model.supportsStreaming, supportsTools: model.supportsTools, lastSyncedAt: new Date() },
-      create: { providerId, modelId: model.modelId, name: model.name, contextLength: model.contextLength, inputCostPer1k: model.inputCostPer1k, outputCostPer1k: model.outputCostPer1k, supportsImages: model.supportsImages, supportsVision: model.supportsVision, supportsFunctionCalling: model.supportsFunctionCalling, supportsJsonMode: model.supportsJsonMode, supportsStreaming: model.supportsStreaming, supportsTools: model.supportsTools, lastSyncedAt: new Date() },
+      update: {
+        name: model.name,
+        contextLength: model.contextLength,
+        inputCostPer1k: model.inputCostPer1k,
+        outputCostPer1k: model.outputCostPer1k,
+        supportsImages: model.supportsImages,
+        supportsVision: model.supportsVision,
+        supportsFunctionCalling: model.supportsFunctionCalling,
+        supportsJsonMode: model.supportsJsonMode,
+        supportsStreaming: model.supportsStreaming,
+        supportsTools: model.supportsTools,
+        type: modelType,
+        lastSyncedAt: new Date(),
+      },
+      create: {
+        providerId,
+        modelId: model.modelId,
+        name: model.name,
+        contextLength: model.contextLength,
+        inputCostPer1k: model.inputCostPer1k,
+        outputCostPer1k: model.outputCostPer1k,
+        supportsImages: model.supportsImages,
+        supportsVision: model.supportsVision,
+        supportsFunctionCalling: model.supportsFunctionCalling,
+        supportsJsonMode: model.supportsJsonMode,
+        supportsStreaming: model.supportsStreaming,
+        supportsTools: model.supportsTools,
+        type: modelType,
+        isActive: true,
+        lastSyncedAt: new Date(),
+      },
     });
     count++;
+  }
+
+  // Ensure there's a default TEXT and (if applicable) IMAGE model for this provider
+  const textDefault = await db.aiModel.findFirst({
+    where: { providerId, type: 'TEXT', isActive: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (textDefault && !fetchedModels.some((m) => isImage(m.modelId))) {
+    // No image models in this sync — only ensure text default
+    const anyDefault = await db.aiModel.findFirst({ where: { providerId, isDefault: true } });
+    if (!anyDefault) {
+      await db.aiModel.update({ where: { id: textDefault.id }, data: { isDefault: true } });
+    }
   }
 
   await db.aiProvider.update({
@@ -720,18 +881,21 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
   });
 
   if (!provider) throw new Error('Provider not found');
-  if (!provider.isActive) throw new Error('Provider is disabled');
-  if (!provider.apiKeyEncrypted) throw new Error('API key not configured');
+  if (!provider.isActive) throw new Error('Provider is disabled. Please activate it first.');
+  if (!provider.apiKeyEncrypted) throw new Error('API key not configured for this provider.');
+
+  // Resolve + validate the model (type must be IMAGE)
+  const resolved = await resolveModel(req.providerId, req.modelId, 'IMAGE', provider.models);
+  const modelId = resolved.modelId;
 
   const apiKey = await decrypt(provider.apiKeyEncrypted);
   const config = getProviderConfig(provider.kind);
   const baseUrl = provider.baseUrl || config.defaultBaseUrl;
-  const modelId = req.modelId || provider.models.find(m => m.isDefault)?.modelId || provider.models[0]?.modelId;
-  if (!modelId) throw new Error('No model available');
 
   const startTime = Date.now();
   let images: GeneratedImage[] = [];
   let usedProvider = provider;
+  let usedModelId = modelId;
 
   try {
     if (provider.kind === 'GEMINI') {
@@ -742,23 +906,8 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
         responseFormat: req.responseFormat,
       });
       images = result.images;
-    } else if (provider.kind === 'AZURE_OPENAI') {
-      const azureConfig = JSON.parse(provider.config || '{}');
-      const result = await callOpenAIImageGeneration(
-        `${baseUrl}/openai/deployments/${azureConfig.deployment || modelId}`,
-        apiKey,
-        modelId,
-        req.prompt,
-        { size: req.size, quality: req.quality, style: req.style, n: req.n, responseFormat: req.responseFormat, apiVersion: provider.apiVersion || '2024-02-01' },
-      );
-      images = result.images;
-    } else if (
-      provider.kind === 'OPENAI' ||
-      provider.kind === 'OPENROUTER' ||
-      provider.kind === 'GROQ' ||
-      provider.kind === 'DEEPSEEK' ||
-      provider.kind === 'OLLAMA'
-    ) {
+    } else if (provider.kind === 'OPENAI') {
+      // Only OpenAI supports image generation among the OpenAI-compatible providers
       const result = await callOpenAIImageGeneration(baseUrl, apiKey, modelId, req.prompt, {
         negativePrompt: req.negativePrompt,
         size: req.size,
@@ -769,16 +918,8 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
       });
       images = result.images;
     } else {
-      // Attempt OpenAI-compatible for unknown providers
-      const result = await callOpenAIImageGeneration(baseUrl, apiKey, modelId, req.prompt, {
-        negativePrompt: req.negativePrompt,
-        size: req.size,
-        quality: req.quality,
-        style: req.style,
-        n: req.n,
-        responseFormat: req.responseFormat,
-      });
-      images = result.images;
+      // GROQ and DEEPSEEK do not support image generation
+      throw new Error(`${config.name} does not support image generation. Please use OpenAI or Gemini.`);
     }
   } catch (err) {
     // Try fallback providers for image generation
@@ -788,32 +929,68 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
       orderBy: { priority: 'asc' },
     });
 
+    let lastError = err instanceof Error ? err : new Error('Unknown error');
+
     for (const fb of fallbacks) {
       if (!fb.fallback.isActive || !fb.fallback.apiKeyEncrypted) continue;
+      // Only try fallbacks that support image generation (OpenAI or Gemini)
+      if (fb.fallback.kind !== 'OPENAI' && fb.fallback.kind !== 'GEMINI') continue;
       try {
+        const fbResolved = await resolveModel(fb.fallback.id, undefined, 'IMAGE', fb.fallback.models);
         const fbApiKey = await decrypt(fb.fallback.apiKeyEncrypted);
-        const fbBaseUrl = fb.fallback.baseUrl || getProviderConfig(fb.fallback.kind).defaultBaseUrl;
-        const fbModel = req.modelId || fb.fallback.models.find(m => m.isDefault)?.modelId || fb.fallback.models[0]?.modelId;
-        if (!fbModel) continue;
+        const fbConfig = getProviderConfig(fb.fallback.kind);
+        const fbBaseUrl = fb.fallback.baseUrl || fbConfig.defaultBaseUrl;
 
-        const result = await callOpenAIImageGeneration(fbBaseUrl, fbApiKey, fbModel, req.prompt, {
-          size: req.size, quality: req.quality, style: req.style, n: req.n, responseFormat: req.responseFormat,
-        });
-        images = result.images;
+        let fbResult: { images: GeneratedImage[] };
+        if (fb.fallback.kind === 'GEMINI') {
+          fbResult = await callGeminiImageGeneration(fbBaseUrl, fbApiKey, fbResolved.modelId, req.prompt, {
+            negativePrompt: req.negativePrompt, size: req.size, n: req.n, responseFormat: req.responseFormat,
+          });
+        } else {
+          fbResult = await callOpenAIImageGeneration(fbBaseUrl, fbApiKey, fbResolved.modelId, req.prompt, {
+            size: req.size, quality: req.quality, style: req.style, n: req.n, responseFormat: req.responseFormat,
+          });
+        }
+        images = fbResult.images;
         usedProvider = fb.fallback;
+        usedModelId = fbResolved.modelId;
+        lastError = null as unknown as Error;
         break;
-      } catch {
+      } catch (fbErr) {
+        lastError = fbErr instanceof Error ? fbErr : new Error('Fallback failed');
         continue;
       }
     }
 
-    if (images.length === 0) throw err;
+    if (images.length === 0) {
+      // Log the failed request
+      const durationMs = Date.now() - startTime;
+      await db.aiLog.create({
+        data: {
+          providerId: provider.id,
+          providerName: provider.name,
+          modelId,
+          question: `[IMAGE] ${req.prompt}`,
+          response: null,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: 0,
+          durationMs,
+          status: 'error',
+          errorMessage: lastError?.message ?? 'Unknown error',
+          siteId: req.siteId,
+          userId: req.userId,
+        },
+      }).catch(() => { /* logging failure shouldn't mask the original error */ });
+      throw lastError ?? new Error('Image generation failed');
+    }
   }
 
   const durationMs = Date.now() - startTime;
   const size = req.size ?? '1024x1024';
   const n = images.length;
-  const costUsd = n * getImageCost(modelId, size);
+  const costUsd = n * getImageCost(usedModelId, size);
 
   // Update provider stats
   await db.aiProvider.update({
@@ -831,13 +1008,13 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
     data: {
       providerId: usedProvider.id,
       providerName: usedProvider.name,
-      modelId,
+      modelId: usedModelId,
       question: `[IMAGE] ${req.prompt}`,
       response: JSON.stringify({
         imagesGenerated: n,
         size,
         format: req.responseFormat ?? 'url',
-        model: modelId,
+        model: usedModelId,
       }),
       inputTokens: 0,
       outputTokens: 0,
@@ -852,7 +1029,7 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
 
   return {
     images,
-    model: modelId,
+    model: usedModelId,
     costUsd,
     durationMs,
     providerName: usedProvider.name,

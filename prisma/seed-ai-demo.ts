@@ -6,8 +6,8 @@
 // Idempotent: safe to run multiple times (uses upsert with stable IDs).
 // ============================================================
 
-import { db } from './src/lib/db';
-import { encrypt } from './src/lib/encryption';
+import { db } from '../src/lib/db';
+import { encrypt } from '../src/lib/encryption';
 
 async function main() {
   // ---- Resolve a createdById (required FK to User) ----

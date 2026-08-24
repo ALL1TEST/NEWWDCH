@@ -116,7 +116,7 @@ export function UsagePage() {
                   <p className="text-sm font-medium">Monthly Budget</p>
                   <p className="text-sm text-zinc-500">${summary.budget.spent.toFixed(2)} / ${summary.budget.monthlyBudget.toFixed(2)}</p>
                 </div>
-                <Progress value={(summary.budget.spent / summary.budget.monthlyBudget) * 100} />
+                <Progress value={summary.budget.monthlyBudget > 0 ? (summary.budget.spent / summary.budget.monthlyBudget) * 100 : 0} />
                 <p className="text-xs text-zinc-400 mt-1">Warning at {summary.budget.warningThreshold}%</p>
               </CardContent>
             </Card>
@@ -206,7 +206,7 @@ export function UsagePage() {
                       {(summary.topProviders ?? []).length === 0 ? (
                         <TableRow><TableCell colSpan={3} className="text-center py-4 text-zinc-400 text-sm">No data</TableCell></TableRow>
                       ) : (summary.topProviders ?? []).map((p, i) => (
-                        <TableRow key={i}>
+                        <TableRow key={p.provider || i}>
                           <TableCell className="text-sm font-medium">{p.provider}</TableCell>
                           <TableCell className="text-right text-sm">{p.requests.toLocaleString()}</TableCell>
                           <TableCell className="text-right text-sm">${p.cost.toFixed(2)}</TableCell>
@@ -230,7 +230,7 @@ export function UsagePage() {
                       {(summary.topModels ?? []).length === 0 ? (
                         <TableRow><TableCell colSpan={3} className="text-center py-4 text-zinc-400 text-sm">No data</TableCell></TableRow>
                       ) : (summary.topModels ?? []).map((m, i) => (
-                        <TableRow key={i}>
+                        <TableRow key={m.model || i}>
                           <TableCell className="text-sm font-medium max-w-[120px] truncate">{m.model}</TableCell>
                           <TableCell className="text-right text-sm">{m.requests.toLocaleString()}</TableCell>
                           <TableCell className="text-right text-sm">${m.cost.toFixed(2)}</TableCell>

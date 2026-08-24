@@ -37,6 +37,7 @@ interface AiModel {
   id: string;
   name: string;
   providerId: string;
+  type: string; // 'TEXT' | 'IMAGE'
 }
 
 interface PlaygroundMessage {
@@ -46,12 +47,13 @@ interface PlaygroundMessage {
 
 interface PlaygroundResponse {
   content: string;
+  model?: string;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
-  cost: number;
-  responseTimeMs: number;
-  provider: string;
+  costUsd: number;
+  durationMs: number;
+  providerName: string;
 }
 
 // -------------------- Component --------------------
@@ -84,17 +86,19 @@ export function PlaygroundPage() {
 
   // Fetch models for selected provider
   const { data: modelsData } = useQuery({
-    queryKey: queryKeys.aiModels.list({ providerId: providerId || undefined }),
+    queryKey: queryKeys.aiModels.list({ providerId: providerId || undefined, isActive: true }),
     queryFn: () => getApi<PaginatedResponse<AiModel>>('/api/ai/models', {
       providerId: providerId || undefined,
       pageSize: 200,
+      isActive: true,
     }),
     enabled: !!providerId,
   });
   const models = modelsData?.data ?? [];
+  const textModels = models.filter((m) => m.type?.toUpperCase() === 'TEXT');
 
-  // Resolve the selected model (explicit user choice, else first model of this provider).
-  const modelId = userModelId || (models.length > 0 ? models[0].id : '');
+  // Resolve the selected model (explicit user choice, else first text model of this provider).
+  const modelId = userModelId || (textModels.length > 0 ? textModels[0].id : '');
 
   // When the user changes the provider, reset the model selection so we
   // don't end up with a model that doesn't belong to the new provider.
@@ -110,13 +114,7 @@ export function PlaygroundPage() {
 
   // Send message
   const sendMutation = useMutation({
-    mutationFn: async () => {
-      const userMsg: PlaygroundMessage = { role: 'user', content: inputValue };
-      const allMessages = [...messages, userMsg];
-      setInputValue('');
-      setMessages(allMessages);
-      setIsSending(true);
-      setResponseInfo(null);
+    mutationFn: async (allMessages: PlaygroundMessage[]) => {
       const res = await postApi<PlaygroundResponse>('/api/ai/playground', {
         providerId,
         modelId,
@@ -136,6 +134,8 @@ export function PlaygroundPage() {
       setIsSending(false);
     },
     onError: (err: Error) => {
+      // Remove the user's failed message so the chat stays clean.
+      setMessages((prev) => prev.slice(0, -1));
       toast.error(err.message || 'Failed to get response');
       setIsSending(false);
     },
@@ -146,7 +146,15 @@ export function PlaygroundPage() {
       if (!providerId || !modelId) toast.error('Select a provider and model first');
       return;
     }
-    sendMutation.mutate();
+    const userMsg: PlaygroundMessage = { role: 'user', content: inputValue };
+    const allMessages = [...messages, userMsg];
+    // Side effects happen here, before the mutation fires, so mutationFn
+    // only does the API call.
+    setInputValue('');
+    setMessages(allMessages);
+    setIsSending(true);
+    setResponseInfo(null);
+    sendMutation.mutate(allMessages);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -197,7 +205,7 @@ export function PlaygroundPage() {
               <Select value={modelId} onValueChange={setUserModelId} disabled={!providerId}>
                 <SelectTrigger className="text-sm"><SelectValue placeholder={providerId ? 'Select model' : 'Select provider first'} /></SelectTrigger>
                 <SelectContent>
-                  {models.map((m) => (
+                  {textModels.map((m) => (
                     <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -342,9 +350,9 @@ export function PlaygroundPage() {
               <InfoItem label="Output Tokens" value={responseInfo.outputTokens.toLocaleString()} />
               <Separator />
               <InfoItem label="Total Tokens" value={responseInfo.totalTokens.toLocaleString()} />
-              <InfoItem label="Cost" value={`$${responseInfo.cost.toFixed(6)}`} />
-              <InfoItem label="Response Time" value={`${responseInfo.responseTimeMs}ms`} />
-              <InfoItem label="Provider" value={responseInfo.provider} />
+              <InfoItem label="Cost" value={`$${responseInfo.costUsd.toFixed(6)}`} />
+              <InfoItem label="Response Time" value={`${responseInfo.durationMs}ms`} />
+              <InfoItem label="Provider" value={responseInfo.providerName} />
             </>
           ) : (
             <div className="text-center text-zinc-400 text-sm mt-8">

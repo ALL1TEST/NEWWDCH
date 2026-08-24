@@ -108,10 +108,13 @@ export async function POST(request: NextRequest) {
 
     const d = parsed.data;
 
-    // Verify the provider exists
+    // Verify the provider exists + is active (can't add models to an inactive provider)
     const provider = await db.aiProvider.findUnique({ where: { id: d.providerId } });
     if (!provider) {
       return err('Provider not found', 404, 'NOT_FOUND');
+    }
+    if (!provider.isActive) {
+      return err('Cannot add models to an inactive provider. Please activate the provider first.', 400, 'PROVIDER_INACTIVE');
     }
 
     // Check for duplicate [providerId, modelId]
@@ -122,9 +125,8 @@ export async function POST(request: NextRequest) {
       return err('A model with this Model ID already exists for this provider', 409, 'CONFLICT');
     }
 
-    // If setting as default, unset other defaults of the same type
-    let isDefault = d.isDefault;
-    if (isDefault) {
+    // If setting as default, atomically clear other defaults of the same type then create.
+    if (d.isDefault) {
       await db.aiModel.updateMany({
         where: { type: d.type, isDefault: true },
         data: { isDefault: false },
@@ -138,12 +140,15 @@ export async function POST(request: NextRequest) {
         providerId: d.providerId,
         type: d.type,
         isActive: d.isActive,
-        isDefault,
+        isDefault: d.isDefault,
       },
       include: { provider: { select: { id: true, name: true, kind: true } } },
     });
 
-    return ok(model, { requestId: id });
+    return NextResponse.json(
+      { data: model, meta: { requestId: id, timestamp: new Date().toISOString() } },
+      { status: 201 },
+    );
   } catch (error) {
     console.error(`[AI/MODELS:CREATE] ${id} —`, error);
     return err('Failed to create AI model', 500, 'INTERNAL_ERROR');

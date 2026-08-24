@@ -36,10 +36,10 @@ interface AiLog {
   model: string;
   providerId: string;
   modelId: string;
-  inputTokens: number;
-  outputTokens: number;
-  cost: number;
-  durationMs: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cost: number | null;
+  durationMs: number | null;
   status: 'success' | 'error';
   errorMessage: string | null;
   createdAt: string;
@@ -219,10 +219,10 @@ export function LogsPage() {
                     <TableCell className="hidden lg:table-cell max-w-[200px]"><p className="text-sm truncate text-zinc-500">{truncate(log.response, 50)}</p></TableCell>
                     <TableCell className="text-sm">{log.provider}</TableCell>
                     <TableCell className="hidden md:table-cell text-sm max-w-[120px] truncate">{log.model}</TableCell>
-                    <TableCell className="hidden md:table-cell text-sm">{log.inputTokens.toLocaleString()}</TableCell>
-                    <TableCell className="hidden md:table-cell text-sm">{log.outputTokens.toLocaleString()}</TableCell>
-                    <TableCell className="hidden lg:table-cell text-sm">${log.cost.toFixed(4)}</TableCell>
-                    <TableCell className="hidden xl:table-cell text-sm">{(log.durationMs / 1000).toFixed(1)}s</TableCell>
+                    <TableCell className="hidden md:table-cell text-sm">{log.inputTokens?.toLocaleString() ?? '—'}</TableCell>
+                    <TableCell className="hidden md:table-cell text-sm">{log.outputTokens?.toLocaleString() ?? '—'}</TableCell>
+                    <TableCell className="hidden lg:table-cell text-sm">{log.cost != null ? `$${log.cost.toFixed(4)}` : '—'}</TableCell>
+                    <TableCell className="hidden xl:table-cell text-sm">{log.durationMs != null ? `${(log.durationMs / 1000).toFixed(1)}s` : '—'}</TableCell>
                     <TableCell>
                       {log.status === 'success' ? (
                         <Badge variant="secondary" className="bg-green-100 text-green-700"><CheckCircle2 className="h-3 w-3 mr-1" />OK</Badge>
@@ -263,10 +263,10 @@ export function LogsPage() {
                 <div><p className="text-xs text-zinc-500">Status</p><Badge variant="secondary" className={expandedLog.status === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>{expandedLog.status}</Badge></div>
                 <div><p className="text-xs text-zinc-500">Provider</p><p className="text-sm font-medium">{expandedLog.provider}</p></div>
                 <div><p className="text-xs text-zinc-500">Model</p><p className="text-sm font-medium">{expandedLog.model}</p></div>
-                <div><p className="text-xs text-zinc-500">Cost</p><p className="text-sm font-medium">${expandedLog.cost.toFixed(4)}</p></div>
-                <div><p className="text-xs text-zinc-500">Input Tokens</p><p className="text-sm font-medium">{expandedLog.inputTokens.toLocaleString()}</p></div>
-                <div><p className="text-xs text-zinc-500">Output Tokens</p><p className="text-sm font-medium">{expandedLog.outputTokens.toLocaleString()}</p></div>
-                <div><p className="text-xs text-zinc-500">Duration</p><p className="text-sm font-medium">{(expandedLog.durationMs / 1000).toFixed(2)}s</p></div>
+                <div><p className="text-xs text-zinc-500">Cost</p><p className="text-sm font-medium">{expandedLog.cost != null ? `$${expandedLog.cost.toFixed(4)}` : '—'}</p></div>
+                <div><p className="text-xs text-zinc-500">Input Tokens</p><p className="text-sm font-medium">{expandedLog.inputTokens?.toLocaleString() ?? '—'}</p></div>
+                <div><p className="text-xs text-zinc-500">Output Tokens</p><p className="text-sm font-medium">{expandedLog.outputTokens?.toLocaleString() ?? '—'}</p></div>
+                <div><p className="text-xs text-zinc-500">Duration</p><p className="text-sm font-medium">{expandedLog.durationMs != null ? `${(expandedLog.durationMs / 1000).toFixed(2)}s` : '—'}</p></div>
                 <div><p className="text-xs text-zinc-500">Date</p><p className="text-sm font-medium">{new Date(expandedLog.createdAt).toLocaleString()}</p></div>
               </div>
               {expandedLog.errorMessage && (

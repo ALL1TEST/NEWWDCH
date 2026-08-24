@@ -83,7 +83,50 @@ export async function POST(request: NextRequest) {
     }
 
     const d = parsed.data;
-    const scope = (body as Record<string, unknown>).scope as string | undefined || 'global';
+    const scope = typeof (body as Record<string, unknown>).scope === 'string'
+      ? ((body as Record<string, unknown>).scope as string)
+      : 'global';
+
+    // Validate FK references + relationships for the 4 provider/model fields.
+    // Empty string clears the value (null); a non-empty string must reference an existing active record.
+
+    // Text AI: defaultProviderId + defaultModelId
+    if (d.defaultProviderId !== undefined && d.defaultProviderId !== '') {
+      const provider = await db.aiProvider.findUnique({ where: { id: d.defaultProviderId } });
+      if (!provider) return err('Default provider not found', 404, 'NOT_FOUND');
+      if (!provider.isActive) return err('Cannot set an inactive provider as the default', 400, 'PROVIDER_INACTIVE');
+
+      if (d.defaultModelId !== undefined && d.defaultModelId !== '') {
+        const model = await db.aiModel.findUnique({ where: { id: d.defaultModelId } });
+        if (!model) return err('Default model not found', 404, 'NOT_FOUND');
+        if (model.providerId !== d.defaultProviderId) {
+          return err('The default model does not belong to the default provider', 400, 'MODEL_PROVIDER_MISMATCH');
+        }
+        if (!model.isActive) return err('Cannot set an inactive model as the default', 400, 'MODEL_INACTIVE');
+        if (model.type?.toUpperCase() !== 'TEXT') {
+          return err('The default text model must be a TEXT-type model', 400, 'MODEL_TYPE_MISMATCH');
+        }
+      }
+    }
+
+    // Image AI: imageProviderId + imageModelId
+    if (d.imageProviderId !== undefined && d.imageProviderId !== '') {
+      const provider = await db.aiProvider.findUnique({ where: { id: d.imageProviderId } });
+      if (!provider) return err('Image provider not found', 404, 'NOT_FOUND');
+      if (!provider.isActive) return err('Cannot set an inactive provider as the image default', 400, 'PROVIDER_INACTIVE');
+
+      if (d.imageModelId !== undefined && d.imageModelId !== '') {
+        const model = await db.aiModel.findUnique({ where: { id: d.imageModelId } });
+        if (!model) return err('Image model not found', 404, 'NOT_FOUND');
+        if (model.providerId !== d.imageProviderId) {
+          return err('The image model does not belong to the image provider', 400, 'MODEL_PROVIDER_MISMATCH');
+        }
+        if (!model.isActive) return err('Cannot set an inactive model as the image default', 400, 'MODEL_INACTIVE');
+        if (model.type?.toUpperCase() !== 'IMAGE') {
+          return err('The default image model must be an IMAGE-type model', 400, 'MODEL_TYPE_MISMATCH');
+        }
+      }
+    }
 
     const data: Record<string, unknown> = {
       defaultProviderId: d.defaultProviderId === '' ? null : d.defaultProviderId ?? undefined,

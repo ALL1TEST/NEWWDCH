@@ -64,7 +64,7 @@ function serializePrompt<T extends Record<string, unknown>>(item: T): T {
 
 const updateSchema = z.object({
   name: z.string().min(1).max(200).trim().optional(),
-  category: z.enum(['CONTENT_GENERATION', 'IMAGE_GENERATION', 'SEO', 'TRANSLATION', 'SUMMARIZATION', 'MARKETING', 'SOCIAL_MEDIA', 'EMAIL', 'CODING', 'ANALYSIS', 'CUSTOM']).optional(),
+  category: z.enum(['CONTENT_GENERATION', 'IMAGE_GENERATION', 'SEO', 'TRANSLATION', 'SUMMARIZATION', 'MARKETING', 'SOCIAL_MEDIA', 'EMAIL', 'CODING', 'ANALYSIS']).optional(),
   description: z.string().max(2000).optional().or(z.literal('')),
   tags: z.union([z.string().max(2000), z.array(z.string()).max(100)]).optional(),
   variables: z.union([z.string().max(10000), z.record(z.string(), z.unknown())]).optional(),
@@ -146,6 +146,30 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         ? JSON.stringify(d.variables)
         : (d.variables === '' ? null : d.variables);
     }
+
+    // Validate provider/model FK references + relationship if either is changing
+    const effectiveProviderId = d.providerId !== undefined ? (d.providerId === '' ? null : d.providerId) : existing.providerId;
+    const effectiveModelId = d.modelId !== undefined ? (d.modelId === '' ? null : d.modelId) : existing.modelId;
+
+    if (effectiveProviderId) {
+      const provider = await db.aiProvider.findUnique({ where: { id: effectiveProviderId } });
+      if (!provider) return err('Selected provider not found', 404, 'NOT_FOUND');
+      if (!provider.isActive) return err('Cannot use an inactive provider for a prompt', 400, 'PROVIDER_INACTIVE');
+
+      if (effectiveModelId) {
+        const model = await db.aiModel.findUnique({ where: { id: effectiveModelId } });
+        if (!model) return err('Selected model not found', 404, 'NOT_FOUND');
+        if (model.providerId !== effectiveProviderId) {
+          return err('The selected model does not belong to the selected provider', 400, 'MODEL_PROVIDER_MISMATCH');
+        }
+        if (!model.isActive) {
+          return err('Cannot use an inactive model for a prompt', 400, 'MODEL_INACTIVE');
+        }
+      }
+    } else if (effectiveModelId) {
+      return err('A provider must be selected when a model is specified', 400, 'MODEL_WITHOUT_PROVIDER');
+    }
+
     if (d.providerId !== undefined) data.providerId = d.providerId === '' ? null : d.providerId;
     if (d.modelId !== undefined) data.modelId = d.modelId === '' ? null : d.modelId;
     if (d.temperature !== undefined) data.temperature = d.temperature;
@@ -180,9 +204,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       });
     }
 
-    const item = await db.promptTemplate.update({
+    await db.promptTemplate.update({
       where: { id: promptId },
       data,
+    });
+
+    // Re-fetch with the same includes as GET so the response shape is consistent.
+    const item = await db.promptTemplate.findUnique({
+      where: { id: promptId },
+      include: {
+        provider: { select: { id: true, name: true, kind: true } },
+        createdBy: { select: { id: true, name: true, email: true } },
+        _count: { select: { versions: true } },
+      },
     });
 
     return ok(serializePrompt(item as unknown as Record<string, unknown>));

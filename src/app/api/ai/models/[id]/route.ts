@@ -91,19 +91,46 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const d = parsed.data;
+    const data: Record<string, unknown> = {};
 
-    // If setting as default, unset other defaults of the same type
+    if (d.name !== undefined) data.name = d.name;
+    if (d.modelId !== undefined) data.modelId = d.modelId;
+    if (d.type !== undefined) data.type = d.type;
+    if (d.contextLength !== undefined) data.contextLength = d.contextLength;
+    if (d.inputCostPer1k !== undefined) data.inputCostPer1k = d.inputCostPer1k;
+    if (d.outputCostPer1k !== undefined) data.outputCostPer1k = d.outputCostPer1k;
+    if (d.supportsImages !== undefined) data.supportsImages = d.supportsImages;
+    if (d.supportsVision !== undefined) data.supportsVision = d.supportsVision;
+    if (d.supportsFunctionCalling !== undefined) data.supportsFunctionCalling = d.supportsFunctionCalling;
+    if (d.supportsJsonMode !== undefined) data.supportsJsonMode = d.supportsJsonMode;
+    if (d.supportsStreaming !== undefined) data.supportsStreaming = d.supportsStreaming;
+    if (d.supportsTools !== undefined) data.supportsTools = d.supportsTools;
+    if (d.isActive !== undefined) data.isActive = d.isActive;
+
+    // If providerId is changing, validate the new provider exists + is active
+    if (d.providerId !== undefined && d.providerId !== existing.providerId) {
+      const newProvider = await db.aiProvider.findUnique({ where: { id: d.providerId } });
+      if (!newProvider) return err('Target provider not found', 404, 'NOT_FOUND');
+      if (!newProvider.isActive) return err('Cannot move model to an inactive provider', 400, 'PROVIDER_INACTIVE');
+      data.providerId = d.providerId;
+    }
+
+    // If setting as default, clear other defaults of the same type first.
+    // Use the NEW type if type is being changed, otherwise the existing type.
     if (d.isDefault === true) {
-      const modelType = d.type ?? existing.type;
+      const modelType = (d.type ?? existing.type)?.toUpperCase() === 'IMAGE' ? 'IMAGE' : 'TEXT';
       await db.aiModel.updateMany({
         where: { type: modelType, isDefault: true, id: { not: modelId } },
         data: { isDefault: false },
       });
+      data.isDefault = true;
+    } else if (d.isDefault === false) {
+      data.isDefault = false;
     }
 
     const item = await db.aiModel.update({
       where: { id: modelId },
-      data: d,
+      data,
       include: { provider: { select: { id: true, name: true, kind: true } } },
     });
 

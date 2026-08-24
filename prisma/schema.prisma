@@ -2043,11 +2043,8 @@ enum AiProviderKind {
   OPENAI
   ANTHROPIC
   GEMINI
-  OPENROUTER
   GROQ
   DEEPSEEK
-  OLLAMA
-  AZURE_OPENAI
 }
 
 enum AiConnectionStatus {
@@ -2085,7 +2082,6 @@ enum PromptCategoryNew {
   EMAIL
   CODING
   ANALYSIS
-  CUSTOM
 }
 
 model AiProvider {

@@ -1,6 +1,8 @@
 // ============================================================
 // AI PROVIDER CONFIGURATIONS
 // ============================================================
+// Only 5 provider kinds are supported. Legacy kinds (OPENROUTER,
+// OLLAMA, AZURE_OPENAI) have been removed.
 
 export interface ProviderConfig {
   kind: string;
@@ -27,6 +29,8 @@ export interface ProviderModel {
   supportsTools: boolean;
 }
 
+export const PROVIDER_KINDS = ['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK'] as const;
+
 export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
   OPENAI: {
     kind: 'OPENAI',
@@ -37,26 +41,26 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     helpText: 'Enter your OpenAI API key from platform.openai.com',
     icon: 'OpenAI',
     defaultModels: [
-      { modelId: 'gpt-4o', name: 'GPT-4o', contextLength: 128000, inputCostPer1k: 0.0025, outputCostPer1k: 0.01, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
-      { modelId: 'gpt-4o-mini', name: 'GPT-4o Mini', contextLength: 128000, inputCostPer1k: 0.00015, outputCostPer1k: 0.0006, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
+      { modelId: 'gpt-5', name: 'GPT-5', contextLength: 256000, inputCostPer1k: 0.005, outputCostPer1k: 0.015, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
+      { modelId: 'gpt-5-mini', name: 'GPT-5 mini', contextLength: 256000, inputCostPer1k: 0.0003, outputCostPer1k: 0.0009, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
       { modelId: 'gpt-4.1', name: 'GPT-4.1', contextLength: 1047576, inputCostPer1k: 0.002, outputCostPer1k: 0.008, supportsImages: false, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
-      { modelId: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', contextLength: 1047576, inputCostPer1k: 0.0004, outputCostPer1k: 0.0016, supportsImages: false, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
-      { modelId: 'o3-mini', name: 'o3-mini', contextLength: 200000, inputCostPer1k: 0.0011, outputCostPer1k: 0.0044, supportsImages: false, supportsVision: false, supportsFunctionCalling: true, supportsJsonMode: false, supportsStreaming: false, supportsTools: true },
+      { modelId: 'gpt-4.1-mini', name: 'GPT-4.1 mini', contextLength: 1047576, inputCostPer1k: 0.0004, outputCostPer1k: 0.0016, supportsImages: false, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
+      { modelId: 'gpt-image-1', name: 'GPT Image', contextLength: 0, inputCostPer1k: 0, outputCostPer1k: 0.04, supportsImages: true, supportsVision: false, supportsFunctionCalling: false, supportsJsonMode: false, supportsStreaming: false, supportsTools: false },
+      { modelId: 'dall-e-3', name: 'DALL-E 3', contextLength: 0, inputCostPer1k: 0, outputCostPer1k: 0.04, supportsImages: true, supportsVision: false, supportsFunctionCalling: false, supportsJsonMode: false, supportsStreaming: false, supportsTools: false },
     ],
   },
   ANTHROPIC: {
     kind: 'ANTHROPIC',
     name: 'Anthropic',
     defaultBaseUrl: 'https://api.anthropic.com/v1',
-    modelsEndpoint: '',
+    modelsEndpoint: '', // Anthropic has no /models endpoint
     chatEndpoint: '/messages',
     helpText: 'Enter your Anthropic API key from console.anthropic.com',
     icon: 'Anthropic',
     defaultModels: [
-      { modelId: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', contextLength: 200000, inputCostPer1k: 0.003, outputCostPer1k: 0.015, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
-      { modelId: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', contextLength: 200000, inputCostPer1k: 0.003, outputCostPer1k: 0.015, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
-      { modelId: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', contextLength: 200000, inputCostPer1k: 0.001, outputCostPer1k: 0.005, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
-      { modelId: 'claude-opus-4-20250514', name: 'Claude Opus 4', contextLength: 200000, inputCostPer1k: 0.015, outputCostPer1k: 0.075, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
+      { modelId: 'claude-sonnet-4-20250514', name: 'Claude Sonnet', contextLength: 200000, inputCostPer1k: 0.003, outputCostPer1k: 0.015, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
+      { modelId: 'claude-3-5-haiku-20241022', name: 'Claude Haiku', contextLength: 200000, inputCostPer1k: 0.001, outputCostPer1k: 0.005, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
+      { modelId: 'claude-opus-4-20250514', name: 'Claude Opus', contextLength: 200000, inputCostPer1k: 0.015, outputCostPer1k: 0.075, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
     ],
   },
   GEMINI: {
@@ -64,25 +68,13 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     name: 'Google Gemini',
     defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     modelsEndpoint: '/models',
-    chatEndpoint: '',
+    chatEndpoint: '', // constructed dynamically per model
     helpText: 'Enter your Google AI API key from aistudio.google.com',
     icon: 'Gemini',
     defaultModels: [
-      { modelId: 'gemini-2.5-pro-preview-06-05', name: 'Gemini 2.5 Pro', contextLength: 1048576, inputCostPer1k: 0.00125, outputCostPer1k: 0.01, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
-      { modelId: 'gemini-2.5-flash-preview-05-20', name: 'Gemini 2.5 Flash', contextLength: 1048576, inputCostPer1k: 0.00015, outputCostPer1k: 0.0006, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
-      { modelId: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', contextLength: 1048576, inputCostPer1k: 0.0001, outputCostPer1k: 0.0004, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
-    ],
-  },
-  OPENROUTER: {
-    kind: 'OPENROUTER',
-    name: 'OpenRouter',
-    defaultBaseUrl: 'https://openrouter.ai/api/v1',
-    modelsEndpoint: '/models',
-    chatEndpoint: '/chat/completions',
-    helpText: 'Enter your OpenRouter API key from openrouter.ai',
-    icon: 'OpenRouter',
-    defaultModels: [
-      { modelId: 'openrouter/auto', name: 'Auto (Best Available)', contextLength: 128000, inputCostPer1k: 0.001, outputCostPer1k: 0.003, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
+      { modelId: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', contextLength: 1048576, inputCostPer1k: 0.00125, outputCostPer1k: 0.01, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
+      { modelId: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', contextLength: 1048576, inputCostPer1k: 0.00015, outputCostPer1k: 0.0006, supportsImages: true, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
+      { modelId: 'gemini-2.0-flash-image', name: 'Gemini Image', contextLength: 0, inputCostPer1k: 0, outputCostPer1k: 0.039, supportsImages: true, supportsVision: false, supportsFunctionCalling: false, supportsJsonMode: false, supportsStreaming: false, supportsTools: false },
     ],
   },
   GROQ: {
@@ -96,7 +88,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     defaultModels: [
       { modelId: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', contextLength: 131072, inputCostPer1k: 0.00059, outputCostPer1k: 0.00079, supportsImages: false, supportsVision: false, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
       { modelId: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B', contextLength: 131072, inputCostPer1k: 0.00005, outputCostPer1k: 0.00008, supportsImages: false, supportsVision: false, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
-      { modelId: 'qwen-qwq-32b', name: 'Qwen QwQ 32B', contextLength: 131072, inputCostPer1k: 0.00029, outputCostPer1k: 0.00039, supportsImages: false, supportsVision: false, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
+      { modelId: 'llama-4-scout-17b-16e-instruct', name: 'Llama 4 Scout', contextLength: 131072, inputCostPer1k: 0.00011, outputCostPer1k: 0.00034, supportsImages: false, supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: true },
     ],
   },
   DEEPSEEK: {
@@ -108,31 +100,21 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     helpText: 'Enter your DeepSeek API key from platform.deepseek.com',
     icon: 'DeepSeek',
     defaultModels: [
-      { modelId: 'deepseek-chat', name: 'DeepSeek Chat (V3)', contextLength: 131072, inputCostPer1k: 0.00014, outputCostPer1k: 0.00028, supportsImages: false, supportsVision: false, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: false },
-      { modelId: 'deepseek-reasoner', name: 'DeepSeek Reasoner (R1)', contextLength: 131072, inputCostPer1k: 0.00055, outputCostPer1k: 0.00219, supportsImages: false, supportsVision: false, supportsFunctionCalling: false, supportsJsonMode: false, supportsStreaming: true, supportsTools: false },
+      { modelId: 'deepseek-chat', name: 'DeepSeek V3', contextLength: 131072, inputCostPer1k: 0.00014, outputCostPer1k: 0.00028, supportsImages: false, supportsVision: false, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: false },
+      { modelId: 'deepseek-reasoner', name: 'DeepSeek R1', contextLength: 131072, inputCostPer1k: 0.00055, outputCostPer1k: 0.00219, supportsImages: false, supportsVision: false, supportsFunctionCalling: false, supportsJsonMode: false, supportsStreaming: true, supportsTools: false },
     ],
   },
-  OLLAMA: {
-    kind: 'OLLAMA',
-    name: 'Ollama (Local)',
-    defaultBaseUrl: 'http://localhost:11434/v1',
-    modelsEndpoint: '/models',
-    chatEndpoint: '/chat/completions',
-    helpText: 'Enter your Ollama server URL (default: http://localhost:11434)',
-    icon: 'Ollama',
-    defaultModels: [],
-  },
-  AZURE_OPENAI: {
-    kind: 'AZURE_OPENAI',
-    name: 'Azure OpenAI',
-    defaultBaseUrl: '',
-    modelsEndpoint: '',
-    chatEndpoint: '',
-    helpText: 'Enter your Azure OpenAI endpoint and API key from portal.azure.com',
-    icon: 'Azure',
-    defaultModels: [],
-  },
 };
+
+// Set of model IDs that are image-generation models (type IMAGE).
+// Used by syncModels to correctly type synced models.
+export const IMAGE_MODEL_IDS = new Set([
+  'gpt-image-1',
+  'dall-e-3',
+  'dall-e-2',
+  'gemini-2.0-flash-image',
+  'gemini-image-gen',
+]);
 
 export function getProviderConfig(kind: string): ProviderConfig {
   return PROVIDER_CONFIGS[kind] ?? {
@@ -145,4 +127,8 @@ export function getProviderConfig(kind: string): ProviderConfig {
     icon: 'Settings',
     defaultModels: [],
   };
+}
+
+export function isImageModelId(modelId: string): boolean {
+  return IMAGE_MODEL_IDS.has(modelId);
 }

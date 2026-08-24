@@ -63,7 +63,7 @@ function serializePrompt<T extends Record<string, unknown>>(item: T): T {
 
 // ---------- validation ------------------------------------------------
 
-const CATEGORIES = ['CONTENT_GENERATION', 'IMAGE_GENERATION', 'SEO', 'TRANSLATION', 'SUMMARIZATION', 'MARKETING', 'SOCIAL_MEDIA', 'EMAIL', 'CODING', 'ANALYSIS', 'CUSTOM'] as const;
+const CATEGORIES = ['CONTENT_GENERATION', 'IMAGE_GENERATION', 'SEO', 'TRANSLATION', 'SUMMARIZATION', 'MARKETING', 'SOCIAL_MEDIA', 'EMAIL', 'CODING', 'ANALYSIS'] as const;
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200).trim(),
@@ -171,6 +171,27 @@ export async function POST(request: NextRequest) {
     let creator = await db.user.findFirst({ where: { role: 'ADMIN' }, select: { id: true } });
     if (!creator) creator = await db.user.findFirst({ select: { id: true } });
     if (!creator) return err('No user exists to attribute the prompt to', 500, 'NO_USER');
+
+    // Validate provider/model FK references + relationship
+    if (d.providerId && d.providerId !== '') {
+      const provider = await db.aiProvider.findUnique({ where: { id: d.providerId } });
+      if (!provider) return err('Selected provider not found', 404, 'NOT_FOUND');
+      if (!provider.isActive) return err('Cannot use an inactive provider for a prompt', 400, 'PROVIDER_INACTIVE');
+
+      if (d.modelId && d.modelId !== '') {
+        const model = await db.aiModel.findUnique({ where: { id: d.modelId } });
+        if (!model) return err('Selected model not found', 404, 'NOT_FOUND');
+        if (model.providerId !== d.providerId) {
+          return err('The selected model does not belong to the selected provider', 400, 'MODEL_PROVIDER_MISMATCH');
+        }
+        if (!model.isActive) {
+          return err('Cannot use an inactive model for a prompt', 400, 'MODEL_INACTIVE');
+        }
+      }
+    } else if (d.modelId && d.modelId !== '') {
+      // Model without provider — invalid
+      return err('A provider must be selected when a model is specified', 400, 'MODEL_WITHOUT_PROVIDER');
+    }
 
     // Serialize tags/variables back to JSON strings for storage
     const tagsJson = Array.isArray(d.tags) ? JSON.stringify(d.tags) : (d.tags ?? null);

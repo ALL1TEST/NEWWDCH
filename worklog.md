@@ -1444,3 +1444,164 @@ Stage Summary:
   * 3 prompts: Blog Article Writer, SEO Meta Description, Image Prompt Generator.
   * AI Settings: default=OpenAI Test/GPT-5, image=OpenAI Test/GPT Image.
 - RE-RUN INSTRUCTIONS: `bun run prisma/seed-ai-demo.ts` — safe to run repeatedly (upserts by stable ID, cleans up old `seed-*` records first).
+
+---
+Task ID: AI-FRONTEND-FIX
+Agent: frontend-fixer
+Task: Fix AI frontend pages per audit findings
+
+Work Log:
+
+1. src/modules/ai/providers-page.tsx
+   - `saveMutation` (`handleSave`): Added apiKey validation — when creating a new provider (not editing), require `formData.apiKey.trim()`; otherwise show "API key is required" toast and return early.
+   - `saveMutation.onSuccess`: Added `queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all })` and `queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all })` alongside the existing aiProviders + aiModels invalidations so dependent Settings and Prompt dropdowns refresh.
+   - `deleteMutation.onSuccess`: Added `queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all })` (aiSettings invalidation was already present).
+   - `toggleActiveMutation.onSuccess`: Added aiSettings + aiPrompts invalidations so toggling a provider off immediately removes it from Settings/Prompt dropdowns.
+   - `handleKindChange`: No longer overwrites baseUrl when the user has typed a custom value. The previous kind's default URL is computed and compared: only set the new kind's default URL when prev.baseUrl is empty OR equals the previous kind's default URL.
+   - Test Connection menu item: Disabled state now uses `testMutation.variables === provider.id && testMutation.isPending` so only the clicked row's button is disabled.
+   - Sync Models menu item: Same pattern — `syncMutation.variables === provider.id && syncMutation.isPending`.
+   - Active toggle Switch: Added `disabled={toggleActiveMutation.isPending && toggleActiveMutation.variables?.id === provider.id}` so only the toggled provider's switch is disabled during the PATCH.
+
+2. src/modules/ai/models-page.tsx
+   - `createMutation.onSuccess`, `updateMutation.onSuccess`, `deleteMutation.onSuccess`: Added `queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all })` and `queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all })`.
+   - `toggleMutation.onSuccess`: Added aiSettings invalidation.
+   - `toggleMutation`: Added `onError: (err: Error) => toast.error(err.message || 'Failed to update model')`.
+   - `setDefaultMutation.onSuccess`: Added aiSettings invalidation.
+   - `syncAllMutation`: Changed postApi type from `{ count?: number }` to `{ syncedCount?: number; count?: number }`; uses `res?.syncedCount ?? res?.count ?? 0` when summing totals.
+   - Edit dialog Provider dropdown: Changed filter from `providers.filter((p) => p.isActive)` to `providers.filter((p) => p.isActive || p.id === formData.providerId)` so the currently-edited model's provider remains visible even if inactive.
+   - Table cell: Changed `model.provider?.name ?? model.providerId` → `model.provider?.name ?? 'Unknown provider'`.
+
+3. src/modules/ai/prompts-page.tsx
+   - Removed `'CUSTOM'` from `PROMPT_CATEGORIES` array (the shared `PromptCategoryNew` type doesn't include CUSTOM, so the previous code was already type-incorrect).
+   - Removed `CUSTOM: 'Custom'` from `CATEGORY_LABELS`.
+   - Removed `CUSTOM: 'bg-stone-100 text-stone-700'` from `CATEGORY_COLORS`.
+   - Changed `emptyForm.category` from `'CUSTOM'` to `'CONTENT_GENERATION'`.
+   - Models query: Added `isActive: true` to both the query key and the API params so only active models appear in the Model dropdown.
+   - Versions query: Added `isLoading: versionsLoading` to destructured values.
+   - `saveMutation.mutationFn`: Replaced silent JSON fallback with explicit validation. If `body.variables` is non-empty (after trim) and `JSON.parse` fails, throws `new Error('Variables must be valid JSON')` which the existing `onError` surfaces as a toast. Empty/whitespace variables still fall back to `{}`.
+   - `favMutation`: Added `onError: (err: Error) => toast.error(err.message || 'Failed to toggle favorite')`.
+   - Version History dialog: Added a `versionsLoading` branch that shows Skeleton placeholders + "Loading versions..." text instead of falling through to "No versions found." while the query is still pending.
+
+4. src/modules/ai/settings-page.tsx
+   - Fixed query key mismatch: changed `queryKeys.aiModels.list({ isActive: true, all: true })` → `queryKeys.aiModels.list({ isActive: true, pageSize: 200 })` to match the actual API params (prevents cache misses).
+   - Added error state: destructured `isError: settingsIsError` from the settings query, and added an error branch after the loading check that renders a card with "Failed to load AI settings. Please refresh the page." — blocks the user from saving defaults over stale state when the fetch failed.
+   - Added `localEdits` reset on `settingsData` change. Initial implementation used `useEffect` + `useRef`, but the React Compiler flagged `set-state-in-effect` and `cannot-access-refs-during-render`. Final implementation uses the "storing information from previous renders" pattern documented in React docs: `const [prevSettings, setPrevSettings] = useState(settingsData); if (prevSettings !== settingsData) { setPrevSettings(settingsData); setLocalEdits({}); }`. Safe because React retries the render with the updated state before committing.
+
+5. src/modules/ai/playground-page.tsx
+   - Added `type: string` field to the local `AiModel` interface.
+   - Models query: Added `isActive: true` to both query key and API params.
+   - Added `const textModels = models.filter((m) => m.type?.toUpperCase() === 'TEXT')` and used `textModels` (instead of `models`) in the Model dropdown and in the `modelId` auto-resolution (first text model of the provider).
+   - Updated `PlaygroundResponse` interface to match backend `ChatResponse`: `cost` → `costUsd`, `responseTimeMs` → `durationMs`, `provider` → `providerName`. Added optional `model?: string`.
+   - Updated Response Info panel: `responseInfo.cost.toFixed(6)` → `responseInfo.costUsd.toFixed(6)`, `responseInfo.responseTimeMs` → `responseInfo.durationMs`, `responseInfo.provider` → `responseInfo.providerName`.
+   - Refactored `sendMutation.mutationFn`: it now only does the API call. Takes `allMessages` as its argument and returns `{ res, allMessages }`. Removed all `setInputValue`/`setMessages`/`setIsSending`/`setResponseInfo` calls from inside `mutationFn`.
+   - `handleSend` now performs the side effects (clear input, append user message, set isSending, clear responseInfo) before calling `sendMutation.mutate(allMessages)`.
+   - `sendMutation.onError`: Added `setMessages((prev) => prev.slice(0, -1))` to remove the failed user message before showing the error toast.
+
+6. src/modules/ai/logs-page.tsx
+   - Made `inputTokens`, `outputTokens`, `cost`, `durationMs` nullable in the `AiLog` interface (the DB allows nulls for error logs that never completed).
+   - Wrapped all `.toLocaleString()` and `.toFixed()` calls with null guards in BOTH the table cells and the detail dialog:
+     * `log.inputTokens?.toLocaleString() ?? '—'`
+     * `log.outputTokens?.toLocaleString() ?? '—'`
+     * `log.cost != null ? \`$${log.cost.toFixed(4)}\` : '—'`
+     * `log.durationMs != null ? \`${(log.durationMs / 1000).toFixed(1)}s\` : '—'` (table) / `.toFixed(2)s` (dialog)
+
+7. src/modules/ai/jobs-page.tsx
+   - Added a clarifying comment on the KPI calculations explaining that `runningCount`, `failedCount`, and `completedToday` are computed from the current page of `jobs` (max 25), not the full dataset — a known limitation since there's no dedicated stats endpoint. Logic unchanged.
+   - Detail dialog: Destructured `isLoading: detailLoading` from the job detail query. When `detailLoading` is true, shows a Skeleton grid + "Loading..." text instead of an empty dialog body.
+   - Detail dialog Cancel button: Added `disabled={cancelMutation.isPending && cancelMutation.variables === jobDetail?.id}` so only the cancel button for the job being cancelled is disabled (was previously always enabled, allowing double-clicks).
+
+8. src/modules/ai/usage-page.tsx
+   - Division-by-zero guard: changed `<Progress value={(summary.budget.spent / summary.budget.monthlyBudget) * 100} />` → `<Progress value={summary.budget.monthlyBudget > 0 ? (summary.budget.spent / summary.budget.monthlyBudget) * 100 : 0} />`.
+   - Stable keys: changed `<TableRow key={i}>` to `<TableRow key={p.provider || i}>` in Top Providers table and `<TableRow key={m.model || i}>` in Top Models table.
+
+Stage Summary:
+- All 8 AI module pages updated per spec. The fixes are surgical — UI structure, layout, and design language are unchanged; only the specific behaviors called out in the audit are modified.
+- LINT: `bun run lint` reports ZERO errors and ZERO warnings in any `src/modules/ai/*` file. The remaining 5 errors + 6 warnings are all pre-existing in unrelated files (`NEWWDCH/*` legacy duplicate folder, `src/components/patterns/data-table.tsx`, `src/modules/content/*`, `src/modules/seo/*`).
+- Dev server log shows no errors after the changes; compilation succeeds.
+- KEY RISK: The settings-page `localEdits` reset uses the "setState during render" pattern. This is officially sanctioned by React docs but is somewhat unusual; if it causes issues, it can be reverted to a no-op (the original behavior of preserving local edits across refetches is merely suboptimal, not broken).
+- KEY BEHAVIOR CHANGE: Playground now removes the user's failed message from the chat on API error (per spec). Previously the failed user message stayed in the chat with no assistant response. If users prefer to see/edit their failed message, this behavior would need to be revisited.
+
+---
+Task ID: AI-AUDIT-FIX-1
+Agent: main (ai-audit-fixer)
+Task: Comprehensive end-to-end audit and fix of the entire AI section — providers, models, prompts, settings, generation service, validation, persistence, error handling.
+
+Work Log:
+
+1. AUDIT — Launched 2 parallel Explore agents to audit all 11 AI frontend files and 22 AI backend files. Identified 14 critical bugs, 22 functional issues, 18 UX issues across the AI section.
+
+2. PRISMA SCHEMA FIXES
+   - Removed OPENROUTER, OLLAMA, AZURE_OPENAI from `enum AiProviderKind` (was 8 values, now 5).
+   - Removed CUSTOM from `enum PromptCategoryNew` (was 11 values, now 10).
+   - Ran `bun run db:push` — schema synced, Prisma Client regenerated.
+   - Cleaned up any legacy enum data via raw SQL (none found — seed data only used valid kinds).
+
+3. SHARED TYPES FIXES
+   - Trimmed `AiProviderKind` type to `'OPENAI' | 'ANTHROPIC' | 'GEMINI' | 'GROQ' | 'DEEPSEEK'`.
+   - Removed `'CUSTOM'` from `PromptCategoryNew` type.
+
+4. PROVIDER CONFIGS (src/lib/ai/providers.ts)
+   - Complete rewrite: removed OPENROUTER, OLLAMA, AZURE_OPENAI configs. Only 5 provider configs remain.
+   - Added `PROVIDER_KINDS` exported constant array.
+   - Added `IMAGE_MODEL_IDS` set + `isImageModelId()` helper for syncModels to correctly type models.
+   - Updated default model lists with realistic current models (GPT-5, Claude Sonnet, Gemini 2.5, Llama 4 Scout, DeepSeek V3/R1, etc.).
+
+5. AI SERVICE (src/lib/ai/ai-service.ts) — Major fixes
+   - **NEW `resolveModel()` helper**: Translates DB cuid (e.g. "m-openai-gpt5") to the upstream model string (e.g. "gpt-5"). Validates: model exists, belongs to provider, is active, type matches expected (TEXT/IMAGE). Falls back to AI Settings defaults → provider's default model of the correct type.
+   - **`executeChat()`**: Now uses `resolveModel()` for proper model validation. Applies AI Settings defaults for temperature/maxTokens when not provided. Fallback providers now dispatch to the correct `callAnthropic`/`callGemini`/`callOpenAI` based on fallback kind (was always calling `callOpenAI`). Failed requests are now logged to AiLog with `status: 'error'` + `errorMessage`. Removed dead AZURE_OPENAI branch.
+   - **`executeImageGeneration()`**: Uses `resolveModel()` with expected type IMAGE. Only OpenAI and Gemini support image generation — Groq/DeepSeek now throw a clear error. Fallback only tries OpenAI/Gemini providers. Failed requests logged with error. Cost calculation uses the actual model used (not the requested one).
+   - **`healthCheck()`**: Removed OLLAMA special-casing. Anthropic test now uses the provider's first active TEXT model (or a known-good default) instead of hardcoded `claude-3-haiku-20240307`. Error messages now include the response body (truncated to 200 chars) for better debugging.
+   - **`syncModels()`**: Removed AZURE_OPENAI/OLLAMA special-casing. Now sets `type: 'IMAGE'` for known image model IDs (dall-e-3, gpt-image-1, gemini-image) and `type: 'TEXT'` for everything else. Ensures a default TEXT model exists after sync. Sets `isActive: true` on created models.
+
+6. API ROUTE FIXES
+   - **providers/[id]/set-default**: Now rejects inactive providers. Uses `db.$transaction` to atomically clear other defaults + set the new one.
+   - **models/[id]/set-default**: Changed from clearing defaults by `providerId` to clearing by `type` (so there's exactly one default TEXT model and one default IMAGE model system-wide). Rejects inactive models. Uses transaction.
+   - **models POST**: Validates provider exists + is active. Returns HTTP 201. Clears defaults of the same type when `isDefault: true`.
+   - **models PATCH**: Validates `providerId` exists + is active when changing. Whitelists fields instead of passing entire `d` to Prisma. Clears defaults of the correct type (new type if type is changing).
+   - **prompts POST**: Removed CUSTOM from CATEGORIES enum. Added FK validation: provider must exist + be active; model must exist, belong to provider, be active. Rejects model-without-provider.
+   - **prompts PATCH**: Removed CUSTOM from category enum. Added same FK validation. Re-fetches with `provider`/`createdBy`/`_count` includes after update so response shape matches GET.
+   - **prompts duplicate**: Now calls `serializePrompt()` on response (so tags/variables are parsed). Resets `usageCount: 0` on the duplicate. Validates provider/model still exist + are active (drops references if not). Returns 201 with proper includes.
+   - **settings POST**: Added comprehensive FK validation: defaultProvider must exist + be active; defaultModel must belong to defaultProvider, be active, be type TEXT; imageProvider must exist + be active; imageModel must belong to imageProvider, be active, be type IMAGE. Returns clear error codes (MODEL_PROVIDER_MISMATCH, MODEL_TYPE_MISMATCH, PROVIDER_INACTIVE, etc.).
+   - **images/providers**: Changed filter from `kind IN ['OPENAI','OPENROUTER','AZURE_OPENAI','GEMINI']` to `kind IN ['OPENAI','GEMINI']`. Changed model filter from `supportsImages: true` (vision) to `type: 'IMAGE'` (generation). Filters out providers with no image models.
+   - **images/generate**: Pre-validates provider is active + supports image generation (OpenAI/Gemini only). Pre-validates model is type IMAGE + belongs to provider + is active. Returns 400 for validation errors, 502 for upstream API errors.
+   - **images/save**: Fixed `uploadedById: 'system'` FK violation — now resolves the first ADMIN user (or any user) as the uploader.
+   - **playground POST**: Pre-validates provider exists + is active + has API key. Pre-validates model is type TEXT + belongs to provider + is active. Returns 400 for validation errors, 502 for upstream errors.
+
+7. FRONTEND FIXES (via subagent)
+   - **providers-page**: API key validation on create; aiSettings+aiPrompts invalidation on all mutations; `handleKindChange` preserves custom baseUrl; per-row disabled state for Test/Sync/Active-toggle using `mutation.variables`.
+   - **models-page**: aiSettings+aiPrompts invalidation on all mutations; `toggleMutation` onError; `syncAllMutation` reads `syncedCount`; Edit dialog includes the model's current provider even if inactive; "Unknown provider" fallback.
+   - **prompts-page**: Removed CUSTOM category from PROMPT_CATEGORIES, CATEGORY_LABELS, CATEGORY_COLORS; default category → CONTENT_GENERATION; models query filters `isActive: true`; explicit JSON validation on variables (rejects invalid JSON with toast); favMutation onError; version history loading state.
+   - **settings-page**: Query key matches actual API params; error state blocks save when fetch fails; `localEdits` cleared on refetch.
+   - **playground-page**: Models query `isActive: true`; client-side TEXT filter; `PlaygroundResponse` field names aligned with backend (`costUsd`, `durationMs`, `providerName`); side effects moved out of `mutationFn` into `handleSend`; failed user message removed in `onError`.
+   - **logs-page**: Null guards on all `.toLocaleString()`/`.toFixed()` calls (table + detail dialog).
+   - **jobs-page**: Clarifying comment on KPI current-page limitation; detail dialog loading state; Cancel button disabled only for the job being cancelled.
+   - **usage-page**: Division-by-zero guard on budget progress; stable keys in Top Providers/Models tables.
+
+8. SEED DATA
+   - Re-ran `prisma/seed-ai-demo.ts` (fixed paths for new location) — 5 providers, 13 models, 3 prompts, settings all created/updated successfully.
+
+9. VERIFICATION
+   - **API tests (curl)**:
+     * Provider/model mismatch on prompt create → `MODEL_PROVIDER_MISMATCH` error ✓
+     * Text model in image settings field → `MODEL_TYPE_MISMATCH` error ✓
+     * Inactive provider as default → `PROVIDER_INACTIVE` error ✓
+     * Set default model → clears previous defaults of the same type ✓ (verified: exactly 1 TEXT default + 1 IMAGE default)
+     * Image providers endpoint → only OpenAI Test + Google Gemini Test ✓
+   - **Browser tests (Agent Browser)**:
+     * Providers page: 5 providers, all Connected + Active, OpenAI Test is Default ✓
+     * Models page: 13 models with correct provider associations ✓
+     * Add Provider Kind dropdown: only 5 options (OpenAI, Anthropic, Gemini, Groq, DeepSeek) ✓
+     * Add Prompt Category dropdown: 10 options, NO Custom ✓
+     * Add Prompt default category: Content Generation ✓
+     * Add Prompt Model dropdown: disabled with "Select provider first" until provider chosen ✓
+     * Settings: default=OpenAI Test/GPT-5, image=OpenAI Test/GPT Image ✓
+     * Image Provider dropdown: only OpenAI Test + Google Gemini Test ✓
+     * Create provider without API key → "API key is required" toast ✓
+     * Create prompt with invalid JSON variables → "Variables must be valid JSON" toast, prompt not saved ✓
+   - **Lint**: 0 errors in any AI module file. 5 pre-existing errors in unrelated files (NEWWDCH/examples, seo-broken-links, seo-social-preview).
+   - **Dev log**: No runtime errors during testing.
+
+Stage Summary:
+- ROOT APPROACH: Comprehensive audit identified 14 critical bugs (API response shape already fixed in prior session; remaining issues were model resolution, validation, cascade, defaults, error handling). Fixed the AI service's `resolveModel()` helper to translate DB cuids → upstream model strings + validate ownership/active/type. Added AI Settings fallback for temperature/maxTokens and model defaults. Added FK validation to every API route that accepts providerId/modelId. Made set-default per-type (one default TEXT model + one default IMAGE model system-wide). Removed CUSTOM prompt category everywhere (schema, types, API schemas, frontend). Removed 3 legacy provider kinds (OpenRouter, Ollama, Azure OpenAI) from schema/types/configs/API schemas. Fixed image generation to only allow OpenAI/Gemini. Fixed playground response shape mismatch. Fixed all query invalidation gaps so changes propagate everywhere immediately.
+- FILES MODIFIED: prisma/schema.prisma, src/shared/types/index.ts, src/lib/ai/providers.ts, src/lib/ai/ai-service.ts, src/app/api/ai/providers/[id]/set-default/route.ts, src/app/api/ai/models/route.ts, src/app/api/ai/models/[id]/route.ts, src/app/api/ai/models/[id]/set-default/route.ts, src/app/api/ai/prompts/route.ts, src/app/api/ai/prompts/[id]/route.ts, src/app/api/ai/prompts/[id]/duplicate/route.ts, src/app/api/ai/settings/route.ts, src/app/api/ai/images/providers/route.ts, src/app/api/ai/images/generate/route.ts, src/app/api/ai/images/save/route.ts, src/app/api/ai/playground/route.ts, src/modules/ai/providers-page.tsx, src/modules/ai/models-page.tsx, src/modules/ai/prompts-page.tsx, src/modules/ai/settings-page.tsx, src/modules/ai/playground-page.tsx, src/modules/ai/logs-page.tsx, src/modules/ai/jobs-page.tsx, src/modules/ai/usage-page.tsx, prisma/seed-ai-demo.ts (path fix).
+- DATA STATE: 5 providers (OpenAI Test default, Anthropic Test, Google Gemini Test, Groq Test, DeepSeek Test — all Connected + Active). 13 models (GPT-5 default TEXT, GPT-5 mini, GPT-4.1, GPT Image default IMAGE, Claude Sonnet, Claude Haiku, Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini Image, Llama 3.3 70B, Llama 4 Scout, DeepSeek V3, DeepSeek R1). 3 prompts (Blog Article Writer, SEO Meta Description, Image Prompt Generator). Settings: default=OpenAI Test/GPT-5, image=OpenAI Test/GPT Image.

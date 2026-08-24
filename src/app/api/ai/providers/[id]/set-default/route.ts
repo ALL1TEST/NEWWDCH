@@ -17,7 +17,7 @@ function err(message: string, status = 400, code = 'VALIDATION_ERROR') {
 }
 
 // =====================================================================
-// POST — set as default
+// POST — set as default provider (clears all other defaults)
 // =====================================================================
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -28,12 +28,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const provider = await db.aiProvider.findUnique({ where: { id: providerId } });
     if (!provider) return err('Provider not found', 404, 'NOT_FOUND');
+    if (!provider.isActive) {
+      return err('Cannot set an inactive provider as default. Please activate it first.', 400, 'INACTIVE');
+    }
 
-    // Unset all others
-    await db.aiProvider.updateMany({ where: { isDefault: true }, data: { isDefault: false } });
-
-    // Set this one as default
-    await db.aiProvider.update({ where: { id: providerId }, data: { isDefault: true } });
+    // Atomically: clear all other defaults, then set this one.
+    await db.$transaction([
+      db.aiProvider.updateMany({ where: { isDefault: true, id: { not: providerId } }, data: { isDefault: false } }),
+      db.aiProvider.update({ where: { id: providerId }, data: { isDefault: true } }),
+    ]);
 
     return ok({ isDefault: true });
   } catch (error) {

@@ -191,6 +191,8 @@ export function ProvidersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiProviders.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
       toast.success(editingProvider ? 'Provider updated' : 'Provider created');
       handleCloseDialog();
     },
@@ -206,6 +208,7 @@ export function ProvidersPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiProviders.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
       toast.success('Provider deleted');
       setDeleteDialogOpen(false);
       setDeletingProvider(null);
@@ -265,6 +268,8 @@ export function ProvidersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiProviders.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to update provider');
@@ -305,15 +310,23 @@ export function ProvidersPage() {
       toast.error('Name is required');
       return;
     }
+    if (!editingProvider && !formData.apiKey.trim()) {
+      toast.error('API key is required');
+      return;
+    }
     saveMutation.mutate(formData);
   };
 
   const handleKindChange = (kind: string) => {
     const providerKind = kind as AiProviderKind;
+    const prevDefaultUrl = PROVIDER_CONFIGS[formData.kind]?.defaultUrl ?? '';
     setFormData((prev) => ({
       ...prev,
       kind: providerKind,
-      baseUrl: PROVIDER_CONFIGS[providerKind].defaultUrl,
+      baseUrl:
+        !prev.baseUrl || prev.baseUrl === prevDefaultUrl
+          ? PROVIDER_CONFIGS[providerKind].defaultUrl
+          : prev.baseUrl,
     }));
   };
 
@@ -479,6 +492,10 @@ export function ProvidersPage() {
                         <TableCell>
                           <Switch
                             checked={provider.isActive}
+                            disabled={
+                              toggleActiveMutation.isPending &&
+                              toggleActiveMutation.variables?.id === provider.id
+                            }
                             onCheckedChange={(checked) =>
                               toggleActiveMutation.mutate({ id: provider.id, isActive: checked })
                             }
@@ -492,11 +509,17 @@ export function ProvidersPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => testMutation.mutate(provider.id)} disabled={testMutation.isPending}>
+                              <DropdownMenuItem
+                                onClick={() => testMutation.mutate(provider.id)}
+                                disabled={testMutation.variables === provider.id && testMutation.isPending}
+                              >
                                 <Zap className="h-4 w-4 mr-2" />
                                 Test Connection
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => syncMutation.mutate(provider.id)} disabled={syncMutation.isPending}>
+                              <DropdownMenuItem
+                                onClick={() => syncMutation.mutate(provider.id)}
+                                disabled={syncMutation.variables === provider.id && syncMutation.isPending}
+                              >
                                 <RefreshCw className="h-4 w-4 mr-2" />
                                 Sync Models
                               </DropdownMenuItem>
