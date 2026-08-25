@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
         // Missing canonical URL
         if (!seoConfig || !seoConfig.canonicalUrl || seoConfig.canonicalUrl.trim() === '') {
           issues.push({
-            severity: 'CRITICAL',
+            severity: 'WARNING',
             resourceType: 'content',
             resourceId: item.id,
             pageUrl,
@@ -415,7 +415,9 @@ export async function POST(request: NextRequest) {
               data: {
                 recommendation: newIssue.recommendation,
                 severity: newIssue.severity,
-                // Don't touch isResolved — if it was resolved, keep it resolved
+                // If the issue is detected again but was previously resolved,
+                // reopen it because the problem still exists.
+                ...(existing.isResolved ? { isResolved: false } : {}),
               },
             });
           } else {
