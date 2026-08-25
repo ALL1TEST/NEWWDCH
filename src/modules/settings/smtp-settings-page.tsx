@@ -289,7 +289,7 @@ export function SmtpSettingsPage() {
   // ---------- Loading skeleton ----------
   if (isLoading) {
     return (
-      <div className="space-y-6 p-6 max-w-3xl">
+      <div className="space-y-6 p-6">
         <div className="h-8 w-48 animate-pulse bg-muted rounded" />
         {Array.from({ length: 3 }).map((_, i) => (
           <Card key={i}>
@@ -309,20 +309,15 @@ export function SmtpSettingsPage() {
   );
 
   return (
-    <div className="space-y-6 p-6 max-w-3xl">
+    <div className="space-y-6 p-6">
       {/* Page Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            SMTP Settings
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Configure email delivery for transactional messages, notifications, and newsletters.
-          </p>
-        </div>
-        <div className="hidden sm:flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
-          <Server className="h-5 w-5" />
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          SMTP Settings
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Configure email delivery for transactional messages, notifications, and newsletters.
+        </p>
       </div>
 
       {/* 1. Email Sending */}
