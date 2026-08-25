@@ -1826,3 +1826,219 @@ Verification:
 - Broader lint pass: only pre-existing errors in unrelated frontend files (`seo-broken-links-page.tsx` React Compiler memoization warning, `seo-social-preview-page.tsx` missing `Search` import). None caused by this change.
 
 Result: All paginated SEO list endpoints now return the `PaginatedResponse` shape (`{ data: { data: [...], pagination: {...} }, meta: {...} }`) so that after `api-client` unwraps `envelope.data` the frontend receives `{ data: [...], pagination: {...} }` as expected. Flat (non-paginated) endpoints unchanged.
+
+---
+Task ID: SEO-OVERVIEW-FIX
+Agent: main (coder)
+Task: Refactor SEO Overview page — replace full IssuesTable with compact summary, fix Search Performance section states, fix metric card navigation, fix skeleton count, add empty-state CTA
+
+Work Log:
+- Read existing `/home/z/my-project/src/modules/seo/seo-overview-page.tsx` and the supporting `/api/seo/search-console` route to verify response shape (`{ connected, connection, summary }`, with `summary` absent when not connected).
+- Confirmed `getApi` unwraps the ApiResponse envelope, so `getApi<SearchConsoleStatusData>('/api/seo/search-console')` returns the inner data object directly.
+- Rewrote `src/modules/seo/seo-overview-page.tsx` with the following changes:
+
+  1. Replaced full IssuesTable with compact `RecentIssuesSummary` widget
+     - Removed `IssuesTable` component and its `<Table>`-based markup.
+     - Added `RecentIssuesSummary` sub-component that:
+       * Renders a severity summary line "X Critical · Y Warnings · Z Info" computed from the unresolved issues (`!isResolved`) in the page.
+       * Renders up to 5 most recent issues as a simple list using `issues.slice(0, 5)` — each row shows a severity badge, truncated page URL (mono), and truncated problem text (no recommendation column).
+       * Shows a "View All Issues →" button (ghost, navigates to `seo/audit`) at the bottom when issues exist.
+       * Shows an empty state with a Shield icon, "No SEO issues found" text, and a "Run SEO Audit →" CTA button (navigates to `seo/audit`) when no recent issues exist.
+     - Removed now-unused `Table, TableBody, TableCell, TableHead, TableHeader, TableRow` and `Loader2` imports.
+
+  2. Fixed Search Performance section with proper state handling
+     - Added a `useQuery` for `/api/seo/search-console` keyed on `queryKeys.seoSearchConsole.all`, `enabled: !!stats?.searchConsoleConnected`, `staleTime: 30s`. Typed as `SearchConsoleStatusData = { connected, connection, summary? }`.
+     - State matrix implemented in the section:
+       * Loading (overview loading OR connected-but-SC-still-loading): render 4 skeleton KPI cards.
+       * Not connected (`!stats?.searchConsoleConnected`): empty state with `Eye` icon, "Connect Google Search Console to view search performance." text, and "Connect Search Console" button → `seo/search-console`.
+       * Connected but `!scData?.summary`: empty state with `RefreshCw` icon, "No search performance data available yet. Sync to fetch data from Google Search Console." text, and "Sync Now" button → `seo/search-console`.
+       * Connected with summary: 4 compact inline KPIs (Clicks / Impressions / CTR / Position) rendered via a new `SearchPerformanceKpi` helper, followed by a "View Search Console" button → `seo/search-console`.
+     - Added local formatters `formatCompactNumber`, `formatCtr`, `formatPosition` (no new dependencies — equivalent to the ones on `seo-search-console-page.tsx`).
+     - Added lucide-react icons already used elsewhere in the project: `RefreshCw, MousePointerClick, TrendingUp, Target`. No new packages installed.
+
+  3. Fixed metric card navigation
+     - Added `onClick={() => navigate('seo', null, 'audit')}` to the previously non-clickable cards: Missing Meta Titles, Missing Meta Descriptions, Missing H1, Duplicate Titles, Duplicate Descriptions.
+     - Confirmed Redirects card already navigates to `seo/settings` (where the Redirects tab lives) — kept as-is per the task clarification.
+
+  4. Fixed loading skeleton count
+     - Changed `Array.from({ length: 12 })` → `Array.from({ length: 11 })` to match the actual KPI card count (Indexed, Not Indexed, Missing Meta Titles, Missing Meta Desc, Missing H1, Duplicate Titles, Duplicate Desc, Broken Links, Redirects, Missing Canonicals, Canonical Issues = 11).
+
+  5. Fixed Recent Issues empty state
+     - Added the "Run SEO Audit →" CTA button inside the new `RecentIssuesSummary` empty state (described above).
+
+- Kept `ScoreRing`, `KpiCard`, `KpiCardSkeleton`, `StatusBadge`, and the entire Technical SEO Health section unchanged per task constraints.
+- Kept `navigate` usage consistent with the rest of the file (`navigate('seo', null, 'audit' | 'settings' | 'search-console')`).
+- Reused existing shadcn/ui components (`Card`, `Badge`, `Button`, `Skeleton`) — no new dependencies added.
+
+Verification:
+- Ran `cd /home/z/my-project && bun run lint 2>&1 | grep "seo-overview" | head -5` → no output (clean).
+- Full lint output shows only 2 pre-existing errors and 3 pre-existing warnings, all in unrelated files (`seo-broken-links-page.tsx`, `seo-social-preview-page.tsx`).
+- Dev server log shows clean recompile (`✓ Compiled in 672ms`) with no errors related to the SEO overview module.
+
+Stage Summary:
+- SEO Overview page now ships a compact, navigable issues summary instead of a duplicate Audit table.
+- Search Performance section properly handles loading / not-connected / connected-no-data / connected-with-data states.
+- All 5 previously dead KPI cards are now clickable and route to the Audit page; Redirects still routes to Settings (Redirects tab).
+- Skeleton count matches the actual KPI grid size.
+- Empty state on Recent Issues now has a clear "Run SEO Audit" CTA.
+- No new dependencies introduced; design language preserved; ScoreRing and Technical SEO Health untouched.
+
+---
+Task ID: SEO-AUDIT-ENGINE-FIX
+Agent: seo-audit-engine-fixer
+Task: Fix SEO audit engine — replace destructive deleteMany+createMany with upsert logic, wrap in transaction, harden [id] route against cross-site access
+
+Work Log:
+- Problem: POST /api/seo/issues?action=audit was DELETING all unresolved issues for the site (`db.seoIssue.deleteMany`) and bulk-recreating them via `createMany` on every audit run. This destroyed issue history, original `createdAt` timestamps, `id`s, and any `isResolved` state users had set manually.
+- File 1: src/app/api/seo/issues/route.ts (POST ?action=audit)
+  - Removed the `db.seoIssue.deleteMany({ where: { ...siteFilter, isResolved: false } })` block entirely. Issues are never deleted during an audit anymore.
+  - Kept ALL existing scanning logic untouched (contentItem/seoConfig/site reads + every check: missing meta title, missing/long meta description, missing H1, no featured image, missing canonical URL, missing OG image, images without ALT, short content, no/few internal links, H2 structure, duplicate titles, duplicate canonical URLs, external canonical URLs). Only the persistence layer changed.
+  - Replaced the final `createMany` block with an upsert-based persistence layer wrapped in `db.$transaction(async (tx) => {...})` for atomicity:
+    1. Fetch all existing issues for the site: `tx.seoIssue.findMany({ where: siteFilter })`.
+    2. Build a lookup map keyed by deterministic key `${pageUrl}::${problem}`.
+    3. Iterate detected `issues`: if key matches an existing issue → `tx.seoIssue.update` (only `recommendation` + `severity`; `id`, `createdAt`, `isResolved` preserved) and record its id in `seenIds`. If no match → push to `toCreate`.
+    4. Stale detection: existing issues whose id is NOT in `seenIds` AND not already resolved → `tx.seoIssue.updateMany({ where: { id: { in: staleIds } }, data: { isResolved: true } })`. These represent issues that were fixed since the last audit.
+    5. Create only genuinely new issues: `tx.seoIssue.createMany({ data: toCreate })` (only if non-empty).
+  - Response now returns granular counts: `audited` (pages), `issuesFound` (total detected this run), `created` (truly new), `updated` (existing matches refreshed), `resolved` (no-longer-detected → marked resolved), plus a descriptive message. Backward-compatible fields (`audited`, `issuesFound`, `created`) retained.
+- File 2: src/app/api/seo/issues/[id]/route.ts (PATCH + DELETE)
+  - Added `import { getSiteWhere } from '@/lib/site-context'`.
+  - PATCH: replaced `db.seoIssue.findUnique({ where: { id: issueId } })` with `db.seoIssue.findFirst({ where: { id: issueId, ...siteFilter } })` (siteFilter via `getSiteWhere(request)`). An issue belonging to another site no longer matches → 404, preventing cross-site read/write.
+  - DELETE: renamed `_request` → `request` (now used) and applied the same `findFirst` + site filter change. Subsequent `delete({ where: { id: issueId } })` is safe because the preceding null-check already proved ownership.
+- Verification: `cd /home/z/my-project && bun run lint 2>&1 | grep "seo/issues"` → no output (zero lint errors/warnings in either edited file). The 2 remaining repo-wide lint errors are pre-existing and unrelated (seo-broken-links-page.tsx React Compiler memoization, seo-social-preview-page.tsx 'Search' undef). Dev server log shows clean compilation.
+
+Stage Summary:
+- SEO audit no longer destroys history. Re-running an audit now:
+  - refreshes (recommendation/severity) for still-present issues while keeping their id/createdAt/isResolved,
+  - creates only net-new issues,
+  - auto-marks previously-open issues that are no longer detected as `isResolved = true` (closed because the underlying problem was fixed).
+- The whole persistence phase is atomic (single `db.$transaction`); a failure rolls back all updates/creates so the DB is never left in a half-audited state.
+- Cross-site access on PATCH/DELETE of a single issue is now blocked via site-scoped `findFirst`.
+Files modified:
+  - src/app/api/seo/issues/route.ts
+  - src/app/api/seo/issues/[id]/route.ts
+---
+Task ID: SEO-REDIRECTS-FIX
+Agent: seo-redirects-fixer
+Task: Fix redirect validation — (1) loop detection on reactivation, (2) in-batch loop detection in CSV import + wrap creates in db.$transaction, (3) RFC 4180 CSV field escaping on export
+
+Work Log:
+- Problem 1 (reactivation bypass): The PATCH handler in `src/app/api/redirects/[id]/route.ts` only ran `wouldCreateLoop` when `d.fromPath || d.toPath` was set. A PATCH of `{ isActive: true }` on an inactive redirect skipped loop detection entirely, so reactivating could silently create an infinite redirect loop.
+  - Fix: Added a second loop-detection block after the existing path-change check, before `updateData` build:
+    ```ts
+    if (d.isActive === true && existing.isActive === false) {
+      const loop = await wouldCreateLoop(existing.fromPath, existing.toPath, siteFilter, redirectId);
+      if (loop) return 400 with message 'Reactivating this redirect would create a redirect loop';
+    }
+    ```
+  - Uses the existing (stored) paths per task spec. `wouldCreateLoop` signature unchanged.
+
+- Problem 2 (in-batch loops slip through CSV import): In `src/app/api/redirects/bulk/route.ts` POST confirm-import, each row's `wouldCreateLoop` check queried committed DB state. Rows created earlier in the same import weren't visible (sequential `db.redirect.create`, no transaction), so two CSV rows like `/a → /b` and `/b → /a` both passed and got inserted, creating a live loop. Same for chains `/a → /b`, `/b → /c`.
+  - Fix: Added an in-batch chain/loop detector after the per-row validation loop, before the `!confirm` early-return:
+    1. Extended `validRows` element type with `rowNum: number` so in-batch errors carry the original CSV row number.
+    2. Build `Map<fromPath, index>` for all `validRows`.
+    3. For each row, if `row.toPath` is present as another row's `fromPath` (different index) → add to `batchSkipIndices`, push error `{ row: row.rowNum, message: 'In-batch loop detected: "to" path "..." matches another row\'s "from" path' }`.
+    4. `rowsToImport = validRows.filter((_, i) => !batchSkipIndices.has(i))`.
+  - Atomicity: restructured confirm-mode import so validation runs OUTSIDE the transaction and only the creates are wrapped in `db.$transaction(async (tx) => {...})`:
+    - Per-row DB loop check iterates `rowsToImport` → builds `rowsToCreate` (loops against committed DB increment `errorsDuringImport`).
+    - `await db.$transaction(...)` runs `tx.redirect.create` for each row in `rowsToCreate`. Any throw → entire batch rolls back, `errorsDuringImport += rowsToCreate.length`. On success, `imported = rowsToCreate.length`.
+  - `skipped` now reflects `batchSkipIndices.size`. `validRows` count in both the preview and confirm responses is `rowsToImport.length` (post in-batch filter). `wouldCreateLoop` signature and create payload shape unchanged.
+
+- Problem 3 (CSV export not escaped): `src/app/api/redirects/bulk/route.ts` GET export wrote `fromPath`/`toPath` raw — any field containing a comma, double-quote, or newline would corrupt the CSV (and break round-trip re-import).
+  - Fix: Added module-level helper `function escapeCsvField(value: string): string { return \`"\${value.replace(/"/g, '""')}"\`; }` (RFC 4180). GET export now wraps every field (`fromPath`, `toPath`, `typeNum`, `String(r.isActive)`) via `escapeCsvField(...)` and joins with `,`. Header line left bare.
+
+Verification:
+- `cd /home/z/my-project && bun run lint 2>&1 | grep -E "redirects" | head -5` → empty (zero lint errors/warnings in either edited file).
+- Full lint still shows the same 2 pre-existing errors + 3 pre-existing warnings in unrelated files (`seo-broken-links-page.tsx` React Compiler memoization, `seo-social-preview-page.tsx` 'Search' undef) — not introduced by this change.
+- Dev server log shows clean compilation (`✓ Compiled in 672ms`), no errors against the edited routes.
+
+Stage Summary:
+- PATCHing `{ isActive: true }` on an inactive redirect now runs loop detection against the stored from/to paths and returns 400 ("Reactivating this redirect would create a redirect loop") instead of silently creating a live loop.
+- CSV import no longer creates in-batch redirect chains/loops: any row whose `toPath` matches another row's `fromPath` is skipped with a precise per-row error message. All surviving creates are committed atomically in a single `db.$transaction` — a failure rolls back the entire batch so the DB is never left half-imported.
+- CSV export is now RFC 4180 compliant (every field double-quoted, inner quotes doubled) and round-trips correctly through the existing quoted-field parser.
+Files modified:
+  - src/app/api/redirects/[id]/route.ts
+  - src/app/api/redirects/bulk/route.ts
+
+---
+Task ID: SEO-SITEMAP-SC-FIX
+Agent: seo-sitemap-sc-fixer
+Task: Two SEO fixes — (1) make sitemap Google/Bing ping endpoints perform REAL HTTP requests and surface the real upstream status code; (2) Search Console page UX: add a chart date-range selector, fix empty states when disconnected, and replace the blank `: null` render when `data` is null with a proper Retry card.
+
+Work Log:
+
+== 1. Sitemap ping — real HTTP requests (src/app/api/seo/sitemap/route.ts) ==
+
+Problem: The `ping-google` and `ping-bing` branches of POST /api/seo/sitemap just called `db.sitemapConfig.update({ data: { lastPinged{Google,Bing}: new Date() } })` and returned a hard-coded success string. No HTTP request was actually sent to either search engine, so the UI's "pinged at" timestamp was a lie.
+
+Fix:
+- Added module-level helper `resolveBaseUrl(request)`:
+  1. Reads `db.setting.findFirst({ where: { key: 'site_url' } })` (value e.g. `https://cms.example.com`), strips any trailing slash.
+  2. Falls back to the request's own origin via `x-forwarded-proto` + `x-forwarded-host`/`host` headers (works behind the Caddy gateway).
+  3. Final fallback `https://example.com`.
+  4. Wrapped in try/catch — a DB failure doesn't break the ping, it just falls through to the header-based fallback and logs a warning.
+
+- Added module-level helper `pingSearchEngine(engine: 'google' | 'bing', sitemapUrl: string): Promise<PingResult>`:
+  - Builds the real ping URL: `https://www.google.com/ping?sitemap=${encodeURIComponent(sitemapUrl)}` (and the Bing equivalent).
+  - Real `fetch()` with `method: 'GET'`, `redirect: 'manual'` (so we see the raw upstream status instead of following a redirect), `AbortSignal.timeout(15_000)` (prevents hanging), and a custom `User-Agent`.
+  - Returns `{ ok: true, httpStatus, message }` if `response.ok` (HTTP 2xx).
+  - Returns `{ ok: false, httpStatus, message }` with a descriptive message (e.g. `"Google returned HTTP 404 for the ping request (the public ping API was deprecated in 2023)"`) on any non-2xx upstream response.
+  - Catches network/timeout errors and returns `{ ok: false, httpStatus: null, message: ... }` so they don't crash the route.
+
+- Rewrote the `ping-google` branch:
+  - `const baseUrl = await resolveBaseUrl(request);` → `sitemapUrl = \`${baseUrl}/sitemap.xml\``
+  - `const result = await pingSearchEngine('google', sitemapUrl)`
+  - Only updates `lastPingedGoogle` when `result.ok === true`. On failure the DB row is left untouched (returned as-is).
+  - On failure: returns HTTP 502 with body `{ error: { code: 'PING_FAILED', message, details: { engine, httpStatus, sitemapUrl } }, data: { ...config, pingResult: message, pingHttpStatus: httpStatus }, meta }`. The real upstream status code is in both `error.details.httpStatus` and `data.pingHttpStatus` so the frontend (current or future) can show an accurate message.
+  - On success: returns 200 with `{ ...updated, pingResult: 'Ping accepted by Google (HTTP 200)', pingHttpStatus: 200, sitemapUrl }`.
+
+- Rewrote the `ping-bing` branch identically (different endpoint URL + `lastPingedBing`).
+
+- IMPORTANT: Google deprecated the public ping API in 2023, so the real fetch will likely return 404/405/429. We surface that real status instead of faking success — per task spec.
+
+== 2. Search Console page (src/modules/seo/seo-search-console-page.tsx) ==
+
+2a. Date-range selector for the chart:
+- Added `const [chartDays, setChartDays] = useState(14);` to `SeoSearchConsolePageInner`.
+- Hoisted `const isConnected = data?.connection?.status === 'CONNECTED';` to before the stats query (was previously declared lower in the function — removed the duplicate declaration to avoid a TS error).
+- Changed the stats query to use `chartDays`:
+  - `queryKey: queryKeys.seoSearchConsoleStats.list(chartDays)`
+  - `queryFn: () => getApi<DailyStat[]>('/api/seo/search-console/stats', { days: chartDays })`
+- Imported `Select, SelectContent, SelectItem, SelectTrigger, SelectValue` from `@/components/ui/select`.
+- Added a `<Select>` to the Performance Chart card header (next to the title) with options: 7 / 14 / 28 / 90 days. Value bound to `String(chartDays)`, `onValueChange` parses to Number.
+- Updated the chart's "Last N days" `<Badge>` to use the dynamic `days` prop instead of the hard-coded "Last 14 days".
+- Extended `PerformanceChartProps` with `days: number`, `onSync?: () => void`, `isSyncing?: boolean`. The badge now renders `Last {days} days`.
+
+2b. Empty states:
+- When `!isConnected`: the Performance Chart, Top Search Queries, and Top Pages cards are now wrapped in `{isConnected && (...)}` and hidden entirely. Replaced with a single prominent empty-state Card (border-dashed) containing:
+  - A `Search` lucide icon in a circular muted background.
+  - Heading "Connect Google Search Console".
+  - Body text "Connect Google Search Console to view search performance." (matches task spec wording).
+  - A "Connect Search Console" CTA Button (with `Plug` icon, shows `Loader2` spinner while `connectMutation.isPending`).
+  - Helper text "Enter your site URL above and click Connect to get started." pointing the user back to the URL input that still lives in the Connection Status Card.
+- When connected but no stats data: the existing empty-state inside `PerformanceChart` was enhanced — message changed to "No performance data available yet." and a "Sync Now" Button (`RefreshCw` icon) is now rendered when an `onSync` callback is supplied. The chart passes `onSync={() => syncMutation.mutate()}` and `isSyncing={syncMutation.isPending}`.
+
+2c. Blank page when `data` is null:
+- Replaced the `: null}` branch of the `isLoading ? ... : data ? ... : null` ternary with a proper empty-state Card (border-dashed):
+  - `Globe` lucide icon in a circular muted background.
+  - Heading "No Search Console data".
+  - Body text "We couldn't load your Search Console data. Please try again."
+  - A "Retry" outline Button that calls `queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsole.all })` to re-trigger the main query.
+
+Preserved per task constraints:
+- KPI cards section unchanged (still `{isConnected && summary && (...)}`).
+- QueriesTable and PagesTable components unchanged.
+- Existing design language (Card / CardHeader / CardTitle / Button / Badge / muted-foreground palette) preserved.
+- No new dependencies — used the already-installed shadcn/ui `Select` component.
+
+Verification:
+- `cd /home/z/my-project && bun run lint 2>&1 | grep -E "sitemap|search-console-page" | head -5` → empty output (zero lint errors/warnings in either edited file).
+- Full lint still reports the same 2 pre-existing errors + 3 pre-existing warnings, all in unrelated files (`seo-broken-links-page.tsx` React Compiler memoization, `seo-social-preview-page.tsx` missing `Search` import). None caused by this change.
+- `npx tsc --noEmit --skipLibCheck` reports zero errors in `seo-search-console-page.tsx` and only a single pre-existing `TS18047 'result' is possibly 'null'` on line 33 of `sitemap/route.ts` (inside the GET handler that was NOT touched by this task — same line exists at HEAD).
+- Dev server log shows clean compilation (`✓ Compiled in 672ms`) with no errors related to either edited file.
+
+Stage Summary:
+- POST /api/seo/sitemap?action=ping-google and ?action=ping-bing now make REAL outbound HTTP requests to the search engines' ping endpoints and surface the actual upstream HTTP status code in the response body (and via HTTP 502 on failure). The `lastPinged{Google,Bing}` timestamp is only advanced on a 2xx response, so a failed ping no longer leaves a misleading "pinged at" timestamp in the DB.
+- The Search Console page now has a working 7/14/28/90-day date-range selector wired through to the stats query, hides the chart / queries / pages cards when not connected (showing a single clear "Connect Search Console" CTA instead), shows an in-chart "Sync Now" button when there's no stats data yet, and shows a Retry card instead of a blank page when the main query returns null.
+Files modified:
+  - src/app/api/seo/sitemap/route.ts
+  - src/modules/seo/seo-search-console-page.tsx

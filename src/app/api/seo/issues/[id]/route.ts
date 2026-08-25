@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { generateRequestId } from '@/lib/utils';
 import { z } from 'zod/v4';
+import { getSiteWhere } from '@/lib/site-context';
 
 // ---------- validation ------------------------------------------------
 
@@ -33,7 +34,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     const { id: issueId } = await context.params;
 
-    const existing = await db.seoIssue.findUnique({ where: { id: issueId } });
+    // Use findFirst with site filter to prevent cross-site access:
+    // an issue belonging to another site simply won't match → 404.
+    const siteFilter = await getSiteWhere(request);
+    const existing = await db.seoIssue.findFirst({ where: { id: issueId, ...siteFilter } });
     if (!existing) {
       return NextResponse.json(
         { error: { code: 'NOT_FOUND', message: 'SEO issue not found' }, meta: { requestId: id, timestamp: new Date().toISOString() } },
@@ -95,14 +99,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 // DELETE — remove
 // =====================================================================
 
-export async function DELETE(_request: NextRequest, context: RouteContext) {
+export async function DELETE(request: NextRequest, context: RouteContext) {
   const id = generateRequestId();
   const start = Date.now();
 
   try {
     const { id: issueId } = await context.params;
 
-    const existing = await db.seoIssue.findUnique({ where: { id: issueId } });
+    // Use findFirst with site filter to prevent cross-site access.
+    const siteFilter = await getSiteWhere(request);
+    const existing = await db.seoIssue.findFirst({ where: { id: issueId, ...siteFilter } });
     if (!existing) {
       return NextResponse.json(
         { error: { code: 'NOT_FOUND', message: 'SEO issue not found' }, meta: { requestId: id, timestamp: new Date().toISOString() } },

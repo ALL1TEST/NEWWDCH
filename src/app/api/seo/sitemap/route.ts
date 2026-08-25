@@ -46,6 +46,101 @@ export async function GET(request: NextRequest) {
 // POST — generate / ping / toggle auto
 // =====================================================================
 
+/**
+ * Resolve the site's canonical base URL.
+ *
+ * Priority:
+ *   1. The `site_url` Setting (e.g. "https://cms.example.com")
+ *   2. The `Origin` / `Host` header of the incoming request (best-effort fallback)
+ *
+ * Used to build the absolute sitemap URL that gets sent to Google / Bing.
+ */
+async function resolveBaseUrl(request: NextRequest): Promise<string> {
+  try {
+    const setting = await db.setting.findFirst({ where: { key: 'site_url' } });
+    if (setting?.value) {
+      // Strip trailing slash so we don't end up with `//sitemap.xml`
+      return setting.value.replace(/\/+$/, '');
+    }
+  } catch (error) {
+    console.warn('[SEO:SITEMAP] Failed to read site_url setting:', error);
+  }
+
+  // Fallback to the request's own origin (works behind proxies too)
+  const forwardedProto = request.headers.get('x-forwarded-proto');
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host');
+  if (host) {
+    const proto = forwardedProto || request.nextUrl.protocol.replace(':', '') || 'https';
+    return `${proto}://${host}`.replace(/\/+$/, '');
+  }
+
+  return 'https://example.com';
+}
+
+interface PingResult {
+  ok: boolean;
+  httpStatus: number | null;
+  message: string;
+}
+
+/**
+ * Perform a real HTTP ping to a search engine's sitemap endpoint.
+ *
+ * NOTE: Google deprecated the public ping API in 2023, so this will usually
+ * return a non-200 status (commonly 404/405/429). That is fine — we surface
+ * the real upstream status instead of faking success.
+ */
+async function pingSearchEngine(
+  engine: 'google' | 'bing',
+  sitemapUrl: string,
+): Promise<PingResult> {
+  const endpoint =
+    engine === 'google'
+      ? `https://www.google.com/ping?sitemap=${encodeURIComponent(sitemapUrl)}`
+      : `https://www.bing.com/ping?sitemap=${encodeURIComponent(sitemapUrl)}`;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      // Don't follow redirects — we want the raw upstream status
+      redirect: 'manual',
+      // Give the engine a reasonable amount of time to respond
+      signal: AbortSignal.timeout(15_000),
+      headers: {
+        'User-Agent': 'CMS-Sitemap-Ping/1.0 (+https://example.com)',
+        Accept: 'text/html,application/xhtml+xml,*/*',
+      },
+    });
+
+    if (response.ok) {
+      return {
+        ok: true,
+        httpStatus: response.status,
+        message: `Ping accepted by ${engine === 'google' ? 'Google' : 'Bing'} (HTTP ${response.status})`,
+      };
+    }
+
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message:
+        engine === 'google'
+          ? `Google returned HTTP ${response.status} for the ping request (the public ping API was deprecated in 2023)`
+          : `Bing returned HTTP ${response.status} for the ping request`,
+    };
+  } catch (error) {
+    // Network failure, DNS, timeout, etc.
+    const isTimeout = error instanceof Error && error.name === 'TimeoutError';
+    return {
+      ok: false,
+      httpStatus: null,
+      message: isTimeout
+        ? `Request to ${engine === 'google' ? 'Google' : 'Bing'} timed out`
+        : `Network error while pinging ${engine === 'google' ? 'Google' : 'Bing'}: ${error instanceof Error ? error.message : 'unknown error'}`,
+    };
+  }
+}
+
 export async function POST(request: NextRequest) {
   const id = generateRequestId();
   const start = Date.now();
@@ -77,25 +172,80 @@ export async function POST(request: NextRequest) {
 
     // Ping Google
     if (action === 'ping-google') {
-      // In production, this would send an HTTP request to Google's ping endpoint
-      const updated = await db.sitemapConfig.update({
-        where: { id: config.id },
-        data: { lastPingedGoogle: new Date() },
-      });
+      const baseUrl = await resolveBaseUrl(request);
+      const sitemapUrl = `${baseUrl}/sitemap.xml`;
+      const result = await pingSearchEngine('google', sitemapUrl);
+
+      // Only persist the timestamp on a successful ping
+      const updated = result.ok
+        ? await db.sitemapConfig.update({
+            where: { id: config.id },
+            data: { lastPingedGoogle: new Date() },
+          })
+        : config;
+
+      if (!result.ok) {
+        return NextResponse.json(
+          {
+            error: {
+              code: 'PING_FAILED',
+              message: result.message,
+              details: { engine: 'google', httpStatus: result.httpStatus, sitemapUrl },
+            },
+            data: { ...updated, pingResult: result.message, pingHttpStatus: result.httpStatus },
+            meta: { requestId: id, timestamp: new Date().toISOString(), duration: Date.now() - start },
+          },
+          // Use 502 Bad Gateway to signal an upstream failure
+          { status: 502 },
+        );
+      }
+
       return NextResponse.json({
-        data: { ...updated, pingResult: 'Ping sent to Google successfully' },
+        data: {
+          ...updated,
+          pingResult: result.message,
+          pingHttpStatus: result.httpStatus,
+          sitemapUrl,
+        },
         meta: { requestId: id, timestamp: new Date().toISOString(), duration: Date.now() - start },
       });
     }
 
     // Ping Bing
     if (action === 'ping-bing') {
-      const updated = await db.sitemapConfig.update({
-        where: { id: config.id },
-        data: { lastPingedBing: new Date() },
-      });
+      const baseUrl = await resolveBaseUrl(request);
+      const sitemapUrl = `${baseUrl}/sitemap.xml`;
+      const result = await pingSearchEngine('bing', sitemapUrl);
+
+      const updated = result.ok
+        ? await db.sitemapConfig.update({
+            where: { id: config.id },
+            data: { lastPingedBing: new Date() },
+          })
+        : config;
+
+      if (!result.ok) {
+        return NextResponse.json(
+          {
+            error: {
+              code: 'PING_FAILED',
+              message: result.message,
+              details: { engine: 'bing', httpStatus: result.httpStatus, sitemapUrl },
+            },
+            data: { ...updated, pingResult: result.message, pingHttpStatus: result.httpStatus },
+            meta: { requestId: id, timestamp: new Date().toISOString(), duration: Date.now() - start },
+          },
+          { status: 502 },
+        );
+      }
+
       return NextResponse.json({
-        data: { ...updated, pingResult: 'Ping sent to Bing successfully' },
+        data: {
+          ...updated,
+          pingResult: result.message,
+          pingHttpStatus: result.httpStatus,
+          sitemapUrl,
+        },
         meta: { requestId: id, timestamp: new Date().toISOString(), duration: Date.now() - start },
       });
     }

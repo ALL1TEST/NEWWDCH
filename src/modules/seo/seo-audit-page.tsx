@@ -39,16 +39,6 @@ const SEVERITY_STYLES: Record<string, { color: string; bg: string }> = {
   INFO: { color: 'text-sky-700 dark:text-sky-400', bg: 'bg-sky-100 dark:bg-sky-900/30' },
 };
 
-function inferCategory(problem: string): string {
-  const p = problem.toLowerCase();
-  if (p.includes('canonical') || p.includes('redirect')) return 'Technical Issues';
-  if (p.includes('h1') || p.includes('h2') || p.includes('meta title') || p.includes('meta description') || p.includes('content') || p.includes('readability') || p.includes('image') || p.includes('alt')) return 'Content Issues';
-  if (p.includes('index') || p.includes('noindex')) return 'Indexing Issues';
-  if (p.includes('schema') || p.includes('structured') || p.includes('json-ld')) return 'Structured Data Issues';
-  if (p.includes('link') || p.includes('orphan') || p.includes('broken')) return 'Link Issues';
-  return 'Technical Issues';
-}
-
 export function SeoAuditPage() {
   const queryClient = useQueryClient();
   const [severityFilter, setSeverityFilter] = useState<string>('all');
@@ -104,17 +94,6 @@ export function SeoAuditPage() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.seoIssues.all }); queryClient.invalidateQueries({ queryKey: ['seo-issues'] }); toast.success('Issue marked as resolved'); },
   });
 
-  // Group by category (API already filters resolved when showResolved=false)
-  const grouped = useMemo(() => {
-    const groups: Record<string, SeoIssueRow[]> = {};
-    for (const issue of issues) {
-      const cat = inferCategory(issue.problem);
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(issue);
-    }
-    return groups;
-  }, [issues]);
-
   const columns = useMemo<ColumnDef<SeoIssueRow>[]>(
     () => [
       { id: 'severity', header: 'Severity', accessorKey: 'severity', cell: ({ row }) => { const s = SEVERITY_STYLES[row.original.severity]; return s ? <Badge variant="outline" className={cn('border-transparent font-medium gap-1', s.bg, s.color)}>{row.original.severity}</Badge> : row.original.severity; } },
@@ -166,9 +145,9 @@ export function SeoAuditPage() {
       />
 
       <div className="grid grid-cols-3 gap-3">
-        <Card className="p-3"><p className="text-xs text-red-600 dark:text-red-400">Critical</p><p className="text-lg font-bold tabular-nums text-red-600 dark:text-red-400">{severityCounts.CRITICAL}</p></Card>
-        <Card className="p-3"><p className="text-xs text-amber-600 dark:text-amber-400">Warnings</p><p className="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">{severityCounts.WARNING}</p></Card>
-        <Card className="p-3"><p className="text-xs text-sky-600 dark:text-sky-400">Info</p><p className="text-lg font-bold tabular-nums text-sky-600 dark:text-sky-400">{severityCounts.INFO}</p></Card>
+        <Card className={cn('p-3 cursor-pointer transition-colors hover:bg-muted/50', severityFilter === 'CRITICAL' && 'ring-2 ring-red-300 dark:ring-red-700')} onClick={() => { setSeverityFilter(severityFilter === 'CRITICAL' ? 'all' : 'CRITICAL'); table.setCurrentPage(1); }}><p className="text-xs text-red-600 dark:text-red-400">Critical</p><p className="text-lg font-bold tabular-nums text-red-600 dark:text-red-400">{severityCounts.CRITICAL}</p></Card>
+        <Card className={cn('p-3 cursor-pointer transition-colors hover:bg-muted/50', severityFilter === 'WARNING' && 'ring-2 ring-amber-300 dark:ring-amber-700')} onClick={() => { setSeverityFilter(severityFilter === 'WARNING' ? 'all' : 'WARNING'); table.setCurrentPage(1); }}><p className="text-xs text-amber-600 dark:text-amber-400">Warnings</p><p className="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">{severityCounts.WARNING}</p></Card>
+        <Card className={cn('p-3 cursor-pointer transition-colors hover:bg-muted/50', severityFilter === 'INFO' && 'ring-2 ring-sky-300 dark:ring-sky-700')} onClick={() => { setSeverityFilter(severityFilter === 'INFO' ? 'all' : 'INFO'); table.setCurrentPage(1); }}><p className="text-xs text-sky-600 dark:text-sky-400">Info</p><p className="text-lg font-bold tabular-nums text-sky-600 dark:text-sky-400">{severityCounts.INFO}</p></Card>
       </div>
 
       <DataTable

@@ -162,6 +162,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       }
     }
 
+    // Reactivation loop check: turning an inactive redirect back on must not create a loop.
+    // Uses the existing (stored) paths — path changes are handled by the block above.
+    if (d.isActive === true && existing.isActive === false) {
+      const loop = await wouldCreateLoop(existing.fromPath, existing.toPath, siteFilter, redirectId);
+      if (loop) {
+        return NextResponse.json(
+          { error: { code: 'REDIRECT_LOOP', message: 'Reactivating this redirect would create a redirect loop' }, meta: { requestId: id, timestamp: new Date().toISOString() } },
+          { status: 400 },
+        );
+      }
+    }
+
     const updateData: Record<string, unknown> = {};
     if (d.fromPath !== undefined) updateData.fromPath = d.fromPath;
     if (d.toPath !== undefined) updateData.toPath = d.toPath;

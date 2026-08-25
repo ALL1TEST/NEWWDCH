@@ -27,6 +27,12 @@ const NUM_TO_TYPE: Record<string, string> = {
 
 const VALID_TYPES = new Set(['301', '302', '307', '308']);
 
+// ---------- CSV escaping (RFC 4180) -----------------------------------
+
+function escapeCsvField(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
 // ---------- Loop detection helper -------------------------------------
 
 async function wouldCreateLoop(fromPath: string, toPath: string, siteFilter: Record<string, string>): Promise<boolean> {
@@ -132,7 +138,12 @@ export async function GET(request: NextRequest) {
     const lines: string[] = ['fromPath,toPath,type,active'];
     for (const r of redirects) {
       const typeNum = TYPE_TO_NUM[r.type] || '301';
-      lines.push(`${r.fromPath},${r.toPath},${typeNum},${r.isActive}`);
+      lines.push([
+        escapeCsvField(r.fromPath),
+        escapeCsvField(r.toPath),
+        escapeCsvField(typeNum),
+        escapeCsvField(String(r.isActive)),
+      ].join(','));
     }
 
     const csv = lines.join('\n');
@@ -218,7 +229,7 @@ export async function POST(request: NextRequest) {
 
     // Validate all rows
     const errors: { row: number; message: string }[] = [];
-    const validRows: { fromPath: string; toPath: string; type: string }[] = [];
+    const validRows: { fromPath: string; toPath: string; type: string; rowNum: number }[] = [];
     const seenFromPaths = new Set<string>();
 
     // Fetch existing active redirects' fromPaths for duplicate check
@@ -285,14 +296,37 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      validRows.push({ fromPath: fromVal, toPath: toVal, type: NUM_TO_TYPE[typeVal] || 'PERMANENT_301' });
+      validRows.push({ fromPath: fromVal, toPath: toVal, type: NUM_TO_TYPE[typeVal] || 'PERMANENT_301', rowNum });
     }
+
+    // In-batch loop/chain detection: a row whose `toPath` equals another row's
+    // `fromPath` in the same CSV would create a redirect chain (and potentially
+    // a loop). Such rows are skipped and reported in the errors list. This is
+    // necessary because the per-row DB loop check below runs before the batch
+    // is committed, so it can't see sibling rows created in the same import.
+    const batchFromPathIdx = new Map<string, number>();
+    for (let i = 0; i < validRows.length; i++) {
+      batchFromPathIdx.set(validRows[i].fromPath, i);
+    }
+    const batchSkipIndices = new Set<number>();
+    for (let i = 0; i < validRows.length; i++) {
+      const row = validRows[i];
+      const matchIdx = batchFromPathIdx.get(row.toPath);
+      if (matchIdx !== undefined && matchIdx !== i) {
+        batchSkipIndices.add(i);
+        errors.push({
+          row: row.rowNum,
+          message: `In-batch loop detected: "to" path "${row.toPath}" matches another row's "from" path`,
+        });
+      }
+    }
+    const rowsToImport = validRows.filter((_, i) => !batchSkipIndices.has(i));
 
     // If not confirmed, return validation results only
     if (!confirm) {
       return NextResponse.json({
         data: {
-          validRows: validRows.length,
+          validRows: rowsToImport.length,
           invalidRows: errors.length,
           errors,
           imported: 0,
@@ -303,37 +337,52 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Confirm mode: actually import valid rows
+    // Confirm mode: actually import valid rows.
+    // Validation (DB loop detection) runs outside the transaction; only the
+    // creates are wrapped in `db.$transaction` for atomicity — if any create
+    // throws, the entire batch rolls back.
     let imported = 0;
-    let skipped = 0;
+    let skipped = batchSkipIndices.size;
     let errorsDuringImport = 0;
 
-    for (const row of validRows) {
+    // Per-row DB loop check (against existing committed redirects).
+    const rowsToCreate: typeof rowsToImport = [];
+    for (const row of rowsToImport) {
       try {
-        // Loop detection
         const loop = await wouldCreateLoop(row.fromPath, row.toPath, siteFilter);
         if (loop) {
           errorsDuringImport++;
           continue;
         }
-
-        await db.redirect.create({
-          data: {
-            fromPath: row.fromPath,
-            toPath: row.toPath,
-            type: row.type as 'PERMANENT_301' | 'TEMPORARY_302' | 'TEMPORARY_307' | 'PERMANENT_308',
-            siteId,
-          },
-        });
-        imported++;
+        rowsToCreate.push(row);
       } catch {
         errorsDuringImport++;
       }
     }
 
+    // Atomic create: all-or-nothing.
+    try {
+      await db.$transaction(async (tx) => {
+        for (const row of rowsToCreate) {
+          await tx.redirect.create({
+            data: {
+              fromPath: row.fromPath,
+              toPath: row.toPath,
+              type: row.type as 'PERMANENT_301' | 'TEMPORARY_302' | 'TEMPORARY_307' | 'PERMANENT_308',
+              siteId,
+            },
+          });
+        }
+      });
+      imported = rowsToCreate.length;
+    } catch {
+      // Entire batch rolled back; count every row as an import error.
+      errorsDuringImport += rowsToCreate.length;
+    }
+
     return NextResponse.json({
       data: {
-        validRows: validRows.length,
+        validRows: rowsToImport.length,
         invalidRows: errors.length,
         errors,
         imported,

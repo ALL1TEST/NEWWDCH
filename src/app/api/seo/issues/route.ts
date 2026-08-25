@@ -101,11 +101,6 @@ export async function POST(request: NextRequest) {
       const siteFilter = await getSiteWhere(request);
       const siteId = siteFilter.siteId;
 
-      // Clear previous unresolved issues for this site
-      await db.seoIssue.deleteMany({
-        where: { ...siteFilter, isResolved: false },
-      });
-
       const publishedItems = await db.contentItem.findMany({
         where: { ...siteFilter, status: 'PUBLISHED', deletedAt: null },
         select: {
@@ -380,20 +375,91 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Bulk create issues
-      let created = 0;
-      if (issues.length > 0) {
-        await db.seoIssue.createMany({
-          data: issues.map((issue) => ({
-            ...issue,
-            siteId: siteId || undefined,
-          })),
-        });
-        created = issues.length;
-      }
+      // ---------- upsert persistence (replaces delete + create) ----------
+      // Instead of deleting and recreating (which destroys history, timestamps,
+      // and resolution state), we upsert: update existing matches, create new
+      // ones, and mark no-longer-detected issues as resolved.
+      // All persistence runs inside a single transaction for atomicity.
+      const auditResult = await db.$transaction(async (tx) => {
+        // Get all existing issues for this site (or globally in all-sites mode)
+        const existingIssues = await tx.seoIssue.findMany({ where: siteFilter });
+
+        // Build a map of existing issues by (pageUrl + problem) for quick lookup.
+        // This is the deterministic key that identifies the same issue across runs.
+        const existingMap = new Map<string, (typeof existingIssues)[number]>();
+        for (const ei of existingIssues) {
+          existingMap.set(`${ei.pageUrl}::${ei.problem}`, ei);
+        }
+
+        // Track which existing issues we've seen in this audit run
+        const seenIds = new Set<string>();
+        const toCreate: {
+          severity: 'CRITICAL' | 'WARNING' | 'INFO';
+          resourceType: string;
+          resourceId: string;
+          pageUrl: string;
+          problem: string;
+          recommendation: string;
+          siteId?: string;
+        }[] = [];
+
+        for (const newIssue of issues) {
+          const key = `${newIssue.pageUrl}::${newIssue.problem}`;
+          const existing = existingMap.get(key);
+          if (existing) {
+            // Match found: update recommendation + severity.
+            // Keep id, createdAt, and isResolved untouched (preserve history).
+            seenIds.add(existing.id);
+            await tx.seoIssue.update({
+              where: { id: existing.id },
+              data: {
+                recommendation: newIssue.recommendation,
+                severity: newIssue.severity,
+                // Don't touch isResolved — if it was resolved, keep it resolved
+              },
+            });
+          } else {
+            // No match: this is a truly new issue — queue for creation
+            toCreate.push({ ...newIssue, siteId: siteId || undefined });
+          }
+        }
+
+        // Existing issues NOT detected this audit run were fixed since the last
+        // audit. Mark them as resolved (skip ones already resolved).
+        const staleIds = existingIssues
+          .filter((ei) => !seenIds.has(ei.id) && !ei.isResolved)
+          .map((ei) => ei.id);
+
+        if (staleIds.length > 0) {
+          await tx.seoIssue.updateMany({
+            where: { id: { in: staleIds } },
+            data: { isResolved: true },
+          });
+        }
+
+        // Bulk-create only the genuinely new issues
+        if (toCreate.length > 0) {
+          await tx.seoIssue.createMany({ data: toCreate });
+        }
+
+        return {
+          audited: publishedItems.length,
+          issuesFound: issues.length,
+          created: toCreate.length,
+          updated: seenIds.size,
+          resolved: staleIds.length,
+        };
+      });
 
       return NextResponse.json({
-        data: { audited: publishedItems.length, issuesFound: issues.length, created, message: `Audited ${publishedItems.length} pages, found ${issues.length} SEO issues` },
+        data: {
+          audited: auditResult.audited,
+          issuesFound: auditResult.issuesFound,
+          created: auditResult.created,
+          updated: auditResult.updated,
+          resolved: auditResult.resolved,
+          message: `Audited ${auditResult.audited} pages, found ${auditResult.issuesFound} SEO issues (${auditResult.created} new, ${auditResult.updated} updated, ${auditResult.resolved} resolved)`,
+        },
         meta: { requestId: id, timestamp: new Date().toISOString(), duration: Date.now() - start },
       });
     }

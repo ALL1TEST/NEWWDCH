@@ -30,6 +30,13 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Table,
   TableBody,
   TableCell,
@@ -204,7 +211,18 @@ function KpiCard({ icon: Icon, label, value, iconColor, iconBg }: KpiCardProps) 
 
 // ==================== CSS Bar Chart ====================
 
-function PerformanceChart({ stats, isLoading }: { stats: DailyStat[]; isLoading: boolean }) {
+interface PerformanceChartProps {
+  stats: DailyStat[];
+  isLoading: boolean;
+  /** Number of days covered by the stats (drives the "Last N days" badge). */
+  days: number;
+  /** Called when the user clicks "Sync Now" inside the empty state. */
+  onSync?: () => void;
+  /** Whether a sync is currently in progress (disables the Sync button). */
+  isSyncing?: boolean;
+}
+
+function PerformanceChart({ stats, isLoading, days, onSync, isSyncing }: PerformanceChartProps) {
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -218,10 +236,26 @@ function PerformanceChart({ stats, isLoading }: { stats: DailyStat[]; isLoading:
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <BarChart3 className="h-12 w-12 text-muted-foreground/30 mb-3" strokeWidth={1.5} />
-        <p className="text-sm font-medium text-muted-foreground">No performance data available</p>
+        <p className="text-sm font-medium text-muted-foreground">No performance data available yet.</p>
         <p className="text-xs text-muted-foreground mt-1">
           Sync with Search Console to see chart data
         </p>
+        {onSync && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-4"
+            onClick={onSync}
+            disabled={isSyncing}
+          >
+            {isSyncing ? (
+              <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5 mr-2" />
+            )}
+            Sync Now
+          </Button>
+        )}
       </div>
     );
   }
@@ -243,7 +277,7 @@ function PerformanceChart({ stats, isLoading }: { stats: DailyStat[]; isLoading:
           </span>
         </div>
         <Badge variant="outline" className="text-[10px] font-normal bg-background/80">
-          Last 14 days
+          Last {days} days
         </Badge>
       </div>
 
@@ -463,6 +497,8 @@ export function SeoSearchConsolePage() {
 function SeoSearchConsolePageInner() {
   const queryClient = useQueryClient();
   const [connectUrl, setConnectUrl] = useState('');
+  // Date range for the Performance Chart (days back from today).
+  const [chartDays, setChartDays] = useState(14);
 
   // Main query
   const { data, isLoading, error } = useQuery({
@@ -471,12 +507,13 @@ function SeoSearchConsolePageInner() {
     staleTime: 30_000,
   });
 
-  // Stats query (14 days)
+  // Stats query — uses the user-selected `chartDays` range.
+  const isConnected = data?.connection?.status === 'CONNECTED';
   const { data: statsData, isLoading: statsLoading } = useQuery({
-    queryKey: queryKeys.seoSearchConsoleStats.list(14),
-    queryFn: () => getApi<DailyStat[]>('/api/seo/search-console/stats', { days: 14 }),
+    queryKey: queryKeys.seoSearchConsoleStats.list(chartDays),
+    queryFn: () => getApi<DailyStat[]>('/api/seo/search-console/stats', { days: chartDays }),
     staleTime: 60_000,
-    enabled: data?.connection?.status === 'CONNECTED',
+    enabled: isConnected,
   });
 
   // Queries query
@@ -495,7 +532,6 @@ function SeoSearchConsolePageInner() {
     enabled: data?.connection?.status === 'CONNECTED',
   });
 
-  const isConnected = data?.connection?.status === 'CONNECTED';
   const connection = data?.connection;
   const summary = data?.summary;
 
@@ -693,58 +729,135 @@ function SeoSearchConsolePageInner() {
             </section>
           )}
 
-          {/* Performance Chart */}
-          <Card>
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-semibold">Performance Chart</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <PerformanceChart
-                stats={statsData ?? []}
-                isLoading={statsLoading}
-              />
-            </CardContent>
-          </Card>
+          {/* Disconnected empty state — replace chart / queries / pages with a single CTA */}
+          {!isConnected && (
+            <Card className="border-dashed">
+              <CardContent className="p-10 sm:p-16 flex flex-col items-center justify-center text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 mb-4">
+                  <Search className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
+                </div>
+                <h3 className="text-lg font-semibold">Connect Google Search Console</h3>
+                <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                  Connect Google Search Console to view search performance.
+                </p>
+                <Button
+                  className="mt-5"
+                  onClick={() => connectMutation.mutate()}
+                  disabled={connectMutation.isPending || !connectUrl.trim()}
+                >
+                  {connectMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Plug className="h-4 w-4 mr-2" />
+                  )}
+                  Connect Search Console
+                </Button>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Enter your site URL above and click Connect to get started.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
-          {/* Top Search Queries */}
-          <Card>
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-semibold">Top Search Queries</CardTitle>
-                <Badge variant="outline" className="text-[10px] font-normal">
-                  Top 10
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <QueriesTable
-                queries={queriesData?.data ?? []}
-                isLoading={queriesLoading}
-              />
-            </CardContent>
-          </Card>
+          {/* Performance Chart — only when connected */}
+          {isConnected && (
+            <Card>
+              <CardHeader className="pb-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <CardTitle className="text-base font-semibold">Performance Chart</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground hidden sm:inline">Range</span>
+                    <Select
+                      value={String(chartDays)}
+                      onValueChange={(v) => setChartDays(Number(v))}
+                    >
+                      <SelectTrigger className="h-8 w-[130px] text-xs">
+                        <SelectValue placeholder="Select range" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="7">Last 7 days</SelectItem>
+                        <SelectItem value="14">Last 14 days</SelectItem>
+                        <SelectItem value="28">Last 28 days</SelectItem>
+                        <SelectItem value="90">Last 90 days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <PerformanceChart
+                  stats={statsData ?? []}
+                  isLoading={statsLoading}
+                  days={chartDays}
+                  onSync={() => syncMutation.mutate()}
+                  isSyncing={syncMutation.isPending}
+                />
+              </CardContent>
+            </Card>
+          )}
 
-          {/* Top Pages */}
-          <Card>
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-semibold">Top Pages</CardTitle>
-                <Badge variant="outline" className="text-[10px] font-normal">
-                  Top 10
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <PagesTable
-                pages={pagesData?.data ?? []}
-                isLoading={pagesLoading}
-              />
-            </CardContent>
-          </Card>
+          {/* Top Search Queries — only when connected */}
+          {isConnected && (
+            <Card>
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base font-semibold">Top Search Queries</CardTitle>
+                  <Badge variant="outline" className="text-[10px] font-normal">
+                    Top 10
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <QueriesTable
+                  queries={queriesData?.data ?? []}
+                  isLoading={queriesLoading}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Top Pages — only when connected */}
+          {isConnected && (
+            <Card>
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base font-semibold">Top Pages</CardTitle>
+                  <Badge variant="outline" className="text-[10px] font-normal">
+                    Top 10
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <PagesTable
+                  pages={pagesData?.data ?? []}
+                  isLoading={pagesLoading}
+                />
+              </CardContent>
+            </Card>
+          )}
         </>
-      ) : null}
+      ) : (
+        /* 2c: data is null and not loading — show a proper empty state instead of a blank page */
+        <Card className="border-dashed">
+          <CardContent className="p-10 sm:p-16 flex flex-col items-center justify-center text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mb-4">
+              <Globe className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
+            </div>
+            <h3 className="text-lg font-semibold">No Search Console data</h3>
+            <p className="text-sm text-muted-foreground mt-1 max-w-md">
+              We couldn&apos;t load your Search Console data. Please try again.
+            </p>
+            <Button
+              variant="outline"
+              className="mt-5"
+              onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsole.all })}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

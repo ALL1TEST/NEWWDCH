@@ -4,17 +4,14 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Globe, FileQuestion, FileX2, Type, Heading, Copy, Unlink,
-  FileCode, BarChart3, Shield, ArrowUpRight, Loader2, AlertTriangle,
+  FileCode, BarChart3, Shield, ArrowUpRight, AlertTriangle,
   Info, ChevronRight, Navigation, CheckCircle2, XCircle, Eye, ClipboardCheck,
-  Link2, Code,
+  Link2, Code, RefreshCw, MousePointerClick, TrendingUp, Target,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
 import { PageHeader } from '@/components/patterns';
 import { getApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
@@ -60,6 +57,20 @@ interface SeoOverviewData {
   recentIssues: SeoIssue[];
 }
 
+interface SearchConsoleSummary {
+  totalClicks: number;
+  totalImpressions: number;
+  averageCtr: number;
+  averagePosition: number;
+}
+
+interface SearchConsoleStatusData {
+  connected: boolean;
+  connection: { lastSyncAt: string | null } | null;
+  summary?: SearchConsoleSummary | null;
+  stats?: unknown[];
+}
+
 // ==================== Severity Config ====================
 
 const SEVERITY_CONFIG: Record<
@@ -70,6 +81,23 @@ const SEVERITY_CONFIG: Record<
   WARNING: { color: 'text-amber-700 dark:text-amber-400', bg: 'bg-amber-100 dark:bg-amber-900/30', icon: AlertTriangle },
   INFO: { color: 'text-sky-700 dark:text-sky-400', bg: 'bg-sky-100 dark:bg-sky-900/30', icon: Info },
 };
+
+// ==================== Formatters ====================
+
+function formatCompactNumber(n: number | null | undefined): string {
+  const num = n ?? 0;
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+  return num.toLocaleString();
+}
+
+function formatCtr(n: number | null | undefined): string {
+  return `${((n ?? 0) * 100).toFixed(2)}%`;
+}
+
+function formatPosition(n: number | null | undefined): string {
+  return (n ?? 0).toFixed(1);
+}
 
 // ==================== Health Score Ring ====================
 
@@ -166,55 +194,140 @@ function StatusBadge({ status, configured }: { status: string; configured?: bool
   return <Badge variant="outline" className="font-medium bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border-transparent"><XCircle className="h-3 w-3 mr-1" />Missing</Badge>;
 }
 
-// ==================== Issues Table ====================
+// ==================== Recent Issues Summary (compact) ====================
 
-function IssuesTable({ issues }: { issues: SeoIssue[] }) {
-  if (issues.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="mb-3 text-muted-foreground/30"><Shield className="h-12 w-12" strokeWidth={1.5} /></div>
-        <p className="text-sm font-medium text-foreground">No SEO issues found</p>
-        <p className="text-xs text-muted-foreground mt-1">Your site looks healthy!</p>
-      </div>
-    );
-  }
+interface NavigateFn {
+  (mod: string, itemId?: string | null, subPage?: string | null): void;
+}
+
+function RecentIssuesSummary({ issues, navigate }: { issues: SeoIssue[]; navigate: NavigateFn }) {
+  // Unresolved counts by severity
+  const unresolved = issues.filter((i) => !i.isResolved);
+  const criticalCount = unresolved.filter((i) => i.severity === 'CRITICAL').length;
+  const warningCount = unresolved.filter((i) => i.severity === 'WARNING').length;
+  const infoCount = unresolved.filter((i) => i.severity === 'INFO').length;
+
+  // Only the 3-5 most recent issues
+  const recent = issues.slice(0, 5);
+
   return (
-    <div className="rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-24">Severity</TableHead>
-            <TableHead>Page URL</TableHead>
-            <TableHead className="hidden md:table-cell">Problem</TableHead>
-            <TableHead className="hidden lg:table-cell">Recommendation</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {issues.map((issue) => {
+    <div className="space-y-4">
+      {/* Severity summary */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 font-medium">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          {criticalCount} Critical
+        </span>
+        <span className="text-muted-foreground/60">·</span>
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          {warningCount} Warnings
+        </span>
+        <span className="text-muted-foreground/60">·</span>
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400 font-medium">
+          <Info className="h-3.5 w-3.5" />
+          {infoCount} Info
+        </span>
+      </div>
+
+      {recent.length > 0 ? (
+        <ul className="space-y-2">
+          {recent.map((issue) => {
             const sev = SEVERITY_CONFIG[issue.severity] ?? SEVERITY_CONFIG.INFO;
             const SevIcon = sev.icon;
             return (
-              <TableRow key={issue.id}>
-                <TableCell>
-                  <Badge variant="outline" className={cn('border-transparent font-medium gap-1', sev.bg, sev.color)}>
-                    <SevIcon className="h-3 w-3" />
-                    {issue.severity.charAt(0) + issue.severity.slice(1).toLowerCase()}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <span className="font-mono text-sm truncate block max-w-[200px]" title={issue.pageUrl}>{truncate(issue.pageUrl, 40)}</span>
-                </TableCell>
-                <TableCell className="hidden md:table-cell">
-                  <span className="text-sm text-muted-foreground truncate block max-w-[240px]" title={issue.problem}>{truncate(issue.problem, 50)}</span>
-                </TableCell>
-                <TableCell className="hidden lg:table-cell">
-                  <span className="text-sm text-muted-foreground truncate block max-w-[280px]" title={issue.recommendation}>{truncate(issue.recommendation, 60)}</span>
-                </TableCell>
-              </TableRow>
+              <li
+                key={issue.id}
+                className="flex items-start gap-3 p-2.5 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
+              >
+                <Badge
+                  variant="outline"
+                  className={cn('border-transparent font-medium gap-1 shrink-0', sev.bg, sev.color)}
+                >
+                  <SevIcon className="h-3 w-3" />
+                  {issue.severity.charAt(0) + issue.severity.slice(1).toLowerCase()}
+                </Badge>
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="font-mono text-xs text-muted-foreground truncate"
+                    title={issue.pageUrl}
+                  >
+                    {truncate(issue.pageUrl, 60)}
+                  </p>
+                  <p
+                    className="text-sm text-foreground truncate mt-0.5"
+                    title={issue.problem}
+                  >
+                    {issue.problem}
+                  </p>
+                </div>
+              </li>
             );
           })}
-        </TableBody>
-      </Table>
+        </ul>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="mb-3 text-muted-foreground/30">
+            <Shield className="h-10 w-10" strokeWidth={1.5} />
+          </div>
+          <p className="text-sm font-medium text-foreground">No SEO issues found</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Run an audit to detect potential SEO issues.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-3 text-xs"
+            onClick={() => navigate('seo', null, 'audit')}
+          >
+            <ClipboardCheck className="h-3.5 w-3.5 mr-1.5" />
+            Run SEO Audit
+            <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
+          </Button>
+        </div>
+      )}
+
+      {recent.length > 0 && (
+        <div className="flex justify-end">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground"
+            onClick={() => navigate('seo', null, 'audit')}
+          >
+            View All Issues
+            <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==================== Search Performance ====================
+
+function SearchPerformanceKpi({
+  icon: Icon,
+  label,
+  value,
+  iconColor,
+  iconBg,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  iconColor: string;
+  iconBg: string;
+}) {
+  return (
+    <div className="p-3 rounded-lg border bg-card">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+        <span className={cn('flex h-6 w-6 items-center justify-center rounded', iconBg)}>
+          <Icon className={cn('h-3.5 w-3.5', iconColor)} />
+        </span>
+        {label}
+      </div>
+      <p className="text-lg font-bold tabular-nums leading-tight">{value}</p>
     </div>
   );
 }
@@ -231,6 +344,14 @@ export function SeoOverviewPage() {
 
   const stats = data?.stats ?? null;
   const issues = Array.isArray(data?.recentIssues) ? data.recentIssues : [];
+
+  // Search Console status + summary (only fetched when connected)
+  const { data: scData, isLoading: scLoading } = useQuery({
+    queryKey: queryKeys.seoSearchConsole.all,
+    queryFn: () => getApi<SearchConsoleStatusData>('/api/seo/search-console'),
+    enabled: !!stats?.searchConsoleConnected,
+    staleTime: 30_000,
+  });
 
   const hint = (count: number) => count === 0 ? 'healthy' as const : count <= 5 ? 'warning' as const : 'critical' as const;
 
@@ -251,7 +372,7 @@ export function SeoOverviewPage() {
       <section>
         {isLoading ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-            {Array.from({ length: 12 }).map((_, i) => <KpiCardSkeleton key={i} />)}
+            {Array.from({ length: 11 }).map((_, i) => <KpiCardSkeleton key={i} />)}
           </div>
         ) : stats ? (
           <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-6">
@@ -264,11 +385,11 @@ export function SeoOverviewPage() {
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
               <KpiCard icon={Globe} label="Indexed Pages" value={(stats.indexedPages ?? 0).toLocaleString()} iconColor="text-green-600 dark:text-green-400" iconBg="bg-green-100 dark:bg-green-900/30" onClick={() => navigate('seo', null, 'audit')} />
               <KpiCard icon={FileQuestion} label="Not Indexed" value={(stats.notIndexed ?? 0).toLocaleString()} iconColor="text-amber-600 dark:text-amber-400" iconBg="bg-amber-100 dark:bg-amber-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.notIndexed ?? 0)} />
-              <KpiCard icon={FileX2} label="Missing Meta Titles" value={(stats.missingMetaTitles ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" statusHint={hint(stats.missingMetaTitles ?? 0)} />
-              <KpiCard icon={Type} label="Missing Meta Desc." value={(stats.missingMetaDescriptions ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" statusHint={hint(stats.missingMetaDescriptions ?? 0)} />
-              <KpiCard icon={Heading} label="Missing H1" value={(stats.missingH1 ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" statusHint={hint(stats.missingH1 ?? 0)} />
-              <KpiCard icon={Copy} label="Duplicate Titles" value={(stats.duplicateTitles ?? 0).toLocaleString()} iconColor="text-amber-600 dark:text-amber-400" iconBg="bg-amber-100 dark:bg-amber-900/30" statusHint={hint(stats.duplicateTitles ?? 0)} />
-              <KpiCard icon={Copy} label="Duplicate Desc." value={(stats.duplicateDescriptions ?? 0).toLocaleString()} iconColor="text-amber-600 dark:text-amber-400" iconBg="bg-amber-100 dark:bg-amber-900/30" statusHint={hint(stats.duplicateDescriptions ?? 0)} />
+              <KpiCard icon={FileX2} label="Missing Meta Titles" value={(stats.missingMetaTitles ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.missingMetaTitles ?? 0)} />
+              <KpiCard icon={Type} label="Missing Meta Desc." value={(stats.missingMetaDescriptions ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.missingMetaDescriptions ?? 0)} />
+              <KpiCard icon={Heading} label="Missing H1" value={(stats.missingH1 ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.missingH1 ?? 0)} />
+              <KpiCard icon={Copy} label="Duplicate Titles" value={(stats.duplicateTitles ?? 0).toLocaleString()} iconColor="text-amber-600 dark:text-amber-400" iconBg="bg-amber-100 dark:bg-amber-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.duplicateTitles ?? 0)} />
+              <KpiCard icon={Copy} label="Duplicate Desc." value={(stats.duplicateDescriptions ?? 0).toLocaleString()} iconColor="text-amber-600 dark:text-amber-400" iconBg="bg-amber-100 dark:bg-amber-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.duplicateDescriptions ?? 0)} />
               <KpiCard icon={Unlink} label="Broken Links" value={(stats.brokenLinksCount ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.brokenLinksCount ?? 0)} />
               <KpiCard icon={Navigation} label="Redirects" value={(stats.redirectsCount ?? 0).toLocaleString()} iconColor="text-sky-600 dark:text-sky-400" iconBg="bg-sky-100 dark:bg-sky-900/30" onClick={() => navigate('seo', null, 'settings')} />
               <KpiCard icon={Link2} label="Missing Canonicals" value={(stats.missingCanonicals ?? 0).toLocaleString()} iconColor="text-amber-600 dark:text-amber-400" iconBg="bg-amber-100 dark:bg-amber-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.missingCanonicals ?? 0)} />
@@ -340,22 +461,94 @@ export function SeoOverviewPage() {
       <section>
         <Card>
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">Search Performance</CardTitle>
-              {!stats?.searchConsoleConnected && (
-                <Button variant="outline" size="sm" className="text-xs" onClick={() => navigate('seo', null, 'search-console')}>
-                  <BarChart3 className="h-3.5 w-3.5 mr-1.5" />Connect Search Console
-                </Button>
-              )}
-            </div>
+            <CardTitle className="text-base font-semibold">Search Performance</CardTitle>
           </CardHeader>
           <CardContent>
-            {stats?.searchConsoleConnected ? (
-              <p className="text-sm text-muted-foreground text-center py-8">Search Console data loaded. Visit the <button onClick={() => navigate('seo', null, 'search-console')} className="text-primary hover:underline">Search Console page</button> for detailed metrics.</p>
+            {isLoading || (stats?.searchConsoleConnected && scLoading) ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-20 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : !stats?.searchConsoleConnected ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <div className="mb-3 text-muted-foreground/30">
+                  <Eye className="h-10 w-10" strokeWidth={1.5} />
+                </div>
+                <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+                  Connect Google Search Console to view search performance.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs"
+                  onClick={() => navigate('seo', null, 'search-console')}
+                >
+                  <BarChart3 className="h-3.5 w-3.5 mr-1.5" />
+                  Connect Search Console
+                </Button>
+              </div>
+            ) : !scData?.summary ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <div className="mb-3 text-muted-foreground/30">
+                  <RefreshCw className="h-10 w-10" strokeWidth={1.5} />
+                </div>
+                <p className="text-sm text-muted-foreground mb-4 max-w-md">
+                  No search performance data available yet. Sync to fetch data from Google Search Console.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs"
+                  onClick={() => navigate('seo', null, 'search-console')}
+                >
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                  Sync Now
+                </Button>
+              </div>
             ) : (
-              <div className="text-center py-8">
-                <Eye className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
-                <p className="text-sm text-muted-foreground">Connect Google Search Console to see real performance data</p>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <SearchPerformanceKpi
+                    icon={MousePointerClick}
+                    label="Clicks"
+                    value={formatCompactNumber(scData.summary.totalClicks)}
+                    iconColor="text-green-600 dark:text-green-400"
+                    iconBg="bg-green-100 dark:bg-green-900/30"
+                  />
+                  <SearchPerformanceKpi
+                    icon={Eye}
+                    label="Impressions"
+                    value={formatCompactNumber(scData.summary.totalImpressions)}
+                    iconColor="text-sky-600 dark:text-sky-400"
+                    iconBg="bg-sky-100 dark:bg-sky-900/30"
+                  />
+                  <SearchPerformanceKpi
+                    icon={Target}
+                    label="CTR"
+                    value={formatCtr(scData.summary.averageCtr)}
+                    iconColor="text-amber-600 dark:text-amber-400"
+                    iconBg="bg-amber-100 dark:bg-amber-900/30"
+                  />
+                  <SearchPerformanceKpi
+                    icon={TrendingUp}
+                    label="Position"
+                    value={formatPosition(scData.summary.averagePosition)}
+                    iconColor="text-violet-600 dark:text-violet-400"
+                    iconBg="bg-violet-100 dark:bg-violet-900/30"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-muted-foreground"
+                    onClick={() => navigate('seo', null, 'search-console')}
+                  >
+                    View Search Console
+                    <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
@@ -377,9 +570,16 @@ export function SeoOverviewPage() {
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Skeleton className="h-7 w-24" />
+                  <Skeleton className="h-7 w-28" />
+                  <Skeleton className="h-7 w-20" />
+                </div>
+                {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}
+              </div>
             ) : (
-              <IssuesTable issues={issues} />
+              <RecentIssuesSummary issues={issues} navigate={navigate} />
             )}
           </CardContent>
         </Card>
@@ -387,5 +587,3 @@ export function SeoOverviewPage() {
     </div>
   );
 }
-
-
