@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Shield,
@@ -10,8 +10,8 @@ import {
   Loader2,
   AlertTriangle,
   CheckCircle2,
+  XCircle,
   FileCode,
-  Type,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,12 +22,23 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { getApi, putApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useSiteStore } from '@/lib/stores/site-store';
 import { toast } from 'sonner';
-import { cn, truncate } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 // ==================== Types ====================
 
@@ -41,6 +52,7 @@ interface RobotsData {
 interface ValidationWarning {
   type: 'warning' | 'error';
   message: string;
+  line?: number;
 }
 
 // ==================== Validation ====================
@@ -50,7 +62,7 @@ function validateRobots(content: string): ValidationWarning[] {
   const lines = content.split('\n');
 
   if (!content.trim()) {
-    warnings.push({ type: 'error', message: 'Robots.txt content is empty' });
+    warnings.push({ type: 'error', message: 'Robots.txt content is empty', line: 1 });
     return warnings;
   }
 
@@ -61,54 +73,64 @@ function validateRobots(content: string): ValidationWarning[] {
     warnings.push({ type: 'error', message: 'No "User-agent:" directive found — crawlers may ignore your rules' });
   }
 
-  // Check Sitemap URL validity — use slice(indexOf(':') + 1) to handle URLs with colons (https://)
-  const sitemapLines = lines.filter((line) =>
-    line.toLowerCase().trimStart().startsWith('sitemap:'),
-  );
-  for (const sl of sitemapLines) {
-    const url = sl.slice(sl.indexOf(':') + 1).trim();
-    if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
-      warnings.push({ type: 'warning', message: `Sitemap URL should start with http:// or https://: "${url}"` });
+  // Check Sitemap URL validity
+  lines.forEach((line, idx) => {
+    if (line.toLowerCase().trimStart().startsWith('sitemap:')) {
+      const url = line.slice(line.indexOf(':') + 1).trim();
+      if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+        warnings.push({ type: 'warning', message: `Sitemap URL should start with http:// or https://: "${url}"`, line: idx + 1 });
+      }
     }
-  }
-
-  // Check for dangerous rules: Disallow: /
-  const disallowAll = lines.some((line) => {
-    const trimmed = line.trim().toLowerCase();
-    return trimmed === 'disallow: /';
   });
-  if (disallowAll) {
-    warnings.push({ type: 'error', message: 'WARNING: This rule blocks all crawlers from accessing the entire website.' });
-  }
 
-  // Parse robots.txt into user-agent groups to check for REAL conflicts within the same group.
-  // Multiple consecutive User-agent lines are a valid multi-agent group (NOT duplicates).
-  // Only flag EXACT duplicates that appear in SEPARATE groups (same agent, different rule blocks).
-  interface RobotGroup {
-    agents: string[];
-    allowPaths: string[];
-    disallowPaths: string[];
-  }
-  const groups: RobotGroup[] = [];
-  let currentGroup: RobotGroup | null = null;
+  // Check for dangerous Disallow: / in User-agent: * groups
+  let inWildcardGroup = false;
   let lastLineWasUserAgent = false;
-
-  for (const line of lines) {
+  lines.forEach((line, idx) => {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-
+    if (!trimmed || trimmed.startsWith('#')) return;
     const colonIdx = trimmed.indexOf(':');
-    if (colonIdx === -1) continue;
-
+    if (colonIdx === -1) return;
     const directive = trimmed.slice(0, colonIdx).trim().toLowerCase();
     const value = trimmed.slice(colonIdx + 1).trim();
 
     if (directive === 'user-agent') {
-      // If the previous line was also a User-agent, we're in a multi-agent group
+      if (lastLineWasUserAgent) {
+        // continuation of multi-agent group
+      } else {
+        inWildcardGroup = value === '*';
+      }
+      lastLineWasUserAgent = true;
+    } else {
+      lastLineWasUserAgent = false;
+      if (directive === 'disallow' && value === '/' && inWildcardGroup) {
+        warnings.push({
+          type: 'error',
+          message: 'This rule blocks ALL crawlers from accessing the entire website. Search engines will not crawl or index any pages.',
+          line: idx + 1,
+        });
+      }
+    }
+  });
+
+  // Parse into groups for conflict detection
+  interface RobotGroup { agents: string[]; allowPaths: string[]; disallowPaths: string[]; }
+  const groups: RobotGroup[] = [];
+  let currentGroup: RobotGroup | null = null;
+  lastLineWasUserAgent = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx === -1) continue;
+    const directive = trimmed.slice(0, colonIdx).trim().toLowerCase();
+    const value = trimmed.slice(colonIdx + 1).trim();
+
+    if (directive === 'user-agent') {
       if (lastLineWasUserAgent && currentGroup) {
         currentGroup.agents.push(value.toLowerCase());
       } else {
-        // Start a new group
         currentGroup = { agents: [value.toLowerCase()], allowPaths: [], disallowPaths: [] };
         groups.push(currentGroup);
       }
@@ -116,52 +138,41 @@ function validateRobots(content: string): ValidationWarning[] {
     } else {
       lastLineWasUserAgent = false;
       if (!currentGroup) continue;
-
-      if (directive === 'allow' && value) {
-        currentGroup.allowPaths.push(value.toLowerCase());
-      } else if (directive === 'disallow' && value) {
-        currentGroup.disallowPaths.push(value.toLowerCase());
-      }
+      if (directive === 'allow' && value) currentGroup.allowPaths.push(value.toLowerCase());
+      else if (directive === 'disallow' && value) currentGroup.disallowPaths.push(value.toLowerCase());
     }
   }
 
-  // Check for conflicting Allow/Disallow on the same path WITHIN the same group
+  // Conflicting Allow/Disallow within same group
   for (const group of groups) {
     const conflicts = group.allowPaths.filter((p) => group.disallowPaths.includes(p));
     if (conflicts.length > 0) {
-      const agentLabel = group.agents.join(', ');
-      warnings.push({ type: 'warning', message: `Conflicting Allow/Disallow rules for paths: ${conflicts.join(', ')} (in User-agent: ${agentLabel})` });
+      warnings.push({ type: 'warning', message: `Conflicting Allow/Disallow for paths: ${conflicts.join(', ')} (User-agent: ${group.agents.join(', ')})` });
     }
   }
 
-  // Check for duplicate user-agent groups (same agent appears in multiple separate groups, NOT multi-agent groups)
-  const agentGroupCounts = new Map<string, number>();
-  for (const group of groups) {
-    for (const agent of group.agents) {
-      agentGroupCounts.set(agent, (agentGroupCounts.get(agent) || 0) + 1);
-    }
-  }
-  for (const [agent, count] of agentGroupCounts) {
-    if (count > 1) {
-      warnings.push({ type: 'warning', message: `Duplicate User-agent directive for "${agent}" — rules may conflict` });
-    }
+  // Duplicate user-agent groups
+  const agentCounts = new Map<string, number>();
+  for (const group of groups) for (const a of group.agents) agentCounts.set(a, (agentCounts.get(a) || 0) + 1);
+  for (const [agent, count] of agentCounts) {
+    if (count > 1) warnings.push({ type: 'warning', message: `Duplicate User-agent "${agent}" — rules may conflict` });
   }
 
-  // Check for invalid directives
+  // Invalid directives
   const validDirectives = new Set(['user-agent', 'disallow', 'allow', 'sitemap', 'crawl-delay', 'request-rate', 'host', 'clean-param']);
-  for (const line of lines) {
+  lines.forEach((line, idx) => {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
+    if (!trimmed || trimmed.startsWith('#')) return;
     const colonIdx = trimmed.indexOf(':');
     if (colonIdx === -1) {
-      warnings.push({ type: 'warning', message: `Invalid syntax (missing colon): "${truncate(trimmed, 50)}"` });
+      warnings.push({ type: 'warning', message: `Invalid syntax (missing colon): "${trimmed.slice(0, 50)}"`, line: idx + 1 });
     } else {
       const directive = trimmed.slice(0, colonIdx).trim().toLowerCase();
       if (!validDirectives.has(directive)) {
-        warnings.push({ type: 'warning', message: `Unrecognized directive: "${directive}" — may be ignored by crawlers` });
+        warnings.push({ type: 'warning', message: `Unrecognized directive: "${directive}"`, line: idx + 1 });
       }
     }
-  }
+  });
 
   return warnings;
 }
@@ -172,6 +183,152 @@ function getDefaultContent(domain: string): string {
   return `User-agent: *\nAllow: /\n\nSitemap: https://${domain}/sitemap.xml`;
 }
 
+// ==================== Syntax Highlighted Line ====================
+
+function HighlightedLine({ line, number }: { line: string; number: number }) {
+  const trimmed = line.trim();
+
+  // Comment
+  if (trimmed.startsWith('#')) {
+    return (
+      <div className="flex">
+        <span className="inline-block w-10 shrink-0 text-right pr-3 text-muted-foreground/40 select-none">{number}</span>
+        <span className="text-muted-foreground/60 italic">{line}</span>
+      </div>
+    );
+  }
+
+  // Empty line
+  if (!trimmed) {
+    return (
+      <div className="flex">
+        <span className="inline-block w-10 shrink-0 text-right pr-3 text-muted-foreground/40 select-none">{number}</span>
+        <span>&nbsp;</span>
+      </div>
+    );
+  }
+
+  // Directive line
+  const colonIdx = line.indexOf(':');
+  if (colonIdx === -1) {
+    return (
+      <div className="flex">
+        <span className="inline-block w-10 shrink-0 text-right pr-3 text-muted-foreground/40 select-none">{number}</span>
+        <span className="text-red-500">{line}</span>
+      </div>
+    );
+  }
+
+  const directive = line.slice(0, colonIdx + 1);
+  const rest = line.slice(colonIdx + 1);
+  const directiveLower = directive.toLowerCase().trim();
+
+  let directiveColor = 'text-foreground';
+  if (directiveLower === 'user-agent:') directiveColor = 'text-violet-600 dark:text-violet-400 font-medium';
+  else if (directiveLower === 'disallow:') directiveColor = 'text-red-600 dark:text-red-400 font-medium';
+  else if (directiveLower === 'allow:') directiveColor = 'text-green-600 dark:text-green-400 font-medium';
+  else if (directiveLower === 'sitemap:') directiveColor = 'text-sky-600 dark:text-sky-400 font-medium';
+  else directiveColor = 'text-amber-600 dark:text-amber-400';
+
+  return (
+    <div className="flex">
+      <span className="inline-block w-10 shrink-0 text-right pr-3 text-muted-foreground/40 select-none">{number}</span>
+      <span>
+        <span className={directiveColor}>{directive}</span>
+        <span className="text-foreground/80">{rest}</span>
+      </span>
+    </div>
+  );
+}
+
+// ==================== Status Indicator ====================
+
+function StatusIndicator({ warnings }: { warnings: ValidationWarning[] }) {
+  if (warnings.length === 0) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400">
+        <span className="h-2 w-2 rounded-full bg-green-500" />
+        Valid
+      </span>
+    );
+  }
+  const hasErrors = warnings.some((w) => w.type === 'error');
+  if (hasErrors) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+        <span className="h-2 w-2 rounded-full bg-red-500" />
+        Invalid
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+      <span className="h-2 w-2 rounded-full bg-amber-500" />
+      Has warnings
+    </span>
+  );
+}
+
+// ==================== Code Editor ====================
+
+function CodeEditor({
+  content,
+  onChange,
+  warningLines,
+}: {
+  content: string;
+  onChange: (val: string) => void;
+  warningLines: Set<number>;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lineNumbersRef = useRef<HTMLDivElement>(null);
+  const lines = content.split('\n');
+
+  // Sync scroll between line numbers and textarea
+  const handleScroll = useCallback(() => {
+    if (textareaRef.current && lineNumbersRef.current) {
+      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
+    }
+  }, []);
+
+  return (
+    <div className="relative rounded-lg border border-border bg-zinc-50 dark:bg-zinc-950/50 overflow-hidden">
+      <div className="flex">
+        {/* Line numbers */}
+        <div
+          ref={lineNumbersRef}
+          className="flex-shrink-0 overflow-hidden bg-zinc-100 dark:bg-zinc-900/50 border-r border-border py-3 select-none"
+          style={{ width: '3.5rem' }}
+        >
+          {lines.map((_, i) => (
+            <div
+              key={i}
+              className={cn(
+                'text-right pr-3 text-xs leading-6 font-mono',
+                warningLines.has(i + 1)
+                  ? 'text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-950/30'
+                  : 'text-muted-foreground/40',
+              )}
+            >
+              {i + 1}
+            </div>
+          ))}
+        </div>
+        {/* Textarea */}
+        <textarea
+          ref={textareaRef}
+          className="flex-1 min-h-[400px] bg-transparent px-4 py-3 font-mono text-sm leading-6 resize-y border-0 focus-visible:outline-none focus-visible:ring-0 text-foreground/90"
+          value={content}
+          onChange={(e) => onChange(e.target.value)}
+          onScroll={handleScroll}
+          spellCheck={false}
+          placeholder="User-agent: *&#10;Allow: /"
+        />
+      </div>
+    </div>
+  );
+}
+
 // ==================== Main Page ====================
 
 export function SeoRobotsPage() {
@@ -179,6 +336,8 @@ export function SeoRobotsPage() {
   const [content, setContent] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
+  const [blockAllConfirmOpen, setBlockAllConfirmOpen] = useState(false);
   const activeSite = useSiteStore((s) => s.getActiveSite());
   const domain = activeSite?.domain ?? 'cms.example.com';
 
@@ -188,20 +347,21 @@ export function SeoRobotsPage() {
     staleTime: 30_000,
   });
 
-  // Sync content from server when loaded
   const serverContent = robots?.content ?? '';
-  React.useEffect(() => {
-    if (serverContent && !isDirty) {
-      setContent(serverContent);
-    }
-  }, [serverContent, isDirty]);
+  // Sync content from server when loaded — use a key-based approach to avoid
+  // calling setState inside an effect (React Compiler lint rule).
+  // We store the last synced server content and compare in render.
+  const [lastSynced, setLastSynced] = useState('');
+  if (serverContent && serverContent !== lastSynced && !isDirty) {
+    setLastSynced(serverContent);
+    setContent(serverContent);
+  }
 
   const handleContentChange = useCallback((val: string) => {
     setContent(val);
     setIsDirty(true);
   }, []);
 
-  // Save mutation
   const saveMutation = useMutation({
     mutationFn: (newContent: string) => putApi('/api/seo/robots', { content: newContent }),
     onSuccess: () => {
@@ -218,21 +378,31 @@ export function SeoRobotsPage() {
     const defaultContent = getDefaultContent(domain);
     setContent(defaultContent);
     setIsDirty(true);
+    setRestoreConfirmOpen(false);
     toast.info('Restored to default robots.txt template');
   }, [domain]);
 
-  const handleSave = useCallback(() => {
-    saveMutation.mutate(content);
-  }, [content, saveMutation]);
-
-  // Validation warnings
   const warnings = useMemo(() => validateRobots(content), [content]);
+  const warningLines = useMemo(() => {
+    const s = new Set<number>();
+    warnings.forEach((w) => { if (w.line) s.add(w.line); });
+    return s;
+  }, [warnings]);
 
-  const charCount = content.length;
+  const hasBlockAllError = warnings.some((w) => w.message.includes('blocks ALL crawlers'));
+
+  const handleSaveClick = useCallback(() => {
+    if (hasBlockAllError) {
+      setBlockAllConfirmOpen(true);
+    } else {
+      saveMutation.mutate(content);
+    }
+  }, [hasBlockAllError, saveMutation, content]);
+
   const lineCount = content.split('\n').length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Error state */}
       {error && (
         <Card className="border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20">
@@ -247,11 +417,23 @@ export function SeoRobotsPage() {
 
       {/* Validation Warnings */}
       {warnings.length > 0 && (
-        <Card className="border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20">
+        <Card className={cn(
+          'border',
+          warnings.some((w) => w.type === 'error')
+            ? 'border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20'
+            : 'border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20'
+        )}>
           <CardContent className="p-4 space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              Validation {warnings.some((w) => w.type === 'error') ? 'Errors' : 'Warnings'}
+            <div className={cn(
+              'flex items-center gap-2 text-sm font-medium',
+              warnings.some((w) => w.type === 'error')
+                ? 'text-red-700 dark:text-red-400'
+                : 'text-amber-700 dark:text-amber-400'
+            )}>
+              {warnings.some((w) => w.type === 'error')
+                ? <XCircle className="h-4 w-4 shrink-0" />
+                : <AlertTriangle className="h-4 w-4 shrink-0" />}
+              {warnings.some((w) => w.type === 'error') ? 'Validation Errors' : 'Validation Warnings'}
             </div>
             {warnings.map((w, i) => (
               <div
@@ -263,8 +445,9 @@ export function SeoRobotsPage() {
                     : 'text-amber-600 dark:text-amber-400',
                 )}
               >
-                <span className={w.type === 'error' ? 'font-medium' : ''}>
-                  {w.type === 'error' ? '✗' : '⚠'} {w.message}
+                <span>
+                  {w.line && <span className="text-muted-foreground/60">Line {w.line}: </span>}
+                  {w.message}
                 </span>
               </div>
             ))}
@@ -283,20 +466,28 @@ export function SeoRobotsPage() {
         ) : (
           <>
             {/* Toolbar */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-              <div className="flex items-center gap-2">
-                <FileCode className="h-5 w-5 text-muted-foreground" />
-                <h3 className="font-semibold text-sm">Editor</h3>
-                {isDirty && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <FileCode className="h-5 w-5 text-muted-foreground" />
+                  <h3 className="font-semibold text-sm">Editor</h3>
+                </div>
+                <StatusIndicator warnings={warnings} />
+                {isDirty ? (
                   <Badge variant="outline" className="text-xs font-normal text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">
                     Unsaved changes
                   </Badge>
-                )}
+                ) : content.trim() ? (
+                  <Badge variant="outline" className="text-xs font-normal text-green-600 dark:text-green-400 border-green-300 dark:border-green-700">
+                    Saved
+                  </Badge>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
-                  onClick={handleSave}
+                  onClick={handleSaveClick}
                   disabled={saveMutation.isPending || !isDirty}
+                  size="sm"
                 >
                   {saveMutation.isPending ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -305,43 +496,27 @@ export function SeoRobotsPage() {
                   )}
                   Save
                 </Button>
-                <Button variant="outline" onClick={handleRestore}>
+                <Button variant="outline" size="sm" onClick={() => setRestoreConfirmOpen(true)}>
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Restore Default
                 </Button>
-                <Button variant="outline" onClick={() => setPreviewOpen(true)}>
+                <Button variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
                   <Eye className="h-4 w-4 mr-2" />
                   Preview Result
                 </Button>
               </div>
             </div>
 
-            {/* Textarea */}
-            <textarea
-              className={cn(
-                'w-full min-h-[400px] rounded-lg border border-border bg-muted/30 px-4 py-3',
-                'font-mono text-sm leading-relaxed resize-y',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                'placeholder:text-muted-foreground/60',
-              )}
-              placeholder={getDefaultContent(domain)}
-              value={content}
-              onChange={(e) => handleContentChange(e.target.value)}
-              spellCheck={false}
+            {/* Code Editor with line numbers */}
+            <CodeEditor
+              content={content}
+              onChange={handleContentChange}
+              warningLines={warningLines}
             />
 
-            {/* Character count bar */}
+            {/* Footer bar */}
             <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
-              <div className="flex items-center gap-4">
-                <span className="flex items-center gap-1">
-                  <Type className="h-3 w-3" />
-                  {charCount.toLocaleString()} characters
-                </span>
-                <span className="flex items-center gap-1">
-                  <Shield className="h-3 w-3" />
-                  {lineCount.toLocaleString()} lines
-                </span>
-              </div>
+              <span>{lineCount} lines · {content.length.toLocaleString()} characters</span>
               <div className="flex items-center gap-1.5">
                 {isDirty ? (
                   <>
@@ -364,24 +539,89 @@ export function SeoRobotsPage() {
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-3xl max-h-[80vh]">
           <DialogHeader>
-            <DialogTitle>Robots.txt Preview</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <FileCode className="h-4 w-4" />
+              Robots.txt Preview
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            {/* Formatted rules */}
-            <div className="overflow-auto rounded-lg border bg-muted/30 p-4 max-h-[60vh]">
-              <pre className="text-sm font-mono whitespace-pre-wrap text-foreground/80">
-                <code>{content || '# robots.txt is empty'}</code>
-              </pre>
+            <div className="text-xs text-muted-foreground">
+              This is what will be served at <code className="font-mono text-primary">/robots.txt</code>
+            </div>
+            {/* Syntax highlighted preview */}
+            <div className="overflow-auto rounded-lg border bg-zinc-50 dark:bg-zinc-950/50 p-4 max-h-[55vh]">
+              <div className="font-mono text-sm leading-6 whitespace-pre-wrap">
+                {content.trim() ? (
+                  content.split('\n').map((line, i) => (
+                    <HighlightedLine key={i} line={line} number={i + 1} />
+                  ))
+                ) : (
+                  <span className="text-muted-foreground/50 italic"># robots.txt is empty</span>
+                )}
+              </div>
             </div>
             {warnings.length === 0 && content.trim() && (
               <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
                 <CheckCircle2 className="h-4 w-4" />
-                No validation issues found
+                No validation issues found — robots.txt is valid
               </div>
             )}
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Restore Default Confirmation */}
+      <AlertDialog open={restoreConfirmOpen} onOpenChange={setRestoreConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore Default Robots.txt?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will replace the current content with the recommended default robots.txt configuration. Your current changes will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRestore}>
+              Restore Default
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Block All Confirmation — SEO Safety */}
+      <AlertDialog open={blockAllConfirmOpen} onOpenChange={setBlockAllConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-red-500" />
+              Warning: This Blocks All Crawlers
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                Your robots.txt contains <code className="font-mono text-red-600 dark:text-red-400 font-medium">Disallow: /</code> for <code className="font-mono font-medium">User-agent: *</code>.
+              </span>
+              <span className="block">
+                This will prevent search engines from crawling and indexing your entire website. This can severely harm your SEO.
+              </span>
+              <span className="block font-medium">
+                Are you sure you want to save this configuration?
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                setBlockAllConfirmOpen(false);
+                saveMutation.mutate(content);
+              }}
+            >
+              Yes, Save Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
