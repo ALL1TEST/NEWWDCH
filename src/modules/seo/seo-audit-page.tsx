@@ -9,6 +9,9 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
   DataTable, useDataTable, PageHeader,
@@ -248,54 +251,57 @@ export function SeoAuditPage() {
         ),
       },
       {
-        id: 'isResolved',
-        header: 'Status',
-        accessorKey: 'isResolved',
-        size: 90,
-        cell: ({ row }) => row.original.isResolved
-          ? <Badge variant="outline" className="border-transparent bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 font-medium">Resolved</Badge>
-          : <Badge variant="outline" className="border-transparent bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-medium">Open</Badge>,
-      },
-      {
         id: 'actions',
         header: '',
-        size: 90,
+        size: 110,
         cell: ({ row }) => {
           if (row.original.isResolved) {
             return (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  reopenMutation.mutate(row.original.id);
-                }}
-                disabled={reopenMutation.isPending}
-              >
-                {reopenMutation.isPending
-                  ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                  : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
-                Reopen
-              </Button>
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        reopenMutation.mutate(row.original.id);
+                      }}
+                      disabled={reopenMutation.isPending}
+                      className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-muted-foreground cursor-pointer transition-colors hover:bg-muted hover:text-foreground hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {reopenMutation.isPending
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <RotateCcw className="h-3.5 w-3.5" />}
+                      Reopen
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Mark issue as open again</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             );
           }
           return (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={(e) => {
-                e.stopPropagation();
-                resolveMutation.mutate(row.original.id);
-              }}
-              disabled={resolveMutation.isPending}
-            >
-              {resolveMutation.isPending
-                ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
-              Resolve
-            </Button>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      resolveMutation.mutate(row.original.id);
+                    }}
+                    disabled={resolveMutation.isPending}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-muted-foreground cursor-pointer transition-colors hover:bg-green-50 hover:text-green-700 hover:border-green-300 dark:hover:bg-green-900/20 dark:hover:text-green-400 dark:hover:border-green-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {resolveMutation.isPending
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <CheckCircle2 className="h-3.5 w-3.5" />}
+                    Resolve
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Mark issue as resolved</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           );
         },
       },
