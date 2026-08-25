@@ -54,11 +54,10 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
   Plus,
@@ -625,56 +624,60 @@ export function ProvidersPage() {
                             <span className={`h-2.5 w-2.5 rounded-full ${statusConfig.color}`} />
                             <span className="text-sm">{statusConfig.label}</span>
                             {errorDiag && (
-                              <TooltipProvider delayDuration={200}>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button
-                                      type="button"
-                                      className="inline-flex items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                                      aria-label="View error details"
-                                    >
-                                      <HelpCircle className="h-3.5 w-3.5" />
-                                    </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" className="max-w-xs p-0">
-                                    <div className="space-y-2 p-3 text-xs">
-                                      <div className="font-semibold text-red-600 dark:text-red-400">
-                                        {errorDiag.category}
-                                      </div>
-                                      {errorDiag.errorMessage && (
-                                        <div className="text-zinc-600 dark:text-zinc-300">
-                                          <span className="font-medium">Message: </span>
-                                          {errorDiag.errorMessage}
-                                        </div>
-                                      )}
-                                      {errorDiag.errorType && (
-                                        <div className="text-zinc-500 dark:text-zinc-400">
-                                          <span className="font-medium">Type: </span>
-                                          <code className="bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-[10px]">{errorDiag.errorType}</code>
-                                        </div>
-                                      )}
-                                      {provider.baseUrl && (
-                                        <div className="text-zinc-500 dark:text-zinc-400 break-all">
-                                          <span className="font-medium">Endpoint: </span>
-                                          <code className="bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-[10px]">{provider.baseUrl}</code>
-                                        </div>
-                                      )}
-                                      {lastAttempt && (
-                                        <div className="text-zinc-500 dark:text-zinc-400">
-                                          <span className="font-medium">Last attempt: </span>
-                                          {lastAttempt}
-                                        </div>
-                                      )}
-                                      {errorDiag.suggestion && (
-                                        <div className="text-zinc-600 dark:text-zinc-300 border-t border-zinc-200 dark:border-zinc-700 pt-2 mt-2">
-                                          <span className="font-medium">Suggested fix: </span>
-                                          {errorDiag.suggestion}
-                                        </div>
-                                      )}
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                                    aria-label="View error details"
+                                  >
+                                    <HelpCircle className="h-3.5 w-3.5" />
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                  side="top"
+                                  align="start"
+                                  sideOffset={4}
+                                  className="w-[300px] max-w-[calc(100vw-2rem)] p-3"
+                                >
+                                  <div className="space-y-2 text-xs">
+                                    <div className="font-medium text-destructive flex items-center gap-1.5">
+                                      <AlertCircle className="h-3.5 w-3.5" />
+                                      {errorDiag.category}
                                     </div>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
+                                    {errorDiag.errorMessage && (
+                                      <div className="text-muted-foreground">
+                                        <span className="font-medium text-foreground">Message: </span>
+                                        {errorDiag.errorMessage}
+                                      </div>
+                                    )}
+                                    {errorDiag.errorType && (
+                                      <div className="text-muted-foreground flex items-center gap-1 flex-wrap">
+                                        <span className="font-medium text-foreground">Type:</span>
+                                        <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{errorDiag.errorType}</code>
+                                      </div>
+                                    )}
+                                    {provider.baseUrl && (
+                                      <div className="text-muted-foreground flex items-center gap-1 flex-wrap">
+                                        <span className="font-medium text-foreground">Endpoint:</span>
+                                        <code className="bg-muted px-1 py-0.5 rounded text-[10px] break-all">{provider.baseUrl}</code>
+                                      </div>
+                                    )}
+                                    {lastAttempt && (
+                                      <div className="text-muted-foreground">
+                                        <span className="font-medium text-foreground">Last attempt: </span>
+                                        {lastAttempt}
+                                      </div>
+                                    )}
+                                    {errorDiag.suggestion && (
+                                      <div className="text-muted-foreground border-t pt-2 mt-2">
+                                        <span className="font-medium text-foreground">Suggested fix: </span>
+                                        {errorDiag.suggestion}
+                                      </div>
+                                    )}
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
                             )}
                           </div>
                         </TableCell>
