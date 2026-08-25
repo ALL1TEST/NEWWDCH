@@ -41,85 +41,94 @@ const SEVERITY_STYLES: Record<string, { color: string; bg: string }> = {
 };
 
 // -------------------- Expandable Text Component --------------------
+// Uses a ref + scrollWidth measurement to detect overflow reliably,
+// regardless of font size or column width. "Read more" / "Read less"
+// appears on its own line below the text, only when the content overflows.
 
 function ExpandableText({
   text,
-  maxChars,
   className,
 }: {
   text: string;
-  maxChars: number;
   className?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const textRef = React.useRef<HTMLSpanElement>(null);
+
+  // Measure whether the text overflows its container.
+  // We compare scrollWidth (full content width) to clientWidth (visible width).
+  React.useLayoutEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    // Only measure when collapsed — when expanded the full text is shown
+    // and we already know it was overflowing.
+    if (expanded) return;
+    // Use a small delay to let the table layout settle
+    const measure = () => {
+      const el = textRef.current;
+      if (!el) return;
+      // scrollWidth includes overflow; clientWidth is the visible box
+      // Add 2px tolerance to avoid false positives from sub-pixel rounding
+      setOverflows(el.scrollWidth > el.clientWidth + 2);
+    };
+    measure();
+    // Re-measure on resize (table column widths can change)
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [expanded, text]);
 
   if (!text) return <span className={cn('text-muted-foreground', className)}>—</span>;
 
-  if (text.length <= maxChars) {
-    return <span className={className}>{text}</span>;
-  }
-
   return (
-    <span className={className}>
-      {expanded ? text : `${text.slice(0, maxChars)}...`}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setExpanded(!expanded);
-        }}
-        className="ml-1 text-primary hover:underline text-xs font-medium inline-block"
+    <div className="min-w-0 max-w-[250px]">
+      <span
+        ref={textRef}
+        className={cn(
+          'block overflow-hidden',
+          expanded ? 'whitespace-normal break-words' : 'text-ellipsis whitespace-nowrap',
+          className,
+        )}
+        title={expanded ? undefined : text}
       >
-        {expanded ? 'Read less' : 'Read more'}
-      </button>
-    </span>
+        {text}
+      </span>
+      {overflows && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(!expanded);
+          }}
+          className="mt-0.5 text-primary hover:underline text-xs font-medium block"
+        >
+          {expanded ? 'Read less' : 'Read more'}
+        </button>
+      )}
+    </div>
   );
 }
 
-// -------------------- Expandable URL Component --------------------
+// -------------------- URL Cell Component --------------------
+// Truncated with ellipsis, tooltip on hover, clickable to open in new tab.
+// No "Read more" button.
 
-function ExpandableUrl({ url }: { url: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const maxChars = 30;
-
-  if (url.length <= maxChars) {
-    return (
-      <a
-        href={url.startsWith('http') ? url : `https://cms.example.com${url}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="font-mono text-xs text-primary hover:underline inline-flex items-center gap-0.5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {url}
-        <ExternalLink className="h-2.5 w-2.5 opacity-50" />
-      </a>
-    );
-  }
+function UrlCell({ url }: { url: string }) {
+  const fullUrl = url.startsWith('http') ? url : `https://cms.example.com${url}`;
 
   return (
-    <span className="inline-flex flex-col gap-0.5">
-      <a
-        href={url.startsWith('http') ? url : `https://cms.example.com${url}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="font-mono text-xs text-primary hover:underline inline-flex items-center gap-0.5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {expanded ? url : `${url.slice(0, maxChars)}...`}
-        <ExternalLink className="h-2.5 w-2.5 opacity-50" />
-      </a>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setExpanded(!expanded);
-        }}
-        className="text-primary hover:underline text-xs font-medium w-fit"
-      >
-        {expanded ? 'Read less' : 'Read more'}
-      </button>
-    </span>
+    <a
+      href={fullUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="font-mono text-xs text-primary hover:underline inline-flex items-center gap-0.5 max-w-full"
+      title={url}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <span className="truncate block max-w-[180px]">{url}</span>
+      <ExternalLink className="h-2.5 w-2.5 opacity-50 shrink-0" />
+    </a>
   );
 }
 
@@ -218,7 +227,7 @@ export function SeoAuditPage() {
         header: 'URL',
         accessorKey: 'pageUrl',
         size: 200,
-        cell: ({ row }) => <ExpandableUrl url={row.original.pageUrl} />,
+        cell: ({ row }) => <UrlCell url={row.original.pageUrl} />,
       },
       {
         id: 'problem',
@@ -226,7 +235,7 @@ export function SeoAuditPage() {
         accessorKey: 'problem',
         size: 250,
         cell: ({ row }) => (
-          <ExpandableText text={row.original.problem} maxChars={60} className="text-sm" />
+          <ExpandableText text={row.original.problem} className="text-sm" />
         ),
       },
       {
@@ -235,7 +244,7 @@ export function SeoAuditPage() {
         accessorKey: 'recommendation',
         size: 250,
         cell: ({ row }) => (
-          <ExpandableText text={row.original.recommendation} maxChars={60} className="text-xs text-muted-foreground" />
+          <ExpandableText text={row.original.recommendation} className="text-xs text-muted-foreground" />
         ),
       },
       {
