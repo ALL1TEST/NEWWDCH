@@ -69,6 +69,7 @@ interface AiModel {
   id: string;
   name: string;
   providerId: string;
+  type?: string; // TEXT | IMAGE — used to filter IMAGE models out of the prompt Model dropdown
 }
 
 interface PromptFormData {
@@ -194,7 +195,7 @@ export function PromptsPage() {
     }),
     enabled: !!formData.providerId,
   });
-  const models = modelsData?.data ?? [];
+  const models = (modelsData?.data ?? []).filter((m) => m.type?.toUpperCase() !== 'IMAGE');
 
   // Fetch versions
   const { data: versionsData, isLoading: versionsLoading } = useQuery({
@@ -279,7 +280,7 @@ export function PromptsPage() {
       name: prompt.name,
       category: prompt.category,
       description: prompt.description ?? '',
-      tags: prompt.tags?.join(', ') ?? '',
+      tags: Array.isArray(prompt.tags) ? prompt.tags.join(', ') : '',
       variables: JSON.stringify(prompt.variables ?? {}, null, 2),
       systemPrompt: prompt.systemPrompt,
       userPrompt: prompt.userPrompt,
@@ -302,6 +303,19 @@ export function PromptsPage() {
     if (!formData.name.trim()) {
       toast.error('Name is required');
       return;
+    }
+    // Validate variables JSON before sending to the API
+    if (formData.variables.trim() && formData.variables.trim() !== '{}') {
+      try {
+        const parsed = JSON.parse(formData.variables);
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          toast.error('Variables must be a JSON object (e.g. {"topic": ""})');
+          return;
+        }
+      } catch {
+        toast.error('Variables must be valid JSON');
+        return;
+      }
     }
     saveMutation.mutate(formData);
   };
@@ -406,8 +420,8 @@ export function PromptsPage() {
                     <TableRow key={prompt.id}>
                       <TableCell className="font-medium">{prompt.name}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className={CATEGORY_COLORS[prompt.category]}>
-                          {CATEGORY_LABELS[prompt.category]}
+                        <Badge variant="secondary" className={CATEGORY_COLORS[prompt.category] ?? 'bg-zinc-100 text-zinc-700'}>
+                          {CATEGORY_LABELS[prompt.category] ?? prompt.category}
                         </Badge>
                       </TableCell>
                       <TableCell className="hidden md:table-cell">
@@ -489,8 +503,8 @@ export function PromptsPage() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold truncate">{prompt.name}</h3>
-                    <Badge variant="secondary" className={`${CATEGORY_COLORS[prompt.category]} mt-1`}>
-                      {CATEGORY_LABELS[prompt.category]}
+                    <Badge variant="secondary" className={`${CATEGORY_COLORS[prompt.category] ?? 'bg-zinc-100 text-zinc-700'} mt-1`}>
+                      {CATEGORY_LABELS[prompt.category] ?? prompt.category}
                     </Badge>
                   </div>
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => favMutation.mutate(prompt.id)}>
@@ -610,7 +624,7 @@ export function PromptsPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label>Temperature: {formData.temperature}</Label>
+                <Label>Temperature: {formData.temperature.toFixed(1)}</Label>
                 <Slider min={0} max={2} step={0.1} value={[formData.temperature]} onValueChange={([v]) => setFormData((p) => ({ ...p, temperature: v }))} />
               </div>
               <div className="grid gap-2">

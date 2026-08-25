@@ -68,15 +68,18 @@ function SettingsPageInner() {
   const queryClient = useQueryClient();
 
   const defaultSettings: AiSettings = {
-    defaultProviderId: '',
-    defaultModelId: '',
+    defaultProviderId: null,
+    defaultModelId: null,
     defaultTemperature: 0.7,
     defaultMaxTokens: 2048,
-    imageProviderId: '',
-    imageModelId: '',
+    imageProviderId: null,
+    imageModelId: null,
   };
 
   // Form state — local edits layered on top of the fetched settings.
+  // `localEdits` is cleared ONLY in `saveMutation.onSuccess` so background
+  // refetches (e.g. from another mutation invalidating `aiSettings.all`)
+  // do NOT discard the user's unsaved edits.
   const [localEdits, setLocalEdits] = useState<Partial<AiSettings>>({});
   const updateField = <K extends keyof AiSettings>(key: K, value: AiSettings[K]) => {
     setLocalEdits((prev) => ({ ...prev, [key]: value }));
@@ -90,17 +93,6 @@ function SettingsPageInner() {
 
   // settings = fetched data with local edits applied on top
   const settings: AiSettings = { ...(settingsData ?? defaultSettings), ...localEdits } as AiSettings;
-
-  // Clear local edits when settingsData changes after a refetch so stale edits
-  // don't persist over freshly-fetched server state. Uses the
-  // "storing information from previous renders" pattern documented in React docs
-  // (calling setState during render — safe because React will retry the render
-  // with the updated state before committing).
-  const [prevSettings, setPrevSettings] = useState(settingsData);
-  if (prevSettings !== settingsData) {
-    setPrevSettings(settingsData);
-    setLocalEdits({});
-  }
 
   // Fetch all providers (we want active ones for the dropdowns, but keep all for display)
   const { data: providersData } = useQuery({

@@ -187,6 +187,10 @@ export async function POST(request: NextRequest) {
         if (!model.isActive) {
           return err('Cannot use an inactive model for a prompt', 400, 'MODEL_INACTIVE');
         }
+        // Prompts execute as TEXT (chat) — reject IMAGE-type models
+        if (model.type?.toUpperCase() === 'IMAGE') {
+          return err('Image models cannot be used for text prompts. Please select a TEXT model.', 400, 'MODEL_TYPE_MISMATCH');
+        }
       }
     } else if (d.modelId && d.modelId !== '') {
       // Model without provider — invalid

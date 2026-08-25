@@ -88,12 +88,15 @@ interface AiProvider {
   kind: AiProviderKind;
   baseUrl: string;
   apiKey: string | null;
+  apiKeyMasked: string | null;
   apiVersion: string | null;
   isActive: boolean;
   isDefault: boolean;
   connectionStatus: AiConnectionStatus;
-  latency: number | null;
+  latencyMs: number | null;
   lastSyncAt: string | null;
+  lastHealthCheckAt: string | null;
+  lastError: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -116,7 +119,10 @@ const PROVIDER_KINDS: AiProviderKind[] = [
   'OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK', 'CUSTOM',
 ];
 
-const PROVIDER_CONFIGS: Record<AiProviderKind, { label: string; defaultUrl: string; color: string }> = {
+// NOTE: typed as `Record<string, ...>` (not `Record<AiProviderKind, ...>`) because
+// legacy kinds (OPENROUTER, OLLAMA, AZURE_OPENAI) are kept here for display of
+// existing rows but are no longer part of the `AiProviderKind` union.
+const PROVIDER_CONFIGS: Record<string, { label: string; defaultUrl: string; color: string }> = {
   OPENAI: { label: 'OpenAI', defaultUrl: 'https://api.openai.com/v1', color: 'bg-emerald-100 text-emerald-700' },
   ANTHROPIC: { label: 'Anthropic', defaultUrl: 'https://api.anthropic.com/v1', color: 'bg-orange-100 text-orange-700' },
   GEMINI: { label: 'Gemini', defaultUrl: 'https://generativelanguage.googleapis.com/v1', color: 'bg-sky-100 text-sky-700' },
@@ -129,7 +135,7 @@ const PROVIDER_CONFIGS: Record<AiProviderKind, { label: string; defaultUrl: stri
 };
 
 function kindConfig(kind: string): { label: string; color: string } {
-  const cfg = (PROVIDER_CONFIGS as Record<string, { label: string; defaultUrl: string; color: string }>)[kind];
+  const cfg = PROVIDER_CONFIGS[kind];
   return cfg ?? { label: kind, color: 'bg-zinc-100 text-zinc-700' };
 }
 
@@ -210,6 +216,7 @@ export function ProvidersPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
       toast.success('Provider deleted');
       setDeleteDialogOpen(false);
       setDeletingProvider(null);
@@ -255,6 +262,10 @@ export function ProvidersPage() {
     mutationFn: (id: string) => postApi(`/api/ai/providers/${id}/set-default`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiProviders.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
       toast.success('Default provider updated');
     },
     onError: (err: Error) => {
@@ -478,7 +489,8 @@ export function ProvidersPage() {
                 ) : (
                   providers.map((provider) => {
                     const kc = kindConfig(provider.kind);
-                    const statusConfig = CONNECTION_STATUS_CONFIG[provider.connectionStatus];
+                    const statusConfig = CONNECTION_STATUS_CONFIG[provider.connectionStatus]
+                      ?? { color: 'bg-zinc-400', label: provider.connectionStatus || 'Unknown' };
                     return (
                       <TableRow key={provider.id}>
                         <TableCell className="font-medium">{provider.name}</TableCell>
@@ -494,11 +506,11 @@ export function ProvidersPage() {
                           </div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
-                          {provider.latency != null ? `${provider.latency}ms` : '—'}
+                          {provider.latencyMs != null ? `${provider.latencyMs}ms` : '—'}
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-sm text-zinc-500">
                           {provider.lastSyncAt
-                            ? new Date(provider.lastSyncAt).toLocaleDateString()
+                            ? new Date(provider.lastSyncAt).toLocaleString()
                             : '—'}
                         </TableCell>
                         <TableCell>

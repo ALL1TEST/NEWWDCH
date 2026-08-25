@@ -134,7 +134,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const item = await db.aiProvider.update({ where: { id: providerId }, data });
-    return ok(item);
+
+    // Strip apiKeyEncrypted from the response — never send ciphertext to client
+    const { apiKeyEncrypted: _stripped, ...safeItem } = item;
+    let maskedKey: string | null = null;
+    if (existing.apiKeyEncrypted) {
+      try {
+        const raw = await decrypt(existing.apiKeyEncrypted);
+        maskedKey = maskSecret(raw);
+      } catch {
+        maskedKey = '••••••••';
+      }
+    }
+    return ok({ ...safeItem, apiKeyMasked: maskedKey });
   } catch (error) {
     console.error(`[AI/PROVIDERS:UPDATE] ${id} —`, error);
     return err('Failed to update provider', 500, 'INTERNAL_ERROR');
@@ -143,6 +155,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
 // =====================================================================
 // DELETE — hard delete
+// Handles FK constraints: nullifies PromptTemplate.providerId/modelId,
+// nullifies AiLog.providerId, deletes AiJob references, clears AiSettings
+// references, then deletes models + fallbacks + the provider.
 // =====================================================================
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -154,15 +169,35 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const existing = await db.aiProvider.findUnique({ where: { id: providerId } });
     if (!existing) return err('Provider not found', 404, 'NOT_FOUND');
 
-    // Delete models, fallbacks first (cascade should handle it, but be explicit)
-    await db.aiModel.deleteMany({ where: { providerId } });
-    await db.aiProviderFallback.deleteMany({ where: { providerId } });
-    await db.aiProviderFallback.deleteMany({ where: { fallbackId: providerId } });
+    // Collect model IDs belonging to this provider (for clearing prompt/log references)
+    const modelIds = await db.aiModel.findMany({ where: { providerId }, select: { id: true } });
+    const modelIdList = modelIds.map((m) => m.id);
 
+    // Clear all FK references that would block deletion (no cascade on these relations)
+    await db.$transaction([
+      // Nullify prompt references to this provider or its models
+      db.promptTemplate.updateMany({ where: { providerId }, data: { providerId: null, modelId: null } }),
+      db.promptTemplate.updateMany({ where: { modelId: { in: modelIdList } }, data: { modelId: null } }),
+      // Nullify log references
+      db.aiLog.updateMany({ where: { providerId }, data: { providerId: null } }),
+      db.aiLog.updateMany({ where: { modelId: { in: modelIdList } }, data: { modelId: null } }),
+      // Clear AI Settings references
+      db.aiSettings.updateMany({ where: { defaultProviderId: providerId }, data: { defaultProviderId: null, defaultModelId: null } }),
+      db.aiSettings.updateMany({ where: { imageProviderId: providerId }, data: { imageProviderId: null, imageModelId: null } }),
+      // Delete jobs that reference this provider (jobs require a provider)
+      db.aiJob.deleteMany({ where: { providerId } }),
+      // Delete fallbacks (both directions)
+      db.aiProviderFallback.deleteMany({ where: { providerId } }),
+      db.aiProviderFallback.deleteMany({ where: { fallbackId: providerId } }),
+      // Delete models
+      db.aiModel.deleteMany({ where: { providerId } }),
+    ]);
+
+    // Finally delete the provider
     await db.aiProvider.delete({ where: { id: providerId } });
     return ok({ deleted: true });
   } catch (error) {
     console.error(`[AI/PROVIDERS:DELETE] ${id} —`, error);
-    return err('Failed to delete provider', 500, 'INTERNAL_ERROR');
+    return err('Failed to delete provider. It may still be referenced by other records.', 500, 'INTERNAL_ERROR');
   }
 }

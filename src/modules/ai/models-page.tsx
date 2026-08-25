@@ -114,6 +114,7 @@ export function ModelsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
       toast.success('Model created');
       setFormOpen(false);
     },
@@ -128,6 +129,7 @@ export function ModelsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
       toast.success('Model updated');
       setFormOpen(false);
     },
@@ -141,6 +143,7 @@ export function ModelsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
       toast.success('Model deleted');
       setDeleteTarget(null);
     },
@@ -154,6 +157,7 @@ export function ModelsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
     },
     onError: (err: Error) => toast.error(err.message || 'Failed to update model'),
   });
@@ -164,6 +168,7 @@ export function ModelsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
       toast.success('Default model updated');
     },
     onError: (err: Error) => toast.error(err.message || 'Failed to set default'),
@@ -174,17 +179,25 @@ export function ModelsPage() {
     mutationFn: async () => {
       const active = providers.filter((p) => p.isActive);
       let totalSynced = 0;
+      const failed: string[] = [];
       for (const provider of active) {
         try {
           const res = await postApi<{ syncedCount?: number; count?: number }>(`/api/ai/providers/${provider.id}/sync-models`);
           totalSynced += res?.syncedCount ?? res?.count ?? 0;
-        } catch { /* continue */ }
+        } catch {
+          failed.push(provider.name);
+        }
       }
-      return totalSynced;
+      return { totalSynced, failed };
     },
-    onSuccess: (count) => {
+    onSuccess: ({ totalSynced, failed }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
-      toast.success(`Synced ${count} models across all providers`);
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiProviders.all });
+      if (failed.length > 0) {
+        toast.warning(`Synced ${totalSynced} models. Failed: ${failed.join(', ')}`);
+      } else {
+        toast.success(`Synced ${totalSynced} models across all providers`);
+      }
     },
     onError: (err: Error) => toast.error(err.message || 'Sync failed'),
   });

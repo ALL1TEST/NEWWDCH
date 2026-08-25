@@ -66,7 +66,7 @@ async function resolveModel(
   providerId: string,
   modelId: string | undefined,
   expectedType: 'TEXT' | 'IMAGE',
-  providerModels: Array<{ id: string; modelId: string; isActive: boolean; isDefault: boolean; type: string; inputCostPer1k: number | null; outputCostPer1k: number | null }>,
+  providerModels: Array<{ id: string; modelId: string; providerId: string; isActive: boolean; isDefault: boolean; type: string; inputCostPer1k: number | null; outputCostPer1k: number | null }>,
 ): Promise<ResolvedModel> {
   // If a modelId is provided, it's a DB cuid — look it up
   if (modelId) {
@@ -74,7 +74,7 @@ async function resolveModel(
     if (!model) {
       throw new Error('The selected model was not found for this provider. Please select a valid model.');
     }
-    if (model.providerId !== undefined && model.providerId !== providerId) {
+    if (model.providerId !== providerId) {
       throw new Error('The selected model does not belong to the selected provider.');
     }
     if (!model.isActive) {
@@ -158,6 +158,9 @@ export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
   let content = '';
   let usedProvider = provider;
   let usedModelId = modelId;
+  // Track the resolved model for cost calculation — updated when a fallback succeeds
+  // so cost is calculated using the fallback's rates, not the primary's.
+  let usedResolved = resolved;
 
   try {
     if (provider.kind === 'ANTHROPIC') {
@@ -221,6 +224,7 @@ export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
         content = fbResult.content;
         usedProvider = fb.fallback;
         usedModelId = fbResolved.modelId;
+        usedResolved = fbResolved; // update cost rates to the fallback's
         lastError = null as unknown as Error;
         break;
       } catch (fbErr) {
@@ -256,8 +260,8 @@ export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
 
   const durationMs = Date.now() - startTime;
   const totalTokens = inputTokens + outputTokens;
-  const costUsd = (inputTokens / 1000) * (resolved.inputCostPer1k || 0)
-    + (outputTokens / 1000) * (resolved.outputCostPer1k || 0);
+  const costUsd = (inputTokens / 1000) * (usedResolved.inputCostPer1k || 0)
+    + (outputTokens / 1000) * (usedResolved.outputCostPer1k || 0);
 
   // Update provider
   await db.aiProvider.update({
@@ -577,23 +581,34 @@ export async function syncModels(providerId: string): Promise<number> {
   // Determine the correct type for each model
   const isImage = (mid: string) => isImageModelId(mid);
 
-  // Upsert models + set type correctly
+  // Upsert models + set type correctly.
+  // For existing models (update): only overwrite fields that the upstream API
+  // actually provides meaningful data for. Preserve admin-set cost/name overrides
+  // by only updating from config.defaultModels (which have real cost data) —
+  // API-fetched models with zero cost/context don't overwrite admin edits.
   let count = 0;
   for (const model of fetchedModels) {
     const modelType = isImage(model.modelId) ? 'IMAGE' : 'TEXT';
+    const isFromDefaults = config.defaultModels.some((m) => m.modelId === model.modelId);
+
     await db.aiModel.upsert({
       where: { providerId_modelId: { providerId, modelId: model.modelId } },
       update: {
-        name: model.name,
-        contextLength: model.contextLength,
-        inputCostPer1k: model.inputCostPer1k,
-        outputCostPer1k: model.outputCostPer1k,
-        supportsImages: model.supportsImages,
-        supportsVision: model.supportsVision,
-        supportsFunctionCalling: model.supportsFunctionCalling,
-        supportsJsonMode: model.supportsJsonMode,
-        supportsStreaming: model.supportsStreaming,
-        supportsTools: model.supportsTools,
+        // Only update cost/capability fields from the default config (which has real data).
+        // API-fetched models with zeros don't overwrite admin-set values.
+        ...(isFromDefaults ? {
+          name: model.name,
+          contextLength: model.contextLength,
+          inputCostPer1k: model.inputCostPer1k,
+          outputCostPer1k: model.outputCostPer1k,
+          supportsImages: model.supportsImages,
+          supportsVision: model.supportsVision,
+          supportsFunctionCalling: model.supportsFunctionCalling,
+          supportsJsonMode: model.supportsJsonMode,
+          supportsStreaming: model.supportsStreaming,
+          supportsTools: model.supportsTools,
+        } : {}),
+        // Always update type + lastSyncedAt
         type: modelType,
         lastSyncedAt: new Date(),
       },
@@ -618,15 +633,16 @@ export async function syncModels(providerId: string): Promise<number> {
     count++;
   }
 
-  // Ensure there's a default TEXT and (if applicable) IMAGE model for this provider
+  // Always ensure there's at least one default TEXT model for this provider
   const textDefault = await db.aiModel.findFirst({
     where: { providerId, type: 'TEXT', isActive: true },
     orderBy: { createdAt: 'asc' },
   });
-  if (textDefault && !fetchedModels.some((m) => isImage(m.modelId))) {
-    // No image models in this sync — only ensure text default
-    const anyDefault = await db.aiModel.findFirst({ where: { providerId, isDefault: true } });
-    if (!anyDefault) {
+  if (textDefault) {
+    const hasTextDefault = await db.aiModel.findFirst({
+      where: { providerId, type: 'TEXT', isDefault: true },
+    });
+    if (!hasTextDefault) {
       await db.aiModel.update({ where: { id: textDefault.id }, data: { isDefault: true } });
     }
   }

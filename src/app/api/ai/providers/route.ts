@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
       db.aiProvider.count({ where }),
     ]);
 
-    // Mask API keys
+    // Mask API keys — strip the encrypted ciphertext, return only the masked version
     const masked = await Promise.all(items.map(async (item) => {
       let maskedKey: string | null = null;
       if (item.apiKeyEncrypted) {
@@ -93,7 +93,9 @@ export async function GET(request: NextRequest) {
           maskedKey = '••••••••';
         }
       }
-      return { ...item, apiKeyMasked: maskedKey };
+      // Strip apiKeyEncrypted — never send the ciphertext to the client
+      const { apiKeyEncrypted, ...rest } = item;
+      return { ...rest, apiKeyMasked: maskedKey };
     }));
 
     return NextResponse.json({
@@ -181,7 +183,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return ok(item, { _status: 201 });
+    // Strip apiKeyEncrypted from the response — never send ciphertext to client
+    const { apiKeyEncrypted: _stripped, ...safeItem } = item;
+    return ok({ ...safeItem, apiKeyMasked: encryptedKey ? maskSecret(d.apiKey!) : null }, { _status: 201 });
   } catch (error) {
     console.error(`[AI/PROVIDERS:CREATE] ${id} —`, error);
     return err('Failed to create AI provider', 500, 'INTERNAL_ERROR');

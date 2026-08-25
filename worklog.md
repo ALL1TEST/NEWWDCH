@@ -1696,3 +1696,103 @@ Stage Summary:
 - EXISTING FUNCTIONALITY PRESERVED: All 5 built-in provider kinds (OpenAI, Anthropic, Gemini, Groq, DeepSeek) work exactly as before. The CUSTOM kind is purely additive — no existing code paths were changed, only extended with additional `|| provider.kind === 'CUSTOM'` checks where appropriate.
 - SECURITY: API keys are stored encrypted (via `encrypt()` from `@/lib/encryption`). The full key is never returned in API responses (only `apiKeyMasked`). In the Edit dialog, the API key field is empty with "Leave blank to keep existing key" placeholder — the key is only replaced if a new value is explicitly entered.
 - EXTENSIBILITY: The architecture is designed so additional provider-specific adapters can be added later by adding a new kind to the enum + a new config in `providers.ts` + a new branch in `executeChat`/`executeImageGeneration`/`healthCheck`/`syncModels`. The CUSTOM kind demonstrates the pattern for OpenAI-compatible providers.
+
+---
+Task ID: AI-FRONTEND-FIX-2
+Agent: main (ai-frontend-fixer)
+Task: Surgical fixes to 4 AI frontend pages — providers, models, settings, prompts. No UI redesign; only the specific behaviors called out in the spec are modified.
+
+Work Log:
+
+1. src/modules/ai/providers-page.tsx
+   - **Fix 1 (CRITICAL — type error)**: Changed `PROVIDER_CONFIGS` type from `Record<AiProviderKind, {...}>` to `Record<string, {...}>` so the 3 legacy keys (OPENROUTER, OLLAMA, AZURE_OPENAI) kept for display no longer violate the type (the `AiProviderKind` union only has 6 members: OPENAI, ANTHROPIC, GEMINI, GROQ, DEEPSEEK, CUSTOM). Also simplified `kindConfig()` to index the map directly without a redundant `as Record<string, ...>` cast.
+   - **Fix 2 (CRITICAL — render crash)**: Added a fallback for `CONNECTION_STATUS_CONFIG[provider.connectionStatus]`. If the backend ever returns a status not in the 3 configured values (CONNECTED/DISCONNECTED/ERROR), the row now renders with a neutral `bg-zinc-400` dot and the raw status string as the label, instead of crashing on `undefined.color`.
+   - **Fix 3 (verify — no code change)**: Verified the `/api/ai/providers/[id]/test` route returns `{ success, status, latency, message, availableModels }`. The `healthCheck()` helper in `ai-service.ts` constructs error messages that include the HTTP status code + the response body (truncated to 200 chars) for every provider kind (Anthropic /messages, Gemini /models, OpenAI-compatible /models). The frontend's `testMutation.onSuccess` already shows `res.message` in the error toast, so users see the full upstream error. No change needed.
+   - **Fix 4 (invalidation gap)**: `setDefaultMutation.onSuccess` now also invalidates `aiModels.all`, `aiSettings.all`, `aiPrompts.all`, and `aiLogs.all` (was only invalidating `aiProviders.all`). This ensures the Models page, Settings page, Prompts page, and Logs filter dropdown all reflect the new default provider immediately.
+   - **Fix 5 (invalidation gap)**: `deleteMutation.onSuccess` now also invalidates `aiLogs.all` (was missing it). The Logs page filter dropdown will now drop the deleted provider from its options.
+   - **Fix 6 (UX)**: "Last Sync" column now uses `.toLocaleString()` instead of `.toLocaleDateString()` so the time is shown alongside the date — a sync from 5 minutes ago is now distinguishable from one 12 hours ago.
+
+2. src/modules/ai/models-page.tsx
+   - **Fix 1 (invalidation gap)**: `syncAllMutation.onSuccess` now also invalidates `aiProviders.all` so the "Last Sync" column on the Providers page updates after a Sync All.
+   - **Fix 2 (silent failures)**: `syncAllMutation` no longer swallows per-provider failures. It collects the names of providers whose sync threw an error and:
+     * Returns `{ totalSynced, failed }` from `mutationFn`.
+     * In `onSuccess`, if `failed.length > 0` shows a `toast.warning(\`Synced ${totalSynced} models. Failed: ${failed.join(', ')}\`)` so the user knows which providers failed.
+     * Otherwise shows the original `toast.success(\`Synced ${totalSynced} models across all providers\`)`.
+   - **Fix 3 (invalidation gap)**: Added `aiLogs.all` to the invalidation lists of `createMutation`, `updateMutation`, `deleteMutation`, `toggleMutation`, and `setDefaultMutation` so the Logs page filter dropdown reflects model additions/removals/toggles/default-changes immediately.
+
+3. src/modules/ai/settings-page.tsx
+   - **Fix 1 (CRITICAL — edit loss)**: Removed the "store info from previous render" pattern (`prevSettings` / `setPrevSettings` + the `setState`-during-render that cleared `localEdits` whenever `settingsData` changed). This was silently discarding the user's unsaved edits whenever a background refetch happened (e.g. after the Providers page mutated something and invalidated `aiSettings.all`). `localEdits` is now cleared ONLY in `saveMutation.onSuccess` (which already did this). The `settings = { ...(settingsData ?? defaultSettings), ...localEdits }` merge is unchanged — local edits still layer on top of fetched data, but they persist across background refetches until the user explicitly saves.
+   - **Fix 2 (type correctness)**: Changed `defaultSettings.defaultProviderId` and `defaultSettings.imageProviderId` from `''` (empty string) to `null`, matching the `AiSettings` interface (`string | null`). The existing JSX uses `settings.defaultProviderId ?? ''` / `settings.imageProviderId ?? ''` which already handles `null` correctly — no JSX changes needed. (`defaultModelId` and `imageModelId` were already `''` in the interface as `string | null`, but the spec only called out the two provider IDs; left them as-is to avoid scope creep.)
+
+4. src/modules/ai/prompts-page.tsx
+   - **Fix 1 (model type filtering)**: Added `type?: string` to the local `AiModel` interface and filtered the models list client-side: `const models = (modelsData?.data ?? []).filter((m) => m.type?.toUpperCase() !== 'IMAGE');`. This prevents IMAGE models from appearing in the prompt Model dropdown (a user could previously assign an IMAGE model to a text prompt, which would fail at generation time).
+   - **Fix 2 (variables JSON validation)**: Added explicit JSON validation in `handleSave` before calling `saveMutation.mutate(formData)`. If the variables field is non-empty and not `{}`, it `JSON.parse`s it and verifies the result is a plain object (not an array, not a primitive, not null). On failure shows `toast.error('Variables must be a JSON object (e.g. {"topic": ""})')` or `toast.error('Variables must be valid JSON')` and returns early. The existing in-mutation fallback (silently returning `{}`) is retained as a defense-in-depth measure.
+   - **Fix 3 (category fallback)**: Added fallbacks for `CATEGORY_LABELS[prompt.category]` (→ `prompt.category`) and `CATEGORY_COLORS[prompt.category]` (→ `'bg-zinc-100 text-zinc-700'`) in BOTH the table view (line ~423) and the grid view (line ~506). Unknown categories now render with a neutral gray badge and the raw category string as the label, instead of `undefined`.
+   - **Fix 4 (temperature formatting)**: Changed `Temperature: {formData.temperature}` to `Temperature: {formData.temperature.toFixed(1)}` so the label shows e.g. `0.7` instead of `0.6999999999999999` (raw float artifact from slider stepping).
+   - **Fix 5 (tags defensive check)**: Changed `tags: prompt.tags?.join(', ') ?? ''` to `tags: Array.isArray(prompt.tags) ? prompt.tags.join(', ') : ''` in `handleOpenEdit`. Defends against the API returning tags as a non-array (e.g. a string or null) which would crash `.join()`.
+
+VERIFICATION:
+- `bun run lint 2>&1 | grep -E "modules/ai/" | head -20` → ZERO output (no errors, no warnings in any `src/modules/ai/*` file).
+- Full `bun run lint` reports 5 problems (2 errors, 3 warnings) — all pre-existing in unrelated files (`src/modules/content/content-edit-page.tsx`, `src/modules/seo/seo-broken-links-page.tsx`, `src/modules/seo/seo-social-preview-page.tsx`). No new errors introduced.
+- Dev server log shows successful compilation (`✓ Compiled in 680ms` etc.) and `GET /api/ai/providers?page=1&pageSize=25 200` — the providers page renders correctly after the changes.
+
+Stage Summary:
+- All 4 files modified per spec. Changes are surgical — UI structure, layout, and design language are completely unchanged; only the specific behaviors called out in the audit are modified.
+- KEY BEHAVIOR CHANGES:
+  * Settings page no longer discards unsaved edits on background refetch (Fix s1) — this was the most impactful fix, as any mutation elsewhere that invalidated `aiSettings.all` would silently wipe the user's in-progress settings edits.
+  * Sync All now surfaces per-provider failures instead of silently reporting only the success count (Fix m1).
+  * Prompt Model dropdown no longer shows IMAGE models (Fix pr1) — prevents an invalid prompt→model assignment that would fail at generation time.
+- DEFENSIVE FALLBACKS: status badge (providers), category badge/colors (prompts), tags array (prompts) all now degrade gracefully instead of crashing on unexpected backend data.
+- TYPE SAFETY: `PROVIDER_CONFIGS` type widened to `Record<string, ...>` so legacy display keys don't fight the trimmed `AiProviderKind` union.
+
+---
+Task ID: AI-FULL-AUDIT-2
+Agent: main (ai-auditor)
+Task: Comprehensive audit and fix of the entire AI module — providers, models, prompts, settings, generation service, validation, persistence, error handling.
+
+Work Log:
+
+1. AUDIT — Launched 2 parallel Explore agents to audit all 8 AI frontend files and 18 AI backend files. Identified 11 CRITICAL, 17 FUNCTIONAL, and 10 UX issues.
+
+2. P0 BACKEND FIXES
+   - **Created missing `/api/ai/providers/[id]/test` endpoint** (src/app/api/ai/providers/[id]/test/route.ts) — calls `healthCheck()` which makes a REAL API request to the provider's endpoint, updates connectionStatus/latencyMs/lastHealthCheckAt/lastError, and returns `{ success, status, latency, message, availableModels }`. Previously this endpoint was missing entirely — Test Connection button was calling a non-existent route.
+   - **Fixed API key leak** in providers GET list (stripped `apiKeyEncrypted` from response, only `apiKeyMasked` returned), POST create (stripped + masked), PATCH update (stripped + masked). Previously the encrypted ciphertext was returned to the client on every list/create/update call.
+   - **Fixed provider DELETE FK cascade** — the DELETE route previously only deleted models + fallbacks, but PromptTemplate.providerId, AiLog.providerId, AiJob.providerId, and AiSettings all reference the provider with no onDelete cascade. Now uses `db.$transaction` to nullify all prompt/log/settings references + delete jobs/fallbacks/models before deleting the provider. Previously deleting a provider that had ever been used would throw an FK constraint error.
+   - **Fixed cost accounting for fallback providers** — `executeChat` was calculating cost using the PRIMARY provider's model rates even when a fallback provider handled the request. Added `usedResolved` variable that tracks the resolved model of the fallback that actually succeeded, so cost is calculated using the correct rates.
+   - **Fixed sync overwriting manual model edits** — `syncModels` was overwriting admin-set cost/name/capability fields with zeros from the upstream `/models` endpoint. Now only updates those fields for models that come from `config.defaultModels` (which have real cost data). API-fetched models with zeros don't overwrite admin-set values. Type + lastSyncedAt are always updated.
+
+3. P1 BACKEND FIXES
+   - **Fixed resolveModel dead ownership check** — the `providerModels` type didn't include `providerId`, so the ownership check `model.providerId !== undefined && model.providerId !== providerId` was dead code (always false). Added `providerId: string` to the type and simplified the check to `model.providerId !== providerId`.
+   - **Fixed prompt model type validation** — prompts execute as TEXT (chat) but IMAGE models could be assigned to them. Both POST and PATCH prompt routes now reject IMAGE-type models with `MODEL_TYPE_MISMATCH` error: "Image models cannot be used for text prompts. Please select a TEXT model."
+   - **Fixed syncModels default logic** — previously only ensured a TEXT default when there were NO image models in the sync. Now always ensures at least one default TEXT model exists for the provider.
+
+4. FRONTEND FIXES (via subagent + direct)
+   - **Fixed PROVIDER_CONFIGS type error** — changed from `Record<AiProviderKind, {...}>` to `Record<string, {...}>` so legacy keys (OPENROUTER, OLLAMA, AZURE_OPENAI) don't violate the type.
+   - **Fixed connection status fallback** — `CONNECTION_STATUS_CONFIG[provider.connectionStatus]` now has a `?? { color: 'bg-zinc-400', label: ... }` fallback to prevent render crashes on unknown statuses.
+   - **Fixed latency field name mismatch** — frontend interface had `latency` but API returns `latencyMs`. Fixed the interface + display reference. Latency now correctly shows (e.g., "175ms") instead of always "—".
+   - **Fixed Last Sync display** — changed from `.toLocaleDateString()` (date only) to `.toLocaleString()` (date + time) so a sync from 5 minutes ago is distinguishable from one 12 hours ago.
+   - **Fixed Settings page edit loss** — removed the "store info from previous render" pattern that cleared `localEdits` on every background refetch. `localEdits` is now cleared ONLY in `saveMutation.onSuccess`.
+   - **Fixed Settings empty-string vs null** — `defaultSettings.defaultProviderId` and `imageProviderId` changed from `''` to `null` to match the `AiSettings` interface.
+   - **Fixed query invalidation gaps** — `setDefaultMutation` now invalidates aiModels+aiSettings+aiPrompts+aiLogs (was only aiProviders). `deleteMutation` now also invalidates aiLogs. All model mutations now invalidate aiLogs.
+   - **Fixed syncAllMutation silent failures** — now collects failed provider names and shows them in a warning toast. Also invalidates aiProviders (for Last Sync column).
+   - **Fixed prompt model type filtering** — the Model dropdown in Create/Edit Prompt now filters out IMAGE-type models, only showing TEXT models.
+   - **Fixed variables JSON validation** — `handleSave` in prompts page now validates that variables is a JSON object (not array/primitive) before submitting.
+   - **Fixed category fallback** — `CATEGORY_LABELS` and `CATEGORY_COLORS` now have fallbacks for unknown categories.
+   - **Fixed temperature display** — uses `.toFixed(1)` instead of raw float.
+   - **Fixed tags defensive check** — `Array.isArray(prompt.tags)` check before `.join()`.
+
+5. VERIFICATION
+   - **API key leak**: `curl /api/ai/providers` → `apiKeyEncrypted` not in response, `apiKeyMasked` present ✓
+   - **Test Connection**: `POST /api/ai/providers/ai-openai-test/test` → returns `{ success: false, status: "ERROR", latency: 108, message: "HTTP 403: {error: {code: unsupported_country_region_territory, ...}}" }` ✓ — meaningful error with HTTP status + body
+   - **Delete cascade**: Created test provider + model → `DELETE /api/ai/providers/{id}` → `{ deleted: true }` ✓ — no FK error
+   - **Prompt model type validation**: `POST /api/ai/prompts` with IMAGE model → `MODEL_TYPE_MISMATCH: "Image models cannot be used for text prompts."` ✓
+   - **Latency display**: Browser shows "175ms" in Latency column (was "—" before) ✓
+   - **Last Sync display**: Browser shows "8/25/2026, 9:41:27 AM" (was date-only before) ✓
+   - **Prompt model filtering**: Add Prompt → select OpenAI Test → Model dropdown shows only GPT-5, GPT-5 mini, GPT-4.1 (GPT Image excluded) ✓
+   - **Lint**: 0 errors in any AI file ✓
+   - **Dev log**: No runtime errors ✓
+
+Stage Summary:
+- ROOT APPROACH: The audit found 11 critical issues. The most severe were: (1) the Test Connection endpoint was completely missing (the button called a non-existent route), (2) API key ciphertext was leaked in 3 of 4 provider endpoints, (3) provider DELETE failed with FK constraint errors whenever the provider had been used, (4) cost accounting used the wrong provider's rates when a fallback handled the request, (5) sync overwrote admin-set model cost/name edits with zeros. All are now fixed. Additionally, the frontend had a field name mismatch (`latency` vs `latencyMs`) that made the Latency column always show "—", and the Settings page silently discarded user edits on every background refetch. Both are fixed.
+- FILES MODIFIED: src/app/api/ai/providers/[id]/test/route.ts (CREATED), src/app/api/ai/providers/route.ts, src/app/api/ai/providers/[id]/route.ts, src/app/api/ai/prompts/route.ts, src/app/api/ai/prompts/[id]/route.ts, src/lib/ai/ai-service.ts, src/modules/ai/providers-page.tsx, src/modules/ai/models-page.tsx, src/modules/ai/prompts-page.tsx, src/modules/ai/settings-page.tsx.
+- EXISTING FUNCTIONALITY PRESERVED: All 6 provider kinds (OpenAI, Anthropic, Gemini, Groq, DeepSeek, Custom) work as before. The Provider→Model cascade, default logic, settings validation, and AI generation service are all intact. No UI redesign — only bug fixes.
