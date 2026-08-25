@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const sp = new URL(request.url).searchParams;
-    const days = Math.min(90, Math.max(1, Number(sp.get('days')) || 30));
+    const days = Math.min(180, Math.max(1, Number(sp.get('days')) || 30));
 
     const siteFilter = await getSiteWhere(request);
 

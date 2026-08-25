@@ -79,6 +79,8 @@ interface DailyStat {
   date: string;
   clicks: number;
   impressions: number;
+  ctr?: number;
+  position?: number;
 }
 
 interface QueryItem {
@@ -292,13 +294,23 @@ function PerformanceChart({ stats, isLoading, days, onSync, isSyncing }: Perform
               className="flex-1 flex flex-col items-center gap-0.5 group relative min-w-0"
             >
               {/* Tooltip */}
-              <div className="absolute -top-16 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col items-center gap-0.5 bg-popover border rounded-md shadow-md px-2 py-1.5 z-10 pointer-events-none">
+              <div className="absolute -top-20 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col items-center gap-0.5 bg-popover border rounded-md shadow-md px-2.5 py-2 z-10 pointer-events-none whitespace-nowrap">
                 <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                   {formatShortDate(stat.date)}
                 </span>
                 <span className="text-[10px] font-medium">
                   {stat.clicks} clicks · {stat.impressions} imp
                 </span>
+                {stat.ctr != null && (
+                  <span className="text-[10px] text-muted-foreground">
+                    CTR: {(stat.ctr * 100).toFixed(2)}%
+                  </span>
+                )}
+                {stat.position != null && (
+                  <span className="text-[10px] text-muted-foreground">
+                    Pos: {stat.position.toFixed(1)}
+                  </span>
+                )}
               </div>
 
               {/* Bars container */}
@@ -429,11 +441,17 @@ function PagesTable({ pages, isLoading }: { pages: PageItem[]; isLoading: boolea
         <TableBody>
           {pages.map((item, i) => (
             <TableRow key={`${item.pageUrl}-${i}`}>
-              <TableCell className="font-mono text-xs max-w-[280px] truncate" title={item.pageUrl}>
-                <span className="flex items-center gap-1">
-                  <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground/50" />
-                  {item.pageUrl}
-                </span>
+              <TableCell className="max-w-[280px]">
+                <a
+                  href={item.pageUrl.startsWith('http') ? item.pageUrl : `https://cms.example.com${item.pageUrl}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline"
+                  title={item.pageUrl}
+                >
+                  <span className="truncate max-w-[240px]">{item.pageUrl}</span>
+                  <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
+                </a>
               </TableCell>
               <TableCell className="text-right tabular-nums">{item.clicks.toLocaleString()}</TableCell>
               <TableCell className="text-right tabular-nums hidden sm:table-cell">
@@ -778,7 +796,8 @@ function SeoSearchConsolePageInner() {
                         <SelectItem value="7">Last 7 days</SelectItem>
                         <SelectItem value="14">Last 14 days</SelectItem>
                         <SelectItem value="28">Last 28 days</SelectItem>
-                        <SelectItem value="90">Last 90 days</SelectItem>
+                        <SelectItem value="90">Last 3 months</SelectItem>
+                        <SelectItem value="180">Last 6 months</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -803,7 +822,7 @@ function SeoSearchConsolePageInner() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Top Search Queries</CardTitle>
                   <Badge variant="outline" className="text-[10px] font-normal">
-                    Top 10
+                    Top {queriesData?.data?.length ?? 10}
                   </Badge>
                 </div>
               </CardHeader>
@@ -823,7 +842,7 @@ function SeoSearchConsolePageInner() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Top Pages</CardTitle>
                   <Badge variant="outline" className="text-[10px] font-normal">
-                    Top 10
+                    Top {pagesData?.data?.length ?? 10}
                   </Badge>
                 </div>
               </CardHeader>
