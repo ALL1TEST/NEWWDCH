@@ -6,7 +6,7 @@ import {
   Globe, FileQuestion, FileX2, Type, Heading, Copy, Unlink,
   FileCode, BarChart3, Shield, ArrowUpRight, AlertTriangle,
   Info, ChevronRight, Navigation, CheckCircle2, XCircle, Eye, ClipboardCheck,
-  Link2, Code, RefreshCw, MousePointerClick, TrendingUp, Target,
+  Link2, Code, RefreshCw, MousePointerClick, TrendingUp, Target, ExternalLink,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/patterns';
 import { getApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
-import { cn, truncate } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 
 // ==================== Types ====================
@@ -235,31 +235,33 @@ function RecentIssuesSummary({ issues, navigate }: { issues: SeoIssue[]; navigat
           {recent.map((issue) => {
             const sev = SEVERITY_CONFIG[issue.severity] ?? SEVERITY_CONFIG.INFO;
             const SevIcon = sev.icon;
+            const fullUrl = issue.pageUrl.startsWith('http') ? issue.pageUrl : `https://cms.example.com${issue.pageUrl}`;
             return (
               <li
                 key={issue.id}
-                className="flex items-start gap-3 p-2.5 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
+                className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
               >
                 <Badge
                   variant="outline"
-                  className={cn('border-transparent font-medium gap-1 shrink-0', sev.bg, sev.color)}
+                  className={cn('border-transparent font-medium gap-1 shrink-0 mt-0.5', sev.bg, sev.color)}
                 >
                   <SevIcon className="h-3 w-3" />
                   {issue.severity.charAt(0) + issue.severity.slice(1).toLowerCase()}
                 </Badge>
-                <div className="min-w-0 flex-1">
-                  <p
-                    className="font-mono text-xs text-muted-foreground truncate"
-                    title={issue.pageUrl}
-                  >
-                    {truncate(issue.pageUrl, 60)}
-                  </p>
-                  <p
-                    className="text-sm text-foreground truncate mt-0.5"
-                    title={issue.problem}
-                  >
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-sm font-medium text-foreground leading-snug">
                     {issue.problem}
                   </p>
+                  <a
+                    href={fullUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline"
+                    title={issue.pageUrl}
+                  >
+                    <span className="truncate max-w-[280px]">{issue.pageUrl}</span>
+                    <ExternalLink className="h-2.5 w-2.5 opacity-50 shrink-0" />
+                  </a>
                 </div>
               </li>
             );
