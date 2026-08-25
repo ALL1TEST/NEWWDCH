@@ -324,18 +324,35 @@ export function SeoAuditPage() {
         className={cn(
           'flex items-center gap-1.5 ml-2 px-2.5 py-1 text-xs font-medium rounded-md border transition-colors',
           showResolved
-            ? 'border-foreground/30 bg-foreground/5 text-foreground'
+            ? 'border-foreground bg-foreground text-background'
             : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted/50',
         )}
       >
-        <input
-          type="checkbox"
-          checked={showResolved}
-          readOnly
-          className="h-3 w-3 rounded border-border pointer-events-none"
-        />
+        <span
+          className={cn(
+            'flex h-3 w-3 items-center justify-center rounded-[3px] border transition-colors',
+            showResolved
+              ? 'border-background bg-background text-foreground'
+              : 'border-border bg-background',
+          )}
+        >
+          {showResolved && (
+            <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 6l3 3 5-6" />
+            </svg>
+          )}
+        </span>
         Show Resolved Only
       </button>
+      {showResolved && (
+        <button
+          type="button"
+          onClick={() => { setShowResolved(false); setSeverityFilter('all'); table.setCurrentPage(1); }}
+          className="px-2.5 py-1 text-xs font-medium rounded-md border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+        >
+          Clear
+        </button>
+      )}
     </div>
   );
 
