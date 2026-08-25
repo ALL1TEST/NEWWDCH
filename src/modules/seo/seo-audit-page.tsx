@@ -63,7 +63,8 @@ export function SeoAuditPage() {
     order: table.sortOrder,
     search: table.searchValue || undefined,
     severity: severityFilter !== 'all' ? severityFilter : undefined,
-  }), [table.currentPage, table.pageSize, table.sortField, table.sortOrder, table.searchValue, severityFilter]);
+    isResolved: showResolved ? undefined : 'false',
+  }), [table.currentPage, table.pageSize, table.sortField, table.sortOrder, table.searchValue, severityFilter, showResolved]);
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.seoIssues.list(queryParams),
@@ -74,28 +75,45 @@ export function SeoAuditPage() {
   const issues = data?.data ?? [];
   const totalItems = data?.pagination?.total ?? 0;
 
+  // Fetch severity counts (unresolved only) via 3 lightweight pagination queries
+  // that each return total=1 just to read the pagination.total field.
+  const { data: criticalData } = useQuery({
+    queryKey: ['seo-issues', 'count', 'CRITICAL'],
+    queryFn: () => getApi<PaginatedResponse<SeoIssueRow>>('/api/seo/issues', { pageSize: 1, isResolved: 'false', severity: 'CRITICAL' }),
+    staleTime: 10_000,
+  });
+  const { data: warningData } = useQuery({
+    queryKey: ['seo-issues', 'count', 'WARNING'],
+    queryFn: () => getApi<PaginatedResponse<SeoIssueRow>>('/api/seo/issues', { pageSize: 1, isResolved: 'false', severity: 'WARNING' }),
+    staleTime: 10_000,
+  });
+  const { data: infoData } = useQuery({
+    queryKey: ['seo-issues', 'count', 'INFO'],
+    queryFn: () => getApi<PaginatedResponse<SeoIssueRow>>('/api/seo/issues', { pageSize: 1, isResolved: 'false', severity: 'INFO' }),
+    staleTime: 10_000,
+  });
+
   const auditMutation = useMutation({
     mutationFn: () => postApi('/api/seo/issues?action=audit'),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.seoIssues.all }); toast.success('SEO audit completed'); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.seoIssues.all }); queryClient.invalidateQueries({ queryKey: ['seo-issues'] }); toast.success('SEO audit completed'); },
     onError: () => toast.error('Audit failed'),
   });
 
   const resolveMutation = useMutation({
     mutationFn: (id: string) => patchApi(`/api/seo/issues/${id}`, { isResolved: true }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.seoIssues.all }); toast.success('Issue marked as resolved'); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.seoIssues.all }); queryClient.invalidateQueries({ queryKey: ['seo-issues'] }); toast.success('Issue marked as resolved'); },
   });
 
-  // Group by category
+  // Group by category (API already filters resolved when showResolved=false)
   const grouped = useMemo(() => {
     const groups: Record<string, SeoIssueRow[]> = {};
     for (const issue of issues) {
-      if (!showResolved && issue.isResolved) continue;
       const cat = inferCategory(issue.problem);
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(issue);
     }
     return groups;
-  }, [issues, showResolved]);
+  }, [issues]);
 
   const columns = useMemo<ColumnDef<SeoIssueRow>[]>(
     () => [
@@ -110,10 +128,12 @@ export function SeoAuditPage() {
   );
 
   const severityCounts = useMemo(() => {
-    const c: Record<string, number> = { CRITICAL: 0, WARNING: 0, INFO: 0 };
-    for (const i of issues) if (!i.isResolved && c[i.severity] !== undefined) c[i.severity]++;
-    return c;
-  }, [issues]);
+    return {
+      CRITICAL: criticalData?.pagination?.total ?? 0,
+      WARNING: warningData?.pagination?.total ?? 0,
+      INFO: infoData?.pagination?.total ?? 0,
+    };
+  }, [criticalData, warningData, infoData]);
 
   const filterContent = (
     <div className="flex items-center gap-2 flex-wrap">

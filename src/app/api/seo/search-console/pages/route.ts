@@ -48,8 +48,14 @@ export async function GET(request: NextRequest) {
       db.searchConsolePage.count({ where }),
     ]);
 
+    // Normalize CTR to a fraction (0-1) so the frontend's formatPercent(n*100) works consistently.
+    const normalized = items.map((p) => ({
+      ...p,
+      ctr: p.ctr > 1 ? p.ctr / 100 : p.ctr,
+    }));
+
     return NextResponse.json({
-      data: { data: items, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } },
+      data: { data: normalized, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } },
       meta: {
         requestId: id,
         timestamp: new Date().toISOString(),

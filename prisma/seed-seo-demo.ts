@@ -262,6 +262,10 @@ ${allUrls.map((url) => {
 
   const robotsContent = `User-agent: *
 Allow: /
+Allow: /articles/
+Allow: /categories/
+Allow: /blog
+Allow: /about-us
 Disallow: /admin/
 Disallow: /api/
 Disallow: /private/
@@ -278,14 +282,6 @@ Disallow: /
 
 User-agent: Google-Extended
 Disallow: /
-
-# Allow all other bots
-User-agent: *
-Allow: /articles/
-Allow: /categories/
-Allow: /blog
-Allow: /about-us
-Allow: /
 
 Sitemap: ${SITE_URL}/sitemap.xml`;
 

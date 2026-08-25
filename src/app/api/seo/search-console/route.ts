@@ -58,9 +58,9 @@ export async function GET(request: NextRequest) {
     // Compute summary from recent stats
     const totalClicks = connection.stats.reduce((sum, s) => sum + s.clicks, 0);
     const totalImpressions = connection.stats.reduce((sum, s) => sum + s.impressions, 0);
-    const avgCtr = connection.stats.length > 0
-      ? connection.stats.reduce((sum, s) => sum + s.ctr, 0) / connection.stats.length
-      : 0;
+    // CTR = clicks / impressions (as a fraction, e.g. 0.039 = 3.9%)
+    const avgCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
+    // Average position = mean of daily positions
     const avgPosition = connection.stats.length > 0
       ? connection.stats.reduce((sum, s) => sum + s.position, 0) / connection.stats.length
       : 0;
@@ -68,8 +68,8 @@ export async function GET(request: NextRequest) {
     const summary = {
       totalClicks,
       totalImpressions,
-      avgCtr: Math.round(avgCtr * 100) / 100,
-      avgPosition: Math.round(avgPosition * 100) / 100,
+      averageCtr: Math.round(avgCtr * 100) / 100,
+      averagePosition: Math.round(avgPosition * 100) / 100,
     };
 
     return NextResponse.json({

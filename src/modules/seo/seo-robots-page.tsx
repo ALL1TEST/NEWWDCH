@@ -61,20 +61,12 @@ function validateRobots(content: string): ValidationWarning[] {
     warnings.push({ type: 'error', message: 'No "User-agent:" directive found — crawlers may ignore your rules' });
   }
 
-  const emptyDisallowLines = lines.filter((line) => {
-    const trimmed = line.trim().toLowerCase();
-    return trimmed === 'disallow:' || trimmed === 'disallow: ';
-  });
-  if (emptyDisallowLines.length > 0) {
-    warnings.push({ type: 'warning', message: `Found ${emptyDisallowLines.length} empty "Disallow:" directive(s) — this allows all crawling` });
-  }
-
-  // Check Sitemap URL validity
+  // Check Sitemap URL validity — use slice(indexOf(':') + 1) to handle URLs with colons (https://)
   const sitemapLines = lines.filter((line) =>
     line.toLowerCase().trimStart().startsWith('sitemap:'),
   );
   for (const sl of sitemapLines) {
-    const url = sl.split(':', 2)[1]?.trim();
+    const url = sl.slice(sl.indexOf(':') + 1).trim();
     if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
       warnings.push({ type: 'warning', message: `Sitemap URL should start with http:// or https://: "${url}"` });
     }
@@ -89,27 +81,74 @@ function validateRobots(content: string): ValidationWarning[] {
     warnings.push({ type: 'error', message: 'WARNING: This rule blocks all crawlers from accessing the entire website.' });
   }
 
-  // Check for duplicate User-agent directives
-  const userAgentLines = lines.filter((line) => line.toLowerCase().trimStart().startsWith('user-agent:'));
-  const agentValues = userAgentLines.map((l) => l.split(':')[1]?.trim().toLowerCase()).filter(Boolean);
-  const seen = new Set<string>();
-  for (const agent of agentValues) {
-    if (seen.has(agent)) {
-      warnings.push({ type: 'warning', message: `Duplicate User-agent directive for "${agent}" — rules may conflict` });
+  // Parse robots.txt into user-agent groups to check for REAL conflicts within the same group.
+  // Multiple consecutive User-agent lines are a valid multi-agent group (NOT duplicates).
+  // Only flag EXACT duplicates that appear in SEPARATE groups (same agent, different rule blocks).
+  interface RobotGroup {
+    agents: string[];
+    allowPaths: string[];
+    disallowPaths: string[];
+  }
+  const groups: RobotGroup[] = [];
+  let currentGroup: RobotGroup | null = null;
+  let lastLineWasUserAgent = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx === -1) continue;
+
+    const directive = trimmed.slice(0, colonIdx).trim().toLowerCase();
+    const value = trimmed.slice(colonIdx + 1).trim();
+
+    if (directive === 'user-agent') {
+      // If the previous line was also a User-agent, we're in a multi-agent group
+      if (lastLineWasUserAgent && currentGroup) {
+        currentGroup.agents.push(value.toLowerCase());
+      } else {
+        // Start a new group
+        currentGroup = { agents: [value.toLowerCase()], allowPaths: [], disallowPaths: [] };
+        groups.push(currentGroup);
+      }
+      lastLineWasUserAgent = true;
+    } else {
+      lastLineWasUserAgent = false;
+      if (!currentGroup) continue;
+
+      if (directive === 'allow' && value) {
+        currentGroup.allowPaths.push(value.toLowerCase());
+      } else if (directive === 'disallow' && value) {
+        currentGroup.disallowPaths.push(value.toLowerCase());
+      }
     }
-    seen.add(agent);
   }
 
-  // Check for conflicting Allow/Disallow on same path
-  const allowPaths = lines.filter((l) => l.trim().toLowerCase().startsWith('allow:')).map((l) => l.split(':')[1]?.trim()).filter(Boolean);
-  const disallowPaths = lines.filter((l) => l.trim().toLowerCase().startsWith('disallow:') && l.trim() !== 'disallow:' && l.trim() !== 'disallow: ').map((l) => l.split(':')[1]?.trim()).filter(Boolean);
-  const conflicts = allowPaths.filter((p) => disallowPaths.includes(p));
-  if (conflicts.length > 0) {
-    warnings.push({ type: 'warning', message: `Conflicting Allow/Disallow rules for paths: ${conflicts.join(', ')}` });
+  // Check for conflicting Allow/Disallow on the same path WITHIN the same group
+  for (const group of groups) {
+    const conflicts = group.allowPaths.filter((p) => group.disallowPaths.includes(p));
+    if (conflicts.length > 0) {
+      const agentLabel = group.agents.join(', ');
+      warnings.push({ type: 'warning', message: `Conflicting Allow/Disallow rules for paths: ${conflicts.join(', ')} (in User-agent: ${agentLabel})` });
+    }
+  }
+
+  // Check for duplicate user-agent groups (same agent appears in multiple separate groups, NOT multi-agent groups)
+  const agentGroupCounts = new Map<string, number>();
+  for (const group of groups) {
+    for (const agent of group.agents) {
+      agentGroupCounts.set(agent, (agentGroupCounts.get(agent) || 0) + 1);
+    }
+  }
+  for (const [agent, count] of agentGroupCounts) {
+    if (count > 1) {
+      warnings.push({ type: 'warning', message: `Duplicate User-agent directive for "${agent}" — rules may conflict` });
+    }
   }
 
   // Check for invalid directives
-  const validDirectives = new Set(['user-agent', 'disallow', 'allow', 'sitemap', 'crawl-delay', 'request-rate']);
+  const validDirectives = new Set(['user-agent', 'disallow', 'allow', 'sitemap', 'crawl-delay', 'request-rate', 'host', 'clean-param']);
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
@@ -130,7 +169,7 @@ function validateRobots(content: string): ValidationWarning[] {
 // ==================== Default Content ====================
 
 function getDefaultContent(domain: string): string {
-  return `User-agent: *\nAllow: /\nDisallow:\n\nSitemap: https://${domain}/sitemap.xml`;
+  return `User-agent: *\nAllow: /\n\nSitemap: https://${domain}/sitemap.xml`;
 }
 
 // ==================== Main Page ====================

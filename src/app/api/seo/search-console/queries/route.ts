@@ -48,8 +48,15 @@ export async function GET(request: NextRequest) {
       db.searchConsoleQuery.count({ where }),
     ]);
 
+    // Normalize CTR to a fraction (0-1) so the frontend's formatPercent(n*100) works consistently.
+    // The DB may store CTR as a percentage (8.14) — divide by 100 to get 0.0814.
+    const normalized = items.map((q) => ({
+      ...q,
+      ctr: q.ctr > 1 ? q.ctr / 100 : q.ctr,
+    }));
+
     return NextResponse.json({
-      data: { data: items, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } },
+      data: { data: normalized, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } },
       meta: {
         requestId: id,
         timestamp: new Date().toISOString(),
