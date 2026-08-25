@@ -383,17 +383,17 @@ export function SeoOverviewPage() {
 
             {/* KPI Grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
-              <KpiCard icon={Globe} label="Indexed Pages" value={(stats.indexedPages ?? 0).toLocaleString()} iconColor="text-green-600 dark:text-green-400" iconBg="bg-green-100 dark:bg-green-900/30" onClick={() => navigate('seo', null, 'audit')} />
-              <KpiCard icon={FileQuestion} label="Not Indexed" value={(stats.notIndexed ?? 0).toLocaleString()} iconColor="text-amber-600 dark:text-amber-400" iconBg="bg-amber-100 dark:bg-amber-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.notIndexed ?? 0)} />
-              <KpiCard icon={FileX2} label="Missing Meta Titles" value={(stats.missingMetaTitles ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.missingMetaTitles ?? 0)} />
-              <KpiCard icon={Type} label="Missing Meta Desc." value={(stats.missingMetaDescriptions ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.missingMetaDescriptions ?? 0)} />
-              <KpiCard icon={Heading} label="Missing H1" value={(stats.missingH1 ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.missingH1 ?? 0)} />
-              <KpiCard icon={Copy} label="Duplicate Titles" value={(stats.duplicateTitles ?? 0).toLocaleString()} iconColor="text-amber-600 dark:text-amber-400" iconBg="bg-amber-100 dark:bg-amber-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.duplicateTitles ?? 0)} />
-              <KpiCard icon={Copy} label="Duplicate Desc." value={(stats.duplicateDescriptions ?? 0).toLocaleString()} iconColor="text-amber-600 dark:text-amber-400" iconBg="bg-amber-100 dark:bg-amber-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.duplicateDescriptions ?? 0)} />
-              <KpiCard icon={Unlink} label="Broken Links" value={(stats.brokenLinksCount ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.brokenLinksCount ?? 0)} />
-              <KpiCard icon={Navigation} label="Redirects" value={(stats.redirectsCount ?? 0).toLocaleString()} iconColor="text-sky-600 dark:text-sky-400" iconBg="bg-sky-100 dark:bg-sky-900/30" onClick={() => navigate('seo', null, 'settings')} />
-              <KpiCard icon={Link2} label="Missing Canonicals" value={(stats.missingCanonicals ?? 0).toLocaleString()} iconColor="text-amber-600 dark:text-amber-400" iconBg="bg-amber-100 dark:bg-amber-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.missingCanonicals ?? 0)} />
-              <KpiCard icon={Link2} label="Canonical Issues" value={(stats.canonicalIssues ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" onClick={() => navigate('seo', null, 'audit')} statusHint={hint(stats.canonicalIssues ?? 0)} />
+              <KpiCard icon={Globe} label="Indexed Pages" value={(stats.indexedPages ?? 0).toLocaleString()} iconColor="text-green-600 dark:text-green-400" iconBg="bg-green-100 dark:bg-green-900/30" onClick={() => navigate('seo', null, 'indexed' as never)} />
+              <KpiCard icon={FileQuestion} label="Not Indexed" value={(stats.notIndexed ?? 0).toLocaleString()} iconColor="text-amber-600 dark:text-amber-400" iconBg="bg-amber-100 dark:bg-amber-900/30" onClick={() => navigate('seo', null, 'not-indexed' as never)} statusHint={hint(stats.notIndexed ?? 0)} />
+              <KpiCard icon={FileX2} label="Missing Meta Titles" value={(stats.missingMetaTitles ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" onClick={() => navigate('seo', null, 'missing-meta-title' as never)} statusHint={hint(stats.missingMetaTitles ?? 0)} />
+              <KpiCard icon={Type} label="Missing Meta Desc." value={(stats.missingMetaDescriptions ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" onClick={() => navigate('seo', null, 'missing-meta-description' as never)} statusHint={hint(stats.missingMetaDescriptions ?? 0)} />
+              <KpiCard icon={Heading} label="Missing H1" value={(stats.missingH1 ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" onClick={() => navigate('seo', null, 'missing-h1' as never)} statusHint={hint(stats.missingH1 ?? 0)} />
+              <KpiCard icon={Copy} label="Duplicate Titles" value={(stats.duplicateTitles ?? 0).toLocaleString()} iconColor="text-amber-600 dark:text-amber-400" iconBg="bg-amber-100 dark:bg-amber-900/30" onClick={() => navigate('seo', null, 'duplicate-titles' as never)} statusHint={hint(stats.duplicateTitles ?? 0)} />
+              <KpiCard icon={Copy} label="Duplicate Desc." value={(stats.duplicateDescriptions ?? 0).toLocaleString()} iconColor="text-amber-600 dark:text-amber-400" iconBg="bg-amber-100 dark:bg-amber-900/30" onClick={() => navigate('seo', null, 'duplicate-descriptions' as never)} statusHint={hint(stats.duplicateDescriptions ?? 0)} />
+              <KpiCard icon={Unlink} label="Broken Links" value={(stats.brokenLinksCount ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" onClick={() => navigate('seo', null, 'broken-links' as never)} statusHint={hint(stats.brokenLinksCount ?? 0)} />
+              <KpiCard icon={Navigation} label="Redirects" value={(stats.redirectsCount ?? 0).toLocaleString()} iconColor="text-sky-600 dark:text-sky-400" iconBg="bg-sky-100 dark:bg-sky-900/30" onClick={() => navigate('seo', null, 'settings/redirects' as never)} />
+              <KpiCard icon={Link2} label="Missing Canonicals" value={(stats.missingCanonicals ?? 0).toLocaleString()} iconColor="text-amber-600 dark:text-amber-400" iconBg="bg-amber-100 dark:bg-amber-900/30" onClick={() => navigate('seo', null, 'missing-canonicals' as never)} statusHint={hint(stats.missingCanonicals ?? 0)} />
+              <KpiCard icon={Link2} label="Canonical Issues" value={(stats.canonicalIssues ?? 0).toLocaleString()} iconColor="text-red-600 dark:text-red-400" iconBg="bg-red-100 dark:bg-red-900/30" onClick={() => navigate('seo', null, 'canonical-issues' as never)} statusHint={hint(stats.canonicalIssues ?? 0)} />
             </div>
           </div>
         ) : null}
@@ -405,7 +405,7 @@ export function SeoOverviewPage() {
           <CardHeader className="pb-3"><CardTitle className="text-base font-semibold">Technical SEO Health</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <button onClick={() => navigate('seo', null, 'settings')} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left">
+              <button onClick={() => navigate('seo', null, 'settings/sitemap' as never)} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left">
                 <div className={cn('flex h-9 w-9 items-center justify-center rounded-lg', stats?.sitemapStatus === 'GENERATED' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-amber-100 dark:bg-amber-900/30')}>
                   <FileCode className={cn('h-4 w-4', stats?.sitemapStatus === 'GENERATED' ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400')} />
                 </div>
@@ -416,7 +416,7 @@ export function SeoOverviewPage() {
                 <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
               </button>
 
-              <button onClick={() => navigate('seo', null, 'settings')} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left">
+              <button onClick={() => navigate('seo', null, 'settings/robots' as never)} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left">
                 <div className={cn('flex h-9 w-9 items-center justify-center rounded-lg', stats?.robotsStatus === 'CONFIGURED' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30')}>
                   <Shield className={cn('h-4 w-4', stats?.robotsStatus === 'CONFIGURED' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400')} />
                 </div>

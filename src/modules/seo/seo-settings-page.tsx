@@ -26,8 +26,8 @@ const TAB_META: Record<SettingsTab, { title: string; description: string }> = {
   redirects: { title: 'Redirects', description: 'Manage URL redirect rules for your site' },
 };
 
-export function SeoSettingsPage() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('sitemap');
+export function SeoSettingsPage({ initialTab = 'sitemap' }: { initialTab?: SettingsTab }) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const meta = TAB_META[activeTab];
 
   return (

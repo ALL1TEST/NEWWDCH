@@ -8,6 +8,7 @@ import { SeoOverviewPage } from './seo-overview-page';
 import { SeoAuditPage } from './seo-audit-page';
 import { SeoSearchConsolePage } from './seo-search-console-page';
 import { SeoSettingsPage } from './seo-settings-page';
+import { SeoDetailPage } from './seo-detail-page';
 
 // Legacy pages kept for internal reuse inside Settings (redirects) but no longer routed standalone.
 import { SeoRedirectsPage } from './seo-redirects-page';
@@ -23,10 +24,6 @@ function PageLoader() {
 }
 
 // ==================== SEO Sub-Navigation ====================
-// Consolidated from 12 tabs to 4 clean tabs:
-//   Overview | SEO Audit | Search Console | Settings
-// Legacy sub-pages (redirects, indexing, broken-links, canonicals, internal-links,
-// social-preview, schema, sitemap, robots) are redirected to the closest new tab.
 
 const SEO_TABS = [
   { key: null, label: 'Overview', icon: Search },
@@ -70,27 +67,33 @@ function SeoSubNav() {
 
 // ==================== Router ====================
 
+// Detail page types that can be navigated to from Overview metric cards
+const DETAIL_TYPES = new Set([
+  'indexed', 'not-indexed', 'missing-meta-title', 'missing-meta-description',
+  'missing-h1', 'duplicate-titles', 'duplicate-descriptions',
+  'broken-links', 'missing-canonicals', 'canonical-issues',
+]);
+
+// Settings sub-tab mapping (for redirects → settings/redirects)
+const SETTINGS_TAB_MAP: Record<string, string> = {
+  'settings/redirects': 'redirects',
+  'settings/sitemap': 'sitemap',
+  'settings/robots': 'robots',
+};
+
 function SeoRouter() {
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
 
-  // ---- Legacy sub-page redirects → new consolidated tabs ----
-  // These pages no longer exist as standalone tabs. Redirect to the closest new tab.
+  // ---- Legacy sub-page redirects ----
   React.useEffect(() => {
     if (!currentSubPage) return;
     const legacyMap: Record<string, string | null> = {
-      // Redirects → Settings (Advanced tab handles redirects)
-      'redirects': 'settings',
-      // Indexing / Canonicals / Internal-links / Broken-links → SEO Audit (integrated checks)
       'indexing': 'audit',
       'canonicals': 'audit',
       'internal-links': 'audit',
-      'broken-links': 'audit',
-      // Schema → SEO Audit (schema validation is part of the audit)
       'schema': 'audit',
-      // Social Preview → moved to Article Editor; redirect to Overview
       'social-preview': null,
-      // Sitemap / Robots → Settings
       'sitemap': 'settings',
       'robots': 'settings',
     };
@@ -99,35 +102,41 @@ function SeoRouter() {
     }
   }, [currentSubPage, navigate]);
 
-  const effectiveSubPage = (() => {
-    // Treat legacy sub-pages as their redirect target for rendering
-    if (!currentSubPage) return null;
-    const legacyRedirect: Record<string, string | null> = {
-      'redirects': 'settings',
-      'indexing': 'audit',
-      'canonicals': 'audit',
-      'internal-links': 'audit',
-      'broken-links': 'audit',
-      'schema': 'audit',
-      'social-preview': null,
-      'sitemap': 'settings',
-      'robots': 'settings',
-    };
-    return currentSubPage in legacyRedirect ? legacyRedirect[currentSubPage] : currentSubPage;
-  })();
+  // Check if this is a settings sub-tab (e.g., "settings/redirects")
+  const settingsTab = currentSubPage && SETTINGS_TAB_MAP[currentSubPage]
+    ? SETTINGS_TAB_MAP[currentSubPage]
+    : null;
+
+  // Check if this is a detail page
+  const isDetailPage = currentSubPage && DETAIL_TYPES.has(currentSubPage);
+
+  // Check if this is a "settings" or "settings/X" route
+  const isSettings = currentSubPage === 'settings' || !!settingsTab;
+
+  // Hide sub-nav on detail pages
+  const showSubNav = !isDetailPage;
 
   return (
     <>
-      <SeoSubNav />
+      {showSubNav && <SeoSubNav />}
       <Suspense fallback={<PageLoader />}>
         {(() => {
-          switch (effectiveSubPage) {
+          // Detail page (filtered view from Overview metric cards)
+          if (isDetailPage) {
+            return <SeoDetailPage type={currentSubPage as any} />;
+          }
+
+          switch (currentSubPage) {
             case 'audit':
               return <SeoAuditPage />;
             case 'search-console':
               return <SeoSearchConsolePage />;
             case 'settings':
-              return <SeoSettingsPage />;
+              return <SeoSettingsPage initialTab="sitemap" />;
+              case 'settings/redirects':
+              case 'settings/sitemap':
+              case 'settings/robots':
+              return <SeoSettingsPage initialTab={settingsTab as any} />;
             default:
               return <SeoOverviewPage />;
           }
