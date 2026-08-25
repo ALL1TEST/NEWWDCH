@@ -77,11 +77,15 @@ export interface DataTableProps<TData, TValue> {
   bulkActions?: BulkAction[];
   emptyMessage?: string;
   emptyIcon?: React.ReactNode;
+  /** Rich empty state — when provided, overrides emptyMessage + emptyIcon */
+  emptyState?: React.ReactNode;
   searchPlaceholder?: string;
   onSearch?: (value: string) => void;
   searchValue?: string;
   filterContent?: React.ReactNode;
   getRowId?: (row: TData) => string;
+  /** Page-size change handler — when provided, the rows-per-page selector becomes functional */
+  onPageSizeChange?: (size: number) => void;
 }
 
 // -------------------- useDataTable Hook --------------------
@@ -462,10 +466,21 @@ function SkeletonRows({ columnCount }: { columnCount: number }) {
 function DataTableEmpty({
   icon,
   message,
+  state,
 }: {
   icon?: React.ReactNode;
   message: string;
+  state?: React.ReactNode;
 }) {
+  if (state) {
+    return (
+      <TableRow>
+        <TableCell colSpan={999} className="p-0">
+          {state}
+        </TableCell>
+      </TableRow>
+    );
+  }
   return (
     <TableRow>
       <TableCell colSpan={999}>
@@ -671,11 +686,13 @@ export function DataTable<TData, TValue>({
   bulkActions,
   emptyMessage = 'No data found.',
   emptyIcon,
+  emptyState,
   searchPlaceholder,
   onSearch,
   searchValue,
   filterContent,
   getRowId,
+  onPageSizeChange,
 }: DataTableProps<TData, TValue>) {
   const hasRowSelection = !!onSelectionChange;
   const columnCount = columns.length + (hasRowSelection ? 1 : 0);
@@ -769,9 +786,10 @@ export function DataTable<TData, TValue>({
 
   const handlePageSizeChange = useCallback(
     (newSize: number) => {
+      onPageSizeChange?.(newSize);
       onPageChange(1);
     },
-    [onPageChange],
+    [onPageChange, onPageSizeChange],
   );
 
   const showToolbar =
@@ -816,7 +834,7 @@ export function DataTable<TData, TValue>({
             {isLoading ? (
               <SkeletonRows columnCount={columnCount} />
             ) : data.length === 0 ? (
-              <DataTableEmpty icon={emptyIcon} message={emptyMessage} />
+              <DataTableEmpty icon={emptyIcon} message={emptyMessage} state={emptyState} />
             ) : (
               table.getRowModel().rows.map((row) => (
                 <TableRow

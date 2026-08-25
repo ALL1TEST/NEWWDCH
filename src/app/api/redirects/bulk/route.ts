@@ -135,15 +135,24 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    const lines: string[] = ['fromPath,toPath,type,active'];
+    // Full export: fromPath, toPath, type, hits, createdAt, updatedAt, status
+    const lines: string[] = [
+      'fromPath,toPath,type,hits,createdAt,updatedAt,status',
+    ];
     for (const r of redirects) {
       const typeNum = TYPE_TO_NUM[r.type] || '301';
-      lines.push([
-        escapeCsvField(r.fromPath),
-        escapeCsvField(r.toPath),
-        escapeCsvField(typeNum),
-        escapeCsvField(String(r.isActive)),
-      ].join(','));
+      const status = r.isActive ? 'active' : 'inactive';
+      lines.push(
+        [
+          escapeCsvField(r.fromPath),
+          escapeCsvField(r.toPath),
+          escapeCsvField(typeNum),
+          escapeCsvField(String(r.hitCount ?? 0)),
+          escapeCsvField(r.createdAt.toISOString()),
+          escapeCsvField(r.updatedAt.toISOString()),
+          escapeCsvField(status),
+        ].join(','),
+      );
     }
 
     const csv = lines.join('\n');
@@ -151,7 +160,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(csv, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="redirects-export.csv"',
+        'Content-Disposition': 'attachment; filename="redirects.csv"',
       },
     });
   } catch (error) {
@@ -212,10 +221,13 @@ export async function POST(request: NextRequest) {
     const { csvContent } = parsed.data;
     const { headers, rows } = parseCSV(csvContent);
 
-    // Find column indices: support 'from'/'fromPath', 'to'/'toPath', 'type'
+    // Find column indices: support 'from'/'fromPath', 'to'/'toPath', 'type', 'status'/'active'
     const fromIdx = headers.findIndex((h) => h === 'from' || h === 'frompath');
     const toIdx = headers.findIndex((h) => h === 'to' || h === 'topath');
     const typeIdx = headers.findIndex((h) => h === 'type');
+    const statusIdx = headers.findIndex(
+      (h) => h === 'status' || h === 'active' || h === 'isactive',
+    );
 
     if (fromIdx === -1 || toIdx === -1) {
       return NextResponse.json(
@@ -229,7 +241,7 @@ export async function POST(request: NextRequest) {
 
     // Validate all rows
     const errors: { row: number; message: string }[] = [];
-    const validRows: { fromPath: string; toPath: string; type: string; rowNum: number }[] = [];
+    const validRows: { fromPath: string; toPath: string; type: string; isActive: boolean; rowNum: number }[] = [];
     const seenFromPaths = new Set<string>();
 
     // Fetch existing active redirects' fromPaths for duplicate check
@@ -246,6 +258,8 @@ export async function POST(request: NextRequest) {
       const fromVal = row[fromIdx]?.trim() || '';
       const toVal = row[toIdx]?.trim() || '';
       const typeVal = typeIdx >= 0 ? (row[typeIdx]?.trim() || '301') : '301';
+      const statusVal =
+        statusIdx >= 0 ? (row[statusIdx]?.trim().toLowerCase() || 'active') : 'active';
 
       // Check from is present
       if (!fromVal) {
@@ -277,26 +291,48 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // status must be valid if present
+      const isActiveRow =
+        statusVal === 'active' || statusVal === 'true' || statusVal === '1'
+          ? true
+          : statusVal === 'inactive' || statusVal === 'false' || statusVal === '0'
+            ? false
+            : null;
+      if (isActiveRow === null) {
+        errors.push({
+          row: rowNum,
+          message: `Invalid status "${statusVal}". Must be one of: active, inactive, true, false`,
+        });
+        continue;
+      }
+
       // from and to cannot be the same
       if (fromVal === toVal) {
         errors.push({ row: rowNum, message: '"from" and "to" paths cannot be the same' });
         continue;
       }
 
-      // Duplicate within import
-      if (seenFromPaths.has(fromVal)) {
-        errors.push({ row: rowNum, message: `Duplicate source path within import: "${fromVal}"` });
+      // Duplicate within import (only matters for active redirects — multiple
+      // inactive redirects with the same fromPath are allowed).
+      if (isActiveRow && seenFromPaths.has(fromVal)) {
+        errors.push({ row: rowNum, message: `Duplicate active source path within import: "${fromVal}"` });
         continue;
       }
-      seenFromPaths.add(fromVal);
+      if (isActiveRow) seenFromPaths.add(fromVal);
 
-      // Check existing active redirect with same fromPath
-      if (existingFromPaths.has(fromVal)) {
+      // Check existing active redirect with same fromPath (only for active rows)
+      if (isActiveRow && existingFromPaths.has(fromVal)) {
         errors.push({ row: rowNum, message: `An active redirect with from path "${fromVal}" already exists` });
         continue;
       }
 
-      validRows.push({ fromPath: fromVal, toPath: toVal, type: NUM_TO_TYPE[typeVal] || 'PERMANENT_301', rowNum });
+      validRows.push({
+        fromPath: fromVal,
+        toPath: toVal,
+        type: NUM_TO_TYPE[typeVal] || 'PERMANENT_301',
+        isActive: isActiveRow,
+        rowNum,
+      });
     }
 
     // In-batch loop/chain detection: a row whose `toPath` equals another row's
@@ -304,13 +340,17 @@ export async function POST(request: NextRequest) {
     // a loop). Such rows are skipped and reported in the errors list. This is
     // necessary because the per-row DB loop check below runs before the batch
     // is committed, so it can't see sibling rows created in the same import.
+    // Only active rows participate — inactive redirects never actually fire.
     const batchFromPathIdx = new Map<string, number>();
     for (let i = 0; i < validRows.length; i++) {
-      batchFromPathIdx.set(validRows[i].fromPath, i);
+      if (validRows[i].isActive) {
+        batchFromPathIdx.set(validRows[i].fromPath, i);
+      }
     }
     const batchSkipIndices = new Set<number>();
     for (let i = 0; i < validRows.length; i++) {
       const row = validRows[i];
+      if (!row.isActive) continue; // inactive rows can't chain
       const matchIdx = batchFromPathIdx.get(row.toPath);
       if (matchIdx !== undefined && matchIdx !== i) {
         batchSkipIndices.add(i);
@@ -369,6 +409,7 @@ export async function POST(request: NextRequest) {
               fromPath: row.fromPath,
               toPath: row.toPath,
               type: row.type as 'PERMANENT_301' | 'TEMPORARY_302' | 'TEMPORARY_307' | 'PERMANENT_308',
+              isActive: row.isActive,
               siteId,
             },
           });

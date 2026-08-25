@@ -19,7 +19,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  FileUp,
+  GitBranch,
+  Power,
+  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +49,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
@@ -54,11 +57,11 @@ import {
   useDataTable,
   ColumnDefHelper,
   ConfirmDialog,
-  StatusBadge,
 } from '@/components/patterns';
-import { getApi, postApi, patchApi, deleteApi, putApi } from '@/lib/api-client';
+import { EmptyState } from '@/components/patterns/empty-state';
+import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
-import { truncate } from '@/lib/utils';
+import { truncate, cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { PaginatedResponse, RedirectType } from '@/shared/types';
 import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
@@ -83,6 +86,8 @@ interface RedirectFormData {
   active: boolean;
 }
 
+type ListResponse = PaginatedResponse<RedirectRow>;
+
 // ==================== Constants ====================
 
 const EMPTY_REDIRECT_FORM: RedirectFormData = {
@@ -92,30 +97,180 @@ const EMPTY_REDIRECT_FORM: RedirectFormData = {
   active: true,
 };
 
-const REDIRECT_TYPE_OPTIONS: {
+interface TypeOption {
   label: string;
+  short: string;
   value: RedirectType;
-  badge: string;
-  statusKey: string;
-}[] = [
-  { label: '301 Permanent', value: 'PERMANENT_301', badge: '301', statusKey: 'PERMANENT_301' },
-  { label: '302 Temporary', value: 'TEMPORARY_302', badge: '302', statusKey: 'TEMPORARY_302' },
-  { label: '307 Temporary', value: 'TEMPORARY_307', badge: '307', statusKey: 'TEMPORARY_307' },
-  { label: '308 Permanent', value: 'PERMANENT_308', badge: '308', statusKey: 'PERMANENT_308' },
+  code: string;
+  tone: 'permanent' | 'temporary';
+}
+
+const REDIRECT_TYPE_OPTIONS: TypeOption[] = [
+  { label: '301 Permanent', short: 'Permanent', value: 'PERMANENT_301', code: '301', tone: 'permanent' },
+  { label: '302 Temporary', short: 'Temporary', value: 'TEMPORARY_302', code: '302', tone: 'temporary' },
+  { label: '307 Temporary', short: 'Temporary', value: 'TEMPORARY_307', code: '307', tone: 'temporary' },
+  { label: '308 Permanent', short: 'Permanent', value: 'PERMANENT_308', code: '308', tone: 'permanent' },
 ];
+
+function getTypeOption(type: RedirectType): TypeOption {
+  return REDIRECT_TYPE_OPTIONS.find((o) => o.value === type) ?? REDIRECT_TYPE_OPTIONS[0];
+}
+
+// ==================== Helpers ====================
+
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  try {
+    return new Date(dateStr).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  } catch {
+    return '—';
+  }
+}
+
+function formatRelative(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  try {
+    const date = new Date(dateStr);
+    const now = Date.now();
+    const diffMs = now - date.getTime();
+    const seconds = Math.floor(diffMs / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    if (days > 30) return formatDate(dateStr);
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
+    return 'just now';
+  } catch {
+    return '—';
+  }
+}
+
+// ==================== Type Badge ====================
+
+function RedirectTypeBadge({ type }: { type: RedirectType }) {
+  const opt = getTypeOption(type);
+  const toneClasses =
+    opt.tone === 'permanent'
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/50'
+      : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50';
+  return (
+    <Badge
+      variant="outline"
+      className={cn('font-medium gap-1.5 px-2 py-0.5', toneClasses)}
+    >
+      <span className="font-mono text-[10px] font-bold opacity-80">{opt.code}</span>
+      <span>{opt.short}</span>
+    </Badge>
+  );
+}
+
+// ==================== Status Cell ====================
+
+interface StatusCellProps {
+  row: RedirectRow;
+  onToggle: (id: string, nextActive: boolean) => void;
+  isPending: boolean;
+}
+
+function StatusToggleCell({ row, onToggle, isPending }: StatusCellProps) {
+  const active = row.active;
+  return (
+    <div className="flex items-center gap-2.5">
+      <Switch
+        checked={active}
+        disabled={isPending}
+        onCheckedChange={(checked) => {
+          // Only fire when the value actually changes — Switch fires on user
+          // interaction, but we guard against spurious re-fires.
+          if (checked !== active) {
+            onToggle(row.id, checked);
+          }
+        }}
+        aria-label={active ? 'Deactivate redirect' : 'Activate redirect'}
+        className={cn(
+          'cursor-pointer',
+          active
+            ? 'data-[state=checked]:bg-emerald-500 dark:data-[state=checked]:bg-emerald-600'
+            : 'data-[state=unchecked]:bg-zinc-300 dark:data-[state=unchecked]:bg-zinc-700',
+        )}
+      />
+      <span
+        className={cn(
+          'inline-flex items-center gap-1 text-xs font-medium select-none',
+          active
+            ? 'text-emerald-700 dark:text-emerald-400'
+            : 'text-zinc-500 dark:text-zinc-400',
+        )}
+      >
+        {isPending ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : active ? (
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+        ) : (
+          <span className="h-1.5 w-1.5 rounded-full bg-zinc-400 dark:bg-zinc-500" />
+        )}
+        {active ? 'Active' : 'Inactive'}
+      </span>
+    </div>
+  );
+}
+
+// ==================== Sortable Header ====================
+
+function SortableHeader({
+  label,
+  column,
+  align = 'left',
+}: {
+  label: string;
+  column: { getIsSorted: () => false | 'asc' | 'desc'; toggleSorting: (desc?: boolean) => void };
+  align?: 'left' | 'right' | 'center';
+}) {
+  const sorted = column.getIsSorted();
+  return (
+    <button
+      className={cn(
+        'flex items-center gap-1 hover:text-foreground transition-colors',
+        align === 'right' && 'flex-row-reverse ml-auto',
+        align === 'center' && 'justify-center',
+      )}
+      onClick={() => column.toggleSorting(sorted === 'asc')}
+    >
+      <span className="font-medium">{label}</span>
+      <ArrowUpDown
+        className={cn(
+          'h-3.5 w-3.5 transition-opacity',
+          sorted ? 'opacity-100 text-foreground' : 'opacity-40',
+        )}
+      />
+    </button>
+  );
+}
 
 // ==================== Validation ====================
 
 function validateRedirectForm(form: RedirectFormData, isEdit: boolean): string | null {
-  if (!form.fromPath.trim()) return 'From URL is required.';
-  if (!form.fromPath.startsWith('/')) return 'From URL must start with "/".';
-  if (!form.toPath.trim()) return 'To URL is required.';
-  if (!form.toPath.startsWith('/')) return 'To URL must start with "/".';
-  if (!isEdit && form.fromPath.trim() === form.toPath.trim()) {
-    return 'From URL and To URL cannot be the same (self-redirect).';
-  }
+  if (!form.fromPath.trim()) return 'From path is required.';
+  if (!form.fromPath.startsWith('/')) return 'From path must start with "/".';
+  if (!form.toPath.trim()) return 'To path is required.';
+  if (!form.toPath.startsWith('/')) return 'To path must start with "/".';
+  // Self-redirect check (case-insensitive — /About and /about are the same URL).
   if (form.fromPath.trim().toLowerCase() === form.toPath.trim().toLowerCase()) {
-    return 'From URL and To URL cannot be the same (self-redirect).';
+    return 'From path and to path cannot be the same (self-redirect).';
+  }
+  // Basic path validity — no spaces, no illegal chars.
+  const pathRe = /^\/[^\s]*$/;
+  if (!pathRe.test(form.fromPath.trim())) return 'From path contains invalid characters.';
+  if (!pathRe.test(form.toPath.trim())) return 'To path contains invalid characters.';
+  // Edit-mode warning hint (not a hard block) — handled elsewhere.
+  if (!isEdit && form.toPath.trim().toLowerCase().startsWith(form.fromPath.trim().toLowerCase())) {
+    // Allow but caller may warn — kept silent here to avoid noise.
   }
   return null;
 }
@@ -148,40 +303,37 @@ function RedirectFormDialog({
   isEdit = false,
 }: RedirectFormDialogProps) {
   const validationError = validateRedirectForm(data, isEdit);
-  const isFormValid = !validationError;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="redirect-from">From URL *</Label>
+            <Label htmlFor="redirect-from">From Path *</Label>
             <Input
               id="redirect-from"
               value={data.fromPath}
-              onChange={(e) =>
-                onChange({ ...data, fromPath: e.target.value })
-              }
+              onChange={(e) => onChange({ ...data, fromPath: e.target.value })}
               placeholder="/old-page"
               autoFocus
+              className="font-mono"
             />
             <p className="text-xs text-muted-foreground">
-              The original URL path. Must start with &quot;/&quot;.
+              The original URL path that should be redirected. Must start with &quot;/&quot;.
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="redirect-to">To URL *</Label>
+            <Label htmlFor="redirect-to">To Path *</Label>
             <Input
               id="redirect-to"
               value={data.toPath}
-              onChange={(e) =>
-                onChange({ ...data, toPath: e.target.value })
-              }
+              onChange={(e) => onChange({ ...data, toPath: e.target.value })}
               placeholder="/new-page"
+              className="font-mono"
             />
             <p className="text-xs text-muted-foreground">
               The destination URL path. Must start with &quot;/&quot;.
@@ -191,9 +343,7 @@ function RedirectFormDialog({
             <Label htmlFor="redirect-type">Redirect Type *</Label>
             <Select
               value={data.type}
-              onValueChange={(v) =>
-                onChange({ ...data, type: v as RedirectType })
-              }
+              onValueChange={(v) => onChange({ ...data, type: v as RedirectType })}
             >
               <SelectTrigger id="redirect-type">
                 <SelectValue placeholder="Select redirect type" />
@@ -201,32 +351,41 @@ function RedirectFormDialog({
               <SelectContent>
                 {REDIRECT_TYPE_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
+                    <span className="font-mono text-xs font-bold mr-2 opacity-70">
+                      {opt.code}
+                    </span>
                     {opt.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium">301/308</span> are permanent (cached by browsers).
+              <span className="font-medium"> 302/307</span> are temporary.
+            </p>
           </div>
-          <div className="flex items-center justify-between rounded-lg border p-3">
+          <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
             <div className="space-y-0.5">
-              <Label htmlFor="redirect-active">Active</Label>
+              <Label htmlFor="redirect-active" className="text-sm font-medium">
+                Active
+              </Label>
               <p className="text-xs text-muted-foreground">
-                Enable this redirect rule
+                When active, requests to the From Path will be redirected.
+                When inactive, the redirect is ignored.
               </p>
             </div>
             <Switch
               id="redirect-active"
               checked={data.active}
-              onCheckedChange={(checked) =>
-                onChange({ ...data, active: checked })
-              }
+              onCheckedChange={(checked) => onChange({ ...data, active: checked })}
             />
           </div>
 
           {validationError && (
-            <p className="text-sm text-red-600 dark:text-red-400">
-              {validationError}
-            </p>
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 p-3">
+              <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700 dark:text-red-400">{validationError}</p>
+            </div>
           )}
         </div>
         <DialogFooter>
@@ -239,7 +398,7 @@ function RedirectFormDialog({
           </Button>
           <Button
             onClick={onSubmit}
-            disabled={isPending || !isFormValid}
+            disabled={isPending || !!validationError}
           >
             {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {submitLabel}
@@ -264,6 +423,10 @@ interface CsvImportResult {
   errorsDuringImport: number;
 }
 
+const CSV_TEMPLATE = `fromPath,toPath,type,status
+/old-page,/new-page,301,active
+/legacy-product,/products,302,inactive`;
+
 function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const queryClient = useQueryClient();
   const [csvContent, setCsvContent] = useState('');
@@ -273,15 +436,34 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
   const [step, setStep] = useState<'upload' | 'preview' | 'done'>('upload');
 
   const validateMutation = useMutation({
-    mutationFn: (csv: string) => postApi<CsvValidationResult>('/api/redirects/bulk?action=import', { csvContent: csv }),
-    onSuccess: (data) => { setValidation(data as unknown as CsvValidationResult); setStep('preview'); },
-    onError: () => toast.error('Failed to validate CSV'),
+    mutationFn: (csv: string) =>
+      postApi<CsvValidationResult>('/api/redirects/bulk?action=import', { csvContent: csv }),
+    onSuccess: (data) => {
+      setValidation(data as unknown as CsvValidationResult);
+      setStep('preview');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to validate CSV'),
   });
 
   const importMutation = useMutation({
-    mutationFn: () => postApi<CsvImportResult>('/api/redirects/bulk?action=import&confirm=true', { csvContent }),
-    onSuccess: (data) => { setImportResult(data as unknown as CsvImportResult); setStep('done'); queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all }); },
-    onError: () => toast.error('Import failed'),
+    mutationFn: () =>
+      postApi<CsvImportResult>(
+        '/api/redirects/bulk?action=import&confirm=true',
+        { csvContent },
+      ),
+    onSuccess: (data) => {
+      const result = data as unknown as CsvImportResult;
+      setImportResult(result);
+      setStep('done');
+      queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all });
+      if (result.imported > 0) {
+        toast.success(`Imported ${result.imported} redirect${result.imported === 1 ? '' : 's'}`);
+      }
+      if (result.errorsDuringImport > 0) {
+        toast.error(`${result.errorsDuringImport} row(s) failed to import`);
+      }
+    },
+    onError: (err: Error) => toast.error(err.message || 'Import failed'),
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -289,7 +471,13 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
     if (!f) return;
     setFile(f);
     const reader = new FileReader();
-    reader.onload = (ev) => { const text = ev.target?.result as string; setCsvContent(text); setValidation(null); setImportResult(null); setStep('upload'); };
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      setCsvContent(text);
+      setValidation(null);
+      setImportResult(null);
+      setStep('upload');
+    };
     reader.readAsText(f);
   };
 
@@ -299,35 +487,92 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
     if (!f) return;
     setFile(f);
     const reader = new FileReader();
-    reader.onload = (ev) => { const text = ev.target?.result as string; setCsvContent(text); setValidation(null); setImportResult(null); setStep('upload'); };
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      setCsvContent(text);
+      setValidation(null);
+      setImportResult(null);
+      setStep('upload');
+    };
     reader.readAsText(f);
   };
 
-  const handleValidate = () => { if (csvContent.trim()) validateMutation.mutate(csvContent); };
-  const handleImport = () => { importMutation.mutate(); };
-  const handleClose = () => { onOpenChange(false); setTimeout(() => { setCsvContent(''); setFile(null); setValidation(null); setImportResult(null); setStep('upload'); }, 200); };
+  const handleValidate = () => {
+    if (csvContent.trim()) validateMutation.mutate(csvContent);
+  };
+  const handleImport = () => importMutation.mutate();
+  const handleClose = () => {
+    onOpenChange(false);
+    setTimeout(() => {
+      setCsvContent('');
+      setFile(null);
+      setValidation(null);
+      setImportResult(null);
+      setStep('upload');
+    }, 200);
+  };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Import Redirects CSV</DialogTitle><DialogDescription>Upload a CSV file with columns: from, to, type (301, 302, 307, 308)</DialogDescription></DialogHeader>
+      <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Import Redirects CSV</DialogTitle>
+          <DialogDescription>
+            Upload a CSV with columns:{' '}
+            <code className="text-xs bg-muted px-1 py-0.5 rounded">fromPath</code>,{' '}
+            <code className="text-xs bg-muted px-1 py-0.5 rounded">toPath</code>,{' '}
+            <code className="text-xs bg-muted px-1 py-0.5 rounded">type</code>{' '}
+            (301/302/307/308),{' '}
+            <code className="text-xs bg-muted px-1 py-0.5 rounded">status</code>{' '}
+            (active/inactive).
+          </DialogDescription>
+        </DialogHeader>
 
         {step === 'upload' && (
           <div className="space-y-4 py-2">
-            <div className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors" onDragOver={(e) => e.preventDefault()} onDrop={handleDrop} onClick={() => document.getElementById('csv-file-input')?.click()}>
-              <input id="csv-file-input" type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+            <div
+              className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById('csv-file-input')?.click()}
+            >
+              <input
+                id="csv-file-input"
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={handleFileChange}
+              />
               <Upload className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
-              <p className="text-sm font-medium">Drop CSV file here or click to browse</p>
-              {file && <p className="text-xs text-muted-foreground mt-1">{file.name}</p>}
+              <p className="text-sm font-medium">
+                Drop CSV file here or click to browse
+              </p>
+              {file && (
+                <p className="text-xs text-muted-foreground mt-1">{file.name}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Or paste CSV content:</Label>
-              <textarea className="w-full min-h-[120px] rounded-md border border-border bg-transparent px-3 py-2 text-xs font-mono shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y" placeholder="from,to,type
-/old-page,/new-page,301" value={csvContent} onChange={(e) => setCsvContent(e.target.value)} />
+              <textarea
+                className="w-full min-h-[120px] rounded-md border border-border bg-transparent px-3 py-2 text-xs font-mono shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
+                placeholder={CSV_TEMPLATE}
+                value={csvContent}
+                onChange={(e) => setCsvContent(e.target.value)}
+              />
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={handleClose}>Cancel</Button>
-              <Button onClick={handleValidate} disabled={!csvContent.trim() || validateMutation.isPending}>{validateMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Validate & Preview</Button>
+              <Button variant="outline" onClick={handleClose}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleValidate}
+                disabled={!csvContent.trim() || validateMutation.isPending}
+              >
+                {validateMutation.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
+                Validate &amp; Preview
+              </Button>
             </DialogFooter>
           </div>
         )}
@@ -335,32 +580,89 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
         {step === 'preview' && validation && (
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-lg border p-3 text-center"><p className="text-lg font-bold tabular-nums text-green-600 dark:text-green-400">{validation.validRows}</p><p className="text-xs text-muted-foreground">Valid</p></div>
-              <div className="rounded-lg border p-3 text-center"><p className="text-lg font-bold tabular-nums text-red-600 dark:text-red-400">{validation.invalidRows}</p><p className="text-xs text-muted-foreground">Invalid</p></div>
-              <div className="rounded-lg border p-3 text-center"><p className="text-lg font-bold tabular-nums">{validation.errors.length}</p><p className="text-xs text-muted-foreground">Errors</p></div>
+              <div className="rounded-lg border p-3 text-center">
+                <p className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  {validation.validRows}
+                </p>
+                <p className="text-xs text-muted-foreground">Valid</p>
+              </div>
+              <div className="rounded-lg border p-3 text-center">
+                <p className="text-lg font-bold tabular-nums text-red-600 dark:text-red-400">
+                  {validation.invalidRows}
+                </p>
+                <p className="text-xs text-muted-foreground">Invalid</p>
+              </div>
+              <div className="rounded-lg border p-3 text-center">
+                <p className="text-lg font-bold tabular-nums">
+                  {validation.errors.length}
+                </p>
+                <p className="text-xs text-muted-foreground">Errors</p>
+              </div>
             </div>
             {validation.errors.length > 0 && (
               <div className="max-h-40 overflow-y-auto rounded-lg border p-3 space-y-1">
-                {validation.errors.map((err, i) => (<div key={i} className="flex items-start gap-2 text-xs"><XCircle className="h-3 w-3 mt-0.5 text-red-500 shrink-0" /><span>Row {err.row}: {err.message}</span></div>))}
+                {validation.errors.map((err, i) => (
+                  <div key={i} className="flex items-start gap-2 text-xs">
+                    <XCircle className="h-3 w-3 mt-0.5 text-red-500 shrink-0" />
+                    <span>
+                      <span className="font-medium">Row {err.row}:</span> {err.message}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setStep('upload')}>Back</Button>
-              <Button onClick={handleImport} disabled={validation.validRows === 0 || importMutation.isPending}>{importMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}{importMutation.isPending ? 'Importing...' : `Import ${validation.validRows} Redirects`}</Button>
+              <Button variant="outline" onClick={() => setStep('upload')}>
+                Back
+              </Button>
+              <Button
+                onClick={handleImport}
+                disabled={validation.validRows === 0 || importMutation.isPending}
+              >
+                {importMutation.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
+                {importMutation.isPending
+                  ? 'Importing...'
+                  : `Import ${validation.validRows} Redirect${validation.validRows === 1 ? '' : 's'}`}
+              </Button>
             </DialogFooter>
           </div>
         )}
 
         {step === 'done' && importResult && (
           <div className="space-y-4 py-2 text-center">
-            <CheckCircle2 className="h-10 w-10 mx-auto text-green-500" />
-            <p className="font-semibold">Import Complete</p>
+            {importResult.errorsDuringImport > 0 && importResult.imported === 0 ? (
+              <XCircle className="h-10 w-10 mx-auto text-red-500" />
+            ) : (
+              <CheckCircle2 className="h-10 w-10 mx-auto text-emerald-500" />
+            )}
+            <p className="font-semibold">
+              {importResult.imported > 0 ? 'Import Complete' : 'Import Failed'}
+            </p>
             <div className="grid grid-cols-3 gap-3 max-w-xs mx-auto">
-              <div><p className="text-lg font-bold tabular-nums text-green-600">{importResult.imported}</p><p className="text-xs text-muted-foreground">Imported</p></div>
-              <div><p className="text-lg font-bold tabular-nums text-amber-600">{importResult.skipped}</p><p className="text-xs text-muted-foreground">Skipped</p></div>
-              <div><p className="text-lg font-bold tabular-nums text-red-600">{importResult.errorsDuringImport}</p><p className="text-xs text-muted-foreground">Errors</p></div>
+              <div>
+                <p className="text-lg font-bold tabular-nums text-emerald-600">
+                  {importResult.imported}
+                </p>
+                <p className="text-xs text-muted-foreground">Imported</p>
+              </div>
+              <div>
+                <p className="text-lg font-bold tabular-nums text-amber-600">
+                  {importResult.skipped}
+                </p>
+                <p className="text-xs text-muted-foreground">Skipped</p>
+              </div>
+              <div>
+                <p className="text-lg font-bold tabular-nums text-red-600">
+                  {importResult.errorsDuringImport}
+                </p>
+                <p className="text-xs text-muted-foreground">Errors</p>
+              </div>
             </div>
-            <DialogFooter className="justify-center"><Button onClick={handleClose}>Done</Button></DialogFooter>
+            <DialogFooter className="justify-center">
+              <Button onClick={handleClose}>Done</Button>
+            </DialogFooter>
           </div>
         )}
       </DialogContent>
@@ -378,10 +680,11 @@ export function SeoRedirectsPage() {
   const [editTarget, setEditTarget] = useState<RedirectRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RedirectRow | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [createForm, setCreateForm] =
-    useState<RedirectFormData>(EMPTY_REDIRECT_FORM);
-  const [editForm, setEditForm] =
-    useState<RedirectFormData>(EMPTY_REDIRECT_FORM);
+  const [createForm, setCreateForm] = useState<RedirectFormData>(EMPTY_REDIRECT_FORM);
+  const [editForm, setEditForm] = useState<RedirectFormData>(EMPTY_REDIRECT_FORM);
+
+  // Track which redirect is currently being toggled — for per-row loading state.
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   // Filter state
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -402,7 +705,8 @@ export function SeoRedirectsPage() {
       order: table.sortOrder,
       search: table.searchValue || undefined,
       type: typeFilter !== 'all' ? typeFilter : undefined,
-      active:
+      // Send `isActive` so the backend filter works regardless of alias support.
+      isActive:
         statusFilter !== 'all'
           ? statusFilter === 'active'
           : undefined,
@@ -418,74 +722,172 @@ export function SeoRedirectsPage() {
     ],
   );
 
+  const queryKey = queryKeys.redirects.list(queryParams);
+
   // Query
-  const { data, isLoading } = useQuery({
-    queryKey: queryKeys.redirects.list(queryParams),
-    queryFn: () =>
-      getApi<PaginatedResponse<RedirectRow>>(
-        '/api/redirects',
-        queryParams,
-      ),
+  const { data, isLoading, error } = useQuery<ListResponse>({
+    queryKey,
+    queryFn: () => getApi<ListResponse>('/api/redirects', queryParams),
     staleTime: 10_000,
   });
 
   const redirects = data?.data ?? [];
   const totalItems = data?.pagination?.total ?? 0;
 
-  // Mutations
+  // ---- Helpers for optimistic cache updates -----------------------------
+
+  const updateCachedRow = useCallback(
+    (id: string, patch: Partial<RedirectRow>) => {
+      queryClient.setQueryData<ListResponse>(queryKey, (prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          data: prev.data.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+        };
+      });
+    },
+    [queryClient, queryKey],
+  );
+
+  const removeCachedRow = useCallback(
+    (id: string) => {
+      queryClient.setQueryData<ListResponse>(queryKey, (prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          data: prev.data.filter((r) => r.id !== id),
+          pagination: {
+            ...prev.pagination,
+            total: Math.max(0, prev.pagination.total - 1),
+          },
+        };
+      });
+    },
+    [queryClient, queryKey],
+  );
+
+  // ---- Mutations -------------------------------------------------------
+
   const createMutation = useMutation({
     mutationFn: (formData: RedirectFormData) =>
-      postApi<RedirectRow>('/api/redirects', formData),
+      postApi<RedirectRow>('/api/redirects', {
+        fromPath: formData.fromPath,
+        toPath: formData.toPath,
+        type: formData.type,
+        isActive: formData.active,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all });
       setIsCreateOpen(false);
       setCreateForm(EMPTY_REDIRECT_FORM);
+      toast.success('Redirect created');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to create redirect');
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, formData }: { id: string; formData: RedirectFormData }) =>
-      patchApi<RedirectRow>(`/api/redirects/${id}`, formData),
+      patchApi<RedirectRow>(`/api/redirects/${id}`, {
+        fromPath: formData.fromPath,
+        toPath: formData.toPath,
+        type: formData.type,
+        isActive: formData.active,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all });
       setEditTarget(null);
+      toast.success('Redirect updated');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update redirect');
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteApi(`/api/redirects/${id}`),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      // Optimistically remove from current page's cache so the UI updates
+      // instantly. The invalidation refetches in the background to reconcile
+      // pagination/counts.
+      removeCachedRow(id);
       queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all });
       setDeleteTarget(null);
+      toast.success('Redirect deleted');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete redirect');
     },
   });
 
+  // The toggle mutation uses an optimistic update with rollback. This is the
+  // core of the "status toggle must actually work" requirement: the switch
+  // flips immediately, the backend persists `isActive`, and on failure the
+  // switch reverts to its previous position with a clear error toast.
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
-      patchApi(`/api/redirects/${id}`, { active }),
-    onSuccess: () => {
+      patchApi<RedirectRow>(`/api/redirects/${id}`, { isActive: active }),
+    onMutate: async ({ id, active }) => {
+      setTogglingId(id);
+      // Cancel outgoing refetches so they don't clobber the optimistic update.
+      await queryClient.cancelQueries({ queryKey: queryKeys.redirects.all });
+      // Snapshot the previous cache for rollback.
+      const prev = queryClient.getQueryData<ListResponse>(queryKey);
+      updateCachedRow(id, { active });
+      return { prev };
+    },
+    onSuccess: (_data, variables) => {
+      toast.success(
+        variables.active ? 'Redirect enabled' : 'Redirect disabled',
+      );
+      // Refetch to pick up the server-side updatedAt + any hit-count changes.
       queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all });
+    },
+    onError: (err: Error, _vars, context) => {
+      // Rollback to the snapshot so the switch visually reverts.
+      if (context?.prev) {
+        queryClient.setQueryData(queryKey, context.prev);
+      }
+      toast.error(err.message || 'Failed to update redirect status');
+    },
+    onSettled: () => {
+      setTogglingId(null);
     },
   });
 
   const exportMutation = useMutation({
     mutationFn: async () => {
       const resp = await fetch('/api/redirects/bulk?action=export');
-      if (!resp.ok) throw new Error('Export failed');
+      if (!resp.ok) {
+        let message = 'Export failed';
+        try {
+          const j = await resp.json();
+          message = j?.error?.message ?? message;
+        } catch {
+          // ignore — non-JSON error
+        }
+        throw new Error(message);
+      }
       const text = await resp.text();
-      const blob = new Blob([text], { type: 'text/csv' });
+      const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = 'redirects.csv'; a.click();
+      a.href = url;
+      a.download = 'redirects.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
     },
-    onSuccess: () => toast.success('Redirects exported'),
-    onError: () => toast.error('Export failed'),
+    onSuccess: () => toast.success('Redirects exported to redirects.csv'),
+    onError: (err: Error) => toast.error(err.message || 'Export failed'),
   });
 
   const handleExport = useCallback(() => exportMutation.mutate(), [exportMutation]);
 
-  // Handlers
+  // ---- Handlers --------------------------------------------------------
+
   const handleOpenEdit = useCallback((row: RedirectRow) => {
     setEditTarget(row);
     setEditForm({
@@ -498,154 +900,168 @@ export function SeoRedirectsPage() {
 
   const handleCreate = useCallback(() => {
     const error = validateRedirectForm(createForm, false);
-    if (error) return;
+    if (error) {
+      toast.error(error);
+      return;
+    }
     createMutation.mutate(createForm);
   }, [createForm, createMutation]);
 
   const handleUpdate = useCallback(() => {
     if (!editTarget) return;
     const error = validateRedirectForm(editForm, true);
-    if (error) return;
+    if (error) {
+      toast.error(error);
+      return;
+    }
     updateMutation.mutate({ id: editTarget.id, formData: editForm });
   }, [editTarget, editForm, updateMutation]);
 
-  // Columns
+  const handleToggle = useCallback(
+    (id: string, nextActive: boolean) => {
+      toggleActiveMutation.mutate({ id, active: nextActive });
+    },
+    [toggleActiveMutation],
+  );
+
+  // ---- Empty states ----------------------------------------------------
+
+  const hasFiltersOrSearch = !!(
+    table.searchValue ||
+    typeFilter !== 'all' ||
+    statusFilter !== 'all'
+  );
+
+  const emptyState = useMemo(() => {
+    if (hasFiltersOrSearch) {
+      return (
+        <EmptyState
+          icon={Search}
+          title="No redirects found"
+          description="Try changing your search or filters."
+        />
+      );
+    }
+    return (
+      <EmptyState
+        icon={GitBranch}
+        title="No redirects configured"
+        description="Create your first redirect to manage moved or changed URLs."
+        action={{
+          label: 'Create Redirect',
+          onClick: () => {
+            setCreateForm(EMPTY_REDIRECT_FORM);
+            setIsCreateOpen(true);
+          },
+          icon: <Plus className="h-4 w-4" />,
+        }}
+      />
+    );
+  }, [hasFiltersOrSearch]);
+
+  // ---- Columns ---------------------------------------------------------
+
   const columns = useMemo<ColumnDef<RedirectRow>[]>(
     () => [
-      ColumnDefHelper.textColumn<RedirectRow>({
+      {
         id: 'fromPath',
-        header: 'From Path',
         accessorKey: 'fromPath',
-        className: 'font-mono text-sm',
-        truncate: 60,
-      }),
-      ColumnDefHelper.textColumn<RedirectRow>({
+        enableSorting: true,
+        size: 220,
+        header: ({ column }) => <SortableHeader label="From Path" column={column} />,
+        cell: ({ row }) => (
+          <span
+            className="font-mono text-sm text-foreground block max-w-[260px] truncate"
+            title={row.original.fromPath}
+          >
+            {row.original.fromPath}
+          </span>
+        ),
+      },
+      {
         id: 'toPath',
-        header: 'To Path',
         accessorKey: 'toPath',
-        className: 'font-mono text-sm',
-        truncate: 60,
-      }),
+        enableSorting: true,
+        size: 220,
+        header: ({ column }) => <SortableHeader label="To Path" column={column} />,
+        cell: ({ row }) => (
+          <span
+            className="font-mono text-sm text-foreground/80 block max-w-[260px] truncate"
+            title={row.original.toPath}
+          >
+            {row.original.toPath}
+          </span>
+        ),
+      },
       {
         id: 'type',
-        header: ({ column }) => (
-          <button
-            className="flex items-center gap-1 hover:text-foreground transition-colors"
-            onClick={() =>
-              column.toggleSorting(column.getIsSorted() === 'asc')
-            }
-          >
-            <span className="font-medium">Type</span>
-            <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
-          </button>
-        ),
         accessorKey: 'type',
         enableSorting: true,
-        cell: ({ row }) => {
-          const t = row.original.type;
-          const found = REDIRECT_TYPE_OPTIONS.find((o) => o.value === t);
-          return (
-            <StatusBadge
-              status={found?.statusKey ?? t}
-              size="sm"
-            />
-          );
-        },
+        size: 150,
+        header: ({ column }) => <SortableHeader label="Type" column={column} />,
+        cell: ({ row }) => <RedirectTypeBadge type={row.original.type} />,
       },
       {
         id: 'hits',
-        header: ({ column }) => (
-          <button
-            className="flex items-center gap-1 hover:text-foreground transition-colors"
-            onClick={() =>
-              column.toggleSorting(column.getIsSorted() === 'asc')
-            }
-          >
-            <span className="font-medium">Hits</span>
-            <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
-          </button>
-        ),
         accessorKey: 'hits',
         enableSorting: true,
+        size: 90,
+        header: ({ column }) => (
+          <SortableHeader label="Hits" column={column} align="right" />
+        ),
         cell: ({ row }) => (
-          <span className="tabular-nums text-sm">
+          <span
+            className="tabular-nums text-sm font-medium text-foreground/80 block text-right"
+            title={`${row.original.hits.toLocaleString()} total hits`}
+          >
             {row.original.hits.toLocaleString()}
           </span>
         ),
       },
       {
         id: 'createdAt',
-        header: ({ column }) => (
-          <button
-            className="flex items-center gap-1 hover:text-foreground transition-colors"
-            onClick={() =>
-              column.toggleSorting(column.getIsSorted() === 'asc')
-            }
-          >
-            <span className="font-medium">Created</span>
-            <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
-          </button>
-        ),
         accessorKey: 'createdAt',
         enableSorting: true,
+        size: 120,
+        header: ({ column }) => <SortableHeader label="Created" column={column} />,
         cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
-            {new Date(row.original.createdAt).toLocaleDateString()}
+          <span className="text-sm text-muted-foreground" title={row.original.createdAt}>
+            {formatDate(row.original.createdAt)}
           </span>
         ),
       },
       {
         id: 'updatedAt',
-        header: ({ column }) => (
-          <button
-            className="flex items-center gap-1 hover:text-foreground transition-colors"
-            onClick={() =>
-              column.toggleSorting(column.getIsSorted() === 'asc')
-            }
-          >
-            <span className="font-medium">Updated</span>
-            <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
-          </button>
-        ),
         accessorKey: 'updatedAt',
         enableSorting: true,
+        size: 120,
+        header: ({ column }) => <SortableHeader label="Updated" column={column} />,
         cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
-            {new Date(row.original.updatedAt).toLocaleDateString()}
+          <span
+            className="text-sm text-muted-foreground"
+            title={new Date(row.original.updatedAt).toLocaleString()}
+          >
+            {formatRelative(row.original.updatedAt)}
           </span>
         ),
       },
       {
         id: 'active',
-        header: 'Status',
         accessorKey: 'active',
         enableSorting: true,
+        size: 150,
+        header: ({ column }) => <SortableHeader label="Status" column={column} />,
         cell: ({ row }) => (
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={row.original.active}
-              onCheckedChange={(checked) =>
-                toggleActiveMutation.mutate({
-                  id: row.original.id,
-                  active: checked,
-                })
-              }
-            />
-            <Badge
-              variant="outline"
-              className={
-                row.original.active
-                  ? 'border-transparent bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                  : 'border-transparent bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
-              }
-            >
-              {row.original.active ? 'Active' : 'Inactive'}
-            </Badge>
-          </div>
+          <StatusToggleCell
+            row={row.original}
+            onToggle={handleToggle}
+            isPending={togglingId === row.original.id}
+          />
         ),
       },
       ColumnDefHelper.actionColumn<RedirectRow>({
         id: 'actions',
+        size: 56,
         render: (row) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -659,10 +1075,31 @@ export function SeoRedirectsPage() {
                 <span className="sr-only">Actions</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
+                Redirect actions
+              </DropdownMenuLabel>
               <DropdownMenuItem onClick={() => handleOpenEdit(row)}>
                 <Pencil className="h-4 w-4 mr-2" />
                 Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  handleToggle(row.id, !row.active)
+                }
+                disabled={togglingId === row.id}
+              >
+                {row.active ? (
+                  <>
+                    <Power className="h-4 w-4 mr-2" />
+                    Disable
+                  </>
+                ) : (
+                  <>
+                    <Power className="h-4 w-4 mr-2" />
+                    Enable
+                  </>
+                )}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -677,14 +1114,21 @@ export function SeoRedirectsPage() {
         ),
       }),
     ],
-    [handleOpenEdit, toggleActiveMutation],
+    [handleOpenEdit, handleToggle, togglingId],
   );
 
-  // Filter content for DataTable
+  // ---- Filter bar content ---------------------------------------------
+
   const filterContent = (
     <div className="flex items-center gap-2">
       <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-      <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); table.setCurrentPage(1); }}>
+      <Select
+        value={typeFilter}
+        onValueChange={(v) => {
+          setTypeFilter(v);
+          table.setCurrentPage(1);
+        }}
+      >
         <SelectTrigger className="h-8 w-[150px] text-xs">
           <SelectValue placeholder="All Types" />
         </SelectTrigger>
@@ -697,7 +1141,13 @@ export function SeoRedirectsPage() {
           ))}
         </SelectContent>
       </Select>
-      <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); table.setCurrentPage(1); }}>
+      <Select
+        value={statusFilter}
+        onValueChange={(v) => {
+          setStatusFilter(v);
+          table.setCurrentPage(1);
+        }}
+      >
         <SelectTrigger className="h-8 w-[130px] text-xs">
           <SelectValue placeholder="All Status" />
         </SelectTrigger>
@@ -712,26 +1162,81 @@ export function SeoRedirectsPage() {
 
   return (
     <div className="space-y-4">
-      {/* Action buttons (preserved from PageHeader, rendered inline) */}
-      <div className="flex items-center justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={handleExport} disabled={exportMutation.isPending}>
-          {exportMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-          Export CSV
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
-          <Upload className="h-4 w-4 mr-2" />
-          Import CSV
-        </Button>
-        <Button
-          onClick={() => {
-            setCreateForm(EMPTY_REDIRECT_FORM);
-            setIsCreateOpen(true);
-          }}
-          size="sm"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Create Redirect
-        </Button>
+      {/* Error banner */}
+      {error && (
+        <div className="flex items-start gap-3 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 p-4">
+          <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-red-700 dark:text-red-400">
+              Failed to load redirects
+            </p>
+            <p className="text-xs text-red-600/80 dark:text-red-400/80 mt-0.5">
+              {(error as Error)?.message || 'Please try again later.'}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all })
+            }
+          >
+            <Loader2 className="h-3.5 w-3.5 mr-1.5" />
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <GitBranch className="h-4 w-4" />
+          <span>
+            {totalItems > 0 ? (
+              <>
+                <span className="font-medium text-foreground tabular-nums">
+                  {totalItems.toLocaleString()}
+                </span>{' '}
+                redirect{totalItems === 1 ? '' : 's'} configured
+              </>
+            ) : (
+              'No redirects yet'
+            )}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            disabled={exportMutation.isPending || totalItems === 0}
+          >
+            {exportMutation.isPending ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setImportDialogOpen(true)}
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Import CSV
+          </Button>
+          <Button
+            onClick={() => {
+              setCreateForm(EMPTY_REDIRECT_FORM);
+              setIsCreateOpen(true);
+            }}
+            size="sm"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Create Redirect
+          </Button>
+        </div>
       </div>
 
       <DataTable
@@ -742,6 +1247,7 @@ export function SeoRedirectsPage() {
         pageSize={table.pageSize}
         currentPage={table.currentPage}
         onPageChange={(p) => table.setCurrentPage(p)}
+        onPageSizeChange={(size) => table.setPageSize(size)}
         onSortChange={(field, order) => table.setSortField(field, order)}
         sortField={table.sortField}
         sortOrder={table.sortOrder}
@@ -752,7 +1258,8 @@ export function SeoRedirectsPage() {
           table.setCurrentPage(1);
         }}
         getRowId={(row) => row.id}
-        emptyMessage="No redirects found. Create your first redirect rule."
+        emptyMessage="No redirects found."
+        emptyState={emptyState}
         filterContent={filterContent}
       />
 
@@ -765,7 +1272,7 @@ export function SeoRedirectsPage() {
         onSubmit={handleCreate}
         isPending={createMutation.isPending}
         title="Create Redirect"
-        description="Set up a new URL redirect rule"
+        description="Set up a new URL redirect rule for your site."
         submitLabel="Create Redirect"
       />
 
@@ -778,13 +1285,20 @@ export function SeoRedirectsPage() {
         onSubmit={handleUpdate}
         isPending={updateMutation.isPending}
         title="Edit Redirect"
-        description={`Update redirect from "${truncate(editTarget?.fromPath ?? '', 40)}"`}
+        description={
+          editTarget
+            ? `Update redirect from "${truncate(editTarget.fromPath, 40)}"`
+            : 'Update redirect'
+        }
         submitLabel="Save Changes"
         isEdit
       />
 
       {/* CSV Import Dialog */}
-      <CsvImportDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} />
+      <CsvImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+      />
 
       {/* Delete Confirm */}
       <ConfirmDialog
@@ -793,7 +1307,7 @@ export function SeoRedirectsPage() {
         title="Delete Redirect"
         description={
           deleteTarget
-            ? `Are you sure you want to delete the redirect from "${truncate(deleteTarget.fromPath, 40)}" to "${truncate(deleteTarget.toPath, 40)}"? This action cannot be undone.`
+            ? `Are you sure you want to delete the redirect from "${truncate(deleteTarget.fromPath, 50)}" to "${truncate(deleteTarget.toPath, 50)}"? This action cannot be undone.`
             : undefined
         }
         confirmLabel="Delete"

@@ -19,8 +19,34 @@ const createSchema = z.object({
 });
 
 // ---------- allowed sort columns -------------------------------------
+// Accepts both DB column names and frontend-friendly aliases.
 
-const SORTABLE = new Set(['createdAt', 'updatedAt', 'fromPath', 'type', 'hitCount']);
+const SORT_ALIASES: Record<string, string> = {
+  hits: 'hitCount',
+  active: 'isActive',
+  frompath: 'fromPath',
+  topath: 'toPath',
+  createdat: 'createdAt',
+  updatedat: 'updatedAt',
+  type: 'type',
+};
+
+const SORTABLE = new Set([
+  'createdAt',
+  'updatedAt',
+  'fromPath',
+  'toPath',
+  'type',
+  'hitCount',
+  'isActive',
+]);
+
+function resolveSortField(raw: string | null): string {
+  if (!raw) return 'createdAt';
+  const normalized = raw.toLowerCase();
+  const aliased = SORT_ALIASES[normalized] ?? raw;
+  return SORTABLE.has(aliased) ? aliased : 'createdAt';
+}
 
 // ---------- loop detection helper -------------------------------------
 
@@ -64,17 +90,22 @@ export async function GET(request: NextRequest) {
     const sp = new URL(request.url).searchParams;
     const page = Math.max(1, Number(sp.get('page')) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(sp.get('pageSize')) || 25));
-    const sort = SORTABLE.has(sp.get('sort') ?? '') ? sp.get('sort')! : 'createdAt';
+    const sort = resolveSortField(sp.get('sort'));
     const order = sp.get('order') === 'asc' ? 'asc' : 'desc';
     const type = sp.get('type') || undefined;
-    const isActive = sp.get('isActive');
+    // Accept both `isActive` and `active` for the status filter.
+    const isActiveRaw = sp.get('isActive') ?? sp.get('active');
+    const isActive =
+      isActiveRaw !== null && isActiveRaw !== undefined && isActiveRaw !== ''
+        ? isActiveRaw === 'true'
+        : undefined;
     const search = sp.get('search') || '';
 
     const siteFilter = await getSiteWhere(request);
     const where: Record<string, unknown> = { ...siteFilter };
     if (type) where.type = type;
-    if (isActive !== null && isActive !== undefined && isActive !== '') {
-      where.isActive = isActive === 'true';
+    if (isActive !== undefined) {
+      where.isActive = isActive;
     }
     if (search) {
       where.OR = [
