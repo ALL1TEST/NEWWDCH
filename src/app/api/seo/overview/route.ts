@@ -54,9 +54,9 @@ export async function GET(request: NextRequest) {
     // indexedPages: count of PUBLISHED content
     const indexedPages = publishedContent.length;
 
-    // notIndexed: from IndexingRecord with status NOT_INDEXED or DISCOVERED
+    // notIndexed: from IndexingRecord with status EXCLUDED, DISCOVERED, or ERROR
     const notIndexed = await db.indexingRecord.count({
-      where: { ...siteFilter, status: { in: ['NOT_INDEXED', 'DISCOVERED'] } },
+      where: { ...siteFilter, status: { in: ['EXCLUDED', 'DISCOVERED', 'ERROR'] } },
     });
 
     // missingMetaTitles: published items where seoTitle is null or empty

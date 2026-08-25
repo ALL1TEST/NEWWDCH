@@ -141,7 +141,7 @@ export function SeoRobotsPage() {
   const [isDirty, setIsDirty] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const activeSite = useSiteStore((s) => s.getActiveSite());
-  const domain = activeSite?.domain ?? 'yourdomain.com';
+  const domain = activeSite?.domain ?? 'cms.example.com';
 
   const { data: robots, isLoading, error } = useQuery({
     queryKey: queryKeys.seoRobots.all,

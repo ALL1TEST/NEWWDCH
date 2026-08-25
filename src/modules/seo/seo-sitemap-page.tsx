@@ -132,7 +132,7 @@ function InfoRow({
       <Icon className={cn('h-4 w-4 mt-0.5 shrink-0', iconColor ?? 'text-muted-foreground')} />
       <div className="min-w-0 flex-1">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm font-medium mt-0.5">{value}</p>
+        <div className="text-sm font-medium mt-0.5">{value}</div>
       </div>
     </div>
   );
@@ -174,7 +174,7 @@ export function SeoSitemapPage() {
   const queryClient = useQueryClient();
   const [previewOpen, setPreviewOpen] = useState(false);
   const activeSite = useSiteStore((s) => s.getActiveSite());
-  const domain = activeSite?.domain ?? 'yourdomain.com';
+  const domain = activeSite?.domain ?? 'cms.example.com';
 
   const { data: sitemap, isLoading, error } = useQuery({
     queryKey: queryKeys.seoSitemap.all,

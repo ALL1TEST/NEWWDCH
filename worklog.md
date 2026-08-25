@@ -1796,3 +1796,33 @@ Stage Summary:
 - ROOT APPROACH: The audit found 11 critical issues. The most severe were: (1) the Test Connection endpoint was completely missing (the button called a non-existent route), (2) API key ciphertext was leaked in 3 of 4 provider endpoints, (3) provider DELETE failed with FK constraint errors whenever the provider had been used, (4) cost accounting used the wrong provider's rates when a fallback handled the request, (5) sync overwrote admin-set model cost/name edits with zeros. All are now fixed. Additionally, the frontend had a field name mismatch (`latency` vs `latencyMs`) that made the Latency column always show "—", and the Settings page silently discarded user edits on every background refetch. Both are fixed.
 - FILES MODIFIED: src/app/api/ai/providers/[id]/test/route.ts (CREATED), src/app/api/ai/providers/route.ts, src/app/api/ai/providers/[id]/route.ts, src/app/api/ai/prompts/route.ts, src/app/api/ai/prompts/[id]/route.ts, src/lib/ai/ai-service.ts, src/modules/ai/providers-page.tsx, src/modules/ai/models-page.tsx, src/modules/ai/prompts-page.tsx, src/modules/ai/settings-page.tsx.
 - EXISTING FUNCTIONALITY PRESERVED: All 6 provider kinds (OpenAI, Anthropic, Gemini, Groq, DeepSeek, Custom) work as before. The Provider→Model cascade, default logic, settings validation, and AI generation service are all intact. No UI redesign — only bug fixes.
+
+---
+Task ID: SEO-API-SHAPE-FIX
+Agent: main (orchestrator)
+
+Task: Fix response shape for SEO list API routes — api-client unwraps `envelope.data`, so paginated list endpoints must return `{ data: { data: [...], pagination: {...} }, meta: {...} }` (the `PaginatedResponse` shape), not `{ data: items, meta: { ..., pagination: {...} } }`.
+
+Work Log:
+- Read all 8 target files plus the reference already-fixed `/api/seo/issues/route.ts` and the api-client (`src/lib/api-client.ts`) to confirm the unwrap behavior (`return envelope.data`).
+- Inspected frontend consumers in `src/modules/seo/*` to determine which routes are paginated vs. flat-object responses.
+
+Files Modified (5 — only GET list handlers, pagination moved from `meta` into `data`, `requestId`/`timestamp`/`duration` kept in `meta`; POST/scan handlers untouched):
+1. `src/app/api/redirects/route.ts` — GET list
+2. `src/app/api/seo/search-console/queries/route.ts` — GET list
+3. `src/app/api/seo/search-console/pages/route.ts` — GET list
+4. `src/app/api/seo/broken-links/route.ts` — GET list
+5. `src/app/api/seo/indexing/route.ts` — GET list
+
+Files Inspected, No Change Needed (3):
+6. `src/app/api/seo/search-console/stats/route.ts` — returns `{ data: stats[], meta: {...} }`. Frontend (`seo-search-console-page.tsx`) calls `getApi<DailyStat[]>` and uses the unwrapped value directly as an array (e.g. `stats.map`, `stats[0]`). After `envelope.data` unwrap the frontend gets the bare `stats[]` array, which matches expectation. Not paginated — left as-is.
+7. `src/app/api/seo/canonicals/route.ts` — returns `{ data: { items, summary }, meta: {...} }`. Frontend (`seo-canonicals-page.tsx`) calls `getApi<CanonicalData>` and accesses `data?.items` / `data?.summary` on the unwrapped value. Not paginated — shape already matches consumer expectation. Left as-is.
+8. `src/app/api/seo/internal-links/route.ts` — returns `{ data: { items, orphans, summary }, meta: {...} }`. Frontend (`seo-internal-links-page.tsx`) calls `getApi<InternalLinksData>` and accesses `data?.items` / `data?.summary` on the unwrapped value. Not paginated — shape already matches consumer expectation. Left as-is.
+
+Reference (do-not-touch): `src/app/api/seo/issues/route.ts` was confirmed as the canonical pattern (`data: { data: items, pagination: {...} }, meta: { requestId, timestamp, duration }`) and used as the template for all 5 fixes.
+
+Verification:
+- Ran `bun run lint 2>&1 | grep -E "api/seo|api/redirects" | head -10` — no output (no lint errors in any modified route).
+- Broader lint pass: only pre-existing errors in unrelated frontend files (`seo-broken-links-page.tsx` React Compiler memoization warning, `seo-social-preview-page.tsx` missing `Search` import). None caused by this change.
+
+Result: All paginated SEO list endpoints now return the `PaginatedResponse` shape (`{ data: { data: [...], pagination: {...} }, meta: {...} }`) so that after `api-client` unwraps `envelope.data` the frontend receives `{ data: [...], pagination: {...} }` as expected. Flat (non-paginated) endpoints unchanged.

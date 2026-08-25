@@ -62,12 +62,11 @@ export async function GET(request: NextRequest) {
     ]);
 
     return NextResponse.json({
-      data: items,
+      data: { data: items, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } },
       meta: {
         requestId: id,
         timestamp: new Date().toISOString(),
         duration: Date.now() - start,
-        pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
       },
     });
   } catch (error) {

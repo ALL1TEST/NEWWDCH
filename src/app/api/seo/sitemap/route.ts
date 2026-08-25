@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      data: result,
+      data: { ...result, totalUrls: result.urlCount },
       meta: { requestId: id, timestamp: new Date().toISOString(), duration: Date.now() - start },
     });
   } catch (error) {
