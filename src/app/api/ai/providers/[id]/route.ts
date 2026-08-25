@@ -24,7 +24,7 @@ function err(message: string, status = 400, code = 'VALIDATION_ERROR') {
 
 const updateSchema = z.object({
   name: z.string().min(1).max(200).trim().optional(),
- kind: z.enum(['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK']).optional(),
+ kind: z.enum(['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK', 'CUSTOM']).optional(),
  baseUrl: z.string().max(2048).optional().or(z.literal('')),
  apiKey: z.string().max(1000).optional().or(z.literal('')),
   apiVersion: z.string().max(100).optional().or(z.literal('')),
@@ -109,6 +109,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (d.config !== undefined) data.config = d.config === '' ? null : d.config;
     if (d.siteId !== undefined) data.siteId = d.siteId === '' ? null : d.siteId;
     if (d.isActive !== undefined) data.isActive = d.isActive;
+
+    // CUSTOM providers require a Base URL. Validate if kind is changing to CUSTOM
+    // or if baseUrl is being updated on an existing CUSTOM provider.
+    const effectiveKind = (d.kind ?? existing.kind) as string;
+    if (effectiveKind === 'CUSTOM') {
+      const effectiveBaseUrl = d.baseUrl !== undefined ? (d.baseUrl === '' ? null : d.baseUrl) : existing.baseUrl;
+      if (!effectiveBaseUrl || effectiveBaseUrl.trim() === '') {
+        return err('Base URL is required for Custom providers', 400, 'BASE_URL_REQUIRED');
+      }
+      try {
+        const u = new URL(effectiveBaseUrl);
+        if (!['http:', 'https:'].includes(u.protocol)) {
+          return err('Base URL must use http or https protocol', 400, 'INVALID_URL');
+        }
+      } catch {
+        return err('Base URL is not a valid URL', 400, 'INVALID_URL');
+      }
+    }
 
     // If apiKey provided, re-encrypt
     if (d.apiKey !== undefined && d.apiKey !== '') {

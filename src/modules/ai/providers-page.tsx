@@ -113,7 +113,7 @@ interface ProviderFormData {
 // Legacy kinds (OPENROUTER, OLLAMA, AZURE_OPENAI) are kept in PROVIDER_CONFIGS
 // for display of existing rows but are no longer selectable.
 const PROVIDER_KINDS: AiProviderKind[] = [
-  'OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK',
+  'OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK', 'CUSTOM',
 ];
 
 const PROVIDER_CONFIGS: Record<AiProviderKind, { label: string; defaultUrl: string; color: string }> = {
@@ -125,6 +125,7 @@ const PROVIDER_CONFIGS: Record<AiProviderKind, { label: string; defaultUrl: stri
   DEEPSEEK: { label: 'DeepSeek', defaultUrl: 'https://api.deepseek.com/v1', color: 'bg-cyan-100 text-cyan-700' },
   OLLAMA: { label: 'Ollama', defaultUrl: 'http://localhost:11434/v1', color: 'bg-zinc-100 text-zinc-700' },
   AZURE_OPENAI: { label: 'Azure OpenAI', defaultUrl: '', color: 'bg-teal-100 text-teal-700' },
+  CUSTOM: { label: 'Custom', defaultUrl: '', color: 'bg-stone-100 text-stone-700' },
 };
 
 function kindConfig(kind: string): { label: string; color: string } {
@@ -313,6 +314,24 @@ export function ProvidersPage() {
     if (!editingProvider && !formData.apiKey.trim()) {
       toast.error('API key is required');
       return;
+    }
+    // CUSTOM providers require a Base URL
+    if (formData.kind === 'CUSTOM' && !formData.baseUrl.trim()) {
+      toast.error('Base URL is required for Custom providers');
+      return;
+    }
+    // Validate Base URL format for CUSTOM providers
+    if (formData.kind === 'CUSTOM' && formData.baseUrl.trim()) {
+      try {
+        const u = new URL(formData.baseUrl);
+        if (!['http:', 'https:'].includes(u.protocol)) {
+          toast.error('Base URL must use http or https protocol');
+          return;
+        }
+      } catch {
+        toast.error('Base URL is not a valid URL');
+        return;
+      }
     }
     saveMutation.mutate(formData);
   };
@@ -612,13 +631,21 @@ export function ProvidersPage() {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="provider-url">Base URL</Label>
+              <Label htmlFor="provider-url">
+                Base URL{formData.kind === 'CUSTOM' ? ' *' : ''}
+              </Label>
               <Input
                 id="provider-url"
-                placeholder="https://api.openai.com/v1"
+                placeholder={formData.kind === 'CUSTOM' ? 'https://api.example.com/v1' : 'https://api.openai.com/v1'}
                 value={formData.baseUrl}
                 onChange={(e) => setFormData((p) => ({ ...p, baseUrl: e.target.value }))}
+                required={formData.kind === 'CUSTOM'}
               />
+              {formData.kind === 'CUSTOM' && (
+                <p className="text-xs text-muted-foreground">
+                  Enter the base URL of your OpenAI-compatible provider (e.g. https://api.example.com/v1). The provider must expose the OpenAI-compatible /chat/completions and /models endpoints.
+                </p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="provider-key">API Key</Label>
@@ -640,6 +667,11 @@ export function ProvidersPage() {
                   {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
+              {editingProvider && (
+                <p className="text-xs text-muted-foreground">
+                  Leave blank to keep the existing API key. The key is stored encrypted and never displayed in full.
+                </p>
+              )}
             </div>
             {formData.kind === 'AZURE_OPENAI' && (
               <p className="text-xs text-muted-foreground">

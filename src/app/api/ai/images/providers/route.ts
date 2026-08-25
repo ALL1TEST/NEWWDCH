@@ -6,9 +6,9 @@ import { db } from '@/lib/db';
 // =====================================================================
 // GET /api/ai/images/providers — Find providers capable of image generation
 // =====================================================================
-// Only OpenAI and Gemini support image generation among the 5 supported kinds.
-// A provider qualifies if it's active, has an API key, and has at least one
-// active IMAGE-type model.
+// OpenAI, Gemini, and Custom (OpenAI-compatible) providers support image
+// generation. A provider qualifies if it's active, has an API key, and has
+// at least one active IMAGE-type model.
 
 export async function GET() {
   const requestId = 'req_' + crypto.randomUUID().slice(0, 8);
@@ -18,7 +18,7 @@ export async function GET() {
       where: {
         isActive: true,
         apiKeyEncrypted: { not: null },
-        kind: { in: ['OPENAI', 'GEMINI'] },
+        kind: { in: ['OPENAI', 'GEMINI', 'CUSTOM'] },
       },
       include: {
         models: {

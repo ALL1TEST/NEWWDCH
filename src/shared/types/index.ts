@@ -205,7 +205,7 @@ export type OAuthGrantType = 'AUTHORIZATION_CODE' | 'CLIENT_CREDENTIALS' | 'PKCE
 
 export type OAuthClientStatus = 'ACTIVE' | 'INACTIVE' | 'REVOKED';
 
-export type AiProviderKind = 'OPENAI' | 'ANTHROPIC' | 'GEMINI' | 'GROQ' | 'DEEPSEEK';
+export type AiProviderKind = 'OPENAI' | 'ANTHROPIC' | 'GEMINI' | 'GROQ' | 'DEEPSEEK' | 'CUSTOM';
 
 export type AiConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'ERROR';
 

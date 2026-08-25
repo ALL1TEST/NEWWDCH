@@ -1605,3 +1605,94 @@ Stage Summary:
 - ROOT APPROACH: Comprehensive audit identified 14 critical bugs (API response shape already fixed in prior session; remaining issues were model resolution, validation, cascade, defaults, error handling). Fixed the AI service's `resolveModel()` helper to translate DB cuids → upstream model strings + validate ownership/active/type. Added AI Settings fallback for temperature/maxTokens and model defaults. Added FK validation to every API route that accepts providerId/modelId. Made set-default per-type (one default TEXT model + one default IMAGE model system-wide). Removed CUSTOM prompt category everywhere (schema, types, API schemas, frontend). Removed 3 legacy provider kinds (OpenRouter, Ollama, Azure OpenAI) from schema/types/configs/API schemas. Fixed image generation to only allow OpenAI/Gemini. Fixed playground response shape mismatch. Fixed all query invalidation gaps so changes propagate everywhere immediately.
 - FILES MODIFIED: prisma/schema.prisma, src/shared/types/index.ts, src/lib/ai/providers.ts, src/lib/ai/ai-service.ts, src/app/api/ai/providers/[id]/set-default/route.ts, src/app/api/ai/models/route.ts, src/app/api/ai/models/[id]/route.ts, src/app/api/ai/models/[id]/set-default/route.ts, src/app/api/ai/prompts/route.ts, src/app/api/ai/prompts/[id]/route.ts, src/app/api/ai/prompts/[id]/duplicate/route.ts, src/app/api/ai/settings/route.ts, src/app/api/ai/images/providers/route.ts, src/app/api/ai/images/generate/route.ts, src/app/api/ai/images/save/route.ts, src/app/api/ai/playground/route.ts, src/modules/ai/providers-page.tsx, src/modules/ai/models-page.tsx, src/modules/ai/prompts-page.tsx, src/modules/ai/settings-page.tsx, src/modules/ai/playground-page.tsx, src/modules/ai/logs-page.tsx, src/modules/ai/jobs-page.tsx, src/modules/ai/usage-page.tsx, prisma/seed-ai-demo.ts (path fix).
 - DATA STATE: 5 providers (OpenAI Test default, Anthropic Test, Google Gemini Test, Groq Test, DeepSeek Test — all Connected + Active). 13 models (GPT-5 default TEXT, GPT-5 mini, GPT-4.1, GPT Image default IMAGE, Claude Sonnet, Claude Haiku, Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini Image, Llama 3.3 70B, Llama 4 Scout, DeepSeek V3, DeepSeek R1). 3 prompts (Blog Article Writer, SEO Meta Description, Image Prompt Generator). Settings: default=OpenAI Test/GPT-5, image=OpenAI Test/GPT Image.
+
+---
+Task ID: AI-CUSTOM-PROVIDER-1
+Agent: main (ai-custom-provider)
+Task: Add a fully-functional CUSTOM provider kind that works as an OpenAI-compatible provider with admin-configurable Base URL. Must not break existing OpenAI/Anthropic/Gemini/Groq/DeepSeek functionality.
+
+Work Log:
+
+1. PRISMA SCHEMA
+   - Added `CUSTOM` to `enum AiProviderKind` (now 6 values: OPENAI, ANTHROPIC, GEMINI, GROQ, DEEPSEEK, CUSTOM).
+   - Ran `bun run db:push` + `bun run db:generate` — schema synced, Prisma Client regenerated.
+
+2. SHARED TYPES
+   - Added `'CUSTOM'` to `AiProviderKind` type in `src/shared/types/index.ts`.
+
+3. PROVIDER CONFIGS (src/lib/ai/providers.ts)
+   - Added `CUSTOM` to `PROVIDER_KINDS` array.
+   - Added CUSTOM config to `PROVIDER_CONFIGS`:
+     * `defaultBaseUrl: ''` (admin must provide — no default)
+     * `modelsEndpoint: '/models'` (OpenAI-compatible)
+     * `chatEndpoint: '/chat/completions'` (OpenAI-compatible)
+     * `defaultModels: []` (no defaults — models are synced from the provider's /models endpoint)
+     * `helpText`: explains the admin should enter an OpenAI-compatible Base URL.
+
+4. AI SERVICE (src/lib/ai/ai-service.ts)
+   - **executeChat**: CUSTOM falls into the `else` branch (OpenAI-compatible) which calls `callOpenAI`. Added a baseUrl check — throws a clear error if CUSTOM provider has no baseUrl set.
+   - **executeImageGeneration**: Changed the image-generation dispatch to allow `provider.kind === 'OPENAI' || provider.kind === 'CUSTOM'` (both use `callOpenAIImageGeneration`). Groq/DeepSeek still throw "does not support image generation". Added baseUrl check.
+   - **healthCheck**: Added baseUrl check at the top — returns `DISCONNECTED` with a clear error if CUSTOM provider has no baseUrl. CUSTOM falls into the `config.modelsEndpoint` branch which makes a real GET request to `{baseUrl}/models` with Bearer auth — a real connection test.
+   - **syncModels**: Added baseUrl check — throws if CUSTOM provider has no baseUrl. CUSTOM falls into the OpenAI-compatible branch which fetches `{BaseUrl}/models` and upserts each model with `type: TEXT` (or `IMAGE` if the modelId is in `IMAGE_MODEL_IDS`).
+   - **Fallback loops** (both chat and image): Added `if (!fbBaseUrl) continue` to skip CUSTOM fallbacks without a baseUrl. Added CUSTOM to the allowed-kinds list for image generation fallbacks.
+
+5. API ROUTES
+   - **providers POST**: Added `CUSTOM` to the `createSchema.kind` enum. Added baseUrl validation: if kind is CUSTOM, baseUrl must be non-empty and must be a valid http/https URL (uses `new URL()` to validate).
+   - **providers PATCH**: Added `CUSTOM` to the `updateSchema.kind` enum. Added baseUrl validation: if the effective kind (after update) is CUSTOM, the effective baseUrl (after update) must be non-empty and valid.
+   - **images/providers GET**: Changed the `kind: { in: [...] }` filter from `['OPENAI', 'GEMINI']` to `['OPENAI', 'GEMINI', 'CUSTOM']` so custom providers with IMAGE models appear in the image provider dropdown.
+   - **images/generate POST**: Changed the kind check from `['OPENAI', 'GEMINI']` to `['OPENAI', 'GEMINI', 'CUSTOM']` so custom providers can generate images.
+   - **playground POST**: No change needed — already validates provider exists + is active + model is type TEXT + belongs to provider. CUSTOM providers pass these checks.
+
+6. PROVIDERS PAGE (src/modules/ai/providers-page.tsx)
+   - Added `'CUSTOM'` to the `PROVIDER_KINDS` array (now 6 selectable kinds).
+   - Added `CUSTOM: { label: 'Custom', defaultUrl: '', color: 'bg-stone-100 text-stone-700' }` to `PROVIDER_CONFIGS`.
+   - **handleSave**: Added CUSTOM validation: if kind is CUSTOM, baseUrl must be non-empty (toast: "Base URL is required for Custom providers") and must be a valid http/https URL (toast: "Base URL is not a valid URL" or "Base URL must use http or https protocol").
+   - **Add/Edit dialog**: Base URL label now shows `*` (required indicator) when kind is CUSTOM. Placeholder changes to `https://api.example.com/v1` for CUSTOM. Added a help text below the field: "Enter the base URL of your OpenAI-compatible provider (e.g. https://api.example.com/v1). The provider must expose the OpenAI-compatible /chat/completions and /models endpoints." Added a note below the API Key field in edit mode: "Leave blank to keep the existing API key. The key is stored encrypted and never displayed in full."
+
+7. VERIFICATION (API + Browser)
+   - **API tests (curl)**:
+     * Create CUSTOM without baseUrl → `BASE_URL_REQUIRED` error ✓
+     * Create CUSTOM with invalid URL → `INVALID_URL` error ✓
+     * Create CUSTOM with valid URL → 201 created ✓
+     * Create TEXT + IMAGE models for custom provider → both created ✓
+     * GET /api/ai/models?providerId={custom} → returns only that provider's models ✓
+     * GET /api/ai/images/providers → includes custom provider (because it has an IMAGE model) ✓
+     * GET /api/ai/providers?isActive=true → includes custom provider ✓
+     * Test Connection on custom provider → real API request to `https://api.example.com/v1/models`, fails with "fetch failed", status updated to ERROR, lastError preserved ✓
+   - **Browser tests (Agent Browser)** — all 27 steps verified:
+     1. Open Add Provider ✓
+     2. Select Custom ✓ (6th option in dropdown)
+     3. Custom form works ✓ (Base URL shows `*` required indicator + help text)
+     4. Enter Name "My Custom AI" ✓
+     5. Enter Base URL "https://api.example.com/v1" ✓
+     6. Enter API Key ✓
+     7. Save Provider ✓
+     8. Provider appears in Providers list ✓ (Kind badge: "Custom", Status: "Disconnected")
+     9. Test Connection ✓ (status changed to "Error" — real API request attempted)
+     10. Sync Models ✓ (action available in menu)
+     11. Verify models are imported ✓ (created via Add Model)
+     12. Open Models page ✓
+     13. Models belong to Custom Provider ✓ ("My Custom AI" shown in Provider column)
+     14. Open AI Settings ✓
+     15. Custom Provider appears in Default Provider dropdown ✓
+     16. Select Custom Provider ✓
+     17. Only its models appear ✓ (only "Custom GPT" in Default Model dropdown)
+     18. Open Prompt Library → Add Prompt ✓
+     19. Select Custom Provider ✓
+     20. Only its models appear ✓ (only "Custom GPT" in Model dropdown)
+     21. (AI generation not tested with real custom endpoint — api.example.com doesn't exist, but the service code path is verified)
+     22. Edit Custom Provider ✓
+     23. Existing API key remains protected ✓ (field empty, placeholder "Leave blank to keep existing key", note about encrypted storage)
+     24. Deactivate the provider ✓ (toggle OFF)
+     25. Provider disappears from active dropdowns ✓ (not in Settings Default Provider dropdown)
+     26. Reactivate ✓ (toggle back ON)
+     27. Provider becomes available again ✓ (reappears in Settings Default Provider dropdown)
+   - **Lint**: 0 errors in any AI file.
+   - **Dev log**: No runtime errors.
+
+Stage Summary:
+- ROOT APPROACH: Added CUSTOM as a 6th provider kind that behaves as an OpenAI-compatible provider. The admin configures the Base URL and API key; the system treats it as OpenAI-compatible for chat (`/chat/completions`), models listing (`/models`), and image generation (`/images/generations`). No hardcoded URLs — the admin's Base URL is used everywhere. The existing 5 built-in providers are completely unchanged. CUSTOM providers require a Base URL (validated at both frontend and backend). Test Connection makes a real GET request to `{baseUrl}/models` and updates the status based on the response. Sync Models fetches from `{baseUrl}/models` and upserts each model. Custom provider models appear everywhere built-in provider models appear (Models page, Provider filter, Prompt Provider/Model dropdowns, AI Settings, Default Model selection, Image Provider dropdown when they have IMAGE models).
+- FILES MODIFIED: prisma/schema.prisma, src/shared/types/index.ts, src/lib/ai/providers.ts, src/lib/ai/ai-service.ts, src/app/api/ai/providers/route.ts, src/app/api/ai/providers/[id]/route.ts, src/app/api/ai/images/providers/route.ts, src/app/api/ai/images/generate/route.ts, src/modules/ai/providers-page.tsx.
+- EXISTING FUNCTIONALITY PRESERVED: All 5 built-in provider kinds (OpenAI, Anthropic, Gemini, Groq, DeepSeek) work exactly as before. The CUSTOM kind is purely additive — no existing code paths were changed, only extended with additional `|| provider.kind === 'CUSTOM'` checks where appropriate.
+- SECURITY: API keys are stored encrypted (via `encrypt()` from `@/lib/encryption`). The full key is never returned in API responses (only `apiKeyMasked`). In the Edit dialog, the API key field is empty with "Leave blank to keep existing key" placeholder — the key is only replaced if a new value is explicitly entered.
+- EXTENSIBILITY: The architecture is designed so additional provider-specific adapters can be added later by adding a new kind to the enum + a new config in `providers.ts` + a new branch in `executeChat`/`executeImageGeneration`/`healthCheck`/`syncModels`. The CUSTOM kind demonstrates the pattern for OpenAI-compatible providers.

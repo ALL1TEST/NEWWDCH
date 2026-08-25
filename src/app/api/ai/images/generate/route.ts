@@ -78,8 +78,8 @@ export async function POST(request: NextRequest) {
     const provider = await db.aiProvider.findUnique({ where: { id: d.providerId } });
     if (!provider) return err('Provider not found', 404, 'NOT_FOUND');
     if (!provider.isActive) return err('Provider is disabled. Please activate it first.', 400, 'PROVIDER_INACTIVE');
-    if (!['OPENAI', 'GEMINI'].includes(provider.kind)) {
-      return err(`${provider.kind} does not support image generation. Please use OpenAI or Gemini.`, 400, 'UNSUPPORTED');
+    if (!['OPENAI', 'GEMINI', 'CUSTOM'].includes(provider.kind)) {
+      return err(`${provider.kind} does not support image generation. Please use OpenAI, Gemini, or a Custom OpenAI-compatible provider.`, 400, 'UNSUPPORTED');
     }
 
     // Pre-validate the model is an IMAGE-type model belonging to this provider

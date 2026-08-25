@@ -24,7 +24,7 @@ function err(message: string, status = 400, code = 'VALIDATION_ERROR') {
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200).trim(),
-  kind: z.enum(['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK']),
+  kind: z.enum(['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK', 'CUSTOM']),
   baseUrl: z.string().max(2048).optional().or(z.literal('')),
   apiKey: z.string().max(1000).optional().or(z.literal('')),
   apiVersion: z.string().max(100).optional().or(z.literal('')),
@@ -133,6 +133,22 @@ export async function POST(request: NextRequest) {
     }
 
     const d = parsed.data;
+
+    // CUSTOM providers require a Base URL (no default is provided by the config).
+    if (d.kind === 'CUSTOM') {
+      if (!d.baseUrl || d.baseUrl.trim() === '') {
+        return err('Base URL is required for Custom providers', 400, 'BASE_URL_REQUIRED');
+      }
+      // Basic URL format validation
+      try {
+        const u = new URL(d.baseUrl);
+        if (!['http:', 'https:'].includes(u.protocol)) {
+          return err('Base URL must use http or https protocol', 400, 'INVALID_URL');
+        }
+      } catch {
+        return err('Base URL is not a valid URL', 400, 'INVALID_URL');
+      }
+    }
 
     let encryptedKey: string | null = null;
     if (d.apiKey && d.apiKey !== '') {

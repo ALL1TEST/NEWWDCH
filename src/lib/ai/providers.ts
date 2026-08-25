@@ -29,7 +29,7 @@ export interface ProviderModel {
   supportsTools: boolean;
 }
 
-export const PROVIDER_KINDS = ['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK'] as const;
+export const PROVIDER_KINDS = ['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK', 'CUSTOM'] as const;
 
 export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
   OPENAI: {
@@ -103,6 +103,19 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
       { modelId: 'deepseek-chat', name: 'DeepSeek V3', contextLength: 131072, inputCostPer1k: 0.00014, outputCostPer1k: 0.00028, supportsImages: false, supportsVision: false, supportsFunctionCalling: true, supportsJsonMode: true, supportsStreaming: true, supportsTools: false },
       { modelId: 'deepseek-reasoner', name: 'DeepSeek R1', contextLength: 131072, inputCostPer1k: 0.00055, outputCostPer1k: 0.00219, supportsImages: false, supportsVision: false, supportsFunctionCalling: false, supportsJsonMode: false, supportsStreaming: true, supportsTools: false },
     ],
+  },
+  CUSTOM: {
+    // Custom OpenAI-compatible provider. The admin configures the Base URL
+    // and API key; we treat it as an OpenAI-compatible endpoint for chat,
+    // models listing, and image generation.
+    kind: 'CUSTOM',
+    name: 'Custom',
+    defaultBaseUrl: '', // Admin must provide — no default
+    modelsEndpoint: '/models', // OpenAI-compatible models endpoint
+    chatEndpoint: '/chat/completions', // OpenAI-compatible chat endpoint
+    helpText: 'Enter the Base URL and API key for your OpenAI-compatible provider (e.g. https://api.example.com/v1).',
+    icon: 'Settings',
+    defaultModels: [], // No defaults — models are synced from the provider's /models endpoint
   },
 };
 

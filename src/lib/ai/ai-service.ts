@@ -147,6 +147,10 @@ export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
   const apiKey = await decrypt(provider.apiKeyEncrypted);
   const config = getProviderConfig(provider.kind);
   const baseUrl = provider.baseUrl || config.defaultBaseUrl;
+  // CUSTOM providers have no defaultBaseUrl — they must have one set explicitly.
+  if (!baseUrl) {
+    throw new Error('No Base URL configured for this custom provider. Please edit the provider and set a Base URL.');
+  }
 
   const startTime = Date.now();
   let inputTokens = 0;
@@ -171,7 +175,7 @@ export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
       outputTokens = result.outputTokens;
       content = result.content;
     } else {
-      // OpenAI-compatible (OpenAI, Groq, DeepSeek)
+      // OpenAI-compatible (OpenAI, Groq, DeepSeek, Custom)
       const result = await callOpenAI(baseUrl, apiKey, modelId, req.messages, {
         temperature, maxTokens,
         topP: req.topP,
@@ -200,6 +204,8 @@ export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
         const fbApiKey = await decrypt(fb.fallback.apiKeyEncrypted);
         const fbConfig = getProviderConfig(fb.fallback.kind);
         const fbBaseUrl = fb.fallback.baseUrl || fbConfig.defaultBaseUrl;
+        // CUSTOM providers have no defaultBaseUrl — skip if the admin hasn't set one.
+        if (!fbBaseUrl) continue;
 
         let fbResult: { content: string; inputTokens: number; outputTokens: number };
         if (fb.fallback.kind === 'ANTHROPIC') {
@@ -207,6 +213,7 @@ export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
         } else if (fb.fallback.kind === 'GEMINI') {
           fbResult = await callGemini(fbBaseUrl, fbApiKey, fbResolved.modelId, req.messages, { temperature, maxTokens });
         } else {
+          // OpenAI-compatible (OpenAI, Groq, DeepSeek, Custom)
           fbResult = await callOpenAI(fbBaseUrl, fbApiKey, fbResolved.modelId, req.messages, { temperature, maxTokens });
         }
         inputTokens = fbResult.inputTokens;
@@ -439,6 +446,10 @@ export async function healthCheck(providerId: string): Promise<HealthCheckResult
   const apiKey = await decrypt(provider.apiKeyEncrypted);
   const config = getProviderConfig(provider.kind);
   const baseUrl = provider.baseUrl || config.defaultBaseUrl;
+  // CUSTOM providers have no defaultBaseUrl — they must have one set explicitly.
+  if (!baseUrl) {
+    return { status: 'DISCONNECTED', latencyMs: 0, error: 'No Base URL configured for this custom provider. Please edit the provider and set a Base URL.' };
+  }
 
   const start = Date.now();
   try {
@@ -468,7 +479,7 @@ export async function healthCheck(providerId: string): Promise<HealthCheckResult
       }
       models = config.defaultModels;
     } else if (config.modelsEndpoint) {
-      // OpenAI-compatible (OpenAI, Groq, DeepSeek)
+      // OpenAI-compatible (OpenAI, Groq, DeepSeek, Custom)
       const res = await fetch(`${baseUrl}${config.modelsEndpoint}`, {
         headers: { 'Authorization': `Bearer ${apiKey}` },
       });
@@ -531,6 +542,10 @@ export async function syncModels(providerId: string): Promise<number> {
   const apiKey = await decrypt(provider.apiKeyEncrypted);
   const config = getProviderConfig(provider.kind);
   const baseUrl = provider.baseUrl || config.defaultBaseUrl;
+  // CUSTOM providers have no defaultBaseUrl — they must have one set explicitly.
+  if (!baseUrl) {
+    throw new Error('No Base URL configured for this custom provider. Please edit the provider and set a Base URL.');
+  }
 
   let fetchedModels: ProviderModel[] = config.defaultModels;
 
@@ -891,6 +906,10 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
   const apiKey = await decrypt(provider.apiKeyEncrypted);
   const config = getProviderConfig(provider.kind);
   const baseUrl = provider.baseUrl || config.defaultBaseUrl;
+  // CUSTOM providers have no defaultBaseUrl — they must have one set explicitly.
+  if (!baseUrl) {
+    throw new Error('No Base URL configured for this custom provider. Please edit the provider and set a Base URL.');
+  }
 
   const startTime = Date.now();
   let images: GeneratedImage[] = [];
@@ -906,8 +925,8 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
         responseFormat: req.responseFormat,
       });
       images = result.images;
-    } else if (provider.kind === 'OPENAI') {
-      // Only OpenAI supports image generation among the OpenAI-compatible providers
+    } else if (provider.kind === 'OPENAI' || provider.kind === 'CUSTOM') {
+      // OpenAI and Custom (OpenAI-compatible) providers support image generation
       const result = await callOpenAIImageGeneration(baseUrl, apiKey, modelId, req.prompt, {
         negativePrompt: req.negativePrompt,
         size: req.size,
@@ -919,7 +938,7 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
       images = result.images;
     } else {
       // GROQ and DEEPSEEK do not support image generation
-      throw new Error(`${config.name} does not support image generation. Please use OpenAI or Gemini.`);
+      throw new Error(`${config.name} does not support image generation. Please use OpenAI, Gemini, or a Custom OpenAI-compatible provider.`);
     }
   } catch (err) {
     // Try fallback providers for image generation
@@ -933,13 +952,15 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
 
     for (const fb of fallbacks) {
       if (!fb.fallback.isActive || !fb.fallback.apiKeyEncrypted) continue;
-      // Only try fallbacks that support image generation (OpenAI or Gemini)
-      if (fb.fallback.kind !== 'OPENAI' && fb.fallback.kind !== 'GEMINI') continue;
+      // Only try fallbacks that support image generation (OpenAI, Gemini, or Custom OpenAI-compatible)
+      if (fb.fallback.kind !== 'OPENAI' && fb.fallback.kind !== 'GEMINI' && fb.fallback.kind !== 'CUSTOM') continue;
       try {
         const fbResolved = await resolveModel(fb.fallback.id, undefined, 'IMAGE', fb.fallback.models);
         const fbApiKey = await decrypt(fb.fallback.apiKeyEncrypted);
         const fbConfig = getProviderConfig(fb.fallback.kind);
         const fbBaseUrl = fb.fallback.baseUrl || fbConfig.defaultBaseUrl;
+        // CUSTOM providers have no defaultBaseUrl — skip if not set.
+        if (!fbBaseUrl) continue;
 
         let fbResult: { images: GeneratedImage[] };
         if (fb.fallback.kind === 'GEMINI') {
@@ -947,6 +968,7 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
             negativePrompt: req.negativePrompt, size: req.size, n: req.n, responseFormat: req.responseFormat,
           });
         } else {
+          // OpenAI or Custom (OpenAI-compatible)
           fbResult = await callOpenAIImageGeneration(fbBaseUrl, fbApiKey, fbResolved.modelId, req.prompt, {
             size: req.size, quality: req.quality, style: req.style, n: req.n, responseFormat: req.responseFormat,
           });
