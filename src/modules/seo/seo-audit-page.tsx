@@ -148,7 +148,7 @@ export function SeoAuditPage() {
     order: table.sortOrder,
     search: table.searchValue || undefined,
     severity: severityFilter !== 'all' ? severityFilter : undefined,
-    isResolved: showResolved ? undefined : 'false',
+    isResolved: showResolved ? 'true' : 'false',
   }), [table.currentPage, table.pageSize, table.sortField, table.sortOrder, table.searchValue, severityFilter, showResolved]);
 
   const { data, isLoading } = useQuery({
@@ -160,20 +160,22 @@ export function SeoAuditPage() {
   const issues = data?.data ?? [];
   const totalItems = data?.pagination?.total ?? 0;
 
-  // Fetch severity counts (unresolved only) via 3 lightweight pagination queries
+  // Fetch severity counts for the CURRENTLY DISPLAYED filter state.
+  // When showResolved=false → count open issues; when showResolved=true → count resolved issues.
+  const resolvedParam = showResolved ? 'true' : 'false';
   const { data: criticalData } = useQuery({
-    queryKey: ['seo-issues', 'count', 'CRITICAL'],
-    queryFn: () => getApi<PaginatedResponse<SeoIssueRow>>('/api/seo/issues', { pageSize: 1, isResolved: 'false', severity: 'CRITICAL' }),
+    queryKey: ['seo-issues', 'count', 'CRITICAL', resolvedParam],
+    queryFn: () => getApi<PaginatedResponse<SeoIssueRow>>('/api/seo/issues', { pageSize: 1, isResolved: resolvedParam, severity: 'CRITICAL' }),
     staleTime: 10_000,
   });
   const { data: warningData } = useQuery({
-    queryKey: ['seo-issues', 'count', 'WARNING'],
-    queryFn: () => getApi<PaginatedResponse<SeoIssueRow>>('/api/seo/issues', { pageSize: 1, isResolved: 'false', severity: 'WARNING' }),
+    queryKey: ['seo-issues', 'count', 'WARNING', resolvedParam],
+    queryFn: () => getApi<PaginatedResponse<SeoIssueRow>>('/api/seo/issues', { pageSize: 1, isResolved: resolvedParam, severity: 'WARNING' }),
     staleTime: 10_000,
   });
   const { data: infoData } = useQuery({
-    queryKey: ['seo-issues', 'count', 'INFO'],
-    queryFn: () => getApi<PaginatedResponse<SeoIssueRow>>('/api/seo/issues', { pageSize: 1, isResolved: 'false', severity: 'INFO' }),
+    queryKey: ['seo-issues', 'count', 'INFO', resolvedParam],
+    queryFn: () => getApi<PaginatedResponse<SeoIssueRow>>('/api/seo/issues', { pageSize: 1, isResolved: resolvedParam, severity: 'INFO' }),
     staleTime: 10_000,
   });
 
@@ -316,15 +318,24 @@ export function SeoAuditPage() {
           </button>
         ))}
       </div>
-      <label className="flex items-center gap-1.5 text-xs cursor-pointer ml-2">
+      <button
+        type="button"
+        onClick={() => { setShowResolved(!showResolved); table.setCurrentPage(1); }}
+        className={cn(
+          'flex items-center gap-1.5 ml-2 px-2.5 py-1 text-xs font-medium rounded-md border transition-colors',
+          showResolved
+            ? 'border-foreground/30 bg-foreground/5 text-foreground'
+            : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted/50',
+        )}
+      >
         <input
           type="checkbox"
           checked={showResolved}
-          onChange={(e) => setShowResolved(e.target.checked)}
-          className="rounded border-border"
+          readOnly
+          className="h-3 w-3 rounded border-border pointer-events-none"
         />
-        Show Resolved
-      </label>
+        Show Resolved Only
+      </button>
     </div>
   );
 
