@@ -75,6 +75,7 @@ import {
   Wifi,
   WifiOff,
   AlertCircle,
+  HelpCircle,
   ChevronLeft,
   ChevronRight,
   Loader2,
@@ -137,6 +138,122 @@ const PROVIDER_CONFIGS: Record<string, { label: string; defaultUrl: string; colo
 function kindConfig(kind: string): { label: string; color: string } {
   const cfg = PROVIDER_CONFIGS[kind];
   return cfg ?? { label: kind, color: 'bg-zinc-100 text-zinc-700' };
+}
+
+// -------------------- Error Diagnostic Parser --------------------
+// Parses the `lastError` string (stored by healthCheck as "HTTP {status}: {body}")
+// and returns structured, user-friendly diagnostic info. NEVER exposes API keys.
+
+interface ErrorDiagnostic {
+  httpStatus: number | null;
+  errorType: string | null;       // e.g. "authentication_error", "request_forbidden"
+  errorMessage: string | null;    // the provider's own message
+  category: string;               // our human-readable category
+  suggestion: string | null;      // suggested fix
+  rawSnippet: string | null;      // truncated sanitized raw error (no keys)
+}
+
+// Patterns that look like API keys or secrets — stripped from any displayed text
+const SECRET_PATTERNS = [
+  /sk-[a-zA-Z0-9-_]{8,}/gi,
+  /sk-ant-[a-zA-Z0-9-_]{8,}/gi,
+  /Bearer\s+[a-zA-Z0-9-_]{8,}/gi,
+  /api[_-]?key[=:]\s*["']?[a-zA-Z0-9-_]{8,}["']?/gi,
+  /x-api-key:\s*[a-zA-Z0-9-_]{8,}/gi,
+  /\b[A-Za-z0-9+/]{40,}={0,2}\b/g, // base64-looking blobs
+];
+
+function sanitizeSecrets(text: string): string {
+  let cleaned = text;
+  for (const pattern of SECRET_PATTERNS) {
+    cleaned = cleaned.replace(pattern, '[REDACTED]');
+  }
+  return cleaned;
+}
+
+function parseErrorDiagnostic(lastError: string | null): ErrorDiagnostic | null {
+  if (!lastError || lastError.trim() === '') return null;
+
+  const sanitized = sanitizeSecrets(lastError);
+
+  // Extract HTTP status: pattern is "HTTP {status}:" or "HTTP {status} "
+  const statusMatch = sanitized.match(/HTTP\s+(\d{3})/i);
+  const httpStatus = statusMatch ? parseInt(statusMatch[1], 10) : null;
+
+  // Try to parse the JSON body after "HTTP {status}:"
+  let errorType: string | null = null;
+  let errorMessage: string | null = null;
+  let rawSnippet: string | null = null;
+
+  const bodyMatch = sanitized.match(/HTTP\s+\d{3}\s*:?\s*([\s\S]*)/i);
+  if (bodyMatch && bodyMatch[1]) {
+    const bodyStr = bodyMatch[1].trim();
+    try {
+      const parsed = JSON.parse(bodyStr);
+      if (parsed?.error?.message) errorMessage = sanitizeSecrets(String(parsed.error.message));
+      if (parsed?.error?.type) errorType = sanitizeSecrets(String(parsed.error.type));
+      if (parsed?.error?.code && !errorType) errorType = sanitizeSecrets(String(parsed.error.code));
+    } catch {
+      // Not JSON — use the raw body (sanitized) as the message
+      if (bodyStr) errorMessage = sanitizeSecrets(bodyStr.slice(0, 200));
+    }
+  } else {
+    // No HTTP status prefix — use the raw error string
+    errorMessage = sanitizeSecrets(sanitized.slice(0, 200));
+  }
+
+  rawSnippet = sanitized.slice(0, 300);
+
+  // Map HTTP status → category + suggestion
+  let category = 'Connection Error';
+  let suggestion: string | null = null;
+
+  if (httpStatus !== null) {
+    if (httpStatus === 401) {
+      category = 'Authentication Failed (401)';
+      suggestion = 'The API key appears to be invalid or expired. Verify the key in the provider settings and update it if necessary.';
+    } else if (httpStatus === 403) {
+      category = 'Access Denied (403)';
+      suggestion = 'Access was denied by the provider. This may be due to region restrictions, account permissions, or an expired plan. Check your provider account status.';
+    } else if (httpStatus === 404) {
+      category = 'Endpoint Not Found (404)';
+      suggestion = 'The Base URL or models endpoint was not found. Verify the Base URL is correct and includes the API version path (e.g. /v1).';
+    } else if (httpStatus === 429) {
+      category = 'Rate Limit Exceeded (429)';
+      suggestion = 'Too many requests were sent. Wait a moment and try again. Consider upgrading your provider plan for higher rate limits.';
+    } else if (httpStatus >= 500) {
+      category = `Provider Server Error (${httpStatus})`;
+      suggestion = 'The provider\'s server encountered an error. Try again later. If the problem persists, check the provider\'s status page.';
+    } else if (httpStatus >= 400) {
+      category = `Request Error (${httpStatus})`;
+      suggestion = 'The request was rejected by the provider. Review the error details and adjust your configuration.';
+    }
+  } else {
+    // No HTTP status — likely a network/timeout error
+    const lower = sanitized.toLowerCase();
+    if (lower.includes('timeout') || lower.includes('timed out')) {
+      category = 'Timeout';
+      suggestion = 'The provider did not respond within the timeout. The provider may be slow or unreachable. Try again or check the provider\'s status.';
+    } else if (lower.includes('fetch failed') || lower.includes('enotfound') || lower.includes('econnrefused') || lower.includes('network')) {
+      category = 'Network Error';
+      suggestion = 'Could not reach the provider. Verify the Base URL is correct, check your network connection, and ensure the provider endpoint is accessible.';
+    } else if (lower.includes('ssl') || lower.includes('certificate')) {
+      category = 'SSL/Certificate Error';
+      suggestion = 'There was an SSL/TLS certificate issue. Verify the Base URL uses https and the provider\'s certificate is valid.';
+    }
+  }
+
+  return { httpStatus, errorType, errorMessage, category, suggestion, rawSnippet };
+}
+
+// Format the lastHealthCheckAt timestamp for display
+function formatLastAttempt(iso: string | null): string | null {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return null;
+  }
 }
 
 const CONNECTION_STATUS_CONFIG: Record<AiConnectionStatus, { color: string; label: string }> = {
@@ -491,6 +608,10 @@ export function ProvidersPage() {
                     const kc = kindConfig(provider.kind);
                     const statusConfig = CONNECTION_STATUS_CONFIG[provider.connectionStatus]
                       ?? { color: 'bg-zinc-400', label: provider.connectionStatus || 'Unknown' };
+                    const errorDiag = provider.connectionStatus === 'ERROR'
+                      ? parseErrorDiagnostic(provider.lastError)
+                      : null;
+                    const lastAttempt = formatLastAttempt(provider.lastHealthCheckAt);
                     return (
                       <TableRow key={provider.id}>
                         <TableCell className="font-medium">{provider.name}</TableCell>
@@ -500,9 +621,61 @@ export function ProvidersPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
                             <span className={`h-2.5 w-2.5 rounded-full ${statusConfig.color}`} />
                             <span className="text-sm">{statusConfig.label}</span>
+                            {errorDiag && (
+                              <TooltipProvider delayDuration={200}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                                      aria-label="View error details"
+                                    >
+                                      <HelpCircle className="h-3.5 w-3.5" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-xs p-0">
+                                    <div className="space-y-2 p-3 text-xs">
+                                      <div className="font-semibold text-red-600 dark:text-red-400">
+                                        {errorDiag.category}
+                                      </div>
+                                      {errorDiag.errorMessage && (
+                                        <div className="text-zinc-600 dark:text-zinc-300">
+                                          <span className="font-medium">Message: </span>
+                                          {errorDiag.errorMessage}
+                                        </div>
+                                      )}
+                                      {errorDiag.errorType && (
+                                        <div className="text-zinc-500 dark:text-zinc-400">
+                                          <span className="font-medium">Type: </span>
+                                          <code className="bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-[10px]">{errorDiag.errorType}</code>
+                                        </div>
+                                      )}
+                                      {provider.baseUrl && (
+                                        <div className="text-zinc-500 dark:text-zinc-400 break-all">
+                                          <span className="font-medium">Endpoint: </span>
+                                          <code className="bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-[10px]">{provider.baseUrl}</code>
+                                        </div>
+                                      )}
+                                      {lastAttempt && (
+                                        <div className="text-zinc-500 dark:text-zinc-400">
+                                          <span className="font-medium">Last attempt: </span>
+                                          {lastAttempt}
+                                        </div>
+                                      )}
+                                      {errorDiag.suggestion && (
+                                        <div className="text-zinc-600 dark:text-zinc-300 border-t border-zinc-200 dark:border-zinc-700 pt-2 mt-2">
+                                          <span className="font-medium">Suggested fix: </span>
+                                          {errorDiag.suggestion}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">

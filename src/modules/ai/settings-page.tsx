@@ -18,7 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Save, Loader2, Settings, Type, Image as ImageIcon,
+  Save, Loader2, Type, Image as ImageIcon,
 } from 'lucide-react';
 
 // -------------------- Types --------------------
@@ -156,11 +156,7 @@ function SettingsPageInner() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <h2 className="text-lg font-semibold flex items-center gap-2">
-        <Settings className="h-5 w-5" /> AI Settings
-      </h2>
-
+    <div className="space-y-6">
       {/* Text AI Settings */}
       <Card>
         <CardHeader className="pb-4">
