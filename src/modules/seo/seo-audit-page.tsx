@@ -344,13 +344,13 @@ export function SeoAuditPage() {
         </span>
         Show Resolved Only
       </button>
-      {showResolved && (
+      {(showResolved || severityFilter !== 'all' || table.searchValue) && (
         <button
           type="button"
-          onClick={() => { setShowResolved(false); setSeverityFilter('all'); table.setCurrentPage(1); }}
+          onClick={() => { setShowResolved(false); setSeverityFilter('all'); table.setSearchValue(''); table.setCurrentPage(1); }}
           className="px-2.5 py-1 text-xs font-medium rounded-md border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
         >
-          Clear
+          Remove All
         </button>
       )}
     </div>
