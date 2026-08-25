@@ -30,7 +30,14 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      data: { ...result, totalUrls: result.urlCount },
+      data: {
+        ...result,
+        totalUrls: result.urlCount,
+        lastGenerated: result.lastGeneratedAt,
+        lastPingGoogle: result.lastPingedGoogle,
+        lastPingBing: result.lastPingedBing,
+        sitemapUrl: await resolveBaseUrl(request).then(b => `${b}/sitemap.xml`),
+      },
       meta: { requestId: id, timestamp: new Date().toISOString(), duration: Date.now() - start },
     });
   } catch (error) {
@@ -251,6 +258,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Default action: generate sitemap
+    const baseUrl = await resolveBaseUrl(request);
+
     const publishedContent = await db.contentItem.findMany({
       where: { ...siteFilter, status: 'PUBLISHED', deletedAt: null },
       select: { slug: true, updatedAt: true },
@@ -267,17 +276,30 @@ export async function POST(request: NextRequest) {
       select: { slug: true, updatedAt: true },
     });
 
-    // Build XML sitemap
-    const baseUrl = (await request.json() as Record<string, unknown>)?.baseUrl as string || 'https://example.com';
+    // Build XML sitemap — escape special XML characters in URLs
+    function escapeXml(str: string): string {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+    }
+
     const urls: string[] = [
       '<?xml version="1.0" encoding="UTF-8"?>',
       '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
     ];
 
+    // Homepage
+    urls.push(
+      '  <url>',
+      `    <loc>${escapeXml(baseUrl)}/</loc>`,
+      `    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>`,
+      '    <changefreq>daily</changefreq>',
+      '    <priority>1.0</priority>',
+      '  </url>',
+    );
+
     for (const item of publishedContent) {
       urls.push(
         '  <url>',
-        `    <loc>${baseUrl}/${item.slug}</loc>`,
+        `    <loc>${escapeXml(baseUrl)}/articles/${escapeXml(item.slug)}</loc>`,
         `    <lastmod>${item.updatedAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0]}</lastmod>`,
         '    <changefreq>weekly</changefreq>',
         '    <priority>0.8</priority>',
@@ -288,7 +310,7 @@ export async function POST(request: NextRequest) {
     for (const cat of categories) {
       urls.push(
         '  <url>',
-        `    <loc>${baseUrl}/category/${cat.slug}</loc>`,
+        `    <loc>${escapeXml(baseUrl)}/categories/${escapeXml(cat.slug)}</loc>`,
         `    <lastmod>${cat.updatedAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0]}</lastmod>`,
         '    <changefreq>monthly</changefreq>',
         '    <priority>0.6</priority>',
@@ -299,7 +321,7 @@ export async function POST(request: NextRequest) {
     for (const tag of tags) {
       urls.push(
         '  <url>',
-        `    <loc>${baseUrl}/tag/${tag.slug}</loc>`,
+        `    <loc>${escapeXml(baseUrl)}/tags/${escapeXml(tag.slug)}</loc>`,
         `    <lastmod>${tag.updatedAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0]}</lastmod>`,
         '    <changefreq>monthly</changefreq>',
         '    <priority>0.5</priority>',
@@ -310,7 +332,7 @@ export async function POST(request: NextRequest) {
     urls.push('</urlset>');
     const xmlContent = urls.join('\n');
 
-    const totalUrls = publishedContent.length + categories.length + tags.length;
+    const totalUrls = 1 + publishedContent.length + categories.length + tags.length; // +1 for homepage
     const updated = await db.sitemapConfig.update({
       where: { id: config.id },
       data: {
@@ -322,7 +344,14 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({
-      data: { ...updated, urlCount: totalUrls },
+      data: {
+        ...updated,
+        totalUrls: updated.urlCount,
+        lastGenerated: updated.lastGeneratedAt,
+        lastPingGoogle: updated.lastPingedGoogle,
+        lastPingBing: updated.lastPingedBing,
+        sitemapUrl: `${baseUrl}/sitemap.xml`,
+      },
       meta: { requestId: id, timestamp: new Date().toISOString(), duration: Date.now() - start },
     });
   } catch (error) {

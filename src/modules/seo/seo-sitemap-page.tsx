@@ -208,25 +208,32 @@ export function SeoSitemapPage() {
 
   // Ping Google mutation
   const pingGoogleMutation = useMutation({
-    mutationFn: () => postApi('/api/seo/sitemap?action=ping-google'),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.seoSitemap.all });
-      toast.success('Successfully pinged Google');
+    mutationFn: async () => {
+      const res = await postApi<{ pingResult?: string; pingHttpStatus?: number }>('/api/seo/sitemap?action=ping-google');
+      return res;
     },
-    onError: () => {
-      toast.error('Failed to ping Google');
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSitemap.all });
+      toast.success(res?.pingResult || 'Successfully pinged Google');
+    },
+    onError: (err: Error & { details?: { httpStatus?: number } }) => {
+      const msg = err.message || 'Failed to ping Google';
+      toast.error(msg);
     },
   });
 
   // Ping Bing mutation
   const pingBingMutation = useMutation({
-    mutationFn: () => postApi('/api/seo/sitemap?action=ping-bing'),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.seoSitemap.all });
-      toast.success('Successfully pinged Bing');
+    mutationFn: async () => {
+      const res = await postApi<{ pingResult?: string; pingHttpStatus?: number }>('/api/seo/sitemap?action=ping-bing');
+      return res;
     },
-    onError: () => {
-      toast.error('Failed to ping Bing');
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSitemap.all });
+      toast.success(res?.pingResult || 'Successfully pinged Bing');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to ping Bing');
     },
   });
 
@@ -335,7 +342,7 @@ export function SeoSitemapPage() {
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
                 )}
-                Generate Sitemap
+                {generateMutation.isPending ? 'Generating...' : 'Generate Sitemap'}
               </Button>
 
               <Button
@@ -348,7 +355,7 @@ export function SeoSitemapPage() {
                 ) : (
                   <Globe className="h-4 w-4 mr-2" />
                 )}
-                Ping Google
+                {pingGoogleMutation.isPending ? 'Pinging...' : 'Ping Google'}
               </Button>
 
               <Button
@@ -361,7 +368,7 @@ export function SeoSitemapPage() {
                 ) : (
                   <Zap className="h-4 w-4 mr-2" />
                 )}
-                Ping Bing
+                {pingBingMutation.isPending ? 'Pinging...' : 'Ping Bing'}
               </Button>
 
               <Separator orientation="vertical" className="h-9 hidden sm:block" />
@@ -370,6 +377,7 @@ export function SeoSitemapPage() {
                 variant="outline"
                 onClick={() => setPreviewOpen(true)}
                 disabled={!xmlContent}
+                title={!xmlContent ? 'Generate a sitemap first' : undefined}
               >
                 <Eye className="h-4 w-4 mr-2" />
                 Preview Sitemap
@@ -381,9 +389,12 @@ export function SeoSitemapPage() {
                   if (xmlContent) {
                     downloadBlob(xmlContent, 'sitemap.xml');
                     toast.success('Sitemap downloaded');
+                  } else {
+                    toast.error('No sitemap content available. Generate a sitemap first.');
                   }
                 }}
                 disabled={!xmlContent}
+                title={!xmlContent ? 'Generate a sitemap first' : undefined}
               >
                 <Download className="h-4 w-4 mr-2" />
                 Download Sitemap
