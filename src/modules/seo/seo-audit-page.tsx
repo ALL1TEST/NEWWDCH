@@ -142,15 +142,19 @@ export function SeoAuditPage() {
   const table = useDataTable({ initialSortField: 'createdAt', initialSortOrder: 'desc', initialPageSize: DEFAULT_PAGE_SIZE });
 
   // Centralized filter-reset function — called by "Remove All" button.
-  // Resets all filter state and forces the table to refetch with default params.
+  // Resets all filter state, clears cached query data for the old filter,
+  // and forces the table + counters to refetch with default params.
   const resetAllFilters = useCallback(() => {
+    // 1. Clear cached data for ALL seo-issues queries so the table doesn't
+    //    show stale resolved-issue data while the new open-issue query fetches.
+    queryClient.removeQueries({ queryKey: ['seo-issues'] });
+    // 2. Reset all filter state to defaults (batched by React)
     setShowResolved(false);
     setSeverityFilter('all');
     table.setSearchValue('');
     table.setCurrentPage(1);
-    // Invalidate all SEO issue queries so the table + counters refetch immediately
-    queryClient.invalidateQueries({ queryKey: queryKeys.seoIssues.all });
-    queryClient.invalidateQueries({ queryKey: ['seo-issues'] });
+    // 3. Invalidate overview queries so the Overview page stays in sync
+    queryClient.invalidateQueries({ queryKey: ['seo-overview'] });
   }, [table, queryClient]);
 
   const queryParams = useMemo(() => ({
