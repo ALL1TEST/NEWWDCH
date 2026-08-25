@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ClipboardCheck, Loader2, CheckCircle2, RotateCcw, ExternalLink,
@@ -140,6 +140,18 @@ export function SeoAuditPage() {
   const [showResolved, setShowResolved] = useState(false);
 
   const table = useDataTable({ initialSortField: 'createdAt', initialSortOrder: 'desc', initialPageSize: DEFAULT_PAGE_SIZE });
+
+  // Centralized filter-reset function — called by "Remove All" button.
+  // Resets all filter state and forces the table to refetch with default params.
+  const resetAllFilters = useCallback(() => {
+    setShowResolved(false);
+    setSeverityFilter('all');
+    table.setSearchValue('');
+    table.setCurrentPage(1);
+    // Invalidate all SEO issue queries so the table + counters refetch immediately
+    queryClient.invalidateQueries({ queryKey: queryKeys.seoIssues.all });
+    queryClient.invalidateQueries({ queryKey: ['seo-issues'] });
+  }, [table, queryClient]);
 
   const queryParams = useMemo(() => ({
     page: table.currentPage,
@@ -347,7 +359,7 @@ export function SeoAuditPage() {
       {(showResolved || severityFilter !== 'all' || table.searchValue) && (
         <button
           type="button"
-          onClick={() => { setShowResolved(false); setSeverityFilter('all'); table.setSearchValue(''); table.setCurrentPage(1); }}
+          onClick={resetAllFilters}
           className="px-2.5 py-1 text-xs font-medium rounded-md border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
         >
           Remove All
