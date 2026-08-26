@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Download,
@@ -42,13 +42,19 @@ interface LogRow {
   action: string;
   status: string;
   backupId: string | null;
-  backupName: string | null;
+  // NOTE: the API returns the related Backup via a nested `backup` object
+  // (not a flat `backupName`), so the Backup Name column reads
+  // `row.backup?.name`. The search endpoint matches the backup name via
+  // the `backup` relation as well.
+  backup: { id: string; name: string; filename: string | null; status: string; scope: string } | null;
   databaseSize: number | null;
+  archiveSize: number | null;
   fileCount: number | null;
   durationMs: number | null;
   storageProvider: string | null;
   verificationResult: string | null;
   errorMessage: string | null;
+  warnings: string | null;
   createdAt: string;
 }
 
@@ -70,6 +76,121 @@ const STATUS_OPTIONS = [
   { value: 'FAILED', label: 'Failed' },
   { value: 'IN_PROGRESS', label: 'In Progress' },
 ];
+
+// -------------------- Search Empty State (inline) --------------------
+
+/** Inline empty state rendered INSIDE the table body when an active search
+ * or filter yields zero results. Distinct from the standalone full-page
+ * "No log entries yet" state, which only shows when the system genuinely
+ * has zero logs (no search AND no filters active).
+ *
+ * The table headers, search input, filter controls, and footer/pagination
+ * all remain visible — only the body renders this empty state. The clear
+ * button resets BOTH the search text and all filters (action/status/dates)
+ * so it works whether the empty result was caused by a search term or by a
+ * filter selection. The label adapts to what is actually active. */
+function NoLogsSearchEmpty({
+  onClear,
+  clearLabel,
+}: {
+  onClear: () => void;
+  clearLabel: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+      <FileText className="h-10 w-10 text-muted-foreground/40 mb-3" strokeWidth={1.5} />
+      <p className="text-sm font-medium text-foreground">No logs found</p>
+      <p className="text-xs text-muted-foreground mt-1">No log entries match your search.</p>
+      <Button variant="outline" size="sm" className="mt-4" onClick={onClear}>
+        {clearLabel}
+      </Button>
+    </div>
+  );
+}
+
+// -------------------- Error Cell (Read more / Read less) --------------------
+
+/** Per-row expandable cell for the Error column.
+ *
+ * - Short errors (fit in 2 lines): rendered in full, NO "Read more" button.
+ * - Long errors: clamped to 2 lines via `line-clamp-2` with a "Read more"
+ *   button BELOW the text. Clicking expands the full text in place (no
+ *   modal/tooltip/popup) and toggles the button to "Read less".
+ * - Each row owns its own expanded state (this component instance). TanStack
+ *   keys rows by id via `getRowId`, so when search/filter results change,
+ *   rows that leave the result set unmount (state discarded) and new rows
+ *   mount fresh (collapsed) — stale expanded state is never carried across
+ *   unrelated rows. The `useEffect` below additionally resets to collapsed
+ *   if the same row's error value changes after a refetch.
+ * - The content is width-constrained (`max-w-[280px]`) so a long error
+ *   message wraps naturally and never forces the whole table to become
+ *   excessively wide; `break-words` + `whitespace-pre-wrap` handle long
+ *   unbroken tokens and preserved newlines.
+ * - Overflow detection is measurement-based (scrollHeight vs clientHeight)
+ *   so the "Read more" button appears ONLY when the text is genuinely
+ *   clamped — not based on a fragile character/line heuristic.
+ */
+const ERROR_CELL_MAX_WIDTH = '280px';
+const ERROR_CELL_CLAMP_LINES = 2;
+
+function ErrorCell({ value }: { value: string | null }) {
+  const [expanded, setExpanded] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const ref = useRef<HTMLParagraphElement>(null);
+
+  // Stale-state prevention: each row owns its own expanded state via this
+  // component instance, and TanStack keys rows by id (getRowId=row.id). When
+  // search/filter results change, rows that leave the result set UNMOUNT
+  // (their ErrorCell state is discarded) and new rows MOUNT fresh
+  // (collapsed) — so an expanded state from a filtered-out row is never
+  // inherited by an unrelated row that takes its position. No explicit
+  // reset effect is needed (and calling setState in an effect body is an
+  // anti-pattern the React Compiler flags).
+
+  // Measure whether the clamped text overflows its line limit. Re-runs on
+  // value change, on expand/collapse toggle, and on element resize (column
+  // width / viewport changes) via ResizeObserver so detection stays accurate.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      if (!expanded) {
+        setIsOverflowing(el.scrollHeight > el.clientHeight + 1);
+      }
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [value, expanded]);
+
+  if (!value) return <span className="text-muted-foreground text-xs">—</span>;
+
+  return (
+    <div style={{ maxWidth: ERROR_CELL_MAX_WIDTH }}>
+      <p
+        ref={ref}
+        className={cn(
+          'text-xs text-red-600 dark:text-red-400 break-words whitespace-pre-wrap',
+          !expanded && 'line-clamp-2',
+        )}
+        style={!expanded ? { WebkitLineClamp: ERROR_CELL_CLAMP_LINES } : undefined}
+      >
+        {value}
+      </p>
+      {(isOverflowing || expanded) && (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="mt-1 text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:underline"
+          aria-expanded={expanded}
+        >
+          {expanded ? 'Read less' : 'Read more'}
+        </button>
+      )}
+    </div>
+  );
+}
 
 // -------------------- Logs Page --------------------
 
@@ -105,6 +226,47 @@ export function LogsPage() {
   const logs = data?.data ?? [];
   const pagination = data?.meta?.pagination;
 
+  // ---- Dual empty-state logic ----
+  // TWO distinct empty states:
+  //   A) isInitialEmpty — system has ZERO logs AND no active search AND no
+  //      active filter. Render the existing full-page "No log entries yet"
+  //      state. (This is the ONLY path to the page-level empty state.)
+  //   B) isResultEmpty — logs exist (or could exist) but the current
+  //      search OR filter returns zero results. Keep the table card,
+  //      headers, search input, filter controls, and footer visible, and
+  //      render "No logs found" INSIDE the table body via the DataTable
+  //      `emptyState` prop (DataTableEmpty spans colSpan=999 so the
+  //      headers remain visible above it).
+  // Search AND filter both affect the table rows; the page-level empty
+  // state is gated on BOTH being inactive.
+  const hasSearch = !!table.searchValue?.trim();
+  const hasFilter =
+    actionFilter !== 'all' || statusFilter !== 'all' || fromDate !== '' || toDate !== '';
+  const hasActiveSearchOrFilter = hasSearch || hasFilter;
+  const isInitialEmpty = !isLoading && logs.length === 0 && !hasActiveSearchOrFilter;
+  const isResultEmpty = !isLoading && logs.length === 0 && hasActiveSearchOrFilter;
+
+  // Reset everything (search text + all filters + page) — used by the
+  // inline empty-state "Clear" button so a single click restores all rows
+  // regardless of whether the empty result was caused by a search term or a
+  // filter selection.
+  const clearSearchAndFilters = () => {
+    table.setSearchValue('');
+    setActionFilter('all');
+    setStatusFilter('all');
+    setFromDate('');
+    setToDate('');
+    table.setCurrentPage(1);
+  };
+
+  // Adaptive clear-button label that reflects what is actually active, so
+  // the action is never misleading.
+  const clearLabel = hasSearch && hasFilter
+    ? 'Clear search & filters'
+    : hasSearch
+      ? 'Clear search'
+      : 'Clear filters';
+
   const handleExport = () => {
     // Export logs as CSV
     if (logs.length === 0) {
@@ -115,7 +277,7 @@ export function LogsPage() {
     const rows = logs.map((log) => [
       log.action,
       log.status,
-      log.backupName || '',
+      log.backup?.name || '',
       log.databaseSize ? formatFileSize(log.databaseSize) : '',
       log.fileCount?.toString() || '',
       formatDurationMs(log.durationMs),
@@ -172,9 +334,18 @@ export function LogsPage() {
       {
         id: 'backupName',
         header: 'Backup Name',
-        accessorKey: 'backupName',
+        // The API returns the related Backup via a nested `backup` object
+        // (not a flat `backupName`), so read the name off the relation.
+        accessorFn: (row) => row.backup?.name ?? null,
         className: 'font-medium',
         size: 180,
+        cell: ({ getValue }) => {
+          const v = (getValue() as string | null) ?? '';
+          if (!v) return <span className="text-muted-foreground text-xs">—</span>;
+          // Full name visible; `title` provides a hover tooltip for very
+          // long names without ever clipping the cell text.
+          return <span className="font-medium" title={v}>{v}</span>;
+        },
       },
       {
         id: 'databaseSize',
@@ -247,16 +418,14 @@ export function LogsPage() {
         header: 'Error',
         accessorKey: 'errorMessage',
         enableSorting: false,
-        size: 200,
-        cell: ({ getValue }) => {
-          const val = getValue() as string | null;
-          if (!val) return <span className="text-muted-foreground text-xs">—</span>;
-          return (
-            <span className="text-xs text-red-600 dark:text-red-400" title={val}>
-              {val.length > 50 ? val.slice(0, 50) + '...' : val}
-            </span>
-          );
-        },
+        size: 220,
+        // Per-row expandable cell: short errors render in full (no "Read
+        // more"); long errors clamp to 2 lines with a "Read more" button
+        // BELOW the text that expands the full message in place (no modal /
+        // tooltip / popup). Each row owns its own expanded state; see
+        // ErrorCell for how stale state is prevented from carrying across
+        // unrelated rows when search/filter results change.
+        cell: ({ getValue }) => <ErrorCell value={getValue() as string | null} />,
       },
       ColumnDefHelper.dateColumn<LogRow>({
         id: 'createdAt',
@@ -329,7 +498,7 @@ export function LogsPage() {
         }
       />
 
-      {logs.length === 0 && !isLoading ? (
+      {isInitialEmpty ? (
         <EmptyState
           icon={FileText}
           title="No log entries yet"
@@ -355,7 +524,19 @@ export function LogsPage() {
           }}
           filterContent={filterContent}
           getRowId={(row) => row.id}
+          // When an active search OR filter returns zero results, keep the
+          // table card, headers, search input, filter controls, and footer
+          // visible, and render the "No logs found" empty state INSIDE the
+          // table body (DataTableEmpty spans colSpan=999 so the headers
+          // remain visible above it). The result count (totalItems=0) flows
+          // through so the footer correctly shows 0 matching items. The
+          // clear button resets search + all filters (label adapts).
           emptyMessage="No log entries found."
+          emptyState={
+            isResultEmpty ? (
+              <NoLogsSearchEmpty onClear={clearSearchAndFilters} clearLabel={clearLabel} />
+            ) : undefined
+          }
         />
       )}
     </div>

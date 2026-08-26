@@ -25,6 +25,40 @@ const listIncludes = {
 
 const SORTABLE = new Set(['createdAt', 'action', 'status', 'durationMs', 'archiveSize']);
 
+// ---------- label maps (for search matching) -------------------------
+// The UI displays labelized forms of these string/enums (e.g. "IN_PROGRESS"
+// → "In Progress", "AMAZON_S3" → "Amazon S3"). Search must match what the
+// user SEES, so for each search term we pre-compute the set of raw enum
+// values whose raw form OR labelized form contains the term, then OR a
+// `provider IN (...)` / `action IN (...)` / `status IN (...)` clause with
+// the free-text `contains` clauses on errorMessage and backup.name.
+
+const ACTION_VALUES = ['CREATE', 'RESTORE', 'VERIFY', 'DOWNLOAD', 'DELETE', 'SCHEDULE', 'STORAGE_TEST'] as const;
+
+const STATUS_VALUES = ['SUCCESS', 'FAILED', 'IN_PROGRESS', 'SKIPPED', 'PENDING'] as const;
+
+const PROVIDER_LABELS: Record<string, string> = {
+  LOCAL: 'Local',
+  AMAZON_S3: 'Amazon S3',
+  GOOGLE_DRIVE: 'Google Drive',
+  DROPBOX: 'Dropbox',
+  ONEDRIVE: 'OneDrive',
+  CLOUDFLARE_R2: 'Cloudflare R2',
+  BACKBLAZE_B2: 'Backblaze B2',
+  FTP: 'FTP',
+  SFTP: 'SFTP',
+};
+
+/** Split on underscores, capitalize each word, join with spaces — matches
+ *  the client-side `labelize` so server-side search sees the same strings
+ *  the user sees in the table. */
+function labelize(str: string): string {
+  return str
+    .split('_')
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w))
+    .join(' ');
+}
+
 // =====================================================================
 // GET — list with filters
 // =====================================================================
@@ -66,11 +100,40 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
-      where.OR = [
+      // Search matches: Action, Status, Backup Name, Provider, Error message.
+      // For Action/Status/Provider (stored as raw enums but DISPLAYED as
+      // labelized text), match against BOTH the raw enum ("IN_PROGRESS")
+      // AND the human label ("In Progress") so the user can type what they
+      // see. Backup Name lives on the related Backup record, so it is
+      // matched via the `backup` relation. errorMessage is free-text.
+      const lower = search.toLowerCase();
+
+      const matchedActions = ACTION_VALUES.filter(
+        (a) => a.toLowerCase().includes(lower) || labelize(a).toLowerCase().includes(lower),
+      );
+      const matchedStatuses = STATUS_VALUES.filter(
+        (s) => s.toLowerCase().includes(lower) || labelize(s).toLowerCase().includes(lower),
+      );
+      const matchedProviders = Object.entries(PROVIDER_LABELS).filter(
+        ([enumKey, label]) =>
+          enumKey.toLowerCase().includes(lower) || label.toLowerCase().includes(lower),
+      ).map(([enumKey]) => enumKey);
+
+      const orClauses: Record<string, unknown>[] = [
         { errorMessage: { contains: search } },
-        { warnings: { contains: search } },
-        { verificationResult: { contains: search } },
+        // Backup Name — matched via the related Backup record's name.
+        { backup: { name: { contains: search } } },
       ];
+      if (matchedActions.length > 0) {
+        orClauses.push({ action: { in: matchedActions } });
+      }
+      if (matchedStatuses.length > 0) {
+        orClauses.push({ status: { in: matchedStatuses } });
+      }
+      if (matchedProviders.length > 0) {
+        orClauses.push({ storageProvider: { in: matchedProviders } });
+      }
+      where.OR = orClauses;
     }
 
     const orderBy: Record<string, string> = { [sort]: order };
