@@ -6,23 +6,14 @@ import {
   Shield,
   Save,
   RotateCcw,
-  Eye,
   Loader2,
   AlertTriangle,
-  CheckCircle2,
   XCircle,
   FileCode,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -182,50 +173,6 @@ function getDefaultContent(domain: string): string {
   return `User-agent: *\nAllow: /\n\nSitemap: https://${domain}/sitemap.xml`;
 }
 
-// ==================== Syntax Highlighted Line ====================
-
-// Read-only syntax-highlighted line for the Preview modal. Deliberately
-// has NO line numbers — line numbers are editor chrome and would make the
-// served-response preview feel like a duplicate of the Editor. The Editor
-// (CodeEditor) is the only place that shows line numbers.
-function HighlightedLine({ line }: { line: string }) {
-  const trimmed = line.trim();
-
-  // Comment
-  if (trimmed.startsWith('#')) {
-    return <div><span className="text-muted-foreground/60 italic">{line}</span></div>;
-  }
-
-  // Empty line
-  if (!trimmed) {
-    return <div>&nbsp;</div>;
-  }
-
-  // Directive line
-  const colonIdx = line.indexOf(':');
-  if (colonIdx === -1) {
-    return <div><span className="text-red-500">{line}</span></div>;
-  }
-
-  const directive = line.slice(0, colonIdx + 1);
-  const rest = line.slice(colonIdx + 1);
-  const directiveLower = directive.toLowerCase().trim();
-
-  let directiveColor = 'text-foreground';
-  if (directiveLower === 'user-agent:') directiveColor = 'text-violet-600 dark:text-violet-400 font-medium';
-  else if (directiveLower === 'disallow:') directiveColor = 'text-red-600 dark:text-red-400 font-medium';
-  else if (directiveLower === 'allow:') directiveColor = 'text-green-600 dark:text-green-400 font-medium';
-  else if (directiveLower === 'sitemap:') directiveColor = 'text-sky-600 dark:text-sky-400 font-medium';
-  else directiveColor = 'text-amber-600 dark:text-amber-400';
-
-  return (
-    <div>
-      <span className={directiveColor}>{directive}</span>
-      <span className="text-foreground/80">{rest}</span>
-    </div>
-  );
-}
-
 // ==================== Code Editor ====================
 
 function CodeEditor({
@@ -241,7 +188,7 @@ function CodeEditor({
   const lineNumbersRef = useRef<HTMLDivElement>(null);
   const lines = content.split('\n');
 
-  // Sync scroll between line numbers and textarea
+  // Sync scroll between the line-numbers gutter and the textarea
   const handleScroll = useCallback(() => {
     if (textareaRef.current && lineNumbersRef.current) {
       lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
@@ -249,22 +196,23 @@ function CodeEditor({
   }, []);
 
   return (
-    <div className="relative rounded-lg border border-border bg-zinc-50 dark:bg-zinc-950/50 overflow-hidden">
+    <div className="relative rounded-md border border-border bg-background overflow-hidden transition-colors focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20">
       <div className="flex">
-        {/* Line numbers */}
+        {/* Line numbers gutter */}
         <div
           ref={lineNumbersRef}
-          className="flex-shrink-0 overflow-hidden bg-zinc-100 dark:bg-zinc-900/50 border-r border-border py-3 select-none"
+          aria-hidden="true"
+          className="flex-shrink-0 overflow-hidden bg-muted/30 border-r border-border py-3 select-none"
           style={{ width: '3.5rem' }}
         >
           {lines.map((_, i) => (
             <div
               key={i}
               className={cn(
-                'text-right pr-3 text-xs leading-6 font-mono',
+                'text-right pr-3 text-xs leading-6 font-mono tabular-nums',
                 warningLines.has(i + 1)
                   ? 'text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-950/30'
-                  : 'text-muted-foreground/40',
+                  : 'text-muted-foreground/50',
               )}
             >
               {i + 1}
@@ -274,7 +222,8 @@ function CodeEditor({
         {/* Textarea */}
         <textarea
           ref={textareaRef}
-          className="flex-1 min-h-[400px] bg-transparent px-4 py-3 font-mono text-sm leading-6 resize-y border-0 focus-visible:outline-none focus-visible:ring-0 text-foreground/90"
+          aria-label="Robots.txt content"
+          className="flex-1 min-h-[440px] bg-transparent px-4 py-3 font-mono text-sm leading-6 resize-y border-0 focus-visible:outline-none text-foreground placeholder:text-muted-foreground/40"
           value={content}
           onChange={(e) => onChange(e.target.value)}
           onScroll={handleScroll}
@@ -292,7 +241,6 @@ export function SeoRobotsPage() {
   const queryClient = useQueryClient();
   const [content, setContent] = useState('');
   const [isDirty, setIsDirty] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
   const [blockAllConfirmOpen, setBlockAllConfirmOpen] = useState(false);
   const activeSite = useSiteStore((s) => s.getActiveSite());
@@ -305,9 +253,8 @@ export function SeoRobotsPage() {
   });
 
   const serverContent = robots?.content ?? '';
-  // Sync content from server when loaded — use a key-based approach to avoid
-  // calling setState inside an effect (React Compiler lint rule).
-  // We store the last synced server content and compare in render.
+  // Sync content from server when loaded — key-based approach to avoid
+  // setState-in-render lint by using a guard + lastSynced tracker.
   const [lastSynced, setLastSynced] = useState('');
   if (serverContent && serverContent !== lastSynced && !isDirty) {
     setLastSynced(serverContent);
@@ -347,8 +294,6 @@ export function SeoRobotsPage() {
   }, [warnings]);
 
   const hasBlockAllError = warnings.some((w) => w.message.includes('blocks ALL crawlers'));
-  const hasErrors = warnings.some((w) => w.type === 'error');
-  const hasWarningsOnly = warnings.length > 0 && !hasErrors;
 
   const handleSaveClick = useCallback(() => {
     if (hasBlockAllError) {
@@ -374,7 +319,7 @@ export function SeoRobotsPage() {
         </Card>
       )}
 
-      {/* Validation Warnings */}
+      {/* Validation Warnings — only renders when there are actual issues */}
       {warnings.length > 0 && (
         <Card className={cn(
           'border',
@@ -415,19 +360,19 @@ export function SeoRobotsPage() {
       )}
 
       {/* Editor Card */}
-      <Card className="p-6">
+      <Card className="overflow-hidden">
         {isLoading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-5 w-40" />
-            <Skeleton className="h-96 w-full" />
-            <Skeleton className="h-9 w-64" />
+          <div className="space-y-4 p-5">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-[440px] w-full" />
+            <Skeleton className="h-4 w-64" />
           </div>
         ) : (
-          <>
-            {/* Toolbar */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div>
+            {/* Toolbar header strip — Editor label + actions */}
+            <div className="flex flex-col gap-3 border-b border-border bg-muted/30 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
-                <FileCode className="h-5 w-5 text-muted-foreground" />
+                <FileCode className="h-4 w-4 text-muted-foreground" />
                 <h3 className="font-semibold text-sm">Editor</h3>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -447,148 +392,33 @@ export function SeoRobotsPage() {
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Restore Default
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
-                  <Eye className="h-4 w-4 mr-2" />
-                  Preview Result
-                </Button>
               </div>
             </div>
 
-            {/* Code Editor with line numbers */}
-            <CodeEditor
-              content={content}
-              onChange={handleContentChange}
-              warningLines={warningLines}
-            />
+            {/* Editor body */}
+            <div className="p-5">
+              <CodeEditor
+                content={content}
+                onChange={handleContentChange}
+                warningLines={warningLines}
+              />
 
-            {/* Footer bar */}
-            <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
-              <span>{lineCount} lines · {content.length.toLocaleString()} characters</span>
-              {isDirty && (
-                <div className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                  Modified
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </Card>
-
-      {/* Preview Dialog — renders the actual /robots.txt HTTP response */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileCode className="h-4 w-4" />
-              Robots.txt Preview
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="text-xs text-muted-foreground">
-              This is the exact response served at{' '}
-              <code className="font-mono text-primary">/robots.txt</code>. Read-only.
-            </div>
-
-            {/* HTTP response frame — mimics the served response, not the editor */}
-            <div className="overflow-hidden rounded-lg border border-border">
-              {/* Response status / headers bar */}
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-mono">
-                <span className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">GET</span>
-                  <span className="text-foreground font-medium">/robots.txt</span>
+              {/* Footer bar */}
+              <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
+                <span className="font-mono tabular-nums">
+                  {lineCount} lines · {content.length.toLocaleString()} characters
                 </span>
-                <span
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold',
-                    hasErrors
-                      ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
-                      : 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400',
-                  )}
-                >
-                  {hasErrors ? '200 OK · Invalid' : '200 OK'}
-                </span>
-                <span className="text-muted-foreground">text/plain</span>
-                <span className="text-muted-foreground">utf-8</span>
-                <span className="text-muted-foreground">{content.length} bytes</span>
+                {isDirty && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    Modified
+                  </div>
+                )}
               </div>
-
-              {/* Read-only response body — syntax-highlighted, NO line
-                  numbers (line numbers are editor chrome; their absence
-                  keeps this clearly a served-response preview, not an
-                  editor duplicate). The body is non-editable: it's a
-                  <pre>-style block with select-text cursor, no focus ring. */}
-              <div className="overflow-auto bg-zinc-50 dark:bg-zinc-950/50 p-4 max-h-[50vh] select-text">
-                <div className="font-mono text-sm leading-6 whitespace-pre-wrap cursor-default">
-                  {content.trim() ? (
-                    content.split('\n').map((line, i) => (
-                      <HighlightedLine key={i} line={line} />
-                    ))
-                  ) : (
-                    <span className="text-muted-foreground/50 italic"># robots.txt is empty</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Validation state footer — reflects the current validation state */}
-            <div className="space-y-1.5">
-              {warnings.length === 0 && content.trim() && (
-                <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
-                  <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  No validation issues found — robots.txt is valid
-                </div>
-              )}
-              {!content.trim() && (
-                <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  robots.txt is empty — crawlers will have no rules to follow
-                </div>
-              )}
-              {hasErrors && (
-                <div className="space-y-1">
-                  {warnings
-                    .filter((w) => w.type === 'error')
-                    .map((w, i) => (
-                      <div
-                        key={`e${i}`}
-                        className="flex items-start gap-2 text-xs text-red-600 dark:text-red-400"
-                      >
-                        <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                        <span>
-                          {w.line && (
-                            <span className="text-muted-foreground/70">Line {w.line}: </span>
-                          )}
-                          {w.message}
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              )}
-              {hasWarningsOnly && (
-                <div className="space-y-1">
-                  {warnings
-                    .filter((w) => w.type === 'warning')
-                    .map((w, i) => (
-                      <div
-                        key={`w${i}`}
-                        className="flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400"
-                      >
-                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                        <span>
-                          {w.line && (
-                            <span className="text-muted-foreground/70">Line {w.line}: </span>
-                          )}
-                          {w.message}
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              )}
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        )}
+      </Card>
 
       {/* Restore Default Confirmation */}
       <AlertDialog open={restoreConfirmOpen} onOpenChange={setRestoreConfirmOpen}>

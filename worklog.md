@@ -2491,3 +2491,88 @@ Stage Summary:
 - Footer bar: "Modified" appears only when dirty (conditional sync feedback); when saved, the right side is empty (no permanent "Saved" indicator). Line/character count on the left is preserved.
 - Preview Result modal: untouched and re-verified — still a distinct read-only HTTP response preview (GET /robots.txt · 200 OK · text/plain · utf-8 · N bytes header frame + syntax-highlighted body with NO line numbers + validation footer + Close-only), not a duplicate of the Editor. No second editable copy of robots.txt; the Editor remains the single source of truth.
 - Files modified: src/modules/seo/seo-robots-page.tsx only (removed Badge import, removed StatusIndicator function, refactored Editor header row, refactored footer right side). Dev server running on port 3000. Screenshots: upload/robots/1-editor-clean.png, upload/robots/2-editor-dirty.png, upload/robots/3-preview-modal.png, upload/robots/4-dark-editor.png, upload/robots/5-dark-preview.png.
+
+---
+Task ID: SEO-ROBOTS-PREVIEW-REMOVE-AND-POLISH
+Agent: main
+Task: (1) REMOVE the "Preview Result" button and ALL related preview-modal functionality completely (no empty space / unused UI left behind). (2) Keep the Editor header clean with ONLY: Editor, Save, Restore Default. (3) Polish the Robots.txt page styling — clean modern SEO/CMS admin design, better visual hierarchy, consistent spacing/borders/typography/button styling, make the code editor feel like a professional configuration/code editor (keep line numbers + monospace, subtle borders + clean background), no "Valid"/"Saved" badges. (4) Keep all existing functionality (editing, save, restore default, internal validation, robots.txt content/generation logic) unchanged. (5) No replacement for Preview Result.
+
+Work Log:
+- Read /home/z/my-project/worklog.md (prior tasks SEO-ROBOTS-PREVIEW-DEDUP, SEO-ROBOTS-EDITOR-HEADER-CLEANUP) — confirmed the Editor header already had Valid/Saved badges removed, but the Preview Result button + Preview Dialog + HighlightedLine + previewOpen state + hasErrors/hasWarningsOnly vars were still present.
+- Read /home/z/my-project/src/modules/seo/seo-robots-page.tsx (648 lines) and mapped every symbol usage:
+  * `Eye` import (line 9) — used ONLY by the Preview Result button.
+  * `CheckCircle2` import (line 12) — used ONLY inside the Preview modal's validation footer.
+  * `Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter` imports (lines 19–25) — used ONLY by the Preview modal (DialogFooter wasn't even used).
+  * `HighlightedLine` component (lines 185–227) — used ONLY inside the Preview modal body.
+  * `previewOpen`/`setPreviewOpen` state (line 295) — used ONLY by the Preview button + Preview Dialog.
+  * `hasErrors` (line 350) — used ONLY by the Preview modal (HTTP status pill + errors footer). The Validation Warnings card uses `warnings.some((w) => w.type === 'error')` inline, NOT hasErrors.
+  * `hasWarningsOnly` (line 351) — used ONLY by the Preview modal's warnings footer.
+  * `hasBlockAllError` (line 349) — still used by handleSaveClick (line 354/359). KEEP.
+  * `validateRobots`, `getDefaultContent`, `saveMutation`, `handleRestore`, the Restore Default AlertDialog, the Block-All AlertDialog — all unchanged.
+- Rewrote the file (Write tool) with the following changes:
+
+  IMPORTS removed: `Eye`, `CheckCircle2`, and the entire `Dialog/DialogContent/DialogHeader/DialogTitle/DialogFooter` block. Imports kept: `Shield` (Block-All dialog), `Save`, `RotateCcw`, `Loader2`, `AlertTriangle`, `XCircle`, `FileCode` (editor header), `Card`/`CardContent`, `Button`, `Skeleton`, `AlertDialog*`, `getApi`/`putApi`, `queryKeys`, `useSiteStore`, `toast`, `cn`.
+
+  COMPONENT removed: `HighlightedLine` (was only used by the Preview modal). `validateRobots` and `getDefaultContent` kept byte-for-byte identical.
+
+  STATE removed: `previewOpen`/`setPreviewOpen`. State kept: `content`, `isDirty`, `restoreConfirmOpen`, `blockAllConfirmOpen`, `lastSynced`.
+
+  COMPUTED VARS removed: `hasErrors`, `hasWarningsOnly` (both became unused after the Preview modal removal). `hasBlockAllError`, `warnings`, `warningLines`, `lineCount` kept.
+
+  JSX removed: the entire "Preview Result" `<Button>` (was at lines 450–453) and the entire `<Dialog>` Preview modal block (was at lines 478–591). No replacement UI, no empty placeholder — the toolbar right side now naturally holds only Save + Restore Default.
+
+  POLISH — Editor Card restructured (was `<Card className="p-6">` with a single toolbar+editor+footer all in one padded box; now `<Card className="overflow-hidden">` with a bordered header strip + a separate padded body):
+  * Toolbar header strip: `<div className="flex flex-col gap-3 border-b border-border bg-muted/30 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">` containing the Editor label (FileCode icon + h3) on the left and the Save + Restore Default buttons on the right. This gives a clear visual separation between the action bar and the editing surface.
+  * Editor body: `<div className="p-5">` wrapping the CodeEditor + the footer bar.
+  * Loading skeleton updated to match the new layout (toolbar-height strip + editor block + footer line).
+
+  POLISH — CodeEditor component refined to feel like a professional code editor:
+  * Wrapper: `relative rounded-md border border-border bg-background overflow-hidden transition-colors focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20` — subtle border, theme background, and a focus ring that activates when the textarea is focused (verified: border opacity 0.1→0.4 and a ring box-shadow appears on focus).
+  * Line-numbers gutter: `bg-muted/30 border-r border-border py-3 select-none`, width 3.5rem, `aria-hidden="true"` (decorative). Line-number cells use `text-right pr-3 text-xs leading-6 font-mono tabular-nums` with red highlight on warning lines (`text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-950/30`) and `text-muted-foreground/50` otherwise. `tabular-nums` keeps digit columns aligned.
+  * Textarea: `flex-1 min-h-[440px] bg-transparent px-4 py-3 font-mono text-sm leading-6 resize-y border-0 focus-visible:outline-none text-foreground placeholder:text-muted-foreground/40`, with `aria-label="Robots.txt content"` for a11y, `spellCheck={false}`, and the `User-agent: *\nAllow: /` placeholder.
+
+  POLISH — Footer bar: kept the same conditional structure (`{isDirty && <Modified pill>}` — no permanent "Saved" indicator) but added `font-mono tabular-nums` to the "N lines · M characters" span for consistent numeric alignment.
+
+  Unchanged: validateRobots logic, getDefaultContent, the Restore Default AlertDialog, the Block-All AlertDialog, saveMutation, handleRestore, handleSaveClick, the Validation Warnings card (still renders only when warnings.length > 0 — this is the "validation feedback only appears when there's an actual issue" mechanism), the error-state Card.
+
+LINT:
+- `bun run lint`: ZERO issues in seo-robots-page.tsx. The 5 remaining lint problems are pre-existing in untouched files (data-table.tsx, content-create/edit-page.tsx, seo-broken-links-page.tsx, seo-social-preview-page.tsx) and identical to the baseline.
+
+BROWSER VERIFICATION (agent-browser, logged in as admin@example.com → SEO → Robots.txt):
+
+Toolbar + button removal — verified the header is exactly `Editor | Save | Restore Default`:
+- snapshot -i: `- heading "Editor" [ref=e19]`, `- button "Save" [disabled, ref=e20]`, `- button "Restore Default" [ref=e21]`, `- textbox "Robots.txt content" [ref=e22]`. NO "Preview Result" button.
+- DOM eval: `{previewBtnExists: false, dialogExists: false, editorButtons: ["Save", "Restore Default"], hasValidText: false, hasSavedText: false}`. No Preview button, no Preview dialog, no "Valid"/"Saved" text anywhere.
+
+Polished structure — verified via DOM eval:
+- Toolbar header strip class: `flex flex-col gap-3 border-b border-border bg-muted/30 px-5 py-3 sm:flex-row sm:items-center sm:justify-between` — `{stripHasBorderB: true, stripHasMutedBg: true}`.
+- CodeEditor wrapper: `relative rounded-md border border-border bg-background overflow-hidden transition-colors focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20` — `{wrapHasBorder: true, wrapHasFocusRing: true, textareaHasAriaLabel: true}`.
+- Line-number gutter: `bg-muted/30 border-r border-border py-3 select-none`, 4 line-number cells (default robots.txt = 4 lines), each cell `text-right pr-3 text-xs leading-6 font-mono tabular-nums` — `{lineNumCount: 4, lineNumHasTabular: true, lineNumHasMono: true}`.
+
+Functionality — verified end-to-end:
+- Editing: typed into textarea → `{saveBtnDisabled: false, footerText: "5 lines · 80 characters Modified", hasModified: true}`. Save enables, "Modified" pill shows, line count updates.
+- Save: clicked Save → `PUT /api/seo/robots 200` (dev.log), Save re-disabled, "Modified" cleared, `GET /api/seo/robots 200` re-fetch after invalidation.
+- Restore Default: clicked Restore Default → AlertDialog opened ("Restore Default Robots.txt?"), confirmed → textarea value reset to `User-agent: * | Allow: / | | Sitemap: https://cms.example.com/sitemap.xml` (default), Save enabled, "Modified" shows. Then saved the default to persist a clean state.
+
+Focus ring — verified via computed styles (focus textarea, wait 300ms for style recalc):
+- Unfocused: `wrapBorder` oklab L=0.9999 / alpha 0.1 (border-border at 10%), `wrapBoxShadow` all-zero.
+- Focused: `wrapBorder` oklab L=0.922 / alpha 0.4 (border-primary/40 — primary is near-white in dark mode), `wrapBoxShadow` gained a 4th entry (the `ring-1 ring-primary/20` box-shadow). `textareaFocused: true`.
+
+Dark mode — verified (toggled theme, `isDark: true`):
+- Strip bg: `oklab(0.269 / 0.3)` (dark muted at 30%).
+- Textarea color: `lab(98.26 0 0)` (near-white text).
+- Gutter bg: `oklab(0.269 / 0.3)` (same dark muted as strip).
+- Gutter right border: `lab(100 0 0 / 0.1)` (subtle white at 10%).
+- Textarea font-family: `"Geist Mono", "Geist Mono Fallback"` (monospace).
+- `editorButtons: ["Save", "Restore Default"]`, `previewBtnExists: false`.
+
+Console + dev.log:
+- Cleared console + reloaded fresh: `agent-browser errors` → none. `agent-browser console` → empty (the previous pre-existing `Warning: Missing Description for {DialogContent}` warnings are GONE — they were emitted by the removed Preview modal; the AlertDialogs have AlertDialogDescription so they don't trigger it).
+- /home/z/my-project/dev.log: `GET /api/seo/robots 200`, `PUT /api/seo/robots 200`, `GET / 200` — no 500s, no runtime exceptions, no hydration errors.
+
+Stage Summary:
+- The "Preview Result" button, the entire Preview Dialog, the HighlightedLine component, the previewOpen state, the now-unused hasErrors/hasWarningsOnly vars, and the Eye/CheckCircle2/Dialog* imports are all removed. No empty placeholder or unused UI area remains — the toolbar right side naturally holds only Save + Restore Default.
+- The Editor header is exactly: `Editor` (FileCode icon + h3) on the left, `Save` (primary) + `Restore Default` (outline) on the right, in a bordered header strip (`border-b border-border bg-muted/30 px-5 py-3`) separated from the editor body (`p-5`).
+- The CodeEditor now feels like a professional code editor: subtle border + theme background wrapper, focus-within ring (border-primary/40 + ring-1 ring-primary/20), a muted gutter with border-r and tabular-nums font-mono line numbers, a transparent font-mono textarea (Geist Mono, min-h-440px, aria-label, no spellcheck). Line numbers and monospace formatting preserved.
+- All existing functionality preserved: editing works, Save works (PUT /api/seo/robots 200), Restore Default works (with confirmation dialog), validation runs internally via validateRobots and surfaces ONLY via the conditional Validation Warnings/Errors card (no permanent "Valid"/"Saved" badges). The robots.txt content/generation logic (getDefaultContent) is unchanged.
+- Files modified: src/modules/seo/seo-robots-page.tsx only. Dev server running on port 3000. Screenshots: upload/robots/6-polished-editor-light.png, upload/robots/7-polished-editor-dark.png, upload/robots/8-polished-focused-dark.png.
