@@ -122,15 +122,20 @@ function NoLogsSearchEmpty({
  *   mount fresh (collapsed) — stale expanded state is never carried across
  *   unrelated rows. The `useEffect` below additionally resets to collapsed
  *   if the same row's error value changes after a refetch.
- * - The content is width-constrained (`max-w-[280px]`) so a long error
- *   message wraps naturally and never forces the whole table to become
- *   excessively wide; `break-words` + `whitespace-pre-wrap` handle long
- *   unbroken tokens and preserved newlines.
+ * - The content is width-constrained to a GENEROUS max-width (`480px`) so a
+ *   long error message wraps naturally. This is wide enough that typical
+ *   long errors (100–300 chars) grow the column and naturally trigger
+ *   horizontal scrolling (per the user's requirement: "Long Error messages
+ *   must automatically trigger horizontal scrolling when needed" / "Never
+ *   shrink columns excessively just to avoid scrolling"), while still
+ *   preventing a single multi-thousand-char stack trace from dominating
+ *   the entire table width. `break-words` + `whitespace-pre-wrap` handle
+ *   long unbroken tokens and preserved newlines.
  * - Overflow detection is measurement-based (scrollHeight vs clientHeight)
  *   so the "Read more" button appears ONLY when the text is genuinely
  *   clamped — not based on a fragile character/line heuristic.
  */
-const ERROR_CELL_MAX_WIDTH = '280px';
+const ERROR_CELL_MAX_WIDTH = '480px';
 const ERROR_CELL_CLAMP_LINES = 2;
 
 function ErrorCell({ value }: { value: string | null }) {
@@ -524,6 +529,22 @@ export function LogsPage() {
           }}
           filterContent={filterContent}
           getRowId={(row) => row.id}
+          // Sensible minimum width = sum of column sizes
+          // (120+120+180+100+80+90+120+110+220+140 = 1280). With
+          // `table-layout: auto` (no `tableFixed`), columns GROW beyond
+          // these minimums to fit their content (e.g. a long error message
+          // or a long backup name) — and when the total exceeds the card
+          // width, the table container's `overflow-x: auto` activates a
+          // thin, in-card horizontal scrollbar (styled via globals.css
+          // `[data-slot="table-container"]`). The min-width is only
+          // applied when the table has rows, so the search-empty and
+          // initial-empty states render cleanly without forcing a
+          // scrollbar (DataTable's `tableMinWidth && data.length > 0`
+          // guard). Long error messages are NOT aggressively capped — the
+          // ErrorCell uses a generous 480px max-width so typical long
+          // errors grow the column naturally and trigger horizontal
+          // scrolling instead of being shrunk to fit the card.
+          tableMinWidth={1280}
           // When an active search OR filter returns zero results, keep the
           // table card, headers, search input, filter controls, and footer
           // visible, and render the "No logs found" empty state INSIDE the
