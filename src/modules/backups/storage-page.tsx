@@ -1,6 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
@@ -25,11 +32,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from '@/components/ui/popover';
 import {
   Dialog,
   DialogContent,
@@ -179,16 +181,48 @@ function ProviderBadge({ provider }: { provider: BackupStorageProvider }) {
   );
 }
 
-// -------------------- Provider Dropdown (custom, categorized, text-only) -------------------
+// -------------------- Provider Dropdown (custom, portaled, downward-first) -------------------
 
-/** Custom categorized provider dropdown. Built on the Radix Popover so it
- *  inherits portal rendering (no clipping by the modal's overflow),
- *  outside-click + Escape close, and viewport-aware positioning. Options
- *  are grouped by category with small uppercase category labels — text
- *  only, no provider icons. The panel width matches the trigger width.
- *  The option list is internally scrollable with a thin scrollbar and is
- *  capped to the available viewport height so it never clips the bottom
- *  options (even on short viewports / small browser zoom). */
+/** Custom categorized provider dropdown.
+ *
+ *  Why this exists as a fully custom component (instead of the shadcn
+ *  Popover/Select): the Add Storage modal has a fixed header, a scrollable
+ *  form body and a fixed footer. A Radix-Popover-based dropdown rendered
+ *  inside that body inherits two problems:
+ *
+ *    1. Positioning — Radix auto-flips the panel to whichever side has more
+ *       room, which often meant the panel opened UPWARD over the modal
+ *       header even when there was plenty of space below the trigger.
+ *    2. Wheel scroll — the panel's inner scrollable region was being
+ *       starved of wheel events by the surrounding modal scroll container,
+ *       so hovering the list and scrolling did nothing.
+ *
+ *  This implementation fixes both by:
+ *
+ *    - Rendering the panel through React's `createPortal(...)` directly
+ *      onto `document.body`, so the modal's `overflow`/scroll container
+ *      is no longer an ancestor of the panel — it cannot clip the panel
+ *      and cannot intercept its wheel events.
+ *    - Computing the panel's `position: fixed` rect from the trigger's
+ *      `getBoundingClientRect()`, ALWAYS preferring to open DOWNWARD. The
+ *      panel flips upward only when downward genuinely cannot fit a 200px
+ *      minimum and upward has more room.
+ *    - Capping the panel height to `min(360px, available viewport space)`
+ *      with `overflow-y: auto` + `overscroll-behavior: contain`, so:
+ *        * mouse wheel over the panel scrolls the provider options (the
+ *          panel is the wheel target's nearest scrollable ancestor, and
+ *          containment prevents scroll-chaining back to the modal body);
+ *        * mouse wheel over the modal body (outside the panel) still
+ *          scrolls the modal body — we never attach a modal-level wheel
+ *          handler and never call `preventDefault()` on wheel.
+ *    - Tracking scroll/resize (capture phase, any element) so the panel
+ *      re-positions itself to follow the trigger when the modal body
+ *      scrolls.
+ *    - Full keyboard navigation (Arrow/Home/End/Enter/Escape) with the
+ *      active option kept in view.
+ *    - Outside-click (mousedown) closes; trigger click toggles; selecting
+ *      an option closes and returns focus to the trigger.
+ */
 function ProviderDropdown({
   value,
   onChange,
@@ -199,80 +233,311 @@ function ProviderDropdown({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Refs to the latest values so the open-effect (which attaches window
+  // listeners) does NOT re-run on every value/onChange/activeIndex change.
+  // The listeners read from these refs instead.
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const activeIndexRef = useRef(activeIndex);
+  activeIndexRef.current = activeIndex;
+
+  // Pre-compute the categorized structure (for rendering) and a flat
+  // index map (for keyboard navigation) once — the registry is static.
+  const { categorized, flatOptions, flatIndexOf } = useMemo(() => {
+    const cats = getProvidersByCategory();
+    const flat: { id: BackupStorageProvider; name: string }[] = [];
+    const idxMap = new Map<BackupStorageProvider, number>();
+    cats.forEach(({ providers }) => {
+      providers.forEach((p) => {
+        idxMap.set(p.id, flat.length);
+        flat.push({ id: p.id, name: p.name });
+      });
+    });
+    return { categorized: cats, flatOptions: flat, flatIndexOf: idxMap };
+  }, []);
+
   const selected = getProviderDefinition(value);
-  const categories = getProvidersByCategory();
+
+  /** Recompute the panel's fixed position from the trigger's current rect.
+   *  Prefers opening DOWNWARD. Flips upward only when downward cannot fit
+   *  a 200px minimum AND upward has more room. Closes the dropdown if the
+   *  trigger has scrolled entirely out of the viewport. */
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > window.innerHeight) {
+      setOpen(false);
+      return;
+    }
+    const MIN_HEIGHT = 200;
+    const SAFETY = 16; // px margin from the viewport edge
+    const spaceBelow = window.innerHeight - rect.bottom - SAFETY;
+    const spaceAbove = rect.top - SAFETY;
+    const placement: 'below' | 'above' =
+      spaceBelow >= MIN_HEIGHT || spaceBelow >= spaceAbove ? 'below' : 'above';
+    const available = placement === 'below' ? spaceBelow : spaceAbove;
+    // Cap to 360px (per spec); never smaller than 120px so the panel is
+    // always usable even on very short viewports.
+    const maxHeight = Math.max(120, Math.min(360, available));
+    const top =
+      placement === 'below' ? rect.bottom + 4 : rect.top - 4 - maxHeight;
+    setPanelStyle({
+      position: 'fixed',
+      top: `${top}px`,
+      left: `${rect.left}px`,
+      width: `${rect.width}px`,
+      maxHeight: `${maxHeight}px`,
+      zIndex: 60,
+    });
+  }, []);
+
+  // Open/close lifecycle. Runs only when `open` changes (refs hold the
+  // latest value/onChange/activeIndex so the listeners stay stable).
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    // Initial active option = currently selected provider (so the
+    // highlight is on the user's current value when the panel opens).
+    const idx = flatIndexOf.get(valueRef.current) ?? 0;
+    setActiveIndex(idx);
+    updatePosition();
+
+    // Move focus to the panel so keyboard events originate from inside
+    // the dropdown (Arrow/Home/End/Enter are then scoped to it). Deferred
+    // one frame so the portaled element is mounted before we focus it.
+    const raf = requestAnimationFrame(() => panelRef.current?.focus());
+
+    // ---- Listeners -----------------------------------------------------
+
+    // Reposition on ANY scroll event (capture phase catches scrolls on
+    // any descendant — including the modal body's internal overflow-y-auto
+    // — so the panel always tracks the trigger). Harmless when the panel's
+    // own inner scroll fires (recomputes the same position).
+    const onScroll = () => updatePosition();
+    const onResize = () => updatePosition();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+
+    // Outside mousedown closes the dropdown (but not the modal — the
+    // modal's own onPointerDownOutside still calls preventDefault to
+    // keep the modal alive). Trigger mousedown is allowed through so the
+    // trigger's onClick can toggle.
+    const onPointerDown = (e: MouseEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (panelRef.current?.contains(t)) return;
+      if (triggerRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+
+    // True only when the currently-focused element is inside the dropdown
+    // (trigger or panel). Used to scope Arrow/Home/End/Enter keys so they
+    // don't hijack typing in the Name field while the panel happens to be
+    // open. Escape works from anywhere.
+    const isInDropdown = () => {
+      const active = document.activeElement;
+      if (!active) return false;
+      if (panelRef.current?.contains(active)) return true;
+      if (triggerRef.current?.contains(active)) return true;
+      return false;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setOpen(false);
+        if (isInDropdown()) triggerRef.current?.focus();
+        return;
+      }
+      if (!isInDropdown()) return; // don't hijack other inputs
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          setActiveIndex((i) =>
+            i < 0 ? 0 : Math.min(i + 1, flatOptions.length - 1),
+          );
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setActiveIndex((i) => (i <= 0 ? 0 : i - 1));
+          break;
+        case 'Home':
+          e.preventDefault();
+          setActiveIndex(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          setActiveIndex(flatOptions.length - 1);
+          break;
+        case 'Enter':
+          e.preventDefault();
+          {
+            const i = activeIndexRef.current;
+            if (i >= 0 && i < flatOptions.length) {
+              onChangeRef.current(flatOptions[i].id);
+              setOpen(false);
+              triggerRef.current?.focus();
+            }
+          }
+          break;
+        default:
+          break;
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+
+    // If focus leaves the dropdown entirely (e.g. user clicks into the
+    // Name field or Tabs away), close — same behavior as Radix Select.
+    const onFocusIn = (e: FocusEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (panelRef.current?.contains(t)) return;
+      if (triggerRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    document.addEventListener('focusin', onFocusIn);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('focusin', onFocusIn);
+    };
+  }, [open, flatIndexOf, flatOptions, updatePosition]);
+
+  // Keep the active (highlighted) option scrolled into view inside the
+  // panel whenever it changes (keyboard nav, hover, or initial open).
+  useLayoutEffect(() => {
+    if (!open) return;
+    const el = panelRef.current?.querySelector<HTMLElement>(
+      `[data-index="${activeIndex}"]`,
+    );
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex, open]);
+
+  const handleTriggerClick = () => {
+    if (disabled) return;
+    setOpen((o) => !o);
+  };
+
+  /** Wheel handler attached to the panel itself. We ONLY call
+   *  `stopPropagation()` — never `preventDefault()`. This means:
+   *    - native scroll on the panel (its `overflow-y:auto`) still works
+   *      normally — the wheel target's nearest scrollable ancestor is the
+   *      panel, so the browser scrolls the panel;
+   *    - the wheel event does not bubble up to any ancestor handler that
+   *      might try to scroll the modal body or the page;
+   *    - `overscroll-behavior:contain` (set inline on the panel) further
+   *      prevents scroll-chaining to the modal body when the panel
+   *      reaches its top/bottom boundary.
+   *  Mouse wheel over the modal body (outside the panel) is never
+   *  intercepted here and continues to scroll the modal body normally. */
+  const handleWheel = (e: React.WheelEvent) => {
+    e.stopPropagation();
+  };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          disabled={disabled}
-          className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-[color,box-shadow] hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <span className="truncate text-left text-foreground">
-            {selected?.name ?? 'Select provider'}
-          </span>
-          <ChevronDown
-            className={cn('h-4 w-4 opacity-50 transition-transform shrink-0', open && 'rotate-180')}
-          />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={4}
-        collisionPadding={8}
-        className="p-1"
-        style={{ width: 'var(--radix-popper-anchor-width)' }}
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={handleTriggerClick}
+        className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-[color,box-shadow] hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {/* Inner scroll area: sized to the Radix-provided available height
-            in the panel's placement direction (--radix-popper-available-
-            height, which accounts for collisionPadding and the trigger's
-            position). This makes the panel always fit between the trigger
-            and the viewport edge on ANY viewport height — the full list
-            shows without scrolling when there's room, and scrolls
-            internally with a thin scrollbar when there isn't, so every
-            provider stays reachable and nothing is clipped top or bottom.
-            Falls back to 70vh before the variable resolves. */}
-        <div
-          role="listbox"
-          className="overflow-y-auto storage-modal-scroll"
-          style={{ maxHeight: 'var(--radix-popper-available-height, 70vh)' }}
-        >
-          {categories.map(({ category, label, providers }) => (
-            <div key={category} className="py-1">
-              <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                {label}
+        <span className="truncate text-left text-foreground">
+          {selected?.name ?? 'Select provider'}
+        </span>
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 opacity-50 transition-transform shrink-0',
+            open && 'rotate-180',
+          )}
+        />
+      </button>
+
+      {/* The panel is rendered via createPortal directly onto document.body
+          so the modal's overflow/scroll-container is no longer an ancestor.
+          It cannot clip the panel and cannot intercept the panel's wheel
+          events. The panel only mounts once `panelStyle.top` has been
+          computed by the layout effect above (so it never flashes at the
+          wrong position). */}
+      {open &&
+        panelStyle.top !== undefined &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="listbox"
+            tabIndex={-1}
+            onWheel={handleWheel}
+            style={{
+              ...panelStyle,
+              overflowY: 'auto',
+              overscrollBehavior: 'contain',
+              // Body is set to `pointer-events: none` while the Radix Dialog
+              // is open (Radix's scroll-lock). `pointer-events` is inherited
+              // by default, so a panel portaled to `document.body` would
+              // inherit `none` and become click/wheel-through. Explicitly
+              // re-enable pointer events on the panel so it actually
+              // captures mouse wheel and click events.
+              pointerEvents: 'auto',
+            }}
+            className="storage-modal-scroll animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 bg-popover text-popover-foreground rounded-md border shadow-md p-1 outline-none"
+          >
+            {categorized.map(({ category, label, providers }) => (
+              <div key={category} className="py-1">
+                <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  {label}
+                </div>
+                {providers.map((p) => {
+                  const flatIdx = flatIndexOf.get(p.id) ?? 0;
+                  const isSelected = p.id === value;
+                  const isActive = flatIdx === activeIndex;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      data-index={flatIdx}
+                      onMouseEnter={() => setActiveIndex(flatIdx)}
+                      onClick={() => {
+                        onChange(p.id);
+                        setOpen(false);
+                        triggerRef.current?.focus();
+                      }}
+                      className={cn(
+                        'flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-sm outline-none transition-colors',
+                        isActive ? 'bg-accent' : 'hover:bg-accent/70',
+                        isSelected && 'font-medium',
+                      )}
+                    >
+                      <span className="truncate">{p.name}</span>
+                      {isSelected && (
+                        <Check className="h-4 w-4 text-primary shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
-              {providers.map((p) => {
-                const isSelected = p.id === value;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    role="option"
-                    aria-selected={isSelected}
-                    onClick={() => {
-                      onChange(p.id);
-                      setOpen(false);
-                    }}
-                    className={cn(
-                      'flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent focus:bg-accent',
-                      isSelected && 'bg-accent font-medium',
-                    )}
-                  >
-                    <span className="truncate">{p.name}</span>
-                    {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 
