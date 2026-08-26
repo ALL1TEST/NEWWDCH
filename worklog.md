@@ -2644,3 +2644,97 @@ Stage Summary:
 - The hierarchy is exactly: Redirects (h1) + description + Sitemap | Robots.txt | Redirects (tabs) + [7 Redirects badge] [Export CSV] [Import CSV] [Create Redirect] + [Search redirects...] [All Types] [All Status] + table.
 - The table, all functionality (search, type/status filters, create/edit/delete/toggle, export/import CSV), spacing, and overall SEO/CMS design are unchanged.
 - Files modified: src/modules/seo/seo-settings-page.tsx (tab label only) + src/modules/seo/seo-redirects-page.tsx (count text → badge). Dev server running on port 3000. Screenshots: upload/redirects-header/1-dark.png, upload/redirects-header/2-light.png.
+
+---
+Task ID: SEO-REDIRECTS-COUNT-IN-TAB-AND-SINGLE-CONTROLS-ROW
+Agent: main
+Task: (1) Move the redirect count INTO the "Redirects" navigation tab — change the tab from "Redirects" to "Redirects 7" (count displayed directly next to "Redirects" inside the tab, subtle/professional, dynamic). REMOVE the separate "7 Redirects" summary badge below the tabs. (2) Align ALL redirect controls into ONE horizontal row: [Search redirects by path...] [All Types] [All Status]    [Export CSV] [Import CSV] [Create Redirect]. (3) Vertically align search + filters + action buttons with consistent height. (4) Search input = largest flexible width; filters = compact fixed widths; action buttons grouped right. (5) Remove the separate "7 Redirects" badge row. (6) Table directly below the single controls row. (7) Preserve all functionality. (8) Keep the professional SEO/CMS style, only improve hierarchy/spacing/alignment.
+
+Work Log:
+- Read /home/z/my-project/worklog.md (prior task SEO-REDIRECTS-HEADER-NAV-UPDATE added the "7 Redirects" badge below the tabs). This task moves that count INTO the Redirects tab and merges the controls into one row.
+- Mapped the relevant code:
+  * Tab label: src/modules/seo/seo-settings-page.tsx SETTINGS_TABS (line 20, `label: 'Redirects'`) + TAB_META (line 26, title/description already correct). The settings page renders the h1 + description + tab bar + active child page; the child SeoRedirectsPage renders content only.
+  * Badge + action buttons row: src/modules/seo/seo-redirects-page.tsx lines 1228–1278 (the "Action buttons" `<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">` containing the badge on the left + Export/Import/Create on the right).
+  * `filterContent` const: lines 1161–1199 (the All Types + All Status `<Select>`s passed into the DataTable via `filterContent`).
+  * DataTable call: lines 1280–1296 — passed `searchPlaceholder`, `searchValue`, `onSearch`, `filterContent`. The DataTable's `showToolbar` (data-table.tsx line 795) renders its built-in toolbar (search + filterContent) when any of these are provided.
+  * `totalItems`: line 809 `data?.pagination?.total ?? 0` from the redirects list query (`queryKeys.redirects.list(queryParams)`). All create/delete/toggle mutations call `queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all })` (lines 532, 854, 873, 889, 919), which invalidates ALL `['redirects', ...]` queries.
+  * `createQueryKeys('redirects')` (query-keys.ts lines 10–19) returns `{ all: ['redirects'], list(f), detail(id), count(f) }`. The `count` key (`['redirects', 'count', f]`) shares the `['redirects']` scope, so invalidating `redirects.all` also invalidates the count query.
+
+- Edit set 1 — seo-settings-page.tsx (move count INTO the Redirects tab):
+  * Imports: added `useQuery` (react-query), `getApi` (api-client), `queryKeys` (query-keys).
+  * Added a lightweight count query in `SeoSettingsPage`: `useQuery<RedirectCountResponse>({ queryKey: queryKeys.redirects.count(), queryFn: () => getApi<RedirectCountResponse>('/api/redirects', { page: 1, pageSize: 1 }), staleTime: 10_000 })`. It fetches 1 row + the full `pagination.total`. Because the key shares the `redirects` scope, every create/delete/toggle on the Redirects page invalidates it → the tab badge auto-updates.
+  * Tab button: for `tab.key === 'redirects'`, render a subtle count badge after the label: `<span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground tabular-nums">{redirectCount.toLocaleString()}</span>`. Sitemap and Robots.txt tabs are unchanged (no badge). The badge is always rendered (even at 0) so the count is unconditionally dynamic.
+
+- Edit set 2 — seo-redirects-page.tsx (merge controls into ONE row + remove the badge):
+  * Removed the `filterContent` const (lines 1161–1199) entirely — the All Types / All Status selects now render inline in the new toolbar.
+  * Replaced the "Action buttons" row (lines 1228–1278, which had the badge on the left + Export/Import/Create on the right) with a SINGLE controls row:
+    ```
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-2 flex-1 flex-wrap">  ← left: search + filters
+        <div className="relative flex-1 min-w-[180px]">  ← search (flex-1, grows)
+          <Search ... /> <Input placeholder="Search redirects by path..." className="pl-9 h-8" ... />
+        </div>
+        <Select ...>All Types</Select>  ← w-[150px] size="sm"
+        <Select ...>All Status</Select>  ← w-[130px] size="sm"
+      </div>
+      <div className="flex items-center gap-2">  ← right: action buttons
+        Export CSV / Import CSV / Create Redirect (size="sm")
+      </div>
+    </div>
+    ```
+    The search input uses `flex-1 min-w-[180px]` (no max-w cap) so it takes the largest flexible width; the two selects keep compact fixed widths (150px / 130px); the three buttons stay grouped on the right via `sm:justify-between`.
+  * DataTable call: removed `searchPlaceholder`, `searchValue`, `onSearch`, and `filterContent` props. With none of these provided, the DataTable's `showToolbar` evaluates false → no built-in toolbar renders. The DataTable now renders ONLY the table + pagination, directly below the single controls row.
+
+- Edit set 3 — consistent height fix (h-8 across all 6 controls):
+  * First attempt used `<SelectTrigger className="h-8 w-[150px] text-xs">`. Browser eval showed the selects rendering at 36px (h-9), not 32px (h-8).
+  * Root cause: the shadcn `SelectTrigger` (src/components/ui/select.tsx) applies `data-[size=default]:h-9` / `data-[size=sm]:h-8` via a `data-size` attribute (default = "default"). Tailwind's `h-8` (plain utility) and `data-[size=default]:h-9` (attribute-variant) are NOT considered conflicting by twMerge, so both apply and the attribute-variant wins → 36px. This was a PRE-EXISTING inconsistency (the old `filterContent` had the same `h-8` class and also rendered at 36px).
+  * Fix: pass `size="sm"` to both SelectTriggers → `data-size="sm"` → `data-[size=sm]:h-8` (32px) applies, `data-[size=default]:h-9` does not. Removed the redundant `h-8` class (now `<SelectTrigger size="sm" className="w-[150px] text-xs">`). The search input uses `className="pl-9 h-8"` (Input component has no data-attribute height variant, so plain `h-8` works → 32px). The buttons use `size="sm"` (shadcn Button sm = h-8 = 32px). All six controls now render at exactly 32px.
+
+LINT:
+- `bun run lint`: ZERO issues in seo-redirects-page.tsx and seo-settings-page.tsx. The 5 remaining lint problems are pre-existing in untouched files (data-table.tsx, content-create/edit-page.tsx, seo-broken-links-page.tsx, seo-social-preview-page.tsx). No new imports left unused (`GitBranch` still used by the empty-state icon at line 1021; `Badge` still used by the Type Badge component at lines 162/169; `Search` and `Input` now used by the new toolbar).
+
+BROWSER VERIFICATION (agent-browser, logged in as admin@example.com → SEO → Settings):
+
+Tab count IN the tab — verified:
+- snapshot -i on the SEO settings page: `- button "Redirects 7" [ref=e17]` (was "Redirects" before, now "Redirects 7" with the count badge). Sitemap and Robots.txt tabs unchanged (`- button "Sitemap"`, `- button "Robots.txt"`).
+- The badge is a subtle rounded-full muted pill (`bg-muted text-muted-foreground px-1.5 py-0.5 text-[10px] tabular-nums`) rendered only on the redirects tab.
+
+Separate badge removed — verified via DOM eval: `hasStandaloneBadgeBelow: false` (no `div.inline-flex.rounded-md.border` with "redirect" text remains below the tabs).
+
+Single controls row — verified via DOM eval:
+- `rowFound: true`, `rowClass: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"`.
+- `allInOneRow: true` — search input + All Types + All Status + Export CSV + Import CSV + Create Redirect are ALL inside this one row (the search's `.relative` wrapper, both comboboxes, and all three buttons are descendants of the same row div). No separate action-button row remains.
+
+Consistent height — verified via getBoundingClientRect after the size="sm" fix:
+- `{searchHeight: 32, allTypeHeight: 32, allStatusHeight: 32, exportHeight: 32, importHeight: 32, createHeight: 32, allHeightsEqual: true, commonHeight: 32}`. All six controls are exactly 32px (h-8).
+
+Width / flexibility — verified:
+- `viewportWidth: 1280`, `rowWidth: 976`, `leftGroupWidth: 528`, `rightGroupWidth: 436`.
+- `searchWidth: 232`, `allTypeWidth: 150`, `allStatusWidth: 130`. Search is the widest single control (`searchIsWidest: true`) and uses `flex-1` so it grows with the viewport (down to `min-w-[180px]` before wrapping on narrow screens). Filters keep compact fixed widths. Action buttons grouped on the right (436px for 3 buttons).
+
+Dynamic count — verified end-to-end (create → 7→8, delete → 8→7):
+- Initial state: `tabText: "Redirects7"`, `tableTotal: "7"` (table pagination "Showing 1–7 of 7"). The tab count matches the table total — both read from the `redirects` query scope.
+- Created a test redirect (`/test-dynamic-count` → `/target`, type 301): after the create mutation invalidated `redirects.all`, the count query refetched (`GET /api/redirects?page=1&pageSize=1 200` in dev.log) and the tab updated to `tabText: "Redirects8"` with `tableTotal: "8"`. Both updated together.
+- Deleted the test redirect via the row's kebab menu → Delete → confirm: the tab reverted to `tabText: "Redirects7"` with `tableTotal: "7"` and `testRowGone: true`. The count query refetched again. The tab count is fully dynamic in both directions.
+
+Functionality preserved — verified:
+- Custom search input: typed "sitemap" → table filtered to "Showing 0–0 of 0" (no redirects match); cleared → restored to "Showing 1–7 of 7". The custom `<Input>` correctly drives `table.setSearchValue` + `table.setCurrentPage(1)`, which flows into `queryParams` → `queryKeys.redirects.list(queryParams)` → `/api/redirects?...&search=...`. (Note: `agent-browser fill ""` did not fire React's synthetic onChange; `type` + `press Backspace` did — an agent-browser event quirk, not an app bug. The dev.log shows `GET /api/redirects?...&search=x 200` confirming the search param reaches the API.)
+- All Types / All Status selects: render with the same options (All Types + 301/302/307/308; All Status + Active/Inactive), same `w-[150px]`/`w-[130px]` widths, same `text-xs`, just now at consistent h-8 height and inline in the row.
+- Export CSV / Import CSV / Create Redirect: all three buttons present with the same handlers (`handleExport`, `setImportDialogOpen`, create-form open). Create Redirect opens the form dialog; the test create + delete cycle confirmed the full CRUD path works.
+- Table directly below the single controls row: the DataTable renders only the table + pagination (no built-in toolbar), immediately below the controls row.
+
+Light + dark mode — verified (screenshots):
+- Dark: `upload/redirects-header/3-single-row-dark.png`.
+- Light: `upload/redirects-header/4-single-row-light.png` (toggled theme, `isDark: false`).
+- Layout holds in both themes; badge and controls keep the same muted/bordered palette.
+
+Console + dev.log:
+- `agent-browser errors`: none. `agent-browser console`: empty (no warnings, no errors).
+- /home/z/my-project/dev.log: `GET /api/redirects?page=1&pageSize=1 200` (the new count query, fires on settings-page mount and on every invalidation), `GET /api/redirects?page=1&pageSize=25&sort=createdAt&order=desc 200` (the list query), `GET /api/redirects?...&search=x 200` (search). All 200, no 500s, no runtime exceptions.
+
+Stage Summary:
+- The redirect count moved INTO the "Redirects" tab: the tab now reads "Redirects 7" with a subtle rounded-full muted badge (`bg-muted text-muted-foreground px-1.5 py-0.5 text-[10px] tabular-nums`). Sitemap and Robots.txt tabs are unchanged. The separate "7 Redirects" badge below the tabs is removed.
+- The count is dynamic: the settings page runs a lightweight `useQuery(queryKeys.redirects.count())` over `/api/redirects?page=1&pageSize=1`, which shares the `redirects` scope and is invalidated by every create/delete/toggle on the Redirects page. Verified live: create → tab "Redirects 7" → "Redirects 8" (table total 7 → 8); delete → back to "Redirects 7" (table total 8 → 7).
+- All redirect controls are in ONE horizontal row: [Search redirects by path...] [All Types] [All Status] on the left (search `flex-1` = largest flexible width, filters `w-[150px]`/`w-[130px]` compact fixed), [Export CSV] [Import CSV] [Create Redirect] grouped on the right. All six controls are exactly 32px tall (consistent height — the SelectTrigger `size="sm"` fix also resolved a pre-existing 36px inconsistency). The table renders directly below this single controls row.
+- All functionality preserved: search, type filtering, status filtering, export/import CSV, create/edit/delete/toggle, dynamic count, redirect table. The custom search input drives the same `table.setSearchValue`/`setCurrentPage` → `queryParams` → `/api/redirects` flow as before.
+- Files modified: src/modules/seo/seo-settings-page.tsx (imports + count query + tab badge) + src/modules/seo/seo-redirects-page.tsx (removed filterContent const, replaced action-buttons row with single controls row, dropped search/filter props from DataTable, added size="sm" to both SelectTriggers). Dev server running on port 3000. Screenshots: upload/redirects-header/3-single-row-dark.png, upload/redirects-header/4-single-row-light.png.

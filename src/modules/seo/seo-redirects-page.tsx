@@ -1156,48 +1156,6 @@ export function SeoRedirectsPage() {
     [handleOpenEdit, handleToggle, togglingId],
   );
 
-  // ---- Filter bar content ---------------------------------------------
-
-  const filterContent = (
-    <div className="flex items-center gap-2">
-      <Select
-        value={typeFilter}
-        onValueChange={(v) => {
-          setTypeFilter(v);
-          table.setCurrentPage(1);
-        }}
-      >
-        <SelectTrigger className="h-8 w-[150px] text-xs">
-          <SelectValue placeholder="All Types" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Types</SelectItem>
-          {REDIRECT_TYPE_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select
-        value={statusFilter}
-        onValueChange={(v) => {
-          setStatusFilter(v);
-          table.setCurrentPage(1);
-        }}
-      >
-        <SelectTrigger className="h-8 w-[130px] text-xs">
-          <SelectValue placeholder="All Status" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Status</SelectItem>
-          <SelectItem value="active">Active</SelectItem>
-          <SelectItem value="inactive">Inactive</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
-  );
-
   return (
     <div className="space-y-4">
       {/* Error banner */}
@@ -1225,17 +1183,59 @@ export function SeoRedirectsPage() {
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-sm">
-          <GitBranch className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-foreground tabular-nums">
-            {totalItems.toLocaleString()}
-          </span>
-          <span className="text-muted-foreground">
-            Redirect{totalItems === 1 ? '' : 's'}
-          </span>
+      {/* Single controls row: search + filters on the left, action buttons on the right */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {/* Left: search input + type/status filters */}
+        <div className="flex items-center gap-2 flex-1 flex-wrap">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search redirects by path..."
+              value={table.searchValue}
+              onChange={(e) => {
+                table.setSearchValue(e.target.value);
+                table.setCurrentPage(1);
+              }}
+              className="pl-9 h-8"
+            />
+          </div>
+          <Select
+            value={typeFilter}
+            onValueChange={(v) => {
+              setTypeFilter(v);
+              table.setCurrentPage(1);
+            }}
+          >
+            <SelectTrigger size="sm" className="w-[150px] text-xs">
+              <SelectValue placeholder="All Types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              {REDIRECT_TYPE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => {
+              setStatusFilter(v);
+              table.setCurrentPage(1);
+            }}
+          >
+            <SelectTrigger size="sm" className="w-[130px] text-xs">
+              <SelectValue placeholder="All Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
+        {/* Right: action buttons */}
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -1283,16 +1283,9 @@ export function SeoRedirectsPage() {
         onSortChange={(field, order) => table.setSortField(field, order)}
         sortField={table.sortField}
         sortOrder={table.sortOrder}
-        searchPlaceholder="Search redirects by path..."
-        searchValue={table.searchValue}
-        onSearch={(v) => {
-          table.setSearchValue(v);
-          table.setCurrentPage(1);
-        }}
         getRowId={(row) => row.id}
         emptyMessage="No redirects found."
         emptyState={emptyState}
-        filterContent={filterContent}
       />
 
       {/* Create Dialog */}
