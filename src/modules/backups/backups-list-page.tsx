@@ -246,22 +246,28 @@ export function BackupsListPage() {
     },
   });
 
+  // Column min-widths are intentionally generous and the table uses
+  // `table-layout: auto` (NOT table-fixed) so cells NEVER truncate or clip —
+  // every value (Name, Scope, Type, Encryption, Verification, Status,
+  // Duration, Created, Storage) renders in full. The table carries a
+  // `min-width` (tableMinWidth below) equal to the sum of these column
+  // widths; when the viewport/card is narrower than that, the table
+  // container scrolls horizontally with a thin, subtle scrollbar that
+  // stays inside the card. The pagination/footer lives outside the scroll
+  // area so it always aligns with the card edges.
   const columns: ColumnDef<BackupRow>[] = [
       {
         id: 'name',
         header: 'Name',
         accessorKey: 'name',
-        // With table-fixed layout the Name column absorbs the remaining
-        // width. `block truncate` keeps long names inside the cell with an
-        // ellipsis (full name on hover via title).
+        size: 220,
+        // No `truncate`/`overflow-hidden` — full name always visible.
+        // `title` provides a hover tooltip for very long names without
+        // ever clipping the cell text.
         cell: ({ getValue }) => {
           const value = (getValue() as string) ?? '';
           if (!value) return <span className="text-muted-foreground">—</span>;
-          return (
-            <span className="block truncate font-medium" title={value}>
-              {value}
-            </span>
-          );
+          return <span className="font-medium" title={value}>{value}</span>;
         },
       },
       {
@@ -269,31 +275,23 @@ export function BackupsListPage() {
         header: 'Scope',
         accessorKey: 'scope',
         enableSorting: false,
-        size: 100,
-        cell: ({ getValue }) => (
-          <div className="overflow-hidden">
-            <ScopeBadge scope={getValue() as BackupScope} />
-          </div>
-        ),
+        size: 120,
+        cell: ({ getValue }) => <ScopeBadge scope={getValue() as BackupScope} />,
       },
       {
         id: 'type',
         header: 'Type',
         accessorKey: 'type',
         enableSorting: false,
-        size: 80,
-        cell: ({ getValue }) => (
-          <div className="overflow-hidden">
-            <TypeBadge type={getValue() as BackupType} />
-          </div>
-        ),
+        size: 110,
+        cell: ({ getValue }) => <TypeBadge type={getValue() as BackupType} />,
       },
       {
         id: 'size',
         header: 'Size',
         accessorFn: (row) => row.size,
         enableSorting: false,
-        size: 64,
+        size: 80,
         cell: ({ getValue }) => (
           <span className="tabular-nums text-sm text-muted-foreground">
             {formatFileSize(getValue() as number)}
@@ -305,16 +303,12 @@ export function BackupsListPage() {
         header: 'Storage',
         accessorKey: 'storageProvider',
         enableSorting: false,
-        size: 92,
+        size: 120,
+        // Full storage label visible (e.g. "Amazon S3", "Backblaze B2");
+        // never truncated.
         cell: ({ getValue }) => {
           const v = getValue() as string;
-          return (
-            <div className="overflow-hidden">
-              <span className="block truncate text-xs text-muted-foreground" title={labelize(v)}>
-                {labelize(v)}
-              </span>
-            </div>
-          );
+          return <span className="text-xs text-muted-foreground" title={labelize(v)}>{labelize(v)}</span>;
         },
       },
       {
@@ -322,42 +316,30 @@ export function BackupsListPage() {
         header: 'Encryption',
         accessorKey: 'encryptionStatus',
         enableSorting: false,
-        size: 92,
-        cell: ({ getValue }) => (
-          <div className="overflow-hidden">
-            <EncryptionBadge status={getValue() as string} />
-          </div>
-        ),
+        size: 120,
+        cell: ({ getValue }) => <EncryptionBadge status={getValue() as string} />,
       },
       {
         id: 'verificationStatus',
         header: 'Verification',
         accessorKey: 'verificationStatus',
         enableSorting: false,
-        size: 88,
-        cell: ({ getValue }) => (
-          <div className="overflow-hidden">
-            <VerificationBadge status={getValue() as string | null} />
-          </div>
-        ),
+        size: 110,
+        cell: ({ getValue }) => <VerificationBadge status={getValue() as string | null} />,
       },
       {
         id: 'status',
         header: 'Status',
         accessorKey: 'status',
-        size: 92,
-        cell: ({ getValue }) => (
-          <div className="overflow-hidden">
-            <StatusBadge status={getValue() as string} size="sm" />
-          </div>
-        ),
+        size: 110,
+        cell: ({ getValue }) => <StatusBadge status={getValue() as string} size="sm" />,
       },
       {
         id: 'duration',
         header: 'Duration',
         accessorKey: 'durationMs',
         enableSorting: false,
-        size: 64,
+        size: 90,
         cell: ({ getValue }) => (
           <span className="tabular-nums text-xs text-muted-foreground">
             {formatDurationMs(getValue() as number | null)}
@@ -368,23 +350,21 @@ export function BackupsListPage() {
         id: 'createdAt',
         header: 'Created',
         accessorKey: 'createdAt',
-        size: 120,
+        size: 170,
+        // Full relative timestamp visible (e.g. "Yesterday at 11:56 AM").
+        // NO ellipsis, NO truncation, NO clipping. The 170px min-width +
+        // auto layout guarantees the longest realistic value fits; if a
+        // value is somehow wider the table simply scrolls horizontally.
         cell: ({ getValue }) => {
           const value = getValue() as string | Date;
           if (!value) return <span className="text-muted-foreground">—</span>;
           const rel = formatRelativeTime(value);
-          return (
-            <div className="overflow-hidden">
-              <span className="block truncate text-xs text-muted-foreground" title={rel}>
-                {rel}
-              </span>
-            </div>
-          );
+          return <span className="text-xs text-muted-foreground" title={rel}>{rel}</span>;
         },
       },
       ColumnDefHelper.actionColumn<BackupRow>({
         id: 'actions',
-        size: 44,
+        size: 60,
         render: (row) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -470,11 +450,17 @@ export function BackupsListPage() {
             table.setCurrentPage(1);
           }}
           getRowId={(row) => row.id}
-          // Strict, fixed column layout so the dense 11-column table stays
-          // edge-to-edge with its card (Created column included) on desktop,
-          // and only scrolls horizontally on genuinely narrower viewports.
-          tableFixed
-          tableMinWidth={900}
+          // Auto layout (NOT table-fixed): cells never truncate/clip — every
+          // value renders in full. The table's min-width (1310px = sum of
+          // column min-widths: Name 220 + Scope 120 + Type 110 + Size 80 +
+          // Storage 120 + Encryption 120 + Verification 110 + Status 110 +
+          // Duration 90 + Created 170 + Actions 60) guarantees the table is
+          // only as narrow as its content needs; on viewports narrower than
+          // that, the table-container's overflow-x-auto provides a thin,
+          // subtle horizontal scrollbar that stays inside the card. The
+          // pagination/footer lives outside the scroll area and always
+          // aligns with the card edges.
+          tableMinWidth={1310}
           emptyMessage="No backups found."
           emptyState={
             isSearchEmpty ? (

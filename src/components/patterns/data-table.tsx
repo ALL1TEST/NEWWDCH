@@ -808,7 +808,14 @@ export function DataTable<TData, TValue>({
     (filterContent != null) ||
     (selectedIds.length > 0 && bulkActions && bulkActions.length > 0);
 
-  const tableStyle = tableMinWidth ? { minWidth: `${tableMinWidth}px` } : undefined;
+  // Only enforce a min-width when the table actually has rows. When empty
+  // (no data / search-empty / initial-empty), we let the table collapse to
+  // the card width so the empty state renders cleanly without forcing a
+  // horizontal scrollbar.
+  const tableStyle =
+    tableMinWidth && data.length > 0
+      ? { minWidth: `${tableMinWidth}px` }
+      : undefined;
   const tableClassName = cn(tableFixed && 'table-fixed');
 
   return (
