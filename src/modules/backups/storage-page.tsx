@@ -119,6 +119,29 @@ const initialForm: StorageForm = {
   config: '{}',
 };
 
+// -------------------- Search Empty State (inline) --------------------
+
+/** Inline empty state rendered INSIDE the table body when an active search
+ * yields zero results. This is distinct from the standalone full-page
+ * "No storage configured" state, which only shows when the system genuinely
+ * has zero storage destinations configured (no search active).
+ *
+ * The table headers, search input, and footer/pagination all remain
+ * visible — only the body renders this empty state. Mirrors the pattern
+ * used by the Backups list page. */
+function NoStorageSearchEmpty({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+      <HardDrive className="h-10 w-10 text-muted-foreground/40 mb-3" strokeWidth={1.5} />
+      <p className="text-sm font-medium text-foreground">No storage found</p>
+      <p className="text-xs text-muted-foreground mt-1">No storage destinations match your search.</p>
+      <Button variant="outline" size="sm" className="mt-4" onClick={onClear}>
+        Clear search
+      </Button>
+    </div>
+  );
+}
+
 // -------------------- Storage Page --------------------
 
 export function StoragePage() {
@@ -150,6 +173,21 @@ export function StoragePage() {
 
   const storages = data?.data ?? [];
   const pagination = data?.meta?.pagination;
+
+  // ---- Dual empty-state logic ----
+  // TWO distinct empty states:
+  //   A) isInitialEmpty — system has ZERO storage destinations AND no active
+  //      search. Render the existing full-page "No storage configured" state.
+  //   B) isSearchEmpty — destinations exist (or could exist) but the current
+  //      search returns zero results. Keep the table/card/headers/footer
+  //      visible and render "No storage found" INSIDE the table body via the
+  //      DataTable `emptyState` prop (DataTableEmpty spans colSpan=999 so
+  //      the headers stay visible above it).
+  // Search filtering must only affect table rows, never the page-level
+  // empty state — so the full-page EmptyState is gated on `!hasSearch`.
+  const hasSearch = !!table.searchValue?.trim();
+  const isInitialEmpty = !isLoading && storages.length === 0 && !hasSearch;
+  const isSearchEmpty = !isLoading && storages.length === 0 && hasSearch;
 
   const createMutation = useMutation({
     mutationFn: (body: Omit<StorageForm, 'config'> & { config: Record<string, unknown> }) =>
@@ -365,7 +403,7 @@ export function StoragePage() {
         }
       />
 
-      {storages.length === 0 && !isLoading ? (
+      {isInitialEmpty ? (
         <EmptyState
           icon={HardDrive}
           title="No storage configured"
@@ -391,7 +429,23 @@ export function StoragePage() {
             table.setCurrentPage(1);
           }}
           getRowId={(row) => row.id}
+          // When an active search returns zero results, keep the table/card,
+          // headers, search input, and footer visible and render the
+          // "No storage found" empty state INSIDE the table body (DataTableEmpty
+          // spans colSpan=999 so the headers remain visible above it). The
+          // result count (totalItems=0) is passed through so the footer
+          // correctly shows 0 matching items.
           emptyMessage="No storage configurations found."
+          emptyState={
+            isSearchEmpty ? (
+              <NoStorageSearchEmpty
+                onClear={() => {
+                  table.setSearchValue('');
+                  table.setCurrentPage(1);
+                }}
+              />
+            ) : undefined
+          }
         />
       )}
 

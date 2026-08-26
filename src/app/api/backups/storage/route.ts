@@ -35,6 +35,25 @@ const createSchema = z.object({
 
 const SORTABLE = new Set(['createdAt', 'name', 'provider', 'isActive', 'lastTestAt']);
 
+// ---------- provider labels (for search matching) --------------------
+// Maps the raw provider enum (stored in the DB, e.g. "AMAZON_S3") to the
+// human-readable label shown in the UI (e.g. "Amazon S3"). Used by the
+// search filter so that typing "amazon", "s3", "cloudflare r2", "drive",
+// etc. matches storage destinations by their displayed provider — not
+// just by the raw enum string or the destination name.
+
+const PROVIDER_LABELS: Record<string, string> = {
+  LOCAL: 'Local',
+  AMAZON_S3: 'Amazon S3',
+  GOOGLE_DRIVE: 'Google Drive',
+  DROPBOX: 'Dropbox',
+  ONEDRIVE: 'OneDrive',
+  CLOUDFLARE_R2: 'Cloudflare R2',
+  BACKBLAZE_B2: 'Backblaze B2',
+  FTP: 'FTP',
+  SFTP: 'SFTP',
+};
+
 // ---------- validation helpers for config JSON -----------------------
 
 function validateConfigJson(configStr: string, provider: string): { valid: boolean; errors: string[] } {
@@ -123,9 +142,27 @@ export async function GET(request: NextRequest) {
       where.isActive = isActive === 'true';
     }
     if (search) {
-      where.OR = [
+      // Search matches the destination Name OR the Provider. Provider
+      // matching is label-aware: the user types what they SEE in the UI
+      // (e.g. "amazon", "s3", "cloudflare r2", "dropbox", "drive"), so we
+      // resolve the search term against both the raw enum ("AMAZON_S3")
+      // and the human label ("Amazon S3") and OR it with a name contains.
+      const lower = search.toLowerCase();
+      const matchedProviders = Object.entries(PROVIDER_LABELS)
+        .filter(
+          ([enumKey, label]) =>
+            enumKey.toLowerCase().includes(lower) ||
+            label.toLowerCase().includes(lower),
+        )
+        .map(([enumKey]) => enumKey);
+
+      const orClauses: Record<string, unknown>[] = [
         { name: { contains: search } },
       ];
+      if (matchedProviders.length > 0) {
+        orClauses.push({ provider: { in: matchedProviders } });
+      }
+      where.OR = orClauses;
     }
 
     const orderBy: Record<string, string> = { [sort]: order };
