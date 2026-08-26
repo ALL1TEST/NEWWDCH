@@ -36,7 +36,7 @@ import { PageHeader, StatusBadge } from '@/components/patterns';
 import { getApi, postApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { cn, formatFileSize, formatRelativeTime, labelize } from '@/lib/utils';
-import type { PaginatedResponse, BackupScope, BackupStatus } from '@/shared/types';
+import type { ApiResponse, BackupScope, BackupStatus } from '@/shared/types';
 import { toast } from 'sonner';
 
 // -------------------- Types --------------------
@@ -80,12 +80,12 @@ export function RestorePage() {
   // Fetch completed backups for selection
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.backups.list({ status: 'COMPLETED' }),
-    queryFn: () => getApi<PaginatedResponse<BackupOption>>('/api/backups', {
+    queryFn: () => getApi<ApiResponse<BackupOption[]>>('/api/backups', {
       status: 'COMPLETED',
       pageSize: 100,
       sort: 'createdAt',
       order: 'desc',
-    }),
+    }, { raw: true }),
     staleTime: 15_000,
   });
 

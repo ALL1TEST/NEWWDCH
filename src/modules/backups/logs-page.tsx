@@ -31,7 +31,7 @@ import { getApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { cn, formatFileSize, formatRelativeTime, labelize } from '@/lib/utils';
 import { formatDurationMs } from '@/lib/backup-constants';
-import type { PaginatedResponse } from '@/shared/types';
+import type { ApiResponse } from '@/shared/types';
 import { toast } from 'sonner';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -98,12 +98,12 @@ export function LogsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.backupLogs.list(queryParams),
-    queryFn: () => getApi<PaginatedResponse<LogRow>>('/api/backups/logs', queryParams),
+    queryFn: () => getApi<ApiResponse<LogRow[]>>('/api/backups/logs', queryParams, { raw: true }),
     staleTime: 10_000,
   });
 
   const logs = data?.data ?? [];
-  const pagination = data?.pagination;
+  const pagination = data?.meta?.pagination;
 
   const handleExport = () => {
     // Export logs as CSV

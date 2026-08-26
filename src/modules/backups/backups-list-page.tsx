@@ -54,7 +54,7 @@ import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { cn, formatFileSize, formatDate, formatRelativeTime, labelize } from '@/lib/utils';
 import { formatDurationMs, BACKUP_SCOPE_OPTIONS, BACKUP_STORAGE_OPTIONS, SCOPE_BADGE_CLASSES } from '@/lib/backup-constants';
-import type { PaginatedResponse, BackupStatus, BackupType, BackupScope, BackupStorageProvider } from '@/shared/types';
+import type { ApiResponse, BackupStatus, BackupType, BackupScope, BackupStorageProvider } from '@/shared/types';
 import { toast } from 'sonner';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -156,13 +156,13 @@ export function BackupsListPage() {
       order: table.sortOrder,
       search: table.searchValue || undefined,
     }),
-    queryFn: () => getApi<PaginatedResponse<BackupRow>>('/api/backups', {
+    queryFn: () => getApi<ApiResponse<BackupRow[]>>('/api/backups', {
       page: table.currentPage,
       pageSize: table.pageSize,
       sort: table.sortField,
       order: table.sortOrder,
       search: table.searchValue || undefined,
-    }),
+    }, { raw: true }),
     staleTime: 10_000,
   });
 
@@ -175,7 +175,7 @@ export function BackupsListPage() {
   const storageDestinations = (storageDestinationsData as unknown as { id: string; name: string; provider: string; isActive: boolean }[] | undefined)?.filter(s => s.isActive) ?? [];
 
   const backups = data?.data ?? [];
-  const pagination = data?.pagination;
+  const pagination = data?.meta?.pagination;
 
   const createMutation = useMutation({
     mutationFn: (body: CreateBackupForm) => postApi('/api/backups', body),

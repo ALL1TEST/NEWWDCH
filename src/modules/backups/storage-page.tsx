@@ -51,7 +51,7 @@ import {
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { cn, formatRelativeTime, labelize } from '@/lib/utils';
-import type { PaginatedResponse, BackupStorageProvider } from '@/shared/types';
+import type { ApiResponse, BackupStorageProvider } from '@/shared/types';
 import { toast } from 'sonner';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -138,18 +138,18 @@ export function StoragePage() {
       order: table.sortOrder,
       search: table.searchValue || undefined,
     }),
-    queryFn: () => getApi<PaginatedResponse<StorageRow>>('/api/backups/storage', {
+    queryFn: () => getApi<ApiResponse<StorageRow[]>>('/api/backups/storage', {
       page: table.currentPage,
       pageSize: table.pageSize,
       sort: table.sortField,
       order: table.sortOrder,
       search: table.searchValue || undefined,
-    }),
+    }, { raw: true }),
     staleTime: 10_000,
   });
 
   const storages = data?.data ?? [];
-  const pagination = data?.pagination;
+  const pagination = data?.meta?.pagination;
 
   const createMutation = useMutation({
     mutationFn: (body: Omit<StorageForm, 'config'> & { config: Record<string, unknown> }) =>

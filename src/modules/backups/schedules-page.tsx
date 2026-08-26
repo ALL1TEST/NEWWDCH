@@ -50,7 +50,7 @@ import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { cn, formatRelativeTime, labelize } from '@/lib/utils';
 import { BACKUP_SCOPE_OPTIONS } from '@/lib/backup-constants';
-import type { PaginatedResponse, BackupScope, BackupStorageProvider, BackupScheduleFrequency } from '@/shared/types';
+import type { ApiResponse, BackupScope, BackupStorageProvider, BackupScheduleFrequency } from '@/shared/types';
 import { toast } from 'sonner';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -64,6 +64,7 @@ interface ScheduleRow {
   cronExpression: string | null;
   scope: BackupScope;
   storageId: string | null;
+  storageProvider: BackupStorageProvider;
   encryptionEnabled: boolean;
   verificationEnabled: boolean;
   retentionCount: number;
@@ -81,6 +82,7 @@ interface ScheduleForm {
   cronExpression: string;
   scope: BackupScope;
   storageId: string;
+  storageProvider: BackupStorageProvider; // derived from selected destination, submitted to API
   encryptionEnabled: boolean;
   verificationEnabled: boolean;
   retentionCount: number;
@@ -104,6 +106,7 @@ const initialForm: ScheduleForm = {
   cronExpression: '',
   scope: 'FULL',
   storageId: '',
+  storageProvider: 'LOCAL',
   encryptionEnabled: false,
   verificationEnabled: true,
   retentionCount: 7,
@@ -128,13 +131,13 @@ export function SchedulesPage() {
       order: table.sortOrder,
       search: table.searchValue || undefined,
     }),
-    queryFn: () => getApi<PaginatedResponse<ScheduleRow>>('/api/backups/schedules', {
+    queryFn: () => getApi<ApiResponse<ScheduleRow[]>>('/api/backups/schedules', {
       page: table.currentPage,
       pageSize: table.pageSize,
       sort: table.sortField,
       order: table.sortOrder,
       search: table.searchValue || undefined,
-    }),
+    }, { raw: true }),
     staleTime: 10_000,
   });
 
@@ -147,7 +150,7 @@ export function SchedulesPage() {
   const storageDestinations = (storageData as unknown as { id: string; name: string; provider: string; isActive: boolean }[] | undefined)?.filter(s => s.isActive) ?? [];
 
   const schedules = data?.data ?? [];
-  const pagination = data?.pagination;
+  const pagination = data?.meta?.pagination;
 
   const createMutation = useMutation({
     mutationFn: (body: ScheduleForm) => postApi('/api/backups/schedules', body),
@@ -206,6 +209,7 @@ export function SchedulesPage() {
       cronExpression: row.cronExpression || '',
       scope: row.scope,
       storageId: row.storageId || '',
+      storageProvider: row.storageProvider,
       encryptionEnabled: row.encryptionEnabled,
       verificationEnabled: row.verificationEnabled,
       retentionCount: row.retentionCount,
@@ -221,10 +225,13 @@ export function SchedulesPage() {
 
   const handleSubmit = () => {
     if (!form.name.trim()) return;
+    // Submit storageProvider (the API uses this); storageId is UI-only.
+    const { storageId: _omitStorageId, ...body } = form;
+    void _omitStorageId;
     if (editingId) {
-      updateMutation.mutate({ id: editingId, body: form });
+      updateMutation.mutate({ id: editingId, body });
     } else {
-      createMutation.mutate(form);
+      createMutation.mutate(body);
     }
   };
 
@@ -275,7 +282,7 @@ export function SchedulesPage() {
       {
         id: 'storage',
         header: 'Storage',
-        accessorKey: 'storageId',
+        accessorKey: 'storageProvider',
         enableSorting: false,
         size: 120,
         cell: ({ getValue }) => (
@@ -519,7 +526,11 @@ export function SchedulesPage() {
                 <Label htmlFor="sched-storage">Storage Destination</Label>
                 <Select
                   value={form.storageId}
-                  onValueChange={(v) => updateForm('storageId', v)}
+                  onValueChange={(v) => {
+                    const dest = storageDestinations.find((s) => s.id === v);
+                    updateForm('storageId', v);
+                    if (dest) updateForm('storageProvider', dest.provider as BackupStorageProvider);
+                  }}
                 >
                   <SelectTrigger id="sched-storage">
                     <SelectValue placeholder="Select a storage destination" />
@@ -535,6 +546,9 @@ export function SchedulesPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {storageDestinations.length === 0 && (
+                  <p className="text-xs text-amber-600">No storage destinations configured. Add one in Storage first.</p>
+                )}
               </div>
             </div>
             <div className="space-y-2">
