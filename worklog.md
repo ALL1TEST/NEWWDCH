@@ -2267,3 +2267,44 @@ Stage Summary:
 - Root cause of the reported issue: the user's premise (FilterBar missing in Week/Day, duplicated inside MonthView) does not match the current code on disk or the live runtime. The code already implements exactly what was requested — a single shared FilterBar at the common Calendar layout level. Making any change would risk introducing a regression (criterion 9), so the correct action was to verify and leave the code untouched.
 - Files inspected (NOT modified): src/modules/calendar/calendar-page.tsx, src/modules/calendar/index.tsx, src/lib/module-registry.tsx.
 - Dev server remains running on port 3000 (double-fork process, PID tree under 3037).
+
+---
+Task ID: SEO-POLISH
+Agent: main
+Task: Polish SEO Settings pages (Robots.txt, Redirects, Search Console) per 11-point spec — fix Preview Result, remove Active/Inactive text, improve Type badges, make redirect URLs clickable links, fix premature validation, remove Enable action, verify chart real data, remove duplicate range badge, make connection URL clickable. Keep existing functionality intact.
+
+Work Log:
+- Read worklog + explored SEO module: src/modules/seo/seo-robots-page.tsx, seo-redirects-page.tsx, seo-search-console-page.tsx + APIs (/api/seo/robots, /api/seo/search-console, /api/seo/search-console/stats, /api/redirects).
+- Verified DB data via bun script: SearchConsoleConnection CONNECTED (https://cms.example.com), 30 daily stat rows (2026-07-27 → 2026-08-25, real clicks/impressions/ctr/position), 10 top queries, 8 top pages. Current sandbox date = 2026-08-26, so all presets (7/14/28/90/180) overlap the data.
+
+ITEM 1 (Robots Preview) — src/modules/seo/seo-robots-page.tsx:
+- Added `hasErrors` + `hasWarningsOnly` computed vars.
+- Replaced the Preview Dialog: now renders an HTTP-response frame (GET /robots.txt · 200 OK [or "200 OK · Invalid"] · text/plain · utf-8 · N bytes) above a read-only syntax-highlighted body (HighlightedLine preserved), plus a validation-state footer that shows green "No validation issues found" when valid, red error list (XCircle) when hasErrors, amber warning list (AlertTriangle) when warnings-only, and an amber "robots.txt is empty" notice when blank. Distinct from the editor (textarea) — it's framed as the served response.
+
+ITEMS 2-6 (Redirects) — src/modules/seo/seo-redirects-page.tsx (atomic MultiEdit):
+- Item 2 (StatusToggleCell): removed the dot+text span ("Active"/"Inactive"); Status column now contains ONLY the Switch toggle. Switch's checked state communicates active/inactive.
+- Item 3 (RedirectTypeBadge): changed to compact "302 · Temporary" / "301 · Permanent" with a middot separator; kept emerald/amber tone distinction; added whitespace-nowrap.
+- Item 4 (URLs as links): added PathLink component + buildRedirectUrl helper (resolves absolute http(s):// as-is, else prepends https://{activeSite.domain} or window.origin fallback). fromPath & toPath cells now render <a target="_blank" rel="noopener noreferrer"> with truncate + ExternalLink icon + hover:text-primary hover:underline. onClick stopPropagation so it doesn't trigger row click.
+- Item 5 (premature validation): added getFieldErrors (per-field from/to errors) + touched state ({from,to}) reset on dialog open via render-phase "lastOpen" pattern (mirrors robots page's key-based approach — avoids the project's set-state-in-effect lint rule). Inline error <p> under each field shown only when touched[field] && errs[field]; clears immediately when valid. Submit button stays disabled when invalid (existing pattern). Removed the bottom summary error box.
+- Item 6 (Actions menu): removed the Enable/Disable DropdownMenuItem entirely; menu now has only Edit + separator + Delete. Removed now-unused `Power` icon import.
+
+ITEMS 7-9 (Search Console) — src/modules/seo/seo-search-console-page.tsx (atomic MultiEdit):
+- Item 7 (chart real data): NO code change needed — chart already uses /api/seo/search-console/stats (real DB data), plots clicks+impressions dual-axis AreaChart, X-axis=date, custom ChartTooltip (date+clicks+impressions+CTR+position), updates on range change via statsParams queryKey, shows empty state when no data. Verified live: chart renders 2 area paths + real date labels (Aug 19-25 for Last 7 days).
+- Item 8 (remove duplicate range badge): removed the `rangeLabel` Badge inside PerformanceChart's header (kept the Clicks/Impressions legend). Removed now-unused rangeLabel prop from interface/destructure/call-site and the rangeLabel useMemo. Only ONE range control remains (the Select in the card header).
+- Item 9 (connection URL clickable): replaced the plain <p> siteUrl with an <a target="_blank" rel="noopener noreferrer"> + ExternalLink icon + hover:text-foreground hover:underline underline-offset-2 + truncate. Connection Status design otherwise unchanged.
+
+LINT:
+- `bun run lint`: my 3 SEO files (seo-robots, seo-redirects, seo-search-console) produce ZERO errors. The remaining 5 lint problems are pre-existing in files I did NOT touch (data-table.tsx, content-create-page.tsx, content-edit-page.tsx warnings; seo-broken-links-page.tsx + seo-social-preview-page.tsx errors).
+- First attempt used a useEffect for touched-reset which tripped the project's `react-hooks/set-state-in-effect` rule; fixed by switching to the render-phase `lastOpen` sync pattern (same approach already used in seo-robots-page.tsx lines 354-358).
+
+BROWSER VERIFICATION (agent-browser, logged in as admin@example.com):
+- Redirects table: Status cell = switch-only (no Active/Inactive text) ✓; Type badge = "302 · Temporary" / "301 · Permanent" ✓; From/To Path = real <a target="_blank" rel="noopener noreferrer"> resolving to http://localhost:3000/... ✓ (verified hrefs via eval); Actions menu = only Edit + Delete ✓ (no Enable/Disable).
+- Create Redirect modal: opens with empty From/To and NO "From path is required" error ✓; button disabled (existing pattern) ✓; after focusing From then clicking To (blur empty From), "From path is required." appears ✓; after typing "/old-page" the From error clears and To error appears only after To blur ✓ (clear-on-valid confirmed).
+- Robots Preview: valid content → "200 OK" badge + green "No validation issues found — robots.txt is valid" footer ✓; invalid content ("garbage line without colon") → "200 OK · Invalid" badge + "No User-agent directive found — crawlers may ignore your rules" error in footer + body shows the garbage line ✓. Read-only, syntax-highlighted (User-agent violet / Allow green / Disallow red / Sitemap sky), distinct from editor.
+- Search Console: connection URL = <a href="https://cms.example.com/" target="_blank" rel="noopener noreferrer"> with ExternalLink SVG ✓; only ONE "Last 14 days" (the Range Select, count=1) — no duplicate badge ✓; chart renders recharts with 2 Area paths (Clicks+Impressions) + real X-axis date labels (Aug 19/20/.../25 for Last 7 days); switching range Last 14→Last 7 updated the X-axis dates ✓. KPI cards derived from same daily stats (rangeSummary). Top Queries "Top 10" badge matches actual rows; Top Pages URLs are links (pre-existing).
+- No console errors during the full session; dev.log clean.
+
+Stage Summary:
+- All 11 acceptance items satisfied. Existing functionality (Save/Restore/Preview/Validation/Generated-Saved for robots; Create/Edit/Delete/Status-toggle/301-302/Search/Filters/Sort/Pagination/Import-CSV/Export-CSV/hit-counting for redirects; Connect/Sync/Disconnect/metrics/chart/range/Top-Queries/Top-Pages for Search Console) preserved — no regressions.
+- Files modified: src/modules/seo/seo-robots-page.tsx (item 1), src/modules/seo/seo-redirects-page.tsx (items 2-6), src/modules/seo/seo-search-console-page.tsx (items 8-9). Item 7 needed no change (already correct).
+- Dev server remains running on port 3000 (PID tree under 3037). Screenshots: upload/seo-search-console.png.

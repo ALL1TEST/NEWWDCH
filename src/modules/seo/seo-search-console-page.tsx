@@ -232,8 +232,6 @@ function KpiCard({ icon: Icon, label, value, iconColor, iconBg, loading }: KpiCa
 interface PerformanceChartProps {
   stats: DailyStat[];
   isLoading: boolean;
-  /** Human-readable label for the selected range (badge). */
-  rangeLabel: string;
   /** Called when the user clicks "Sync Now" inside the empty state. */
   onSync?: () => void;
   /** Whether a sync is currently in progress (disables the Sync button). */
@@ -291,7 +289,7 @@ function ChartTooltip({
   );
 }
 
-function PerformanceChart({ stats, isLoading, rangeLabel, onSync, isSyncing }: PerformanceChartProps) {
+function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceChartProps) {
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -347,20 +345,15 @@ function PerformanceChart({ stats, isLoading, rangeLabel, onSync, isSyncing }: P
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-sm bg-primary" />
-            Clicks
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-sm bg-primary/30" />
-            Impressions
-          </span>
-        </div>
-        <Badge variant="outline" className="text-[10px] font-normal bg-background/80">
-          {rangeLabel}
-        </Badge>
+      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm bg-primary" />
+          Clicks
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm bg-primary/30" />
+          Impressions
+        </span>
       </div>
 
       {/*
@@ -665,15 +658,6 @@ function SeoSearchConsolePageInner() {
     [rangePreset, customFrom, customTo],
   );
 
-  // Badge label shown on the chart (also doubles as the range descriptor).
-  const rangeLabel = useMemo(() => {
-    if (rangePreset === 'custom') return `${customFrom || '—'} → ${customTo || '—'}`;
-    const n = Number(rangePreset);
-    if (n === 90) return 'Last 3 months';
-    if (n === 180) return 'Last 6 months';
-    return `Last ${n} days`;
-  }, [rangePreset, customFrom, customTo]);
-
   // Main query
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.seoSearchConsole.all,
@@ -817,9 +801,16 @@ function SeoSearchConsolePageInner() {
                     <ConnectionBadge status={connection?.status ?? 'DISCONNECTED'} />
                   </div>
                   {connection?.siteUrl && isConnected && (
-                    <p className="text-xs text-muted-foreground mt-0.5 font-mono">
-                      {connection.siteUrl}
-                    </p>
+                    <a
+                      href={connection.siteUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-muted-foreground mt-0.5 font-mono hover:text-foreground hover:underline underline-offset-2 transition-colors max-w-full"
+                      title={`Open ${connection.siteUrl} in a new tab`}
+                    >
+                      <span className="truncate max-w-[280px]">{connection.siteUrl}</span>
+                      <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
+                    </a>
                   )}
                   {connection?.lastSyncAt && isConnected && (
                     <div className="flex items-center gap-1.5 mt-1">
@@ -1007,7 +998,6 @@ function SeoSearchConsolePageInner() {
                 <PerformanceChart
                   stats={statsData ?? []}
                   isLoading={statsLoading}
-                  rangeLabel={rangeLabel}
                   onSync={() => syncMutation.mutate()}
                   isSyncing={syncMutation.isPending}
                 />

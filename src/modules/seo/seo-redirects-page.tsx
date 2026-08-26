@@ -20,8 +20,8 @@ import {
   CheckCircle2,
   XCircle,
   GitBranch,
-  Power,
   Search,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,6 +62,7 @@ import { EmptyState } from '@/components/patterns/empty-state';
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { truncate, cn } from '@/lib/utils';
+import { useSiteStore } from '@/lib/stores/site-store';
 import { toast } from 'sonner';
 import type { PaginatedResponse, RedirectType } from '@/shared/types';
 import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
@@ -162,11 +163,55 @@ function RedirectTypeBadge({ type }: { type: RedirectType }) {
   return (
     <Badge
       variant="outline"
-      className={cn('font-medium gap-1.5 px-2 py-0.5', toneClasses)}
+      className={cn('font-medium gap-1 px-2 py-0.5 whitespace-nowrap', toneClasses)}
     >
       <span className="font-mono text-[10px] font-bold opacity-80">{opt.code}</span>
+      <span className="opacity-40">·</span>
       <span>{opt.short}</span>
     </Badge>
+  );
+}
+
+// ==================== Path Link (external) ====================
+
+/**
+ * Builds an absolute URL for a redirect path. Absolute URLs (http/https) are
+ * used as-is; bare paths are resolved against the active site's domain (or
+ * the current window origin as a fallback) so clicking opens the real source
+ * or destination URL in a new tab.
+ */
+function buildRedirectUrl(path: string, domain: string | null | undefined): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  let origin = '';
+  if (domain) {
+    origin = domain.startsWith('http') ? domain : `https://${domain}`;
+  } else if (typeof window !== 'undefined') {
+    origin = window.location.origin;
+  } else {
+    return path;
+  }
+  if (origin.endsWith('/')) origin = origin.slice(0, -1);
+  return origin + (path.startsWith('/') ? path : `/${path}`);
+}
+
+function PathLink({ path }: { path: string }) {
+  const activeSite = useSiteStore((s) => s.getActiveSite());
+  const href = useMemo(
+    () => buildRedirectUrl(path, activeSite?.domain),
+    [path, activeSite?.domain],
+  );
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="inline-flex items-center gap-1 font-mono text-sm text-foreground/80 hover:text-primary hover:underline underline-offset-2 max-w-[260px] min-w-0 transition-colors"
+      title={`Open ${path} in a new tab`}
+    >
+      <span className="truncate">{path}</span>
+      <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
+    </a>
   );
 }
 
@@ -180,8 +225,10 @@ interface StatusCellProps {
 
 function StatusToggleCell({ row, onToggle, isPending }: StatusCellProps) {
   const active = row.active;
+  // The Status column contains ONLY the functional toggle. The switch's
+  // checked/unchecked state communicates active/inactive; no text label.
   return (
-    <div className="flex items-center gap-2.5">
+    <div className="flex items-center">
       <Switch
         checked={active}
         disabled={isPending}
@@ -200,23 +247,6 @@ function StatusToggleCell({ row, onToggle, isPending }: StatusCellProps) {
             : 'data-[state=unchecked]:bg-zinc-300 dark:data-[state=unchecked]:bg-zinc-700',
         )}
       />
-      <span
-        className={cn(
-          'inline-flex items-center gap-1 text-xs font-medium select-none',
-          active
-            ? 'text-emerald-700 dark:text-emerald-400'
-            : 'text-zinc-500 dark:text-zinc-400',
-        )}
-      >
-        {isPending ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
-        ) : active ? (
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-        ) : (
-          <span className="h-1.5 w-1.5 rounded-full bg-zinc-400 dark:bg-zinc-500" />
-        )}
-        {active ? 'Active' : 'Inactive'}
-      </span>
     </div>
   );
 }
@@ -268,11 +298,29 @@ function validateRedirectForm(form: RedirectFormData, isEdit: boolean): string |
   const pathRe = /^\/[^\s]*$/;
   if (!pathRe.test(form.fromPath.trim())) return 'From path contains invalid characters.';
   if (!pathRe.test(form.toPath.trim())) return 'To path contains invalid characters.';
-  // Edit-mode warning hint (not a hard block) — handled elsewhere.
-  if (!isEdit && form.toPath.trim().toLowerCase().startsWith(form.fromPath.trim().toLowerCase())) {
-    // Allow but caller may warn — kept silent here to avoid noise.
-  }
   return null;
+}
+
+// ==================== Per-field validation ====================
+//
+// Returns per-field error strings (empty = valid). Used by the form dialog to
+// show inline errors only after a field is touched — never on modal open.
+function getFieldErrors(form: RedirectFormData): { from: string; to: string } {
+  const from = form.fromPath.trim();
+  const to = form.toPath.trim();
+  let fromErr = '';
+  let toErr = '';
+  if (!from) fromErr = 'From path is required.';
+  else if (!form.fromPath.startsWith('/')) fromErr = 'From path must start with "/".';
+  else if (!/^\/[^\s]*$/.test(form.fromPath.trim())) fromErr = 'From path contains invalid characters.';
+  if (!to) toErr = 'To path is required.';
+  else if (!form.toPath.startsWith('/')) toErr = 'To path must start with "/".';
+  else if (!/^\/[^\s]*$/.test(form.toPath.trim())) toErr = 'To path contains invalid characters.';
+  // Self-redirect — surface on the From field (cross-field check).
+  if (!fromErr && !toErr && from.toLowerCase() === to.toLowerCase()) {
+    fromErr = 'From path and to path cannot be the same (self-redirect).';
+  }
+  return { from: fromErr, to: toErr };
 }
 
 // ==================== Redirect Form Dialog ====================
@@ -302,7 +350,20 @@ function RedirectFormDialog({
   submitLabel,
   isEdit = false,
 }: RedirectFormDialogProps) {
-  const validationError = validateRedirectForm(data, isEdit);
+  // Track which fields the user has interacted with (blurred). Validation
+  // errors are only revealed after a field is touched — never on modal open.
+  const [touched, setTouched] = useState({ from: false, to: false });
+  // Reset touched whenever the dialog opens (render-phase sync, not an effect —
+  // mirrors the key-based pattern used elsewhere so stale errors from a prior
+  // session never carry over into a freshly opened modal).
+  const [lastOpen, setLastOpen] = useState(false);
+  if (open !== lastOpen) {
+    setLastOpen(open);
+    if (open) setTouched({ from: false, to: false });
+  }
+
+  const errs = getFieldErrors(data);
+  const hasError = Boolean(errs.from) || Boolean(errs.to);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -318,13 +379,21 @@ function RedirectFormDialog({
               id="redirect-from"
               value={data.fromPath}
               onChange={(e) => onChange({ ...data, fromPath: e.target.value })}
+              onBlur={() => setTouched((t) => ({ ...t, from: true }))}
               placeholder="/old-page"
               autoFocus
               className="font-mono"
+              aria-invalid={touched.from && !!errs.from}
             />
             <p className="text-xs text-muted-foreground">
               The original URL path that should be redirected. Must start with &quot;/&quot;.
             </p>
+            {touched.from && errs.from && (
+              <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                <AlertTriangle className="h-3 w-3 shrink-0" />
+                {errs.from}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="redirect-to">To Path *</Label>
@@ -332,12 +401,20 @@ function RedirectFormDialog({
               id="redirect-to"
               value={data.toPath}
               onChange={(e) => onChange({ ...data, toPath: e.target.value })}
+              onBlur={() => setTouched((t) => ({ ...t, to: true }))}
               placeholder="/new-page"
               className="font-mono"
+              aria-invalid={touched.to && !!errs.to}
             />
             <p className="text-xs text-muted-foreground">
               The destination URL path. Must start with &quot;/&quot;.
             </p>
+            {touched.to && errs.to && (
+              <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                <AlertTriangle className="h-3 w-3 shrink-0" />
+                {errs.to}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="redirect-type">Redirect Type *</Label>
@@ -380,13 +457,6 @@ function RedirectFormDialog({
               onCheckedChange={(checked) => onChange({ ...data, active: checked })}
             />
           </div>
-
-          {validationError && (
-            <div className="flex items-start gap-2 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 p-3">
-              <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700 dark:text-red-400">{validationError}</p>
-            </div>
-          )}
         </div>
         <DialogFooter>
           <Button
@@ -398,7 +468,7 @@ function RedirectFormDialog({
           </Button>
           <Button
             onClick={onSubmit}
-            disabled={isPending || !!validationError}
+            disabled={isPending || hasError}
           >
             {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {submitLabel}
@@ -969,14 +1039,7 @@ export function SeoRedirectsPage() {
         enableSorting: true,
         size: 220,
         header: ({ column }) => <SortableHeader label="From Path" column={column} />,
-        cell: ({ row }) => (
-          <span
-            className="font-mono text-sm text-foreground block max-w-[260px] truncate"
-            title={row.original.fromPath}
-          >
-            {row.original.fromPath}
-          </span>
-        ),
+        cell: ({ row }) => <PathLink path={row.original.fromPath} />,
       },
       {
         id: 'toPath',
@@ -984,14 +1047,7 @@ export function SeoRedirectsPage() {
         enableSorting: true,
         size: 220,
         header: ({ column }) => <SortableHeader label="To Path" column={column} />,
-        cell: ({ row }) => (
-          <span
-            className="font-mono text-sm text-foreground/80 block max-w-[260px] truncate"
-            title={row.original.toPath}
-          >
-            {row.original.toPath}
-          </span>
-        ),
+        cell: ({ row }) => <PathLink path={row.original.toPath} />,
       },
       {
         id: 'type',
@@ -1082,24 +1138,6 @@ export function SeoRedirectsPage() {
               <DropdownMenuItem onClick={() => handleOpenEdit(row)}>
                 <Pencil className="h-4 w-4 mr-2" />
                 Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  handleToggle(row.id, !row.active)
-                }
-                disabled={togglingId === row.id}
-              >
-                {row.active ? (
-                  <>
-                    <Power className="h-4 w-4 mr-2" />
-                    Disable
-                  </>
-                ) : (
-                  <>
-                    <Power className="h-4 w-4 mr-2" />
-                    Enable
-                  </>
-                )}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

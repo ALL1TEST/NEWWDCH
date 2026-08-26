@@ -390,6 +390,8 @@ export function SeoRobotsPage() {
   }, [warnings]);
 
   const hasBlockAllError = warnings.some((w) => w.message.includes('blocks ALL crawlers'));
+  const hasErrors = warnings.some((w) => w.type === 'error');
+  const hasWarningsOnly = warnings.length > 0 && !hasErrors;
 
   const handleSaveClick = useCallback(() => {
     if (hasBlockAllError) {
@@ -535,9 +537,9 @@ export function SeoRobotsPage() {
         )}
       </Card>
 
-      {/* Preview Dialog */}
+      {/* Preview Dialog — renders the actual /robots.txt HTTP response */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh]">
+        <DialogContent className="max-w-3xl max-h-[85vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileCode className="h-4 w-4" />
@@ -546,26 +548,102 @@ export function SeoRobotsPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="text-xs text-muted-foreground">
-              This is what will be served at <code className="font-mono text-primary">/robots.txt</code>
+              This is the exact response served at{' '}
+              <code className="font-mono text-primary">/robots.txt</code>. Read-only.
             </div>
-            {/* Syntax highlighted preview */}
-            <div className="overflow-auto rounded-lg border bg-zinc-50 dark:bg-zinc-950/50 p-4 max-h-[55vh]">
-              <div className="font-mono text-sm leading-6 whitespace-pre-wrap">
-                {content.trim() ? (
-                  content.split('\n').map((line, i) => (
-                    <HighlightedLine key={i} line={line} number={i + 1} />
-                  ))
-                ) : (
-                  <span className="text-muted-foreground/50 italic"># robots.txt is empty</span>
-                )}
+
+            {/* HTTP response frame — mimics the served response, not the editor */}
+            <div className="overflow-hidden rounded-lg border border-border">
+              {/* Response status / headers bar */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-mono">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">GET</span>
+                  <span className="text-foreground font-medium">/robots.txt</span>
+                </span>
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold',
+                    hasErrors
+                      ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
+                      : 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400',
+                  )}
+                >
+                  {hasErrors ? '200 OK · Invalid' : '200 OK'}
+                </span>
+                <span className="text-muted-foreground">text/plain</span>
+                <span className="text-muted-foreground">utf-8</span>
+                <span className="text-muted-foreground">{content.length} bytes</span>
+              </div>
+
+              {/* Syntax-highlighted, read-only response body */}
+              <div className="overflow-auto bg-zinc-50 dark:bg-zinc-950/50 p-4 max-h-[50vh]">
+                <div className="font-mono text-sm leading-6 whitespace-pre-wrap">
+                  {content.trim() ? (
+                    content.split('\n').map((line, i) => (
+                      <HighlightedLine key={i} line={line} number={i + 1} />
+                    ))
+                  ) : (
+                    <span className="text-muted-foreground/50 italic"># robots.txt is empty</span>
+                  )}
+                </div>
               </div>
             </div>
-            {warnings.length === 0 && content.trim() && (
-              <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
-                <CheckCircle2 className="h-4 w-4" />
-                No validation issues found — robots.txt is valid
-              </div>
-            )}
+
+            {/* Validation state footer — reflects the current validation state */}
+            <div className="space-y-1.5">
+              {warnings.length === 0 && content.trim() && (
+                <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  No validation issues found — robots.txt is valid
+                </div>
+              )}
+              {!content.trim() && (
+                <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  robots.txt is empty — crawlers will have no rules to follow
+                </div>
+              )}
+              {hasErrors && (
+                <div className="space-y-1">
+                  {warnings
+                    .filter((w) => w.type === 'error')
+                    .map((w, i) => (
+                      <div
+                        key={`e${i}`}
+                        className="flex items-start gap-2 text-xs text-red-600 dark:text-red-400"
+                      >
+                        <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>
+                          {w.line && (
+                            <span className="text-muted-foreground/70">Line {w.line}: </span>
+                          )}
+                          {w.message}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+              {hasWarningsOnly && (
+                <div className="space-y-1">
+                  {warnings
+                    .filter((w) => w.type === 'warning')
+                    .map((w, i) => (
+                      <div
+                        key={`w${i}`}
+                        className="flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400"
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>
+                          {w.line && (
+                            <span className="text-muted-foreground/70">Line {w.line}: </span>
+                          )}
+                          {w.message}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
