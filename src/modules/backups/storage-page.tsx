@@ -18,7 +18,6 @@ import {
   RefreshCw,
   Lock,
   FolderOpen,
-  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -101,6 +100,11 @@ interface StorageForm {
   // against a different credential set).
   connection: ConnectionState;
   connectionMessage: string;
+  // Per-field touched flags so inline validation only appears after the
+  // user has interacted with a field (blur) or attempted to submit. We
+  // never show a generic aggregate "N issues" — each required field that
+  // is empty shows its own short message beside it.
+  touched: Record<string, boolean>;
 }
 
 const initialForm: StorageForm = {
@@ -109,6 +113,7 @@ const initialForm: StorageForm = {
   config: {},
   connection: 'idle',
   connectionMessage: '',
+  touched: {},
 };
 
 // -------------------- Section label mapping --------------------
@@ -174,13 +179,16 @@ function ProviderBadge({ provider }: { provider: BackupStorageProvider }) {
   );
 }
 
-// -------------------- Provider Dropdown (custom, categorized) --------------------
+// -------------------- Provider Dropdown (custom, categorized, text-only) -------------------
 
 /** Custom categorized provider dropdown. Built on the Radix Popover so it
  *  inherits portal rendering (no clipping by the modal's overflow),
  *  outside-click + Escape close, and viewport-aware positioning. Options
- *  are grouped by category with small uppercase category labels. The
- *  panel width matches the trigger width. */
+ *  are grouped by category with small uppercase category labels — text
+ *  only, no provider icons. The panel width matches the trigger width.
+ *  The option list is internally scrollable with a thin scrollbar and is
+ *  capped to the available viewport height so it never clips the bottom
+ *  options (even on short viewports / small browser zoom). */
 function ProviderDropdown({
   value,
   onChange,
@@ -192,7 +200,6 @@ function ProviderDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const selected = getProviderDefinition(value);
-  const SelectedIcon = selected?.icon ?? HardDrive;
   const categories = getProvidersByCategory();
 
   return (
@@ -205,9 +212,8 @@ function ProviderDropdown({
           disabled={disabled}
           className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-[color,box-shadow] hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <span className="flex items-center gap-2 truncate text-left text-foreground">
-            <SelectedIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="truncate">{selected?.name ?? 'Select provider'}</span>
+          <span className="truncate text-left text-foreground">
+            {selected?.name ?? 'Select provider'}
           </span>
           <ChevronDown
             className={cn('h-4 w-4 opacity-50 transition-transform shrink-0', open && 'rotate-180')}
@@ -221,12 +227,20 @@ function ProviderDropdown({
         className="p-1"
         style={{ width: 'var(--radix-popper-anchor-width)' }}
       >
-        {/* Inner scroll area: tall enough to show all 11 providers + 4
-            category labels on a typical viewport (≈480px) without
-            scrolling; on shorter viewports it scrolls with the thin
-            scrollbar. Capped at 70vh so the panel never overflows the
-            viewport vertically. */}
-        <div role="listbox" className="max-h-[70vh] overflow-y-auto storage-modal-scroll">
+        {/* Inner scroll area: sized to the Radix-provided available height
+            in the panel's placement direction (--radix-popper-available-
+            height, which accounts for collisionPadding and the trigger's
+            position). This makes the panel always fit between the trigger
+            and the viewport edge on ANY viewport height — the full list
+            shows without scrolling when there's room, and scrolls
+            internally with a thin scrollbar when there isn't, so every
+            provider stays reachable and nothing is clipped top or bottom.
+            Falls back to 70vh before the variable resolves. */}
+        <div
+          role="listbox"
+          className="overflow-y-auto storage-modal-scroll"
+          style={{ maxHeight: 'var(--radix-popper-available-height, 70vh)' }}
+        >
           {categories.map(({ category, label, providers }) => (
             <div key={category} className="py-1">
               <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
@@ -234,7 +248,6 @@ function ProviderDropdown({
               </div>
               {providers.map((p) => {
                 const isSelected = p.id === value;
-                const Icon = p.icon;
                 return (
                   <button
                     key={p.id}
@@ -246,19 +259,11 @@ function ProviderDropdown({
                       setOpen(false);
                     }}
                     className={cn(
-                      'flex w-full items-center gap-2 justify-between rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent focus:bg-accent',
+                      'flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent focus:bg-accent',
                       isSelected && 'bg-accent font-medium',
                     )}
                   >
-                    <span className="flex items-center gap-2 truncate">
-                      <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="truncate">{p.name}</span>
-                      {p.status === 'coming_soon' && (
-                        <span className="text-[10px] font-medium uppercase tracking-wide text-amber-600 dark:text-amber-400">
-                          Soon
-                        </span>
-                      )}
-                    </span>
+                    <span className="truncate">{p.name}</span>
                     {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
                   </button>
                 );
@@ -291,12 +296,11 @@ function NoStorageSearchEmpty({ onClear }: { onClear: () => void }) {
 /** True when the Name field is non-empty AND every required field for the
  *  currently-selected provider has a non-empty value. For providers that
  *  require a validated connection, the connection state must also be
- *  'connected'. Coming-soon providers are never valid (Create disabled). */
+ *  'connected'. */
 function isFormValid(form: StorageForm): boolean {
   if (!form.name.trim()) return false;
   const def = getProviderDefinition(form.provider);
   if (!def) return false;
-  if (def.status === 'coming_soon') return false;
 
   const allFieldsFilled = def.fields.every((f) => {
     if (!f.required) return true;
@@ -308,6 +312,26 @@ function isFormValid(form: StorageForm): boolean {
 
   if (def.requiresConnection && form.connection !== 'connected') return false;
   return true;
+}
+
+/** Returns the inline error message for a single field, or '' when the
+ *  field is valid. Required fields that are empty show their message only
+ *  after the user has blurred the field OR attempted to submit — we never
+ *  surface a generic aggregate "N issues" summary. The Name field follows
+ *  the same rule. */
+function fieldError(
+  form: StorageForm,
+  field: { key: string; label: string; required: boolean; type: string },
+  submitAttempted: boolean,
+): string {
+  if (!field.required) return '';
+  if (field.type === 'switch') return '';
+  const v = form.config[field.key];
+  const isEmpty = v == null || v.trim() === '';
+  if (!isEmpty) return '';
+  const wasTouched = form.touched[field.key] === true;
+  if (!wasTouched && !submitAttempted) return '';
+  return `${field.label} is required`;
 }
 
 /** Signature for the connection/credential-group fields of the current
@@ -394,6 +418,10 @@ export function StoragePage() {
   // validation. If the user edits any connection field afterwards, the
   // signature no longer matches and the 'connected' state is invalidated.
   const [validatedSignature, setValidatedSignature] = useState<string>('');
+  // Flips to true on the first Create / Test attempt while invalid so
+  // every empty required field surfaces its inline message at once.
+  // Reset to false whenever the dialog re-opens or the form becomes valid.
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const table = useDataTable({ initialSortField: 'createdAt', initialSortOrder: 'desc' });
 
@@ -493,11 +521,13 @@ export function StoragePage() {
     setEditingId(null);
     setForm(initialForm);
     setValidatedSignature('');
+    setSubmitAttempted(false);
     setDialogOpen(true);
   };
 
   const openEdit = (row: StorageRow) => {
     setEditingId(row.id);
+    setSubmitAttempted(false);
     // Flatten the stored config object into a string map for form inputs.
     // Secrets come back masked from the API ('••••••••'); show them as
     // the mask so the user knows a value is stored, and rely on the
@@ -516,7 +546,7 @@ export function StoragePage() {
     let initialConnection: ConnectionState = 'idle';
     let initialMessage = '';
     const def = getProviderDefinition(row.provider);
-    if (def && def.requiresConnection && def.status === 'available') {
+    if (def && def.requiresConnection) {
       const groups: FieldGroup[] =
         def.connectionType === 'oauth' ? ['connection'] : ['credentials'];
       const hasCreds = def.fields
@@ -553,6 +583,7 @@ export function StoragePage() {
       config: formConfig,
       connection: initialConnection,
       connectionMessage: initialMessage,
+      touched: {},
     });
     setValidatedSignature(connectionSignature({
       name: row.name,
@@ -560,6 +591,7 @@ export function StoragePage() {
       config: formConfig,
       connection: initialConnection,
       connectionMessage: initialMessage,
+      touched: {},
     }));
     setDialogOpen(true);
   };
@@ -569,6 +601,18 @@ export function StoragePage() {
     setEditingId(null);
     setForm(initialForm);
     setValidatedSignature('');
+    setSubmitAttempted(false);
+  };
+
+  // Mark a field as touched on blur so its inline validation message
+  // only appears after the user has left the field — not while they
+  // are still typing into it for the first time.
+  const markFieldTouched = (key: string) => {
+    setForm((prev) =>
+      prev.touched[key]
+        ? prev
+        : { ...prev, touched: { ...prev.touched, [key]: true } },
+    );
   };
 
   const updateConfigField = (key: string, value: string) => {
@@ -620,9 +664,11 @@ export function StoragePage() {
         config: cleared,
         connection: 'idle',
         connectionMessage: '',
+        touched: {},
       };
     });
     setValidatedSignature('');
+    setSubmitAttempted(false);
   };
 
   const updateForm = <K extends keyof StorageForm>(key: K, value: StorageForm[K]) => {
@@ -630,7 +676,12 @@ export function StoragePage() {
   };
 
   const handleSubmit = () => {
-    if (!isFormValid(form)) return;
+    if (!isFormValid(form)) {
+      // Surface every empty required field at once via inline messages
+      // instead of a generic aggregate error.
+      setSubmitAttempted(true);
+      return;
+    }
     const configObj = buildConfigObject(form);
     const def = getProviderDefinition(form.provider);
     const isActive = def?.requiresConnection ? form.connection === 'connected' : true;
@@ -656,12 +707,10 @@ export function StoragePage() {
   const handleTestOrConnect = async () => {
     const def = getProviderDefinition(form.provider);
     if (!def || def.connectionType === 'none') return;
-    if (!form.name.trim()) {
-      toast.error('Enter a name first');
-      return;
-    }
-    if (!canValidateConnection(form)) {
-      toast.error('Fill all required fields first');
+    // Surface inline field errors rather than a generic toast when the
+    // required credential fields aren't filled yet.
+    if (!form.name.trim() || !canValidateConnection(form)) {
+      setSubmitAttempted(true);
       return;
     }
     const masked = maskedSecretFields(form);
@@ -840,35 +889,6 @@ export function StoragePage() {
   const renderConfigSection = () => {
     if (!currentDef) return null;
 
-    // Coming-soon preview: show fields read-only + a banner. No test, no
-    // create (the API rejects and the form's isFormValid returns false).
-    if (currentDef.status === 'coming_soon') {
-      return (
-        <div className="space-y-3 rounded-lg border border-amber-200/60 bg-amber-50/40 dark:bg-amber-900/10 dark:border-amber-800/40 p-4">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-amber-500" />
-            <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
-              {currentDef.name} — coming soon
-            </p>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Field preview. This provider isn't wired up yet — choose another destination to create now.
-          </p>
-          <div className="space-y-3 pt-1">
-            {currentDef.fields.map((f) => (
-              <ConfigField
-                key={f.key}
-                field={f}
-                value={form.config[f.key] ?? ''}
-                onChange={() => {}}
-                disabled
-              />
-            ))}
-          </div>
-        </div>
-      );
-    }
-
     // Determine which groups this provider uses, in display order.
     const groupsUsed: FieldGroup[] = [];
     if (currentDef.connectionType === 'oauth') {
@@ -956,6 +976,8 @@ export function StoragePage() {
                     field={f}
                     value={form.config[f.key] ?? ''}
                     onChange={(v) => updateConfigField(f.key, v)}
+                    onBlur={() => markFieldTouched(f.key)}
+                    error={fieldError(form, f, submitAttempted)}
                     disabled={isTesting}
                   />
                 ))}
@@ -1041,7 +1063,7 @@ export function StoragePage() {
       {/* Add / Edit Storage Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(v) => !v && closeDialog()}>
         <DialogContent
-          className="sm:max-w-[560px] p-0 gap-0 overflow-hidden"
+          className="sm:max-w-[560px] p-0 gap-0 overflow-hidden flex flex-col max-h-[calc(100vh-2rem)]"
           /* Prevent clicks OUTSIDE the dialog content (e.g. on the
              portal-rendered provider dropdown panel) from closing the
              modal mid-edit. The dropdown is a separate DismissableLayer
@@ -1053,7 +1075,7 @@ export function StoragePage() {
           onPointerDownOutside={(e) => e.preventDefault()}
         >
           {/* Header (fixed) */}
-          <DialogHeader className="px-5 pt-5 pb-3 border-b border-border">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b border-border shrink-0">
             <DialogTitle className="text-base">
               {editingId ? 'Edit Storage' : 'Add Storage'}
             </DialogTitle>
@@ -1062,8 +1084,10 @@ export function StoragePage() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Scrollable config content (thin scrollbar) */}
-          <div className="storage-modal-scroll px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+          {/* Scrollable config content (thin scrollbar). The body is the
+              only scrollable region — header + footer stay pinned so
+              Cancel/Create are always reachable, even on short viewports. */}
+          <div className="storage-modal-scroll px-5 py-4 space-y-4 flex-1 min-h-0 overflow-y-auto">
             {/* Name */}
             <div className="space-y-1.5">
               <Label htmlFor="storage-name" className="text-xs">
@@ -1074,7 +1098,12 @@ export function StoragePage() {
                 placeholder="e.g., Production R2 Bucket"
                 value={form.name}
                 onChange={(e) => updateForm('name', e.target.value)}
+                onBlur={() => markFieldTouched('name')}
+                aria-invalid={!form.name.trim() && (form.touched.name || submitAttempted)}
               />
+              {!form.name.trim() && (form.touched.name || submitAttempted) && (
+                <p className="text-xs text-destructive">Name is required</p>
+              )}
             </div>
 
             {/* Provider */}
@@ -1092,12 +1121,12 @@ export function StoragePage() {
           </div>
 
           {/* Footer (fixed) */}
-          <DialogFooter className="px-5 py-3 border-t border-border bg-muted/20 flex flex-row items-center justify-between sm:justify-between">
+          <DialogFooter className="px-5 py-3 border-t border-border bg-muted/20 flex flex-row items-center justify-between sm:justify-between shrink-0">
             {/* Left: Test Connection / Connect action (only for
                 providers that need a connection, and only when it makes
                 sense — e.g. hidden for OAuth once already connected). */}
             <div className="flex items-center gap-2">
-              {currentDef && currentDef.connectionType !== 'none' && currentDef.status === 'available' && !(
+              {currentDef && currentDef.connectionType !== 'none' && !(
                 currentDef.connectionType === 'oauth' &&
                 form.connection === 'connected' &&
                 !connectionStale
@@ -1185,14 +1214,19 @@ function ConfigField({
   field,
   value,
   onChange,
+  onBlur,
+  error,
   disabled,
 }: {
   field: ProviderField;
   value: string;
   onChange: (v: string) => void;
+  onBlur?: () => void;
+  error?: string;
   disabled?: boolean;
 }) {
   const inputId = `storage-config-${field.key}`;
+  const showError = !!error;
   return (
     <div className="space-y-1.5">
       <Label htmlFor={inputId} className="text-xs">
@@ -1217,9 +1251,11 @@ function ConfigField({
           placeholder={field.placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
           rows={4}
           disabled={disabled}
-          className="font-mono text-xs"
+          aria-invalid={showError || undefined}
+          className={cn('font-mono text-xs', showError && 'border-destructive focus-visible:ring-destructive')}
         />
       ) : (
         <div className="relative">
@@ -1229,18 +1265,22 @@ function ConfigField({
             placeholder={field.placeholder}
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            onBlur={onBlur}
             disabled={disabled}
+            aria-invalid={showError || undefined}
             autoComplete={field.type === 'password' ? 'new-password' : undefined}
-            className={field.type === 'password' ? 'pr-9' : ''}
+            className={cn(field.type === 'password' ? 'pr-9' : '', showError && 'border-destructive focus-visible:ring-destructive')}
           />
           {field.type === 'password' && value && (
             <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60 pointer-events-none" />
           )}
         </div>
       )}
-      {field.helpText && (
+      {showError ? (
+        <p className="text-xs text-destructive">{error}</p>
+      ) : field.helpText ? (
         <p className="text-xs text-muted-foreground leading-relaxed">{field.helpText}</p>
-      )}
+      ) : null}
     </div>
   );
 }

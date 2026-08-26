@@ -107,13 +107,18 @@ function validateConfigJson(configStr: string, provider: string): { valid: boole
       break;
     }
     case 'GOOGLE_CLOUD_STORAGE': {
-      // Coming-soon provider — creation is rejected by the POST handler
-      // before validation runs, but guard here too.
-      errors.push('Google Cloud Storage is coming soon and cannot be created yet.');
+      if (!has('projectId')) errors.push('Google Cloud Storage config requires "projectId"');
+      if (!has('serviceAccountEmail')) errors.push('Google Cloud Storage config requires "serviceAccountEmail"');
+      if (!has('privateKey')) errors.push('Google Cloud Storage config requires "privateKey"');
+      if (!has('bucket')) errors.push('Google Cloud Storage config requires "bucket"');
+      // folder optional
       break;
     }
     case 'MICROSOFT_AZURE_BLOB': {
-      errors.push('Microsoft Azure Blob Storage is coming soon and cannot be created yet.');
+      if (!has('storageAccount')) errors.push('Azure Blob Storage config requires "storageAccount"');
+      if (!has('accessKey')) errors.push('Azure Blob Storage config requires "accessKey"');
+      if (!has('container')) errors.push('Azure Blob Storage config requires "container"');
+      // endpoint optional (derived from storageAccount if omitted)
       break;
     }
     case 'CLOUDFLARE_R2': {
@@ -308,23 +313,6 @@ export async function POST(request: NextRequest) {
 
     const d = parsed.data;
 
-    // Coming-soon providers cannot be created — reject with a clear
-    // message before running validation. The UI also marks these as
-    // "Coming soon" and disables Create, but the API enforces it too.
-    const { COMING_SOON_PROVIDERS } = await import('@/lib/backup/providers');
-    if (COMING_SOON_PROVIDERS.has(d.provider)) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'NOT_IMPLEMENTED',
-            message: `${PROVIDER_LABELS[d.provider] ?? d.provider} is coming soon and cannot be configured yet.`,
-          },
-          meta: { requestId: id },
-        },
-        { status: 400 },
-      );
-    }
-
     // Validate config JSON structure based on provider
     const configValidation = validateConfigJson(d.config, d.provider);
     if (!configValidation.valid) {
@@ -342,7 +330,14 @@ export async function POST(request: NextRequest) {
     }
 
     // ---- Test Connection action ----
-    if ((body as Record<string, unknown>).action === 'test') {
+    // The modal's Test Connection / Connect button POSTs to this route
+    // with `?action=test` in the query string (the body carries the
+    // candidate config). Detect the action from the URL search params —
+    // NOT the body — so a test never accidentally creates a storage row.
+    // The test runs the real provider adapter against the (unpersisted)
+    // form config; no row is written.
+    const urlAction = new URL(request.url).searchParams.get('action');
+    if (urlAction === 'test' || (body as Record<string, unknown>).action === 'test') {
       const { testStorageConnection } = await import('@/lib/backup/backup-service');
       let configObj: Record<string, unknown>;
       try {

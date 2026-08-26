@@ -77,11 +77,17 @@ function validateConfigJson(configStr: string, provider: string): { valid: boole
       if (!has('region')) errors.push('Amazon S3 config requires "region"');
       break;
     }
-    case 'GOOGLE_CLOUD_STORAGE':
+    case 'GOOGLE_CLOUD_STORAGE': {
+      if (!has('projectId')) errors.push('Google Cloud Storage config requires "projectId"');
+      if (!has('serviceAccountEmail')) errors.push('Google Cloud Storage config requires "serviceAccountEmail"');
+      if (!has('privateKey')) errors.push('Google Cloud Storage config requires "privateKey"');
+      if (!has('bucket')) errors.push('Google Cloud Storage config requires "bucket"');
+      break;
+    }
     case 'MICROSOFT_AZURE_BLOB': {
-      // Coming-soon providers cannot be updated into either; the API
-      // would reject creation, and existing rows can't exist. Guard.
-      errors.push(`${provider} is coming soon and cannot be configured.`);
+      if (!has('storageAccount')) errors.push('Azure Blob Storage config requires "storageAccount"');
+      if (!has('accessKey')) errors.push('Azure Blob Storage config requires "accessKey"');
+      if (!has('container')) errors.push('Azure Blob Storage config requires "container"');
       break;
     }
     case 'CLOUDFLARE_R2': {
@@ -389,10 +395,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // Parse the stored (encrypted) config to hand to the provider adapter.
     // createStorageProvider decrypts internally before constructing the
     // adapter, so we pass the encrypted values straight through. Every
-    // supported provider (including OAuth cloud drives) has a REAL
-    // adapter that performs an actual round-trip — no structural-only
-    // "connected" shortcut. Coming-soon providers (GCS / Azure) are
-    // rejected at creation, so no stored row reaches here.
+    // supported provider has a REAL adapter that performs an actual
+    // round-trip — no structural-only "connected" shortcut.
     let storedConfig: Record<string, unknown> = {};
     try { storedConfig = JSON.parse(storage.config || '{}'); } catch { storedConfig = {}; }
 

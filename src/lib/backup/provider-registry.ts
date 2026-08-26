@@ -7,26 +7,16 @@
 // (+ a backend adapter + API validation branch). The form, dropdown,
 // field rendering, and validation all derive from the definition.
 //
-// Each definition carries: id, name, category, icon, connectionType,
-// actionLabel, requiresConnection, status, and a `fields` array.
+// Each definition carries: id, name, category, connectionType,
+// actionLabel, requiresConnection, enabled, and a `fields` array.
 // The field KEYS here MUST stay in sync with the server-side
 // validateConfigJson in /api/backups/storage/route.ts and the
 // ENCRYPTED_FIELDS set in src/lib/backup/providers/index.ts.
+//
+// There is no "coming soon" concept. Every provider in this registry
+// is `enabled: true` and treated as a real, selectable provider with
+// a working form, real validation, and a real Test Connection.
 
-import {
-  HardDrive,
-  Cloud,
-  CloudRain,
-  CloudDrizzle,
-  CloudFog,
-  Database,
-  Boxes,
-  CloudUpload,
-  CloudSun,
-  Cloudy,
-  Network,
-  type LucideIcon,
-} from 'lucide-react';
 import type { BackupStorageProvider } from '@/shared/types';
 
 // -------------------- Types --------------------
@@ -54,18 +44,18 @@ export interface ProviderDefinition {
   id: BackupStorageProvider;
   name: string;
   category: ProviderCategory;
-  icon: LucideIcon;
   /** 'none' = no test step (Local). 'credentials' = Test Connection
-   *  validates the whole credential block (S3/R2/Wasabi/B2/FTP).
+   *  validates the whole credential block (S3/R2/Wasabi/B2/GCS/Azure/FTP).
    *  'oauth' = Connect button runs a real token-refresh test, then a
    *  destination (folder) field is revealed. */
   connectionType: 'none' | 'credentials' | 'oauth';
   actionLabel: string;
   /** Whether Create requires a validated (connected) state. */
   requiresConnection: boolean;
-  /** 'available' = fully wired. 'coming_soon' = fields shown as a
-   *  preview but Test/Create disabled — never faked. */
-  status: 'available' | 'coming_soon';
+  /** Only providers with enabled: true appear in the dropdown. Every
+   *  provider in the dropdown is a real, selectable provider — there
+   *  are no "soon"/"preview"/placeholder states. */
+  enabled: boolean;
   fields: ProviderField[];
 }
 
@@ -98,11 +88,10 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     id: 'LOCAL',
     name: 'Local',
     category: 'LOCAL',
-    icon: HardDrive,
     connectionType: 'none',
     actionLabel: 'Test Path',
     requiresConnection: false,
-    status: 'available',
+    enabled: true,
     fields: [
       {
         key: 'path',
@@ -120,13 +109,12 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     id: 'AMAZON_S3',
     name: 'Amazon S3',
     category: 'OBJECT_STORAGE',
-    icon: Cloud,
     connectionType: 'credentials',
     actionLabel: 'Test Connection',
     requiresConnection: true,
-    status: 'available',
+    enabled: true,
     fields: [
-      { key: 'accessKeyId', label: 'Access Key ID', type: 'text', required: true, group: 'credentials' },
+      { key: 'accessKeyId', label: 'Access Key ID', type: 'text', required: true, placeholder: 'AKIA...', group: 'credentials' },
       { key: 'secretAccessKey', label: 'Secret Access Key', type: 'password', required: true, group: 'credentials' },
       { key: 'bucket', label: 'Bucket', type: 'text', required: true, placeholder: 'my-backups', group: 'credentials' },
       { key: 'region', label: 'Region', type: 'text', required: true, placeholder: 'eu-west-1', group: 'credentials' },
@@ -138,15 +126,14 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     id: 'GOOGLE_CLOUD_STORAGE',
     name: 'Google Cloud Storage',
     category: 'OBJECT_STORAGE',
-    icon: CloudRain,
     connectionType: 'credentials',
     actionLabel: 'Test Connection',
     requiresConnection: true,
-    status: 'coming_soon',
+    enabled: true,
     fields: [
       { key: 'projectId', label: 'Project ID', type: 'text', required: true, placeholder: 'my-project-123', group: 'credentials' },
       { key: 'serviceAccountEmail', label: 'Service Account Email', type: 'text', required: true, placeholder: 'backup@my-project.iam.gserviceaccount.com', group: 'credentials' },
-      { key: 'privateKey', label: 'Private Key', type: 'password', required: true, multiline: true, placeholder: '-----BEGIN PRIVATE KEY-----', group: 'credentials' },
+      { key: 'privateKey', label: 'Private Key', type: 'password', required: true, multiline: true, placeholder: '-----BEGIN PRIVATE KEY-----\nMIIEvQIB...', group: 'credentials' },
       { key: 'bucket', label: 'Bucket', type: 'text', required: true, placeholder: 'my-backups', group: 'credentials' },
       { key: 'folder', label: 'Folder', type: 'text', required: false, placeholder: 'backups/', group: 'destination' },
     ],
@@ -156,14 +143,13 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     id: 'MICROSOFT_AZURE_BLOB',
     name: 'Microsoft Azure Blob Storage',
     category: 'OBJECT_STORAGE',
-    icon: CloudDrizzle,
     connectionType: 'credentials',
     actionLabel: 'Test Connection',
     requiresConnection: true,
-    status: 'coming_soon',
+    enabled: true,
     fields: [
       { key: 'storageAccount', label: 'Storage Account', type: 'text', required: true, placeholder: 'mystorageaccount', group: 'credentials' },
-      { key: 'accessKey', label: 'Access Key', type: 'password', required: true, group: 'credentials' },
+      { key: 'accessKey', label: 'Access Key', type: 'password', required: true, multiline: true, placeholder: 'base64-encoded key', group: 'credentials' },
       { key: 'container', label: 'Container', type: 'text', required: true, placeholder: 'backups', group: 'credentials' },
       { key: 'endpoint', label: 'Endpoint', type: 'text', required: false, placeholder: 'https://mystorageaccount.blob.core.windows.net', group: 'credentials' },
     ],
@@ -173,14 +159,13 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     id: 'CLOUDFLARE_R2',
     name: 'Cloudflare R2',
     category: 'OBJECT_STORAGE',
-    icon: CloudFog,
     connectionType: 'credentials',
     actionLabel: 'Test Connection',
     requiresConnection: true,
-    status: 'available',
+    enabled: true,
     fields: [
       { key: 'accountId', label: 'Account ID', type: 'text', required: true, placeholder: 'your-account-id', group: 'credentials' },
-      { key: 'accessKeyId', label: 'Access Key ID', type: 'text', required: true, group: 'credentials' },
+      { key: 'accessKeyId', label: 'Access Key ID', type: 'text', required: true, placeholder: 'access-key-id', group: 'credentials' },
       { key: 'secretAccessKey', label: 'Secret Access Key', type: 'password', required: true, group: 'credentials' },
       { key: 'bucket', label: 'Bucket', type: 'text', required: true, placeholder: 'my-backups', group: 'credentials' },
       { key: 'endpoint', label: 'Endpoint', type: 'text', required: false, placeholder: 'https://accountid.r2.cloudflarestorage.com', group: 'credentials' },
@@ -191,13 +176,12 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     id: 'WASABI',
     name: 'Wasabi',
     category: 'OBJECT_STORAGE',
-    icon: Database,
     connectionType: 'credentials',
     actionLabel: 'Test Connection',
     requiresConnection: true,
-    status: 'available',
+    enabled: true,
     fields: [
-      { key: 'accessKeyId', label: 'Access Key ID', type: 'text', required: true, group: 'credentials' },
+      { key: 'accessKeyId', label: 'Access Key ID', type: 'text', required: true, placeholder: 'access-key-id', group: 'credentials' },
       { key: 'secretAccessKey', label: 'Secret Access Key', type: 'password', required: true, group: 'credentials' },
       { key: 'bucket', label: 'Bucket', type: 'text', required: true, placeholder: 'my-backups', group: 'credentials' },
       { key: 'region', label: 'Region', type: 'text', required: true, placeholder: 'us-east-1', group: 'credentials' },
@@ -209,13 +193,12 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     id: 'BACKBLAZE_B2',
     name: 'Backblaze B2',
     category: 'OBJECT_STORAGE',
-    icon: Boxes,
     connectionType: 'credentials',
     actionLabel: 'Test Connection',
     requiresConnection: true,
-    status: 'available',
+    enabled: true,
     fields: [
-      { key: 'keyId', label: 'Key ID', type: 'text', required: true, group: 'credentials' },
+      { key: 'keyId', label: 'Key ID', type: 'text', required: true, placeholder: 'key-id', group: 'credentials' },
       { key: 'applicationKey', label: 'Application Key', type: 'password', required: true, group: 'credentials' },
       { key: 'bucket', label: 'Bucket', type: 'text', required: true, placeholder: 'my-backups', group: 'credentials' },
       { key: 'endpoint', label: 'Endpoint', type: 'text', required: false, placeholder: 'https://s3.us-west-002.backblazeb2.com', group: 'credentials' },
@@ -227,11 +210,10 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     id: 'GOOGLE_DRIVE',
     name: 'Google Drive',
     category: 'CLOUD_DRIVE',
-    icon: CloudUpload,
     connectionType: 'oauth',
     actionLabel: 'Connect Google Drive',
     requiresConnection: true,
-    status: 'available',
+    enabled: true,
     fields: [
       { key: 'clientId', label: 'Client ID', type: 'text', required: true, placeholder: '123456789.apps.googleusercontent.com', group: 'connection' },
       { key: 'clientSecret', label: 'Client Secret', type: 'password', required: true, group: 'connection' },
@@ -244,11 +226,10 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     id: 'DROPBOX',
     name: 'Dropbox',
     category: 'CLOUD_DRIVE',
-    icon: CloudSun,
     connectionType: 'oauth',
     actionLabel: 'Connect Dropbox',
     requiresConnection: true,
-    status: 'available',
+    enabled: true,
     fields: [
       { key: 'appKey', label: 'App Key', type: 'text', required: true, placeholder: 'xxxxxxxxxx', group: 'connection' },
       { key: 'appSecret', label: 'App Secret', type: 'password', required: true, group: 'connection' },
@@ -261,11 +242,10 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     id: 'ONEDRIVE',
     name: 'OneDrive',
     category: 'CLOUD_DRIVE',
-    icon: Cloudy,
     connectionType: 'oauth',
     actionLabel: 'Connect OneDrive',
     requiresConnection: true,
-    status: 'available',
+    enabled: true,
     fields: [
       { key: 'clientId', label: 'Client ID', type: 'text', required: true, placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', group: 'connection' },
       { key: 'clientSecret', label: 'Client Secret', type: 'password', required: true, group: 'connection' },
@@ -279,15 +259,14 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     id: 'FTP',
     name: 'FTP',
     category: 'FILE_TRANSFER',
-    icon: Network,
     connectionType: 'credentials',
     actionLabel: 'Test Connection',
     requiresConnection: true,
-    status: 'available',
+    enabled: true,
     fields: [
       { key: 'host', label: 'Host', type: 'text', required: true, placeholder: 'ftp.example.com', group: 'credentials' },
       { key: 'port', label: 'Port', type: 'number', required: false, placeholder: '21', default: '21', group: 'credentials' },
-      { key: 'username', label: 'Username', type: 'text', required: true, group: 'credentials' },
+      { key: 'username', label: 'Username', type: 'text', required: true, placeholder: 'user', group: 'credentials' },
       { key: 'password', label: 'Password', type: 'password', required: true, group: 'credentials' },
       { key: 'remoteDirectory', label: 'Remote Directory', type: 'text', required: false, placeholder: '/backups', group: 'credentials' },
       { key: 'secure', label: 'Secure FTP / FTPS', type: 'switch', required: false, default: false, group: 'credentials' },
@@ -309,11 +288,12 @@ export function getProviderName(id: BackupStorageProvider | string): string {
   return PROVIDER_MAP[id]?.name ?? id;
 }
 
-/** Returns the registry grouped by category, in display order. */
+/** Returns the registry grouped by category, in display order.
+ *  Only enabled providers are included. */
 export function getProvidersByCategory(): { category: ProviderCategory; label: string; providers: ProviderDefinition[] }[] {
   return CATEGORY_ORDER.map((category) => ({
     category,
     label: CATEGORY_LABELS[category],
-    providers: PROVIDER_REGISTRY.filter((p) => p.category === category),
+    providers: PROVIDER_REGISTRY.filter((p) => p.category === category && p.enabled),
   }));
 }

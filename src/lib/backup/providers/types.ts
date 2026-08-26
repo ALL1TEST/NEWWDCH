@@ -96,20 +96,19 @@ export interface OneDriveConfig {
   folder?: string; // path, e.g. /Backups
 }
 
-// ---- Coming-soon providers (field types declared for forward
-//      compatibility; not yet wired into the factory). ----
+// ---- Service-account & shared-key object storage configs ----
 
 export interface GoogleCloudStorageConfig {
   projectId: string;
   serviceAccountEmail: string;
-  privateKey: string;
+  privateKey: string; // PEM-encoded RSA private key (JSON key file's private_key)
   bucket: string;
   folder?: string;
 }
 
 export interface AzureBlobConfig {
   storageAccount: string;
-  accessKey: string;
+  accessKey: string; // base64-encoded shared key
   container: string;
-  endpoint?: string;
+  endpoint?: string; // defaults to https://{account}.blob.core.windows.net
 }

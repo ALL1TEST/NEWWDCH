@@ -14,24 +14,15 @@ import { FtpStorageProvider } from './ftp';
 import { GoogleDriveStorageProvider } from './google-drive';
 import { DropboxStorageProvider } from './dropbox';
 import { OneDriveStorageProvider } from './onedrive';
+import { GoogleCloudStorageProvider } from './gcs';
+import { AzureBlobStorageProvider } from './azure';
 import type { StorageProvider } from './types';
 import { encrypt, decrypt } from '@/lib/encryption';
 
 export type { StorageProvider } from './types';
 
-/** Providers whose integration is NOT implemented yet. The UI shows
- *  their fields (preview) but marks them "Coming soon" and the API
- *  rejects creating one with a clear message. Test Connection is
- *  disabled for these. Google Cloud Storage and Azure Blob require
- *  their native SDKs + service-account flows; flagged here rather
- *  than faked. */
-export const COMING_SOON_PROVIDERS = new Set<string>([
-  'GOOGLE_CLOUD_STORAGE',
-  'MICROSOFT_AZURE_BLOB',
-]);
-
 /**
- * Create a storage provider adapter from a BackupStorage record.
+ * Create a storage provider adapter from a BackupStorageProvider record.
  * The config JSON is decrypted (credentials) before being passed to the adapter.
  */
 export async function createStorageProvider(
@@ -55,6 +46,12 @@ export async function createStorageProvider(
 
     case 'AMAZON_S3':
       return new S3StorageProvider(decryptedConfig as never, 'Amazon S3');
+
+    case 'GOOGLE_CLOUD_STORAGE':
+      return new GoogleCloudStorageProvider(decryptedConfig as never);
+
+    case 'MICROSOFT_AZURE_BLOB':
+      return new AzureBlobStorageProvider(decryptedConfig as never);
 
     case 'CLOUDFLARE_R2':
       return new R2StorageProvider(decryptedConfig as never);
@@ -90,8 +87,8 @@ export async function createStorageProvider(
 export const ENCRYPTED_FIELDS = new Set([
   'secretAccessKey',   // Amazon S3 / Cloudflare R2 / Wasabi
   'applicationKey',    // Backblaze B2
-  'privateKey',        // Google Cloud Storage (forward-compat)
-  'accessKey',         // Microsoft Azure Blob (forward-compat)
+  'privateKey',        // Google Cloud Storage
+  'accessKey',         // Microsoft Azure Blob Storage
   'password',          // FTP
   'clientSecret',      // Google Drive / OneDrive
   'appSecret',         // Dropbox
