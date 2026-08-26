@@ -2308,3 +2308,47 @@ Stage Summary:
 - All 11 acceptance items satisfied. Existing functionality (Save/Restore/Preview/Validation/Generated-Saved for robots; Create/Edit/Delete/Status-toggle/301-302/Search/Filters/Sort/Pagination/Import-CSV/Export-CSV/hit-counting for redirects; Connect/Sync/Disconnect/metrics/chart/range/Top-Queries/Top-Pages for Search Console) preserved — no regressions.
 - Files modified: src/modules/seo/seo-robots-page.tsx (item 1), src/modules/seo/seo-redirects-page.tsx (items 2-6), src/modules/seo/seo-search-console-page.tsx (items 8-9). Item 7 needed no change (already correct).
 - Dev server remains running on port 3000 (PID tree under 3037). Screenshots: upload/seo-search-console.png.
+
+---
+Task ID: SEO-AUDIT-REMOVE-ALL
+Agent: main
+Task: Fix the "Remove All" button in the SEO Audit page so it performs a COMPLETE filter reset — Show Resolved Only OFF, search cleared, severity reset to "All", displayed table re-derived from the reset filter state showing ONLY unresolved issues with "Resolve" buttons (zero "Reopen" buttons), counts + pagination updated immediately. Do NOT implement it as just setShowResolved(false); use a single source of truth so the visible dataset actually changes.
+
+Work Log:
+- Read /home/z/my-project/src/modules/seo/seo-audit-page.tsx (432 lines). Located the filter state (showResolved useState, severityFilter useState, table.searchValue/table.currentPage from useDataTable), the "Remove All" button (line 363-371), and the existing resetAllFilters useCallback (lines 147-158).
+- Traced the single-source-of-truth derivation chain that was ALREADY in place: filter state → queryParams (useMemo, line 160-168) → queryKeys.seoIssues.list(queryParams) → /api/seo/issues (server filters by isResolved/severity/search) → issues = data?.data ?? [] → DataTable. Action cell renders "Resolve" for isResolved=false and "Reopen" for isResolved=true (lines 272-307). Count cards use separate count queries keyed by resolvedParam = showResolved ? 'true' : 'false' (lines 181-196).
+- Verified the API /api/seo/issues GET correctly filters where.isResolved = (isResolved === 'true') when the param is present (src/app/api/seo/issues/route.ts lines 41-49), so isResolved='false' returns ONLY unresolved issues server-side.
+- Ran agent-browser on the LIVE app to reproduce the reported bug before changing code: logged in as admin@example.com → navigated to #seo/audit → initial state 0/19/3 open counts, all "Resolve" buttons, no "Remove All" visible. Clicked "Show Resolved Only" → 0/3/2 resolved counts, 5 "Reopen" buttons, "Remove All" appeared. Clicked "Remove All" → table immediately switched back to 22 "Resolve" buttons, ZERO "Reopen", counts 0/19/3, "Remove All" disappeared. The reported bug did NOT reproduce with the existing code — the existing resetAllFilters already reset all filter state and the table re-derived correctly.
+- Despite no repro, hardened resetAllFilters to make the complete-reset semantics EXPLICIT and race-condition-proof per the user's stated requirements:
+  * Added `void queryClient.cancelQueries({ queryKey: ['seo-issues'] })` BEFORE removeQueries — guarantees any in-flight resolved-issue response is cancelled so it can't repopulate the cache after the reset (race safety).
+  * Kept `queryClient.removeQueries({ queryKey: ['seo-issues'] })` — clears ALL cached seo-issues queries (list + 3 count queries, both isResolved=true/false variants) so neither the table nor the Critical/Warnings/Info cards can briefly show stale resolved data while the fresh open-issue query refetches.
+  * Kept the four state setters (setShowResolved(false), setSeverityFilter('all'), table.setSearchValue(''), table.setCurrentPage(1)) — React batches them into a single re-render so queryParams recomputes once with defaults → queryKey changes → React Query refetches with isResolved='false' → server returns only unresolved issues → table shows only "Resolve" buttons.
+  * Kept `queryClient.invalidateQueries({ queryKey: ['seo-overview'] })` for Overview sync.
+  * Added a detailed block comment above the useCallback documenting the single-source-of-truth derivation chain (filter state → queryParams → queryKey → API response → issues → cell renderer) so future readers understand that resetting state IS sufficient to change the visible dataset (no separate client-side "filtered dataset" variable needed).
+- Ran `bun run lint`: ZERO issues in seo-audit-page.tsx. The 5 remaining lint problems are pre-existing in untouched files (data-table.tsx, content-create/edit-page.tsx, seo-broken-links-page.tsx, seo-social-preview-page.tsx) per the SEO-POLISH worklog entry.
+- Re-ran full agent-browser end-to-end verification AFTER the code change (dev server restarted via double-fork setsid because it had died mid-session; PID tree under new PID, port 3000):
+  * Initial state (#seo/audit): Critical 0 / Warnings 19 / Info 3, 22 rows all with "Resolve" buttons, no "Remove All" button (no filters active). Screenshot: upload/audit-1-initial.png.
+  * Clicked "Show Resolved Only": counts → 0/3/2, 5 rows all with "Reopen" buttons, "Remove All" appeared. ✓
+  * Typed "missing" into search + clicked Warning severity: table filtered to 3 "Reopen" rows (resolved Warning issues matching "missing"). ✓
+  * Clicked "Remove All": table IMMEDIATELY switched to 22 rows all with "Resolve" buttons, ZERO "Reopen" buttons. Counts → 0/19/3 (open issues). "Remove All" button disappeared (no filters active). Screenshot: upload/audit-3-after-removeall.png.
+  * Verified via eval: search input value = "" (empty) ✓; "Show Resolved Only" button class = "border-border text-muted-foreground hover:text-foreground..." (NOT bg-foreground, i.e. visually unchecked) + aria-pressed = null ✓; severity group: All has bg-primary=true, Critical/Warning/Info have bg-primary=false (severity reset to All) ✓.
+  * Pagination footer text: "Showing 1–22 of 22 items" + "1 / 1" ✓.
+  * Console: only Fast Refresh logs (from the code edit) — no errors, no warnings, no hydration mismatches ✓.
+
+Stage Summary:
+- All 12 acceptance criteria verified PASS on the live app:
+  1. Show Resolved Only OFF (visual + state) ✓
+  2. Search query cleared ✓
+  3. Severity reset to "All" ✓
+  4. Other filters reset (page=1, no Remove All visible = no active filters) ✓
+  5. Displayed issues recalculated from original dataset (server refetch with isResolved=false) ✓
+  6. Only unresolved/active issues displayed ✓
+  7. Every displayed issue has a "Resolve" button (22/22) ✓
+  8. Zero "Reopen" buttons visible ✓
+  9. Table updated immediately without page reload ✓
+  10. Pagination + "Showing X–Y of Z items" updated ("Showing 1–22 of 22 items") ✓
+  11. Critical/Warnings/Info counts updated to active/unresolved (0/19/3) ✓
+  12. Checkbox visually unchecked AND filter state false ✓
+- Implementation requirement met: Remove All is NOT just `setShowResolved(false)` — it cancels in-flight queries, clears all cached seo-issues queries, resets ALL filter state (showResolved + severityFilter + searchValue + currentPage), and invalidates overview queries. The visible table is DERIVED from the updated filter state via the queryParams → queryKey → API → issues chain (single source of truth).
+- UI design unchanged: no CSS/layout/markup changes; only the resetAllFilters useCallback body + a documentation comment were modified.
+- Files modified: src/modules/seo/seo-audit-page.tsx (resetAllFilters useCallback at lines 144-181). Dev server remains running on port 3000. Screenshots: upload/audit-1-initial.png, upload/audit-2-resolved.png, upload/audit-3-after-removeall.png.

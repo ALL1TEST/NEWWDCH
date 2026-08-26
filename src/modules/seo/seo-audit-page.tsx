@@ -141,19 +141,42 @@ export function SeoAuditPage() {
 
   const table = useDataTable({ initialSortField: 'createdAt', initialSortOrder: 'desc', initialPageSize: DEFAULT_PAGE_SIZE });
 
-  // Centralized filter-reset function — called by "Remove All" button.
-  // Resets all filter state, clears cached query data for the old filter,
-  // and forces the table + counters to refetch with default params.
+  // COMPLETE FILTER RESET — called by the "Remove All" button.
+  //
+  // Single source of truth: the visible issues are DERIVED from the filter
+  // state via the following chain (no separate "filtered dataset" variable):
+  //   filter state (showResolved / severityFilter / table.searchValue / page)
+  //     → `queryParams` (useMemo, below)
+  //     → `queryKeys.seoIssues.list(queryParams)` (React Query key)
+  //     → `/api/seo/issues` response (server filters by isResolved/severity/search)
+  //     → `issues = data?.data ?? []` (the rows the DataTable renders)
+  //     → Action cell renders "Resolve" for isResolved=false, "Reopen" for true
+  //
+  // So resetting the filter state below is SUFFICIENT to change the visible
+  // rows: queryParams recomputes → queryKey changes → React Query refetches
+  // with isResolved='false' → server returns only UNRESOLVED issues → every
+  // visible row gets a "Resolve" button and zero "Reopen" buttons remain.
+  //
+  // The cache-clearing steps (1 & 2) guarantee no stale resolved-issue data
+  // can be shown while the fresh open-issue query is in flight, and no
+  // in-flight resolved-issue response can repopulate the cache after reset.
   const resetAllFilters = useCallback(() => {
-    // 1. Clear cached data for ALL seo-issues queries so the table doesn't
-    //    show stale resolved-issue data while the new open-issue query fetches.
+    // 1. Cancel any in-flight seo-issues requests so a stale resolved-issue
+    //    response can't land in the cache AFTER we clear it (race safety).
+    void queryClient.cancelQueries({ queryKey: ['seo-issues'] });
+    // 2. Remove ALL cached seo-issues queries (list + the three count
+    //    queries, both isResolved=true/false variants) so the table and
+    //    the Critical/Warnings/Info cards can't briefly show stale
+    //    resolved-issue data while the new open-issue queries refetch.
     queryClient.removeQueries({ queryKey: ['seo-issues'] });
-    // 2. Reset all filter state to defaults (batched by React)
-    setShowResolved(false);
-    setSeverityFilter('all');
-    table.setSearchValue('');
-    table.setCurrentPage(1);
-    // 3. Invalidate overview queries so the Overview page stays in sync
+    // 3. Reset ALL filter state to defaults. React batches these into a
+    //    single re-render, so queryParams recomputes once with the new
+    //    (default) values and the table refetches immediately.
+    setShowResolved(false);            // → isResolved='false' (unresolved only)
+    setSeverityFilter('all');          // → severity=undefined (all severities)
+    table.setSearchValue('');          // → search=undefined (no text filter)
+    table.setCurrentPage(1);           // → page=1 (first page of fresh result)
+    // 4. Invalidate overview queries so the Overview page stays in sync.
     queryClient.invalidateQueries({ queryKey: ['seo-overview'] });
   }, [table, queryClient]);
 
