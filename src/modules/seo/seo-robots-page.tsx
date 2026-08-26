@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog,
@@ -227,34 +226,6 @@ function HighlightedLine({ line }: { line: string }) {
   );
 }
 
-// ==================== Status Indicator ====================
-
-function StatusIndicator({ warnings }: { warnings: ValidationWarning[] }) {
-  if (warnings.length === 0) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400">
-        <span className="h-2 w-2 rounded-full bg-green-500" />
-        Valid
-      </span>
-    );
-  }
-  const hasErrors = warnings.some((w) => w.type === 'error');
-  if (hasErrors) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400">
-        <span className="h-2 w-2 rounded-full bg-red-500" />
-        Invalid
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-      <span className="h-2 w-2 rounded-full bg-amber-500" />
-      Has warnings
-    </span>
-  );
-}
-
 // ==================== Code Editor ====================
 
 function CodeEditor({
@@ -455,21 +426,9 @@ export function SeoRobotsPage() {
           <>
             {/* Toolbar */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <FileCode className="h-5 w-5 text-muted-foreground" />
-                  <h3 className="font-semibold text-sm">Editor</h3>
-                </div>
-                <StatusIndicator warnings={warnings} />
-                {isDirty ? (
-                  <Badge variant="outline" className="text-xs font-normal text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">
-                    Unsaved changes
-                  </Badge>
-                ) : content.trim() ? (
-                  <Badge variant="outline" className="text-xs font-normal text-green-600 dark:text-green-400 border-green-300 dark:border-green-700">
-                    Saved
-                  </Badge>
-                ) : null}
+              <div className="flex items-center gap-2">
+                <FileCode className="h-5 w-5 text-muted-foreground" />
+                <h3 className="font-semibold text-sm">Editor</h3>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -505,19 +464,12 @@ export function SeoRobotsPage() {
             {/* Footer bar */}
             <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
               <span>{lineCount} lines · {content.length.toLocaleString()} characters</span>
-              <div className="flex items-center gap-1.5">
-                {isDirty ? (
-                  <>
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                    Modified
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="h-3 w-3 text-green-500" />
-                    Saved
-                  </>
-                )}
-              </div>
+              {isDirty && (
+                <div className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  Modified
+                </div>
+              )}
             </div>
           </>
         )}

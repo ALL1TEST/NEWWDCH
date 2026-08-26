@@ -2443,3 +2443,51 @@ Stage Summary:
 - Task A: Preview no longer duplicates the Editor. HighlightedLine lost its line numbers (editor chrome), so the Preview body is now clearly a read-only served-response view (HTTP frame + syntax-highlighted body without line numbers + validation footer + "Close" only button + no textarea), while the Editor remains the sole editable source of truth with its line-numbers column + textarea. Existing modal design/spacing/typography and all robots.txt functionality (Save / Restore Default / Preview / Validation / Generated-Saved) preserved.
 - Task B: The funnel/filter icon between the search input and "All Types" dropdown is removed. Search input, "All Types", "All Status", page-size dropdown, gap-2 layout, trigger sizes, typography, and all filtering functionality are unchanged.
 - Files modified: src/modules/seo/seo-robots-page.tsx (HighlightedLine refactor + Preview body call site), src/modules/seo/seo-redirects-page.tsx (removed Filter icon JSX + import). Dev server remains running on port 3000. Screenshots: upload/robots-1-editor.png, upload/robots-2-preview.png, upload/redirects-no-funnel.png.
+
+---
+Task ID: SEO-ROBOTS-EDITOR-HEADER-CLEANUP
+Agent: main
+Task: Refine Robots.txt Settings UI — REMOVE the "Valid" and "Saved" badges/status indicators displayed next to the "Editor" label; keep the Editor header clean and professional; validation feedback should only appear when there's an actual error/warning; do not replace removed badges with another permanent status badge. Keep the existing read-only Preview Result modal (already de-duplicated by task SEO-ROBOTS-PREVIEW-DEDUP) intact.
+
+Work Log:
+- Read /home/z/my-project/worklog.md (prior task SEO-ROBOTS-PREVIEW-DEDUP + SEO-REDIRECTS-FUNNEL-REMOVE) — confirmed the Preview modal was already de-duplicated (HighlightedLine lost its line-number column, read-only HTTP response frame in place), but the Editor header still carried `StatusIndicator` (the "Valid"/"Invalid"/"Has warnings" dot+label) and a `Badge` pair ("Unsaved changes" amber when dirty, "Saved" green when persisted). The footer bar also rendered a permanent "Saved" (green checkmark) state when not dirty.
+- Inspected /home/z/my-project/src/modules/seo/seo-robots-page.tsx — mapped every usage of `Badge`, `StatusIndicator`, `CheckCircle2`, `hasErrors`, `hasWarningsOnly`, `hasBlockAllError`:
+  * `Badge` (line 18 import) — used ONLY at lines 465 (Unsaved changes) and 469 (Saved) inside the Editor header.
+  * `StatusIndicator` (lines 232–256 definition) — used ONLY at line 463 in the Editor header.
+  * `CheckCircle2` (line 12 import) — used at line 516 (footer "Saved" state, being removed) AND line 586 (Preview modal "No validation issues" footer, KEEPING). Import stays.
+  * `hasErrors` / `hasWarningsOnly` (computed at lines 350–351) — still used by the Preview modal's HTTP status pill (line 504/509) and validation footer (lines 548/568). KEEP.
+  * `hasBlockAllError` (line 349) — still used by the Save-click guard (line 354/359). KEEP.
+- Applied 4 atomic edits via MultiEdit to seo-robots-page.tsx:
+  1. Removed `import { Badge } from '@/components/ui/badge';` (line 18) — becomes unused after edit #3.
+  2. Removed the entire `// ==================== Status Indicator ====================` block (the `StatusIndicator` function, ~25 lines) — no longer referenced after edit #3. Replaced its trailing `// ==================== Code Editor ====================` separator anchor so the Code Editor section header is preserved exactly once.
+  3. Editor header refactor: the old `<div className="flex items-center gap-3">` wrapper containing `<div>FileCode + Editor</div>` + `<StatusIndicator/>` + conditional `<Badge>Unsaved changes</Badge>` / `<Badge>Saved</Badge>` was replaced with a single clean `<div className="flex items-center gap-2">FileCode + <h3>Editor</h3></div>`. No permanent status badge beside "Editor".
+  4. Footer bar refactor: the right-side `<div className="flex items-center gap-1.5">` that rendered either amber-dot+"Modified" (dirty) OR green-CheckCircle2+"Saved" (clean) was replaced with `{isDirty && (<div>amber-dot + Modified</div>)}`. So: dirty → "Modified" pill shows (conditional feedback, not permanent); saved → right side is empty. Left side ("N lines · M characters") untouched.
+- NO change to the Preview Result modal, the CodeEditor component, the Validation Warnings card (the conditional card that shows only when warnings/errors exist — this IS the "validation feedback only appears when there's an actual issue" mechanism), the Restore Default / Block-All AlertDialogs, or the Save/Restore/Preview toolbar buttons. The Editor remains the single editable source of truth; the Preview remains a read-only HTTP response view deriving from the same `content` state (no second editable copy).
+
+LINT:
+- `bun run lint`: ZERO issues in seo-robots-page.tsx. The 5 remaining lint problems are pre-existing in untouched files (data-table.tsx, content-create/edit-page.tsx, seo-broken-links-page.tsx, seo-social-preview-page.tsx) and identical to the baseline noted in prior worklog entries.
+
+BROWSER VERIFICATION (agent-browser, logged in as admin@example.com → SEO → Robots.txt):
+
+Saved (clean) state — screenshot upload/robots/1-editor-clean.png:
+- Eval on the Editor card: `{headerRowText: "Editor", headerRowChildrenCount: 2, headerRowChildren: ["svg:…", "H3:font-semibold text-sm"], cardHasValid: false, cardHasSaved: false}`. The header row now contains ONLY the FileCode icon + "Editor" h3 — no StatusIndicator, no "Valid" text, no "Unsaved changes"/"Saved" Badge anywhere in the card.
+- Footer bar eval: `{footerText: "24 lines · 403 characters", footerChildrenCount: 1, footerChildrenTags: ["SPAN text=\"24 lines · 403 characters\""]}`. Right side is empty in the saved state (no "Saved" indicator).
+
+Dirty (edited) state — screenshot upload/robots/2-editor-dirty.png:
+- Typed into the textarea. Eval: `{headerRowText: "Editor", headerRowChildrenCount: 2, cardHasValid: false, cardHasSaved: false, cardHasUnsaved: false, cardHasModified: true, footerChildren: ["SPAN \"25 lines · 438 characters\"", "DIV \"Modified\""], saveBtnDisabled: false}`. Header stays clean (no Valid/Saved/Unsaved permanent badges reappear); footer right shows the conditional "Modified" pill; Save button enables. This matches "validation/sync feedback only appears when there's something to communicate".
+
+Preview Result modal — screenshots upload/robots/3-preview-modal.png (light) and upload/robots/5-dark-preview.png (dark):
+- Opened Preview Result. Eval on the dialog: `{title: "Robots.txt Preview", hasGet: true, has200: true, hasTextPlain: true, hasBytes: true, hasUtf8: true, hasTextarea: false, hasLineNumbers: false, hasValidationMsg: true, hasExplanation: true, headerBarText: "GET /robots.txt 200 OK text/plain utf-8 68 bytes", bodyText: "User-agent: * Allow: / Sitemap: https://cms.example.com/sitemap.xml", bodyIsTextarea: false, bodyHasContentEditable: false}`. All requirements met: title, explanation ("exact response served at /robots.txt"), full HTTP metadata (GET /robots.txt · 200 OK · text/plain · utf-8 · N bytes), clean read-only viewer (no textarea, no line numbers, not contentEditable), validation/result message at the bottom. Editor remains the single source of truth; the Preview derives from the same `content` state — no second editable copy.
+
+Dark mode — screenshots upload/robots/4-dark-editor.png + upload/robots/5-dark-preview.png:
+- Toggled theme (`isDark: true`). Editor header still `{headerRowText: "Editor", headerRowChildrenCount: 2, cardHasValid: false, cardHasSaved: false, footerChildrenCount: 1, footerText: "4 lines · 68 characters"}`. Preview modal still `{isDark: true, title: "Robots.txt Preview", hasGet: true, has200: true, hasBytes: true, hasTextarea: false, hasLineNumbers: false}`. Design holds in dark mode.
+
+Console + dev.log:
+- `agent-browser errors`: none. `agent-browser console`: only the pre-existing `Warning: Missing Description or aria-describedby for {DialogContent}` a11y warning (present before this change, not introduced by it).
+- /home/z/my-project/dev.log: `GET /api/seo/robots 200`, `PUT /api/seo/robots 200` (save persisted), `GET / 200` — no 500s, no runtime exceptions, no hydration errors.
+
+Stage Summary:
+- Editor header is now clean and professional: just `FileCode` icon + "Editor" h3. The "Valid" StatusIndicator and the "Unsaved changes"/"Saved" Badge are removed with no replacement permanent status badge. Validation feedback continues to appear ONLY via the conditional "Validation Warnings"/"Validation Errors" card (renders only when warnings.length > 0) and the Preview modal's validation footer — never as a permanent header pill.
+- Footer bar: "Modified" appears only when dirty (conditional sync feedback); when saved, the right side is empty (no permanent "Saved" indicator). Line/character count on the left is preserved.
+- Preview Result modal: untouched and re-verified — still a distinct read-only HTTP response preview (GET /robots.txt · 200 OK · text/plain · utf-8 · N bytes header frame + syntax-highlighted body with NO line numbers + validation footer + Close-only), not a duplicate of the Editor. No second editable copy of robots.txt; the Editor remains the single source of truth.
+- Files modified: src/modules/seo/seo-robots-page.tsx only (removed Badge import, removed StatusIndicator function, refactored Editor header row, refactored footer right side). Dev server running on port 3000. Screenshots: upload/robots/1-editor-clean.png, upload/robots/2-editor-dirty.png, upload/robots/3-preview-modal.png, upload/robots/4-dark-editor.png, upload/robots/5-dark-preview.png.
