@@ -304,7 +304,7 @@ export function BackupsListPage() {
         accessorKey: 'storageProvider',
         enableSorting: false,
         size: 120,
-        // Full storage label visible (e.g. "Amazon S3", "Backblaze B2");
+        // Full storage label visible (e.g. "Cloudflare R2", "Google Drive");
         // never truncated.
         cell: ({ getValue }) => {
           const v = getValue() as string;

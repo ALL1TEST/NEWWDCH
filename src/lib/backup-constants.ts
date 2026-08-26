@@ -26,14 +26,11 @@ export const BACKUP_SCOPE_OPTIONS: { value: BackupScope; label: string }[] = [
 
 export const BACKUP_STORAGE_OPTIONS: { value: BackupStorageProvider; label: string }[] = [
   { value: 'LOCAL', label: 'Local' },
-  { value: 'AMAZON_S3', label: 'Amazon S3' },
   { value: 'GOOGLE_DRIVE', label: 'Google Drive' },
   { value: 'DROPBOX', label: 'Dropbox' },
   { value: 'ONEDRIVE', label: 'OneDrive' },
   { value: 'CLOUDFLARE_R2', label: 'Cloudflare R2' },
-  { value: 'BACKBLAZE_B2', label: 'Backblaze B2' },
   { value: 'FTP', label: 'FTP' },
-  { value: 'SFTP', label: 'SFTP' },
 ];
 
 // -------------------- Scope Badge Colors --------------------

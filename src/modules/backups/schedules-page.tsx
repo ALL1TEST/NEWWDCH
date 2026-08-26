@@ -332,7 +332,7 @@ export function SchedulesPage() {
         accessorKey: 'storageProvider',
         enableSorting: false,
         size: 130,
-        // Full storage label visible (e.g. "Amazon S3", "Backblaze B2");
+        // Full storage label visible (e.g. "Cloudflare R2", "Google Drive");
         // never truncated.
         cell: ({ getValue }) => (
           <span className="text-xs text-muted-foreground" title={labelize(getValue() as string)}>

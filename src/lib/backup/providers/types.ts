@@ -37,25 +37,22 @@ export interface StorageProvider {
   deleteFile(remotePath: string): Promise<void>;
 }
 
-// Configuration types for each provider
+// Configuration types for each provider supported by this CMS build.
+// Removed providers (Amazon S3, Backblaze B2, SFTP) intentionally have no
+// config type here — they cannot be constructed via the factory.
+
 export interface LocalConfig {
   path?: string; // optional custom storage path
 }
 
 export interface S3Config {
   bucket: string;
-  region: string;
+  region?: string;
   accessKeyId: string;
   secretAccessKey: string;
-  endpoint?: string; // for R2, B2, or custom S3-compatible
+  endpoint?: string; // for R2 or custom S3-compatible
+  accountId?: string; // Cloudflare R2 account ID (used to derive the endpoint)
   forcePathStyle?: boolean;
-}
-
-export interface B2Config {
-  bucket: string;
-  keyId: string;
-  applicationKey: string;
-  endpoint?: string;
 }
 
 export interface FtpConfig {
@@ -67,20 +64,14 @@ export interface FtpConfig {
   secure?: boolean;
 }
 
-export interface SftpConfig {
-  host: string;
-  port?: number;
-  username: string;
-  password?: string;
-  privateKey?: string;
-  remotePath?: string;
-}
-
 export interface OAuthConfig {
   accessToken?: string;
   refreshToken?: string;
   folderId?: string;
+  folder?: string;
   // For providers that need client credentials
   clientId?: string;
   clientSecret?: string;
+  appKey?: string;
+  appSecret?: string;
 }

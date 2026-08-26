@@ -1,6 +1,10 @@
 // ============================================================
-// S3-Compatible Storage Provider — Amazon S3, Cloudflare R2, Backblaze B2
+// S3-Compatible Storage Provider — base + Cloudflare R2
 // ============================================================
+// Amazon S3 and Backblaze B2 were removed from this CMS build. The base
+// S3StorageProvider class is retained because Cloudflare R2 is
+// S3-compatible and reuses it. The factory only constructs R2 (via
+// R2StorageProvider), never the bare S3StorageProvider.
 
 import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { createHash } from 'node:crypto';
@@ -90,16 +94,25 @@ export class S3StorageProvider implements StorageProvider {
   }
 }
 
-// Cloudflare R2 is S3-compatible
+// Cloudflare R2 is S3-compatible. The R2 config carries an `accountId`
+// (from the form); if the user didn't supply an explicit endpoint, derive
+// it from the account ID so the S3 client targets R2's API host rather
+// than the default AWS endpoint.
 export class R2StorageProvider extends S3StorageProvider {
-  constructor(config: S3Config) {
-    super({ ...config, forcePathStyle: true }, 'Cloudflare R2');
-  }
-}
-
-// Backblaze B2 is S3-compatible
-export class B2StorageProvider extends S3StorageProvider {
-  constructor(config: S3Config) {
-    super({ ...config, forcePathStyle: true }, 'Backblaze B2');
+  constructor(config: S3Config & { accountId?: string }) {
+    const endpoint =
+      config.endpoint && config.endpoint.trim() !== ''
+        ? config.endpoint
+        : config.accountId
+          ? `https://${config.accountId}.r2.cloudflarestorage.com`
+          : undefined;
+    super(
+      {
+        ...config,
+        ...(endpoint ? { endpoint } : {}),
+        forcePathStyle: true,
+      },
+      'Cloudflare R2',
+    );
   }
 }

@@ -24,7 +24,7 @@ const listIncludes = {
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200, 'Name must be 200 characters or less').trim(),
-  provider: z.enum(['LOCAL', 'AMAZON_S3', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'BACKBLAZE_B2', 'FTP', 'SFTP']),
+  provider: z.enum(['LOCAL', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'FTP']),
   config: z.string().default('{}'),
   isActive: z.boolean().default(true),
   siteId: z.string().optional(),
@@ -36,22 +36,19 @@ const createSchema = z.object({
 const SORTABLE = new Set(['createdAt', 'name', 'provider', 'isActive', 'lastTestAt']);
 
 // ---------- provider labels (for search matching) --------------------
-// Maps the raw provider enum (stored in the DB, e.g. "AMAZON_S3") to the
-// human-readable label shown in the UI (e.g. "Amazon S3"). Used by the
-// search filter so that typing "amazon", "s3", "cloudflare r2", "drive",
-// etc. matches storage destinations by their displayed provider — not
-// just by the raw enum string or the destination name.
+// Maps the raw provider enum (stored in the DB, e.g. "CLOUDFLARE_R2") to
+// the human-readable label shown in the UI (e.g. "Cloudflare R2"). Used by
+// the search filter so that typing "cloudflare r2", "dropbox", "drive",
+// "ftp", "local" matches storage destinations by their displayed provider
+// — not just by the raw enum string or the destination name.
 
 const PROVIDER_LABELS: Record<string, string> = {
   LOCAL: 'Local',
-  AMAZON_S3: 'Amazon S3',
   GOOGLE_DRIVE: 'Google Drive',
   DROPBOX: 'Dropbox',
   ONEDRIVE: 'OneDrive',
   CLOUDFLARE_R2: 'Cloudflare R2',
-  BACKBLAZE_B2: 'Backblaze B2',
   FTP: 'FTP',
-  SFTP: 'SFTP',
 };
 
 // ---------- validation helpers for config JSON -----------------------
@@ -65,50 +62,61 @@ function validateConfigJson(configStr: string, provider: string): { valid: boole
     return { valid: false, errors: ['Config must be valid JSON'] };
   }
 
+  // The mask placeholder returned by the GET routes for secret fields.
+  // On CREATE this value should never legitimately appear (the user must
+  // supply a real secret). On PATCH the merge logic strips it before
+  // validation, so it should not reach here either.
+  const MASK = '••••••••';
+
+  const has = (k: string) => {
+    const v = config[k];
+    return v !== undefined && v !== null && v !== '' && v !== MASK;
+  };
+
   switch (provider) {
-    case 'AMAZON_S3': {
-      if (!config.bucket) errors.push('S3 config requires "bucket"');
-      if (!config.region) errors.push('S3 config requires "region"');
-      if (!config.accessKeyId) errors.push('S3 config requires "accessKeyId"');
-      if (!config.secretAccessKey) errors.push('S3 config requires "secretAccessKey"');
+    case 'LOCAL': {
+      // Local path is optional — uses default backup directory if not specified
       break;
     }
     case 'GOOGLE_DRIVE': {
-      if (!config.folderId) errors.push('Google Drive config requires "folderId"');
-      if (!config.credentials) errors.push('Google Drive config requires "credentials"');
+      if (!has('clientId')) errors.push('Google Drive config requires "clientId"');
+      if (!has('clientSecret')) errors.push('Google Drive config requires "clientSecret"');
+      if (!has('refreshToken')) errors.push('Google Drive config requires "refreshToken"');
+      if (!has('folderId')) errors.push('Google Drive config requires "folderId"');
       break;
     }
     case 'DROPBOX': {
-      if (!config.accessToken) errors.push('Dropbox config requires "accessToken"');
+      if (!has('appKey')) errors.push('Dropbox config requires "appKey"');
+      if (!has('appSecret')) errors.push('Dropbox config requires "appSecret"');
+      if (!has('refreshToken')) errors.push('Dropbox config requires "refreshToken"');
+      if (!has('folder')) errors.push('Dropbox config requires "folder"');
       break;
     }
     case 'ONEDRIVE': {
-      if (!config.clientId) errors.push('OneDrive config requires "clientId"');
-      if (!config.clientSecret) errors.push('OneDrive config requires "clientSecret"');
+      if (!has('clientId')) errors.push('OneDrive config requires "clientId"');
+      if (!has('clientSecret')) errors.push('OneDrive config requires "clientSecret"');
+      if (!has('refreshToken')) errors.push('OneDrive config requires "refreshToken"');
+      if (!has('folder')) errors.push('OneDrive config requires "folder"');
       break;
     }
     case 'CLOUDFLARE_R2': {
-      if (!config.accountId) errors.push('Cloudflare R2 config requires "accountId"');
-      if (!config.bucket) errors.push('Cloudflare R2 config requires "bucket"');
-      if (!config.accessKeyId) errors.push('Cloudflare R2 config requires "accessKeyId"');
-      if (!config.secretAccessKey) errors.push('Cloudflare R2 config requires "secretAccessKey"');
+      if (!has('accountId')) errors.push('Cloudflare R2 config requires "accountId"');
+      if (!has('accessKeyId')) errors.push('Cloudflare R2 config requires "accessKeyId"');
+      if (!has('secretAccessKey')) errors.push('Cloudflare R2 config requires "secretAccessKey"');
+      if (!has('bucket')) errors.push('Cloudflare R2 config requires "bucket"');
+      // region + endpoint are optional (region defaults to "auto"; endpoint
+      // is derived from accountId by the R2 provider adapter if omitted).
       break;
     }
-    case 'BACKBLAZE_B2': {
-      if (!config.bucket) errors.push('Backblaze B2 config requires "bucket"');
-      if (!config.keyId) errors.push('Backblaze B2 config requires "keyId"');
-      if (!config.applicationKey) errors.push('Backblaze B2 config requires "applicationKey"');
+    case 'FTP': {
+      if (!has('host')) errors.push('FTP config requires "host"');
+      if (!has('username')) errors.push('FTP config requires "username"');
+      if (!has('password')) errors.push('FTP config requires "password"');
+      // port, remoteDirectory, secure are optional
       break;
     }
-    case 'FTP':
-    case 'SFTP': {
-      if (!config.host) errors.push(`${provider} config requires "host"`);
-      if (!config.port) errors.push(`${provider} config requires "port"`);
-      if (!config.username) errors.push(`${provider} config requires "username"`);
-      break;
-    }
-    case 'LOCAL': {
-      // Local path is optional — uses default backup directory if not specified
+    default: {
+      errors.push(`Unsupported provider: ${provider}`);
       break;
     }
   }
@@ -144,9 +152,10 @@ export async function GET(request: NextRequest) {
     if (search) {
       // Search matches the destination Name OR the Provider. Provider
       // matching is label-aware: the user types what they SEE in the UI
-      // (e.g. "amazon", "s3", "cloudflare r2", "dropbox", "drive"), so we
-      // resolve the search term against both the raw enum ("AMAZON_S3")
-      // and the human label ("Amazon S3") and OR it with a name contains.
+      // (e.g. "cloudflare r2", "dropbox", "drive", "ftp", "local"), so we
+      // resolve the search term against both the raw enum (e.g. "FTP")
+      // and the human label (e.g. "Cloudflare R2") and OR it with a name
+      // contains.
       const lower = search.toLowerCase();
       const matchedProviders = Object.entries(PROVIDER_LABELS)
         .filter(
@@ -178,8 +187,25 @@ export async function GET(request: NextRequest) {
       db.backupStorage.count({ where }),
     ]);
 
+    // Mask secrets in every item's config before returning. Secrets are
+    // stored encrypted at rest; here we decrypt + mask so the response
+    // never exposes real credential values. The Storage table only renders
+    // Name/Provider/Status/LastTest columns (never the config), but the
+    // edit form reads `row.config` — returning masked values lets the form
+    // display "••••••••" placeholders and the PATCH merge logic detect
+    // unchanged secrets by matching the mask.
+    const { decryptConfigFields, maskConfigSecrets } = await import('@/lib/backup/providers');
+    const maskedItems = await Promise.all(
+      items.map(async (it) => {
+        let parsed: Record<string, unknown> = {};
+        try { parsed = JSON.parse(it.config || '{}'); } catch { parsed = {}; }
+        const decrypted = await decryptConfigFields(parsed);
+        return { ...it, config: JSON.stringify(maskConfigSecrets(decrypted)) };
+      }),
+    );
+
     return NextResponse.json({
-      data: items,
+      data: maskedItems,
       meta: {
         requestId: id,
         pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },

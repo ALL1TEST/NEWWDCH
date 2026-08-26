@@ -3,9 +3,8 @@
 // ============================================================
 
 import { LocalStorageProvider } from './local';
-import { S3StorageProvider, R2StorageProvider, B2StorageProvider } from './s3';
+import { S3StorageProvider, R2StorageProvider } from './s3';
 import { FtpStorageProvider } from './ftp';
-import { SftpStorageProvider } from './sftp';
 import type { StorageProvider } from './types';
 import { encrypt, decrypt } from '@/lib/encryption';
 
@@ -34,27 +33,24 @@ export async function createStorageProvider(
     case 'LOCAL':
       return new LocalStorageProvider(decryptedConfig as never);
 
-    case 'AMAZON_S3':
-      return new S3StorageProvider(decryptedConfig as never);
-
     case 'CLOUDFLARE_R2':
       return new R2StorageProvider(decryptedConfig as never);
-
-    case 'BACKBLAZE_B2':
-      return new B2StorageProvider(decryptedConfig as never);
 
     case 'FTP':
       return new FtpStorageProvider(decryptedConfig as never);
 
-    case 'SFTP':
-      return new SftpStorageProvider(decryptedConfig as never);
-
     case 'GOOGLE_DRIVE':
     case 'DROPBOX':
     case 'ONEDRIVE':
-      // OAuth providers — require external credentials configuration.
-      // The adapter interface is ready; OAuth flow needs admin setup.
-      throw new Error(`${providerType} requires OAuth configuration. Please configure OAuth credentials in the admin settings.`);
+      // OAuth providers — the connection/config (client ID, client secret,
+      // refresh token, destination folder) is stored by the create flow,
+      // and the row-level Test Connection reports it as configured. The
+      // actual OAuth refresh + upload against the provider's API is an
+      // integration point for a production deployment (registering the
+      // OAuth app, exposing the callback URL). Until that integration is
+      // wired in, attempting to run a backup against an OAuth provider
+      // fails fast with a clear, actionable error.
+      throw new Error(`${providerType} requires an OAuth integration. Configure the OAuth client credentials in the storage destination, then wire the provider callback URL in production.`);
 
     default:
       throw new Error(`Unknown storage provider: ${providerType}`);
@@ -62,11 +58,18 @@ export async function createStorageProvider(
 }
 
 /**
- * Fields that should be encrypted when storing the config.
+ * Fields that should be encrypted when storing the config. Restricted to
+ * the providers supported by this CMS build (Local, Google Drive, Dropbox,
+ * OneDrive, Cloudflare R2, FTP). Removed providers (Amazon S3, Backblaze B2,
+ * SFTP) are intentionally absent so their secret keys can never be written
+ * or surfaced by this code path.
  */
 export const ENCRYPTED_FIELDS = new Set([
-  'secretAccessKey', 'password', 'applicationKey', 'privateKey',
-  'accessToken', 'refreshToken', 'clientSecret', 'credentials',
+  'secretAccessKey', // Cloudflare R2
+  'password',         // FTP
+  'clientSecret',     // Google Drive / OneDrive
+  'appSecret',         // Dropbox
+  'refreshToken',     // Google Drive / Dropbox / OneDrive
 ]);
 
 /**

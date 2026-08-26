@@ -27,10 +27,15 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 const updateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
-  provider: z.enum(['LOCAL', 'AMAZON_S3', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'FTP', 'SFTP']).optional(),
+  provider: z.enum(['LOCAL', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'FTP']).optional(),
   config: z.string().optional(),
   isActive: z.boolean().optional(),
 });
+
+// The mask placeholder used by the GET routes for secret fields. When the
+// PATCH receives a config containing this value for a secret field, it is
+// stripped by the merge logic (the old stored/encrypted value is kept).
+const MASK = '••••••••';
 
 // ---------- config validation ----------------------------------------
 
@@ -43,44 +48,52 @@ function validateConfigJson(configStr: string, provider: string): { valid: boole
     return { valid: false, errors: ['Config must be valid JSON'] };
   }
 
+  const has = (k: string) => {
+    const v = config[k];
+    return v !== undefined && v !== null && v !== '' && v !== MASK;
+  };
+
   switch (provider) {
-    case 'AMAZON_S3': {
-      if (!config.bucket) errors.push('S3 config requires "bucket"');
-      if (!config.region) errors.push('S3 config requires "region"');
-      if (!config.accessKeyId) errors.push('S3 config requires "accessKeyId"');
-      if (!config.secretAccessKey) errors.push('S3 config requires "secretAccessKey"');
+    case 'LOCAL': {
+      // Local path is optional — uses default backup directory if not specified
       break;
     }
     case 'GOOGLE_DRIVE': {
-      if (!config.folderId) errors.push('Google Drive config requires "folderId"');
-      if (!config.credentials) errors.push('Google Drive config requires "credentials"');
+      if (!has('clientId')) errors.push('Google Drive config requires "clientId"');
+      if (!has('clientSecret')) errors.push('Google Drive config requires "clientSecret"');
+      if (!has('refreshToken')) errors.push('Google Drive config requires "refreshToken"');
+      if (!has('folderId')) errors.push('Google Drive config requires "folderId"');
       break;
     }
     case 'DROPBOX': {
-      if (!config.accessToken) errors.push('Dropbox config requires "accessToken"');
+      if (!has('appKey')) errors.push('Dropbox config requires "appKey"');
+      if (!has('appSecret')) errors.push('Dropbox config requires "appSecret"');
+      if (!has('refreshToken')) errors.push('Dropbox config requires "refreshToken"');
+      if (!has('folder')) errors.push('Dropbox config requires "folder"');
       break;
     }
     case 'ONEDRIVE': {
-      if (!config.clientId) errors.push('OneDrive config requires "clientId"');
-      if (!config.clientSecret) errors.push('OneDrive config requires "clientSecret"');
+      if (!has('clientId')) errors.push('OneDrive config requires "clientId"');
+      if (!has('clientSecret')) errors.push('OneDrive config requires "clientSecret"');
+      if (!has('refreshToken')) errors.push('OneDrive config requires "refreshToken"');
+      if (!has('folder')) errors.push('OneDrive config requires "folder"');
       break;
     }
     case 'CLOUDFLARE_R2': {
-      if (!config.accountId) errors.push('Cloudflare R2 config requires "accountId"');
-      if (!config.bucket) errors.push('Cloudflare R2 config requires "bucket"');
-      if (!config.accessKeyId) errors.push('Cloudflare R2 config requires "accessKeyId"');
-      if (!config.secretAccessKey) errors.push('Cloudflare R2 config requires "secretAccessKey"');
+      if (!has('accountId')) errors.push('Cloudflare R2 config requires "accountId"');
+      if (!has('accessKeyId')) errors.push('Cloudflare R2 config requires "accessKeyId"');
+      if (!has('secretAccessKey')) errors.push('Cloudflare R2 config requires "secretAccessKey"');
+      if (!has('bucket')) errors.push('Cloudflare R2 config requires "bucket"');
       break;
     }
-    case 'FTP':
-    case 'SFTP': {
-      if (!config.host) errors.push(`${provider} config requires "host"`);
-      if (!config.port) errors.push(`${provider} config requires "port"`);
-      if (!config.username) errors.push(`${provider} config requires "username"`);
+    case 'FTP': {
+      if (!has('host')) errors.push('FTP config requires "host"');
+      if (!has('username')) errors.push('FTP config requires "username"');
+      if (!has('password')) errors.push('FTP config requires "password"');
       break;
     }
-    case 'LOCAL': {
-      if (!config.path) errors.push('Local config requires "path"');
+    default: {
+      errors.push(`Unsupported provider: ${provider}`);
       break;
     }
   }
@@ -110,7 +123,16 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       );
     }
 
-    return NextResponse.json({ data: item, meta: { requestId: id } });
+    // Mask secrets before returning (same as the list route). Secrets are
+    // stored encrypted; decrypt + mask so the response never exposes real
+    // credential values.
+    const { decryptConfigFields, maskConfigSecrets } = await import('@/lib/backup/providers');
+    let parsed: Record<string, unknown> = {};
+    try { parsed = JSON.parse(item.config || '{}'); } catch { parsed = {}; }
+    const decrypted = await decryptConfigFields(parsed);
+    const maskedItem = { ...item, config: JSON.stringify(maskConfigSecrets(decrypted)) };
+
+    return NextResponse.json({ data: maskedItem, meta: { requestId: id } });
   } catch (error) {
     console.error(`[BACKUP_STORAGE:GET] ${id} —`, error);
     return NextResponse.json(
@@ -182,7 +204,30 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (d.provider !== undefined) updateData.provider = d.provider;
     if (d.config !== undefined) {
       const provider = d.provider ?? existing.provider;
-      const configValidation = validateConfigJson(d.config, provider);
+      // Merge the incoming config into the stored one. The incoming config
+      // may contain mask placeholders ('••••••••') for secret fields the
+      // user did NOT re-enter (the GET routes return secrets masked, and
+      // the edit form passes them through unchanged). To avoid wiping or
+      // double-encrypting those secrets, we decrypt the old config, overlay
+      // only the genuinely-changed (non-mask, non-empty) new values, then
+      // re-encrypt the merged result. This preserves unchanged secrets
+      // exactly while letting the user update individual fields.
+      const { decryptConfigFields, encryptConfigForStorage } = await import('@/lib/backup/providers');
+      let oldConfig: Record<string, unknown> = {};
+      try { oldConfig = JSON.parse(existing.config || '{}'); } catch { oldConfig = {}; }
+      const decryptedOld = await decryptConfigFields(oldConfig);
+      let newConfig: Record<string, unknown> = {};
+      try { newConfig = JSON.parse(d.config); } catch { newConfig = {}; }
+      const merged: Record<string, unknown> = { ...decryptedOld };
+      for (const [k, v] of Object.entries(newConfig)) {
+        if (typeof v === 'string' && (v === MASK || v.trim() === '')) {
+          // Unchanged or cleared — keep the old decrypted value.
+          continue;
+        }
+        merged[k] = v;
+      }
+      const mergedStr = JSON.stringify(merged);
+      const configValidation = validateConfigJson(mergedStr, provider);
       if (!configValidation.valid) {
         return NextResponse.json(
           {
@@ -196,7 +241,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           { status: 400 },
         );
       }
-      updateData.config = d.config;
+      updateData.config = await encryptConfigForStorage(merged);
     }
     if (d.isActive !== undefined) updateData.isActive = d.isActive;
 
@@ -206,7 +251,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       include: fullIncludes,
     });
 
-    return NextResponse.json({ data: updated, meta: { requestId: id } });
+    // Mask secrets in the response (decrypt + mask).
+    const { decryptConfigFields: dcf2, maskConfigSecrets: mcs2 } = await import('@/lib/backup/providers');
+    let parsedUp: Record<string, unknown> = {};
+    try { parsedUp = JSON.parse(updated.config || '{}'); } catch { parsedUp = {}; }
+    const decryptedUp = await dcf2(parsedUp);
+    const maskedUpdated = { ...updated, config: JSON.stringify(mcs2(decryptedUp)) };
+
+    return NextResponse.json({ data: maskedUpdated, meta: { requestId: id } });
   } catch (error) {
     console.error(`[BACKUP_STORAGE:UPDATE] ${id} —`, error);
     return NextResponse.json(
@@ -253,6 +305,10 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
 export async function POST(request: NextRequest, context: RouteContext) {
   const id = reqId();
 
+  // `request` is currently unused — the test runs against the persisted
+  // config. Keeping the signature so the route handler shape stays stable.
+  void request;
+
   try {
     const { id: storageId } = await context.params;
 
@@ -264,87 +320,78 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    // Validate config JSON structure
+    // Validate the stored config structure for the provider. The stored
+    // config is encrypted; validateConfigJson reads it as-is (encrypted
+    // strings are non-empty, so presence checks still pass; the mask check
+    // only applies to values coming FROM the client, not the stored ones).
     const configValidation = validateConfigJson(storage.config, storage.provider);
 
     const now = new Date();
 
     if (!configValidation.valid) {
-      // Update with failed test result
+      const failedResult = { success: false, message: 'Config validation failed', errors: configValidation.errors };
       await db.backupStorage.update({
         where: { id: storageId },
         data: {
           lastTestAt: now,
-          lastTestResult: JSON.stringify({ success: false, errors: configValidation.errors }),
+          lastTestResult: JSON.stringify(failedResult),
+          // A failed validation means the storage is not usable — reflect
+          // that in the Status column (isActive = connection state).
+          isActive: false,
         },
       });
 
       return NextResponse.json({
-        data: {
-          success: false,
-          message: 'Config validation failed',
-          errors: configValidation.errors,
-          testedAt: now.toISOString(),
-        },
+        data: { ...failedResult, testedAt: now.toISOString() },
         meta: { requestId: id },
       });
     }
 
-    // For LOCAL provider, verify the path exists and is writable
-    if (storage.provider === 'LOCAL') {
-      try {
-        const config = JSON.parse(storage.config);
-        const fs = await import('node:fs/promises');
-        const { existsSync } = await import('node:fs');
-        const targetPath = config.path as string;
+    // Parse the stored (encrypted) config to hand to the provider adapter.
+    // createStorageProvider decrypts internally before constructing the
+    // adapter, so we pass the encrypted values straight through.
+    let storedConfig: Record<string, unknown> = {};
+    try { storedConfig = JSON.parse(storage.config || '{}'); } catch { storedConfig = {}; }
 
-        if (!existsSync(targetPath)) {
-          await fs.mkdir(targetPath, { recursive: true });
-        }
+    // OAuth providers (Google Drive / Dropbox / OneDrive) cannot complete a
+    // real authorization roundtrip in this sandbox (no public callback URL,
+    // no registered OAuth app). The "Connect" step in the create flow
+    // structurally validates the credentials; here we re-confirm that
+    // structural validity rather than pretending a live OAuth session was
+    // established. The stored config (client ID, client secret, refresh
+    // token) is exactly what the backup service needs to run the real OAuth
+    // refresh against the provider in a production environment.
+    const OAUTH_PROVIDERS = new Set(['GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE']);
+    let result: { success: boolean; message: string };
 
-        // Test write by creating a temp file
-        const testFile = targetPath + '/.backup-test-' + Date.now();
-        await fs.writeFile(testFile, 'test');
-        await fs.unlink(testFile);
-
-        const result = { success: true, message: 'Local storage path is accessible and writable' };
-        await db.backupStorage.update({
-          where: { id: storageId },
-          data: {
-            lastTestAt: now,
-            lastTestResult: JSON.stringify(result),
-          },
-        });
-
-        return NextResponse.json({ data: { ...result, testedAt: now.toISOString() }, meta: { requestId: id } });
-      } catch (fsError) {
-        const result = {
-          success: false,
-          message: 'Failed to access local storage path',
-          errors: [fsError instanceof Error ? fsError.message : 'Unknown error'],
-        };
-        await db.backupStorage.update({
-          where: { id: storageId },
-          data: {
-            lastTestAt: now,
-            lastTestResult: JSON.stringify(result),
-          },
-        });
-
-        return NextResponse.json({ data: { ...result, testedAt: now.toISOString() }, meta: { requestId: id } });
-      }
+    if (OAUTH_PROVIDERS.has(storage.provider)) {
+      // Structural validation already passed above; report the honest
+      // "configured, ready for production OAuth" state.
+      result = {
+        success: true,
+        message: 'OAuth credentials configured — live token refresh requires production OAuth callback.',
+      };
+    } else {
+      // LOCAL / CLOUDFLARE_R2 / FTP — run the real provider adapter test.
+      //   LOCAL → LocalStorageProvider.testConnection (fs write test, uses
+      //           the default backup dir when path is empty).
+      //   R2 → R2StorageProvider.testConnection (ListObjectsV2 via the
+      //        @aws-sdk/client-s3, with the endpoint auto-derived from the
+      //        account ID when not supplied).
+      //   FTP → FtpStorageProvider.testConnection (basic-ftp access +
+      //         ensureDir on the remote directory).
+      const { testStorageConnection } = await import('@/lib/backup/backup-service');
+      result = await testStorageConnection(storage.provider, storedConfig);
     }
 
-    // For remote providers, validate config structure only (no real connection test in sandbox)
-    const result = {
-      success: true,
-      message: `Config validation passed for ${storage.provider}. Note: Actual connection test requires network access to the remote provider.`,
-    };
     await db.backupStorage.update({
       where: { id: storageId },
       data: {
         lastTestAt: now,
         lastTestResult: JSON.stringify(result),
+        // The Status column reflects the actual connection state — a passed
+        // test marks the storage Active; a failed test marks it Inactive.
+        isActive: result.success,
       },
     });
 

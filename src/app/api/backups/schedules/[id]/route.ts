@@ -31,7 +31,7 @@ const updateSchema = z.object({
   frequency: z.enum(['HOURLY', 'EVERY_6_HOURS', 'DAILY', 'WEEKLY', 'MONTHLY', 'CUSTOM_CRON']).optional(),
   cronExpression: z.string().max(100).nullable().optional(),
   scope: z.enum(['FULL', 'DATABASE_ONLY', 'MEDIA_ONLY', 'FILES_ONLY', 'SETTINGS_ONLY']).optional(),
-  storageProvider: z.enum(['LOCAL', 'AMAZON_S3', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'BACKBLAZE_B2', 'FTP', 'SFTP']).optional(),
+  storageProvider: z.enum(['LOCAL', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'FTP']).optional(),
   encryptionEnabled: z.boolean().optional(),
   verificationEnabled: z.boolean().optional(),
   retentionCount: z.number().int().min(1).max(1000).optional(),

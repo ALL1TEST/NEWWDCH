@@ -139,14 +139,11 @@ export type BackupScope =
 
 export type BackupStorageProvider =
   | 'LOCAL'
-  | 'AMAZON_S3'
   | 'GOOGLE_DRIVE'
   | 'DROPBOX'
   | 'ONEDRIVE'
   | 'CLOUDFLARE_R2'
-  | 'BACKBLAZE_B2'
-  | 'FTP'
-  | 'SFTP';
+  | 'FTP';
 
 export type BackupVerificationStatus =
   | 'PENDING'

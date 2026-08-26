@@ -27,11 +27,11 @@ const SORTABLE = new Set(['createdAt', 'action', 'status', 'durationMs', 'archiv
 
 // ---------- label maps (for search matching) -------------------------
 // The UI displays labelized forms of these string/enums (e.g. "IN_PROGRESS"
-// → "In Progress", "AMAZON_S3" → "Amazon S3"). Search must match what the
-// user SEES, so for each search term we pre-compute the set of raw enum
-// values whose raw form OR labelized form contains the term, then OR a
-// `provider IN (...)` / `action IN (...)` / `status IN (...)` clause with
-// the free-text `contains` clauses on errorMessage and backup.name.
+// → "In Progress", "CLOUDFLARE_R2" → "Cloudflare R2"). Search must match
+// what the user SEES, so for each search term we pre-compute the set of
+// raw enum values whose raw form OR labelized form contains the term, then
+// OR a `provider IN (...)` / `action IN (...)` / `status IN (...)` clause
+// with the free-text `contains` clauses on errorMessage and backup.name.
 
 const ACTION_VALUES = ['CREATE', 'RESTORE', 'VERIFY', 'DOWNLOAD', 'DELETE', 'SCHEDULE', 'STORAGE_TEST'] as const;
 
@@ -39,14 +39,11 @@ const STATUS_VALUES = ['SUCCESS', 'FAILED', 'IN_PROGRESS', 'SKIPPED', 'PENDING']
 
 const PROVIDER_LABELS: Record<string, string> = {
   LOCAL: 'Local',
-  AMAZON_S3: 'Amazon S3',
   GOOGLE_DRIVE: 'Google Drive',
   DROPBOX: 'Dropbox',
   ONEDRIVE: 'OneDrive',
   CLOUDFLARE_R2: 'Cloudflare R2',
-  BACKBLAZE_B2: 'Backblaze B2',
   FTP: 'FTP',
-  SFTP: 'SFTP',
 };
 
 /** Split on underscores, capitalize each word, join with spaces — matches

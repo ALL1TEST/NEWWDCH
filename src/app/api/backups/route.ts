@@ -38,7 +38,7 @@ const createSchema = z.object({
   description: z.string().max(2000).optional().or(z.literal('')), // alias for note
   siteId: z.string().optional(),
   scheduleId: z.string().optional(),
-  storageProvider: z.enum(['LOCAL', 'AMAZON_S3', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'BACKBLAZE_B2', 'FTP', 'SFTP']).default('LOCAL'),
+  storageProvider: z.enum(['LOCAL', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'FTP']).default('LOCAL'),
   storageId: z.string().optional(), // ID of a configured BackupStorage destination
   encryptionEnabled: z.boolean().optional(),
   verifyAfterUpload: z.boolean().optional(),
@@ -55,7 +55,7 @@ const SORTABLE = new Set(['createdAt', 'filename', 'type', 'status', 'size', 'sc
 
 const BACKUP_SCOPE_VALUES = ['FULL', 'DATABASE_ONLY', 'MEDIA_ONLY', 'FILES_ONLY', 'SETTINGS_ONLY'] as const;
 const BACKUP_TYPE_VALUES = ['AUTOMATED', 'MANUAL'] as const;
-const BACKUP_STORAGE_PROVIDER_VALUES = ['LOCAL', 'AMAZON_S3', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'BACKBLAZE_B2', 'FTP', 'SFTP'] as const;
+const BACKUP_STORAGE_PROVIDER_VALUES = ['LOCAL', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'FTP'] as const;
 const BACKUP_STATUS_VALUES = ['CREATING', 'COMPLETED', 'FAILED', 'RESTORING', 'RESTORED', 'VERIFYING', 'VERIFIED', 'DELETING'] as const;
 const BACKUP_ENCRYPTION_VALUES = ['NONE', 'ENCRYPTED', 'DECRYPTED'] as const;
 
@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
       // fields we compute the subset of enum values whose string form
       // includes the (upper-cased, space→underscore) query and match with `in`.
       // This lets "manual" → "MANUAL", "database only" → "DATABASE_ONLY",
-      // "s3" → "AMAZON_S3", "completed" → "COMPLETED".
+      // "r2" → "CLOUDFLARE_R2", "completed" → "COMPLETED".
       //
       // SQLite's Prisma `contains` uses LIKE, which is ASCII case-insensitive
       // by default, so "manual" matches "Manual Pre-Release Snapshot" too.
