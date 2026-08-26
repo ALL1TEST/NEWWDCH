@@ -2576,3 +2576,71 @@ Stage Summary:
 - The CodeEditor now feels like a professional code editor: subtle border + theme background wrapper, focus-within ring (border-primary/40 + ring-1 ring-primary/20), a muted gutter with border-r and tabular-nums font-mono line numbers, a transparent font-mono textarea (Geist Mono, min-h-440px, aria-label, no spellcheck). Line numbers and monospace formatting preserved.
 - All existing functionality preserved: editing works, Save works (PUT /api/seo/robots 200), Restore Default works (with confirmation dialog), validation runs internally via validateRobots and surfaces ONLY via the conditional Validation Warnings/Errors card (no permanent "Valid"/"Saved" badges). The robots.txt content/generation logic (getDefaultContent) is unchanged.
 - Files modified: src/modules/seo/seo-robots-page.tsx only. Dev server running on port 3000. Screenshots: upload/robots/6-polished-editor-light.png, upload/robots/7-polished-editor-dark.png, upload/robots/8-polished-focused-dark.png.
+
+---
+Task ID: SEO-REDIRECTS-HEADER-NAV-UPDATE
+Agent: main
+Task: (1) Rename the SEO Settings tab/breadcrumb text from "Advanced: Redirects" to "Redirects" (do NOT change Sitemap or Robots.txt tabs). (2) Remove the standalone "N redirects configured" / "No redirects yet" text line above the filters. (3) Replace that space with a professional compact summary badge (small, subtle, with a redirect/link icon) showing the total redirect count, e.g. "7 Redirects" — must use dynamic data that auto-updates on create/delete. (4) Final hierarchy: Redirects (h1) + "Manage URL redirect rules for your site" (description) + Sitemap | Robots.txt | Redirects (tabs) + [Redirect count summary] [Export CSV] [Import CSV] [Create Redirect] + [Search redirects...] [All Types] [All Status]. (5) Keep the existing table, functionality, spacing, and overall SEO/CMS design unchanged.
+
+Work Log:
+- Read /home/z/my-project/worklog.md (prior tasks SEO-ROBOTS-PREVIEW-REMOVE-AND-POLISH, SEO-REDIRECTS-UI-TWEAKS) — confirmed the Redirects page Status toggle / Actions dropdown tweaks were already done; this task is about the page header + tab label + count display.
+- Located the "Advanced: Redirects" tab label: src/modules/seo/seo-settings-page.tsx line 20 (`SETTINGS_TABS` array, `{ key: 'redirects', label: 'Advanced: Redirects', icon: GitBranch }`). The h1 title (line 26, `redirects: { title: 'Redirects', description: 'Manage URL redirect rules for your site' }`) was already correct — only the TAB LABEL needed renaming. The tab bar + h1 + description live in this settings page (the child SeoRedirectsPage renders content only, no duplicate PageHeader).
+- Located the standalone count text: src/modules/seo/seo-redirects-page.tsx lines 1230–1244 — a `<div className="flex items-center gap-2 text-sm text-muted-foreground">` containing a GitBranch icon + a `<span>` that rendered either `{totalItems} redirect(s) configured` (when totalItems > 0) or `No redirects yet` (when 0).
+- Confirmed `totalItems` is dynamic: line 809 `const totalItems = data?.pagination?.total ?? 0;` where `data` comes from the `useQuery` over `/api/redirects`. Every create/delete/toggle mutation calls `queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all })` (lines 532, 854, 873, 889, 919), so the badge would auto-update on any change.
+
+- Edit 1 — Tab label rename (seo-settings-page.tsx line 20):
+  * `{ key: 'redirects', label: 'Advanced: Redirects', icon: GitBranch }` → `{ key: 'redirects', label: 'Redirects', icon: GitBranch }`. The Sitemap and Robots.txt tab entries were NOT touched. The h1 title "Redirects" and description "Manage URL redirect rules for your site" in TAB_META were already correct, so no change there.
+
+- Edit 2 — Replace standalone count text with a subtle summary badge (seo-redirects-page.tsx lines 1230–1244):
+  * Old: a `<div className="flex items-center gap-2 text-sm text-muted-foreground">` with GitBranch + a nested `<span>` rendering `{totalItems} redirect(s) configured` or `'No redirects yet'`.
+  * New: `<div className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-sm">` containing:
+    - `<GitBranch className="h-4 w-4 text-muted-foreground" />` (reuses the redirects tab icon for consistent iconography)
+    - `<span className="font-medium text-foreground tabular-nums">{totalItems.toLocaleString()}</span>` (bold count, tabular-nums for stable digit alignment)
+    - `<span className="text-muted-foreground">Redirect{totalItems === 1 ? '' : 's'}</span>` (label, pluralized: "1 Redirect" / "7 Redirects" / "0 Redirects")
+  * The badge always renders (no "No redirects yet" empty-state — it just shows "0 Redirects" when the list is empty). The right side of the same action row (Export CSV / Import CSV / Create Redirect buttons) and the DataTable (search + All Types / All Status filters + table) were NOT touched.
+
+- Hierarchy after edits:
+  * seo-settings-page.tsx renders: `<h1>Redirects</h1>` + `<p>Manage URL redirect rules for your site</p>` + tab bar (Sitemap | Robots.txt | Redirects) + active tab content.
+  * seo-redirects-page.tsx renders: error banner (conditional) + action row ([7 Redirects badge] [Export CSV] [Import CSV] [Create Redirect]) + DataTable (which contains the Search redirects input + All Types / All Status filters + the redirects table + pagination).
+
+LINT:
+- `bun run lint`: ZERO issues in seo-redirects-page.tsx and seo-settings-page.tsx. The 5 remaining lint problems are pre-existing in untouched files (data-table.tsx, content-create/edit-page.tsx, seo-broken-links-page.tsx, seo-social-preview-page.tsx). Compiled in 765ms with no errors.
+
+BROWSER VERIFICATION (agent-browser, logged in as admin@example.com → SEO → Settings → Redirects tab):
+
+Tab label rename — verified:
+- snapshot -i on the SEO settings page: `- button "Sitemap" [ref=e15]`, `- button "Robots.txt" [ref=e16]`, `- button "Redirects" [ref=e17]`. The redirects tab is now labeled "Redirects" (was "Advanced: Redirects"). Sitemap and Robots.txt tabs unchanged.
+- DOM eval `hasAdvancedText: false` (no "Advanced: Redirects" text anywhere on the page).
+
+Standalone count text removed + badge present — verified via DOM eval:
+- `hasConfiguredText: false` — no "redirects configured" text anywhere.
+- `hasNoRedirectsYetText: false` — no "No redirects yet" text anywhere.
+- `badgeFound: true` — the new summary badge is present.
+- `badgeText: "7Redirects"` (textContent collapses the gap-2 whitespace; visually it renders as "7 Redirects" with the icon on the left).
+- `badgeHasIcon: true` — the GitBranch svg icon is inside the badge.
+- `badgeClass: "inline-flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-sm"` — subtle bordered pill with muted background.
+
+Hierarchy matches the spec — verified:
+- snapshot -i: `- heading "Redirects" [level=1, ref=e14]` (h1) + `- button "Sitemap"/"Robots.txt"/"Redirects"` (tab bar) + `- button "Export CSV"/"Import CSV"/"Create Redirect"` (action row right side) + `- textbox "Search redirects by path..." [ref=e28]` + `- combobox "All Types" [ref=e21]` + `- combobox "All Status"` (filter row inside DataTable). The badge sits on the left of the action row (non-interactive, so not in the -i snapshot, but verified via DOM eval above).
+- `tabLabels: ["Sitemap", "Robots.txt", "Redirects"]` (exact tab order and labels).
+- `actionButtons: ["Export CSV", "Import CSV", "Create Redirect"]` (exact button order on the right).
+
+Dynamic data wiring — verified:
+- Badge count matches the DataTable pagination total: badge shows "7 Redirects", and the table pagination reads "Showing 1–7 of 7" (`paginationTotal: "7"`, `badgeText: "7Redirects"`). Both read from the same `totalItems` var (`data.pagination.total`), which is invalidated on every create/delete/toggle, so the badge auto-updates whenever the table does. No duplicated state.
+
+Light + dark mode — verified:
+- Dark: `isDark: true`, `badgeBg: oklab(0.269 / 0.3)` (dark muted at 30%), `badgeBorder: lab(100 0 0 / 0.1)` (subtle white at 10%).
+- Light: `isDark: false`, `badgeBg: oklab(0.97 / 0.3)` (light muted at 30%), `badgeBorder: lab(90.95 ...)` (light border).
+- Badge styling holds in both themes, aligned with the existing design (same `bg-muted/30 border-border` palette used by the polished Robots.txt editor header strip from task SEO-ROBOTS-PREVIEW-REMOVE-AND-POLISH).
+
+Console + dev.log:
+- `agent-browser errors`: none. `agent-browser console`: empty (no warnings, no errors).
+- /home/z/my-project/dev.log: `GET /api/redirects?page=1&pageSize=25&sort=createdAt&order=desc 200` + the prisma count query (`SELECT COUNT(*) ... FROM main.Redirect`) — the API returns the paginated list + total count that feeds both the badge and the table pagination. No 500s, no runtime exceptions.
+
+Stage Summary:
+- The SEO Settings tab for redirects is now labeled "Redirects" (was "Advanced: Redirects"). Sitemap and Robots.txt tabs are unchanged. The h1 title "Redirects" + description "Manage URL redirect rules for your site" were already correct and untouched.
+- The standalone "N redirects configured" / "No redirects yet" text line above the filters is removed. In its place is a subtle summary badge: a bordered rounded-md pill with `bg-muted/30 border-border px-3 py-1.5`, a GitBranch icon (muted), the redirect count (font-medium, foreground, tabular-nums), and a "Redirect"/"Redirects" label (muted). For 7 redirects it reads "7 Redirects"; for 0 it reads "0 Redirects".
+- The badge reads from the same `totalItems` (`data.pagination.total`) as the DataTable, and the query is invalidated on every create/delete/toggle, so the badge auto-updates dynamically — verified by matching the badge count to the table pagination "Showing 1–7 of 7".
+- The hierarchy is exactly: Redirects (h1) + description + Sitemap | Robots.txt | Redirects (tabs) + [7 Redirects badge] [Export CSV] [Import CSV] [Create Redirect] + [Search redirects...] [All Types] [All Status] + table.
+- The table, all functionality (search, type/status filters, create/edit/delete/toggle, export/import CSV), spacing, and overall SEO/CMS design are unchanged.
+- Files modified: src/modules/seo/seo-settings-page.tsx (tab label only) + src/modules/seo/seo-redirects-page.tsx (count text → badge). Dev server running on port 3000. Screenshots: upload/redirects-header/1-dark.png, upload/redirects-header/2-light.png.

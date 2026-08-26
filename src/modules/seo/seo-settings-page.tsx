@@ -17,7 +17,7 @@ type SettingsTab = 'sitemap' | 'robots' | 'redirects';
 const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ElementType }[] = [
   { key: 'sitemap', label: 'Sitemap', icon: FileText },
   { key: 'robots', label: 'Robots.txt', icon: Shield },
-  { key: 'redirects', label: 'Advanced: Redirects', icon: GitBranch },
+  { key: 'redirects', label: 'Redirects', icon: GitBranch },
 ];
 
 const TAB_META: Record<SettingsTab, { title: string; description: string }> = {

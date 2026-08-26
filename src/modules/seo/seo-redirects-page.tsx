@@ -1227,19 +1227,13 @@ export function SeoRedirectsPage() {
 
       {/* Action buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <GitBranch className="h-4 w-4" />
-          <span>
-            {totalItems > 0 ? (
-              <>
-                <span className="font-medium text-foreground tabular-nums">
-                  {totalItems.toLocaleString()}
-                </span>{' '}
-                redirect{totalItems === 1 ? '' : 's'} configured
-              </>
-            ) : (
-              'No redirects yet'
-            )}
+        <div className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-sm">
+          <GitBranch className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium text-foreground tabular-nums">
+            {totalItems.toLocaleString()}
+          </span>
+          <span className="text-muted-foreground">
+            Redirect{totalItems === 1 ? '' : 's'}
           </span>
         </div>
         <div className="flex items-center gap-2">
