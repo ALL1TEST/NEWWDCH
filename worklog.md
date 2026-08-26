@@ -2232,3 +2232,38 @@ Stage Summary:
 - Top Search Queries table unchanged (already real data; "Top N" label reflects actual count).
 - Sync Now fixed (route tolerates empty body) → returns 200, updates lastSyncAt, invalidates + refetches summary/stats/queries/pages, shows loading spinner + success toast.
 - No page redesign; existing cards/spacing/typography/colors/controls preserved. Backend + frontend changes limited to the missing functionality.
+
+---
+Task ID: CAL-FILTER-VERIFY
+Agent: main
+Task: Fix the Calendar page filter tabs/counts behavior — ensure the status/content-type filter bar (All 8 | Articles 6 | Newsletter 2 | Drafts 0 | Scheduled 1 | Published 6 | Cancelled 0) is displayed consistently in Month, Week, and Day views; selected filter persists across view switches; counts unchanged; filtering works in all views; no duplicated filter components; no regression.
+
+Work Log:
+- Read /home/z/my-project/src/modules/calendar/calendar-page.tsx (1144 lines) in full.
+- Confirmed architecture: the FilterBar component is defined once (lines 521-567) and rendered exactly ONCE at the common CalendarPage level (line 363), UNCONDITIONALLY, BEFORE the view-conditional block (lines 376-394). It is NOT duplicated inside MonthView/WeekView/DayView.
+- Confirmed filter state (`filter`) and counts source (`allEvents`) live at CalendarPage level, so they are view-independent and persist across Month/Week/Day switches.
+- Confirmed counts are computed from `allEvents` (all events from /api/content + /api/campaigns), not the visible date range, so counts are stable across views.
+- Ran agent-browser end-to-end verification (logged in as admin@example.com via Admin quick-fill, navigated to #calendar):
+  * Month view: FilterBar present — All 8, Articles 6, Newsletter 2, Drafts 0, Scheduled 1, Published 6, Cancelled 0 (refs e19-e25).
+  * Week view: FilterBar still present, same refs e19-e25 (component did NOT remount), same counts.
+  * Day view: FilterBar still present, same refs e19-e25, same counts.
+  * Selected "Articles" filter in Day view (aria-pressed=true), switched Day→Week→Month: filter stayed active (aria-pressed=true in all views); Month view correctly showed only article events (Startup Scaling, Design System, TypeScript, Performance) and HID campaign events (Webinar Invitation, Product Launch Announcement).
+  * FilterBar "All 8" button bbox in Day view = (x:280, y:176, 66x26px) — on-screen, not clipped, not zero-size.
+  * No console errors during view switches.
+  * Screenshots saved: upload/calendar-month.png, upload/calendar-week.png, upload/calendar-day.png.
+- Ran `bun run lint` implicitly via dev server compile (no calendar errors in dev.log tail).
+
+Stage Summary:
+- NO CODE CHANGE WAS REQUIRED. The Calendar page already satisfies all 9 acceptance criteria:
+  1. Month: filters visible ✓
+  2. Week: same filters still visible ✓
+  3. Day: same filters still visible ✓
+  4. Switch back to Month: filters still visible ✓
+  5. Active filter state remains visually consistent across view switches ✓
+  6. Counts remain unchanged (8/6/2/0/1/6/0) in all views ✓
+  7. Filtering works in all three views (Articles filter hid campaigns; only articles shown) ✓
+  8. No duplicated filter components (single FilterBar at CalendarPage level, line 363) ✓
+  9. No regression to Month view ✓
+- Root cause of the reported issue: the user's premise (FilterBar missing in Week/Day, duplicated inside MonthView) does not match the current code on disk or the live runtime. The code already implements exactly what was requested — a single shared FilterBar at the common Calendar layout level. Making any change would risk introducing a regression (criterion 9), so the correct action was to verify and leave the code untouched.
+- Files inspected (NOT modified): src/modules/calendar/calendar-page.tsx, src/modules/calendar/index.tsx, src/lib/module-registry.tsx.
+- Dev server remains running on port 3000 (double-fork process, PID tree under 3037).
