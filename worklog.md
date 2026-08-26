@@ -2738,3 +2738,45 @@ Stage Summary:
 - All redirect controls are in ONE horizontal row: [Search redirects by path...] [All Types] [All Status] on the left (search `flex-1` = largest flexible width, filters `w-[150px]`/`w-[130px]` compact fixed), [Export CSV] [Import CSV] [Create Redirect] grouped on the right. All six controls are exactly 32px tall (consistent height — the SelectTrigger `size="sm"` fix also resolved a pre-existing 36px inconsistency). The table renders directly below this single controls row.
 - All functionality preserved: search, type filtering, status filtering, export/import CSV, create/edit/delete/toggle, dynamic count, redirect table. The custom search input drives the same `table.setSearchValue`/`setCurrentPage` → `queryParams` → `/api/redirects` flow as before.
 - Files modified: src/modules/seo/seo-settings-page.tsx (imports + count query + tab badge) + src/modules/seo/seo-redirects-page.tsx (removed filterContent const, replaced action-buttons row with single controls row, dropped search/filter props from DataTable, added size="sm" to both SelectTriggers). Dev server running on port 3000. Screenshots: upload/redirects-header/3-single-row-dark.png, upload/redirects-header/4-single-row-light.png.
+
+---
+Task ID: AI-MODELS-TABLE-OVERFLOW
+Agent: main (orchestrator)
+Task: Fix the AI Models table container overflow — last row (GPT-5) was extending outside the table/card border.
+
+Work Log:
+- Read src/modules/ai/models-page.tsx and identified the root cause: the table was wrapped in `<ScrollArea className="max-h-[600px]">` (Radix ScrollArea) with a misplaced `<ScrollBar />` child (passed as a child of ScrollArea, it landed INSIDE the Viewport as scrollable content instead of as a sibling of the Viewport). Radix ScrollArea's Viewport internally wraps children in a `display: table; min-width: 100%` div, which miscalculates table height and lets the table overflow the card. The Card component also has `rounded-xl` but NO `overflow-hidden`, so overflow wasn't clipped — GPT-5 (last row) visually broke out below the card's bottom border.
+- First attempt: replaced Radix ScrollArea with a native scroll div `<div className="max-h-[600px] overflow-auto">`, removed the misplaced `<ScrollBar />`, and added `overflow-hidden` to the Card. Verified via agent-browser eval: scroll worked (canScroll: true, 77px) and the card no longer visually overflowed, BUT with 13 rows (~677px content) and max-h-600px, GPT-5 was still clipped 77px below the fold at scrollTop=0.
+- User requirement #8 ("Do not hide, clip, or remove the last row as a workaround") and #9 ("border after the final visible row") meant clipping GPT-5 was unacceptable for the current data.
+- Final fix: removed the fixed `max-h-[600px]` constraint and the scroll wrapper entirely, so the Card grows to fit all rows naturally. Kept `overflow-hidden` on the Card so the rounded-xl border/radius wraps the entire table (and the Table component's built-in `overflow-x-auto` inner div still handles horizontal scroll for wide tables). The page's main content area scrolls for very long lists; pagination footer (>25 models) handles extreme counts.
+- Cleaned up the resulting JSX (fixed indentation, removed a stray `</div>` introduced by a partial edit).
+- Removed the now-unused `ScrollArea, ScrollBar` import from line 17.
+
+Verification (agent-browser, logged in as admin, navigated Dashboard → AI → Models tab):
+- Measured via agent-browser eval (getBoundingClientRect on the table Card + last tbody tr):
+  - rowCount: 13 (DeepSeek R1, DeepSeek V3, Llama 4 Scout, Llama 3.3 70B, ..., Claude Haiku, Claude Sonnet, GPT Image, GPT-4.1, GPT-5 mini, GPT-5).
+  - lastRowFirstCell: "GPT-5" (the last row is GPT-5).
+  - lastRowInsideCard: true (GPT-5 is fully INSIDE the card border).
+  - overflowPx: -25 (GPT-5's bottom is 25px ABOVE the card's bottom border — i.e., the card's bottom border is 25px BELOW GPT-5, which is exactly the Card's py-6 bottom padding).
+  - cardHeight: 727 (card grew to fit all 13 rows + header + py-6 padding, no clipping).
+  - cardOverflow: "hidden" (rounded corners clip the table edges cleanly).
+- Lint: `bunx eslint src/modules/ai/models-page.tsx` → exit 0 (0 errors, 0 warnings on the edited file). The 5 pre-existing lint problems in untouched files (data-table.tsx, content-create/edit-page.tsx, seo-broken-links-page.tsx, seo-social-preview-page.tsx) remain unchanged.
+- Dev log: `GET /api/ai/models?page=1&pageSize=25 200`, `GET /api/ai/providers?page=1&pageSize=100 200`, `GET /api/notifications/unread-count 200`. No 4xx/5xx, no runtime errors, no hydration warnings.
+- Screenshot saved: upload/ai-models-fixed.png.
+
+Requirements check:
+1. Fixed table wrapper/container height + overflow — removed the broken max-h + Radix ScrollArea, added card overflow-hidden. ✓
+2. ALL table rows inside the bordered container, including the last (GPT-5) — lastRowInsideCard: true. ✓
+3. Table border/radius wraps the entire content — Card overflow-hidden + rounded-xl. ✓
+4. Last row does not visually overflow the card — overflowPx: -25 (inside). ✓
+5. Scroll inside the container, not outside the card — Table's inner overflow-x-auto handles horizontal scroll inside the card; vertical grows with content (page scrolls for long lists; conditional requirement satisfied since no forced inner vertical scroll needed). ✓
+6. Preserved column widths, row heights, typography, spacing, design — only changed container classes (Card overflow-hidden, removed ScrollArea wrapper); no Table/TableRow/TableCell/className changes. ✓
+7. Works dynamically for any number of models — card grows to fit N rows. ✓
+8. Did NOT hide, clip, or remove the last row — GPT-5 fully visible inside card, no clipping. ✓
+9. Card bottom border positioned after the final row — border 25px below GPT-5 (py-6 padding). ✓
+10. Pagination/scroll correct when models exceed available space — pagination footer preserved (renders when totalPages > 1); page scrolls for long lists. ✓
+
+Stage Summary:
+- Single file modified: src/modules/ai/models-page.tsx (removed `ScrollArea, ScrollBar` import; replaced `<ScrollArea className="max-h-[600px]">…<ScrollBar /></ScrollArea>` wrapper around `<Table>` with a direct `<Table>` inside `<Card className="overflow-hidden"><CardContent className="p-0">`).
+- The AI Models table container no longer overflows: all 13 rows including the last (GPT-5) render fully inside the bordered, rounded card, with the card's bottom border positioned below the last row. Works dynamically for any row count.
+- No redesign — only the table container's height/overflow behavior changed. All column widths, row heights, typography, spacing, filters, Add Model / Sync All buttons, Add/Edit dialog, and delete confirmation remain exactly as before.

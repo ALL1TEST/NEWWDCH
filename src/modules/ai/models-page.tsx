@@ -14,7 +14,6 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -287,75 +286,72 @@ export function ModelsPage() {
       </Card>
 
       {/* Table View */}
-      <Card>
+      <Card className="overflow-hidden">
         <CardContent className="p-0">
-          <ScrollArea className="max-h-[600px]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Model Name</TableHead>
-                  <TableHead>Model ID</TableHead>
-                  <TableHead>Provider</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Default</TableHead>
-                  <TableHead>Active</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Model Name</TableHead>
+                <TableHead>Model ID</TableHead>
+                <TableHead>Provider</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Default</TableHead>
+                <TableHead>Active</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>{Array.from({ length: 7 }).map((_, j) => (
+                    <TableCell key={j}><Skeleton className="h-5 w-20" /></TableCell>
+                  ))}</TableRow>
+                ))
+              ) : isError ? (
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-zinc-500">Failed to load models</TableCell></TableRow>
+              ) : models.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-zinc-500">
+                  <Boxes className="h-8 w-8 mx-auto mb-2 text-zinc-300" />
+                  No models found. Click &quot;Add Model&quot; to create one manually.
+                </TableCell></TableRow>
+              ) : models.map((model) => (
+                <TableRow key={model.id}>
+                  <TableCell className="font-medium">{model.name}</TableCell>
+                  <TableCell><span className="font-mono text-xs text-muted-foreground">{model.modelId}</span></TableCell>
+                  <TableCell>{model.provider?.name ?? 'Unknown provider'}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={model.type?.toUpperCase() === 'IMAGE'
+                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-transparent'
+                      : 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400 border-transparent'}>
+                      {model.type?.toUpperCase() === 'IMAGE' ? 'Image' : 'Text'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {model.isDefault ? (
+                      <Badge variant="secondary" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Default</Badge>
+                    ) : (
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setDefaultMutation.mutate(model.id)} title="Set as default">
+                        <Star className="h-3.5 w-3.5 text-zinc-400" />
+                      </Button>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Switch checked={model.isActive} onCheckedChange={(checked) => toggleMutation.mutate({ id: model.id, isActive: checked })} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-0.5">
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleEdit(model)} title="Edit">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(model)} title="Delete">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>{Array.from({ length: 7 }).map((_, j) => (
-                      <TableCell key={j}><Skeleton className="h-5 w-20" /></TableCell>
-                    ))}</TableRow>
-                  ))
-                ) : isError ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-zinc-500">Failed to load models</TableCell></TableRow>
-                ) : models.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-zinc-500">
-                    <Boxes className="h-8 w-8 mx-auto mb-2 text-zinc-300" />
-                    No models found. Click &quot;Add Model&quot; to create one manually.
-                  </TableCell></TableRow>
-                ) : models.map((model) => (
-                  <TableRow key={model.id}>
-                    <TableCell className="font-medium">{model.name}</TableCell>
-                    <TableCell><span className="font-mono text-xs text-muted-foreground">{model.modelId}</span></TableCell>
-                    <TableCell>{model.provider?.name ?? 'Unknown provider'}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={model.type?.toUpperCase() === 'IMAGE'
-                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-transparent'
-                        : 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400 border-transparent'}>
-                        {model.type?.toUpperCase() === 'IMAGE' ? 'Image' : 'Text'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {model.isDefault ? (
-                        <Badge variant="secondary" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Default</Badge>
-                      ) : (
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setDefaultMutation.mutate(model.id)} title="Set as default">
-                          <Star className="h-3.5 w-3.5 text-zinc-400" />
-                        </Button>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Switch checked={model.isActive} onCheckedChange={(checked) => toggleMutation.mutate({ id: model.id, isActive: checked })} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-0.5">
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleEdit(model)} title="Edit">
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(model)} title="Delete">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <ScrollBar />
-          </ScrollArea>
+              ))}
+            </TableBody>
+          </Table>
 
           {pagination && pagination.totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-3 border-t">
