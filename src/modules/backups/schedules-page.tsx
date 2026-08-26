@@ -112,6 +112,27 @@ const initialForm: ScheduleForm = {
   retentionCount: 7,
 };
 
+// -------------------- Search Empty State (inline) --------------------
+
+/** Inline empty state rendered inside the table body when an active search
+ * yields zero results. Distinct from the standalone "No schedules configured"
+ * state which only shows when the system genuinely has zero schedules.
+ * Keeps the table card, header row, and pagination visible so the user can
+ * see/search/clear within the same structure. Mirrors the Backups table's
+ * `NoSearchResultsEmpty` component for consistency. */
+function NoSchedulesSearchResultsEmpty({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+      <CalendarClock className="h-10 w-10 text-muted-foreground/40 mb-3" strokeWidth={1.5} />
+      <p className="text-sm font-medium text-foreground">No schedules found</p>
+      <p className="text-xs text-muted-foreground mt-1">No schedules match your search.</p>
+      <Button variant="outline" size="sm" className="mt-4" onClick={onClear}>
+        Clear search
+      </Button>
+    </div>
+  );
+}
+
 // -------------------- Schedules Page --------------------
 
 export function SchedulesPage() {
@@ -151,6 +172,17 @@ export function SchedulesPage() {
 
   const schedules = data?.data ?? [];
   const pagination = data?.meta?.pagination;
+
+  // Dual empty-state logic (mirrors the Backups table):
+  // - isInitialEmpty: system genuinely has zero schedules AND no search is
+  //   active → show the full-page "No schedules configured" state.
+  // - isSearchEmpty: a search IS active but returns zero results → keep the
+  //   table card/headers/pagination visible and render the inline
+  //   "No schedules found" empty state inside the table body.
+  // These two states must NEVER be confused.
+  const hasSearch = !!table.searchValue?.trim();
+  const isInitialEmpty = !isLoading && schedules.length === 0 && !hasSearch;
+  const isSearchEmpty = !isLoading && schedules.length === 0 && hasSearch;
 
   const createMutation = useMutation({
     mutationFn: (body: ScheduleForm) => postApi('/api/backups/schedules', body),
@@ -241,19 +273,34 @@ export function SchedulesPage() {
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
+  // Column min-widths are intentionally generous and the table uses
+  // `table-layout: auto` (NOT table-fixed) so cells NEVER truncate or clip —
+  // every value (Name, Frequency, Scope, Storage, Encrypt, Verify, Retention,
+  // Active, Next Run, Last Run, Actions) renders in full. Long schedule names
+  // simply make the table wider and trigger horizontal scroll inside the
+  // card. Mirrors the Backups table's reusable overflow/scroll pattern.
+  // Sum of min-widths: 220+110+130+130+90+90+110+80+150+150+60 = 1320px.
   const columns: ColumnDef<ScheduleRow>[] = [
-      ColumnDefHelper.textColumn<ScheduleRow>({
+      {
         id: 'name',
         header: 'Name',
         accessorKey: 'name',
-        className: 'font-medium',
-      }),
+        size: 220,
+        // No `truncate`/`overflow-hidden` — full schedule name always visible.
+        // `title` provides a hover tooltip for very long names without ever
+        // clipping the cell text.
+        cell: ({ getValue }) => {
+          const value = (getValue() as string) ?? '';
+          if (!value) return <span className="text-muted-foreground">—</span>;
+          return <span className="font-medium" title={value}>{value}</span>;
+        },
+      },
       {
         id: 'frequency',
         header: 'Frequency',
         accessorKey: 'frequency',
         enableSorting: false,
-        size: 140,
+        size: 110,
         cell: ({ row }) => {
           const freq = row.original.frequency;
           const cron = row.original.cronExpression;
@@ -272,7 +319,7 @@ export function SchedulesPage() {
         header: 'Scope',
         accessorKey: 'scope',
         enableSorting: false,
-        size: 120,
+        size: 130,
         cell: ({ getValue }) => (
           <Badge variant="outline" className="border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-medium">
             {labelize(getValue() as string)}
@@ -284,9 +331,13 @@ export function SchedulesPage() {
         header: 'Storage',
         accessorKey: 'storageProvider',
         enableSorting: false,
-        size: 120,
+        size: 130,
+        // Full storage label visible (e.g. "Amazon S3", "Backblaze B2");
+        // never truncated.
         cell: ({ getValue }) => (
-          <span className="text-xs text-muted-foreground">{labelize(getValue() as string)}</span>
+          <span className="text-xs text-muted-foreground" title={labelize(getValue() as string)}>
+            {labelize(getValue() as string)}
+          </span>
         ),
       },
       {
@@ -294,7 +345,7 @@ export function SchedulesPage() {
         header: 'Encrypt',
         accessorKey: 'encryptionEnabled',
         enableSorting: false,
-        size: 80,
+        size: 90,
         cell: ({ getValue }) => (
           <span className={cn(
             'text-xs font-medium',
@@ -309,7 +360,7 @@ export function SchedulesPage() {
         header: 'Verify',
         accessorKey: 'verificationEnabled',
         enableSorting: false,
-        size: 80,
+        size: 90,
         cell: ({ getValue }) => (
           <span className={cn(
             'text-xs font-medium',
@@ -324,7 +375,7 @@ export function SchedulesPage() {
         header: 'Retention',
         accessorKey: 'retentionCount',
         enableSorting: false,
-        size: 90,
+        size: 110,
         cell: ({ getValue }) => (
           <span className="tabular-nums text-sm">{getValue() as number} days</span>
         ),
@@ -334,7 +385,7 @@ export function SchedulesPage() {
         header: 'Active',
         accessorKey: 'isActive',
         enableSorting: false,
-        size: 70,
+        size: 80,
         cell: ({ row }) => (
           <Switch
             checked={row.original.isActive}
@@ -348,11 +399,14 @@ export function SchedulesPage() {
         id: 'nextRunAt',
         header: 'Next Run',
         accessorKey: 'nextRunAt',
-        size: 140,
+        size: 150,
+        // Full relative timestamp visible (e.g. "Tomorrow at 2:00 AM"); never
+        // truncated. The 150px min-width + auto layout guarantees realistic
+        // values fit; if a value is somehow wider the table scrolls.
         cell: ({ getValue }) => {
           const val = getValue() as string | null;
           return (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground" title={val ? formatRelativeTime(val) : undefined}>
               {val ? formatRelativeTime(val) : '—'}
             </span>
           );
@@ -362,11 +416,11 @@ export function SchedulesPage() {
         id: 'lastRunAt',
         header: 'Last Run',
         accessorKey: 'lastRunAt',
-        size: 140,
+        size: 150,
         cell: ({ getValue }) => {
           const val = getValue() as string | null;
           return (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground" title={val ? formatRelativeTime(val) : undefined}>
               {val ? formatRelativeTime(val) : '—'}
             </span>
           );
@@ -374,7 +428,7 @@ export function SchedulesPage() {
       },
       ColumnDefHelper.actionColumn<ScheduleRow>({
         id: 'actions',
-        size: 50,
+        size: 60,
         render: (row) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -411,7 +465,7 @@ export function SchedulesPage() {
         }
       />
 
-      {schedules.length === 0 && !isLoading ? (
+      {isInitialEmpty ? (
         <EmptyState
           icon={CalendarClock}
           title="No schedules configured"
@@ -437,7 +491,29 @@ export function SchedulesPage() {
             table.setCurrentPage(1);
           }}
           getRowId={(row) => row.id}
+          // Auto layout (NOT table-fixed): cells never truncate/clip — every
+          // value renders in full. The table's min-width (1320px = sum of
+          // column min-widths: Name 220 + Frequency 110 + Scope 130 +
+          // Storage 130 + Encrypt 90 + Verify 90 + Retention 110 + Active 80
+          // + Next Run 150 + Last Run 150 + Actions 60) guarantees the table
+          // is only as narrow as its content needs; on viewports narrower
+          // than that, the table-container's overflow-x-auto provides a thin,
+          // subtle horizontal scrollbar that stays inside the card. The
+          // pagination/footer lives outside the scroll area and always
+          // aligns with the card edges. Same reusable pattern as the Backups
+          // table for consistency.
+          tableMinWidth={1320}
           emptyMessage="No schedules found."
+          emptyState={
+            isSearchEmpty ? (
+              <NoSchedulesSearchResultsEmpty
+                onClear={() => {
+                  table.setSearchValue('');
+                  table.setCurrentPage(1);
+                }}
+              />
+            ) : undefined
+          }
         />
       )}
 
