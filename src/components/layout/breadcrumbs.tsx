@@ -207,8 +207,9 @@ export function Breadcrumbs() {
 
   // SEO Settings pages (Sitemap, Robots.txt, Redirects) manage their own title
   // and tab bar — hide the global breadcrumb to avoid duplicate navigation.
-  const SEO_SETTINGS_SUBPAGES = new Set(['settings', 'sitemap', 'robots', 'redirects']);
-  if (currentModule === 'seo' && currentSubPage && SEO_SETTINGS_SUBPAGES.has(currentSubPage)) {
+  // Covers both "settings" and compound keys "settings/sitemap",
+  // "settings/robots", "settings/redirects".
+  if (currentModule === 'seo' && currentSubPage && (currentSubPage === 'settings' || currentSubPage.startsWith('settings/'))) {
     return null;
   }
 

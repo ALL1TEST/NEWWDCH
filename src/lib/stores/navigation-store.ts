@@ -58,6 +58,18 @@ function parseHash(hash: string): {
     'audit',
   ]);
 
+  // Compound "settings/<tab>" sub-pages (e.g. SEO "settings/robots") — preserve
+  // the full compound key so the route is reachable via hash/refresh. Without
+  // this, "#seo/settings/robots" collapses to subPage="settings" (Sitemap tab),
+  // so the Robots tab would never load on direct-URL navigation.
+  if (second && second.toLowerCase() === 'settings' && segments[2]) {
+    const SETTINGS_SUBTABS = new Set(['sitemap', 'robots', 'redirects']);
+    const subTab = segments[2].toLowerCase();
+    if (SETTINGS_SUBTABS.has(subTab)) {
+      return { mod, itemId: null, subPage: `settings/${subTab}` };
+    }
+  }
+
   if (second && SUB_PAGE_KEYWORDS.has(second.toLowerCase())) {
     return { mod, itemId: null, subPage: second.toLowerCase() };
   }

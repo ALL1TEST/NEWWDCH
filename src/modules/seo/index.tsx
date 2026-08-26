@@ -81,26 +81,44 @@ const SETTINGS_TAB_MAP: Record<string, string> = {
   'settings/robots': 'robots',
 };
 
+// Legacy sub-page → canonical sub-page. Applied SYNCHRONOUSLY in SeoRouter
+// (see below) so we render the correct page on the very first paint — never
+// an intermediate/wrong screen. The URL is normalized to the canonical form
+// via navigate() in an effect (no visual change, just a clean hash).
+//   - 'robots'/'sitemap'/'redirects' previously mapped to 'settings' (which
+//     rendered the SITEMAP tab — wrong). Now they map to 'settings/<tab>'
+//     so the correct tab opens directly.
+const LEGACY_REDIRECT: Record<string, string | null> = {
+  'indexing': 'audit',
+  'canonicals': 'audit',
+  'internal-links': 'audit',
+  'schema': 'audit',
+  'social-preview': null,
+  'sitemap': 'settings/sitemap',
+  'robots': 'settings/robots',
+  'redirects': 'settings/redirects',
+};
+
 function SeoRouter() {
-  const currentSubPage = useNavigationStore((s) => s.currentSubPage);
+  const rawSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
 
-  // ---- Legacy sub-page redirects ----
+  // Synchronous legacy redirect: compute the canonical sub-page BEFORE render.
+  // This guarantees we paint the correct page immediately — the user never sees
+  // an intermediate Overview or wrong-tab screen. (Previously the redirect ran
+  // in a useEffect, so the first render showed <SeoOverviewPage /> for a frame
+  // before switching — that was the "incorrect/intermediate Robots.txt screen".)
+  const currentSubPage = (rawSubPage && rawSubPage in LEGACY_REDIRECT)
+    ? LEGACY_REDIRECT[rawSubPage]
+    : rawSubPage;
+
+  // Normalize the browser hash to the canonical sub-page (purely a URL update —
+  // the rendered page is already correct, so this causes no visual change).
   React.useEffect(() => {
-    if (!currentSubPage) return;
-    const legacyMap: Record<string, string | null> = {
-      'indexing': 'audit',
-      'canonicals': 'audit',
-      'internal-links': 'audit',
-      'schema': 'audit',
-      'social-preview': null,
-      'sitemap': 'settings',
-      'robots': 'settings',
-    };
-    if (currentSubPage in legacyMap) {
-      navigate('seo', null, legacyMap[currentSubPage]);
+    if (rawSubPage && rawSubPage !== currentSubPage) {
+      navigate('seo', null, currentSubPage);
     }
-  }, [currentSubPage, navigate]);
+  }, [rawSubPage, currentSubPage, navigate]);
 
   // Check if this is a settings sub-tab (e.g., "settings/redirects")
   const settingsTab = currentSubPage && SETTINGS_TAB_MAP[currentSubPage]
@@ -132,11 +150,18 @@ function SeoRouter() {
             case 'search-console':
               return <SeoSearchConsolePage />;
             case 'settings':
-              return <SeoSettingsPage initialTab="sitemap" />;
-              case 'settings/redirects':
-              case 'settings/sitemap':
-              case 'settings/robots':
-              return <SeoSettingsPage initialTab={settingsTab as any} />;
+            case 'settings/redirects':
+            case 'settings/sitemap':
+            case 'settings/robots':
+              // `key` forces a fresh mount whenever the settings tab changes via
+              // URL navigation, so useState(initialTab) always initializes the
+              // correct active tab (no stale-tab flash when switching tabs).
+              return (
+                <SeoSettingsPage
+                  key={settingsTab ?? 'sitemap'}
+                  initialTab={(settingsTab ?? 'sitemap') as any}
+                />
+              );
             default:
               return <SeoOverviewPage />;
           }

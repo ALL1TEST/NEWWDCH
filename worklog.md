@@ -2780,3 +2780,56 @@ Stage Summary:
 - Single file modified: src/modules/ai/models-page.tsx (removed `ScrollArea, ScrollBar` import; replaced `<ScrollArea className="max-h-[600px]">…<ScrollBar /></ScrollArea>` wrapper around `<Table>` with a direct `<Table>` inside `<Card className="overflow-hidden"><CardContent className="p-0">`).
 - The AI Models table container no longer overflows: all 13 rows including the last (GPT-5) render fully inside the bordered, rounded card, with the card's bottom border positioned below the last row. Works dynamically for any row count.
 - No redesign — only the table container's height/overflow behavior changed. All column widths, row heights, typography, spacing, filters, Add Model / Sync All buttons, Add/Edit dialog, and delete confirmation remain exactly as before.
+
+---
+Task ID: SEO-ROBOTS-NAV-FLASH
+Agent: main (orchestrator)
+Task: Fix the Robots.txt page navigation/rendering issue — an incorrect/intermediate Robots.txt screen briefly flashed before the correct page appeared.
+
+Work Log:
+- Root cause analysis (read src/modules/seo/index.tsx, src/modules/seo/seo-settings-page.tsx, src/modules/seo/seo-robots-page.tsx, src/lib/stores/navigation-store.ts, src/components/layout/breadcrumbs.tsx):
+  - The SeoRouter used an ASYNC useEffect to redirect legacy sub-pages. The legacyMap mapped 'robots' → 'settings' (which renders the SITEMAP tab — wrong target). Because the redirect ran in useEffect, the FIRST render painted <SeoOverviewPage /> (via the switch default) for one frame before the effect fired and re-rendered — that intermediate frame was the "incorrect/intermediate Robots.txt screen" the user saw.
+  - parseHash() collapsed "#seo/settings/robots" → subPage='settings' (it only inspected the 2nd segment as a keyword and dropped the 3rd). So the compound routes settings/robots, settings/sitemap, settings/redirects were UNREACHABLE via hash/refresh/direct-URL — a refresh on "#seo/settings/robots" loaded the Sitemap tab instead of Robots.
+  - SeoSettingsPage used useState(initialTab) with no sync when the initialTab prop changed (no key on the component). Navigating between settings tabs via URL (e.g. settings → settings/robots) reused the component instance, so activeTab stayed stale.
+  - Breadcrumbs SEO_SETTINGS_SUBPAGES set only contained flat keys ('settings','sitemap','robots','redirects'), not compound keys ('settings/robots'), so the global breadcrumb was not hidden on the Robots route → duplicate/stray navigation could flash.
+
+- Fix 1 — src/lib/stores/navigation-store.ts (parseHash): added a compound "settings/<tab>" check BEFORE the generic keyword check. If the 2nd segment is 'settings' and the 3rd is one of sitemap/robots/redirects, parseHash now returns subPage = `settings/<tab>` (preserving the full compound key). Direct-URL "#seo/settings/robots" now correctly yields subPage='settings/robots'.
+
+- Fix 2 — src/modules/seo/index.tsx (SeoRouter): replaced the async useEffect legacy redirect with a SYNCHRONOUS redirect. A module-level LEGACY_REDIRECT map (with CORRECT targets: 'robots'→'settings/robots', 'sitemap'→'settings/sitemap', 'redirects'→'settings/redirects', plus the existing audit/social-preview entries) is applied to compute `currentSubPage` (the canonical sub-page) BEFORE render. The very first paint now renders the correct page — no intermediate Overview frame. A separate useEffect only normalizes the browser hash to the canonical form (navigate() with replaceState — no visual change, just a clean URL). Also merged the switch cases ('settings' + 'settings/redirects' + 'settings/sitemap' + 'settings/robots') and added key={settingsTab ?? 'sitemap'} to <SeoSettingsPage> so a fresh mount initializes activeTab correctly whenever the tab changes via URL (no stale-tab flash). Added 'redirects' to the legacy map (was missing).
+
+- Fix 3 — src/components/layout/breadcrumbs.tsx: replaced the flat SEO_SETTINGS_SUBPAGES Set check with `currentSubPage === 'settings' || currentSubPage.startsWith('settings/')`, so the global breadcrumb is hidden for all SEO settings routes including the compound keys. Prevents any stray breadcrumb navigation from flashing on the Robots route.
+
+- Did NOT touch src/modules/seo/seo-robots-page.tsx (the correct Robots.txt page) — its Editor card, Save/Restore Default buttons, CodeEditor, validation, and skeleton loading state are all unchanged (lint clean). Only routing logic was fixed.
+
+Verification (agent-browser, logged in as admin):
+- Direct URL "#seo/settings/robots" (previously collapsed to Sitemap tab): now shows h1 "Robots.txt", Robots.txt tab active, editor with content "User-agent: *\nAllow: /\n\nSitemap: https://cms.example.com/sitemap.xml". URL preserved. ✓
+- Legacy URL "#seo/robots" (previously: Overview flash → Sitemap tab): MutationObserver recorded ONLY ONE h1 state — "Robots.txt" — on the very first mutation. URL normalized to "#seo/settings/robots". No intermediate Overview or Sitemap screen painted. ✓
+- Legacy "#seo/sitemap" → Sitemap tab (active), URL normalized to "#seo/settings/sitemap". ✓
+- Legacy "#seo/redirects" → Redirects tab (active, badge "7"), URL normalized to "#seo/settings/redirects". ✓
+- Compound "#seo/settings/sitemap" → Sitemap tab. "#seo/settings/redirects" → Redirects tab. ✓ (all three compound routes now reachable via hash/refresh)
+- Overview-button click path (primary user path): set up a MutationObserver, clicked the Robots.txt button on the SEO Overview. Result: totalMutations=1, uniqueH1s=["Robots.txt"], firstH1="Robots.txt", lastH1="Robots.txt". The user sees ONLY the correct Robots.txt screen from the first paint — zero intermediate screens. ✓
+- In-page tab switching (clicking Sitemap/Robots.txt/Redirects tabs within the settings page): each click produced exactly one h1 change to the correct value (Sitemap→Robots.txt), no flash, URL unchanged (local setActiveTab). ✓
+- Page structure verified to match the required design (req #8): h1="Robots.txt", tabbar=["Sitemap","Robots.txt","Redirects"], editor h3="Editor", editor actions=["Save","Restore Default"], textarea present with loaded content. Save button correctly disabled until dirty (isDirty=false on load). ✓
+- Lint: `bunx eslint` on all 4 touched/checked files (navigation-store.ts, index.tsx, breadcrumbs.tsx, seo-robots-page.tsx) → exit 0, 0 errors. The 5 pre-existing lint problems in other untouched files (data-table.tsx, content-create/edit-page.tsx, seo-broken-links-page.tsx, seo-social-preview-page.tsx) remain unchanged.
+- Dev log: GET /api/seo/robots 200, GET /api/seo/sitemap 200, GET /api/notifications/unread-count 200 — all 200, no 4xx/5xx, no runtime errors, no hydration warnings.
+- Screenshot saved: upload/robots-nav/robots-fixed.png.
+
+Requirements check:
+1. Robots.txt route renders ONLY the final page — synchronous redirect paints correct page on first frame. ✓
+2. Removed/prevented intermediate/duplicate/fallback/old Robots.txt page — async useEffect redirect (the cause of the Overview flash) replaced with synchronous computation. ✓
+3. Avoids rendering old Robots.txt UI before correct page loads — no intermediate render at all. ✓
+4. Proper loading state/skeleton used — SeoRobotsPage's existing skeleton (unchanged) handles data loading; routing no longer renders a different page during loading. ✓
+5. Only ONE Robots.txt page/component responsible — SeoRobotsPage is the sole component, rendered only inside SeoSettingsPage; routing fixes ensure one render path. ✓
+6. Checked for duplicate routes/components/redirects/nested layouts/conditional rendering — found and fixed: parseHash collapse, async legacyMap redirect + wrong target, stale useState, breadcrumbs compound-key gap. ✓
+7. Did not change existing functionality of the correct Robots.txt page — seo-robots-page.tsx untouched. ✓
+8. Preserved current design — verified: Robots.txt heading, Sitemap/Robots.txt/Redirects nav, Editor section, Save button, Restore Default button, Robots.txt editor all present. ✓
+9. Did not introduce a new page or redesign — only routing logic in 3 files changed. ✓
+10. Direct transition to correct Robots.txt page without flashing — MutationObserver confirmed a single h1 state ("Robots.txt") on navigation. ✓
+
+Stage Summary:
+- 3 files modified:
+  - src/lib/stores/navigation-store.ts — parseHash now preserves compound "settings/<tab>" sub-pages (no more collapse to 'settings').
+  - src/modules/seo/index.tsx — SeoRouter legacy redirect is now SYNCHRONOUS (computes canonical sub-page before render) with CORRECT targets ('robots'→'settings/robots' etc.); added key on <SeoSettingsPage> to force fresh mount on tab change.
+  - src/components/layout/breadcrumbs.tsx — hide breadcrumb for all SEO settings routes incl. compound keys (startsWith('settings/') check).
+- src/modules/seo/seo-robots-page.tsx is UNCHANGED (the correct Robots.txt page — Editor card, Save/Restore Default, CodeEditor, validation, skeleton — all preserved).
+- Navigating to Robots.txt (via Overview button, direct URL "#seo/settings/robots", or legacy "#seo/robots") now paints ONLY the correct Robots.txt page on the very first frame. No intermediate Overview, no Sitemap-tab flash, no duplicate screen. Verified end-to-end with a MutationObserver (uniqueH1s=["Robots.txt"]). All three settings tabs (Sitemap/Robots.txt/Redirects) work via both compound and legacy URLs. Dev server healthy on port 3000. Screenshot: upload/robots-nav/robots-fixed.png.
