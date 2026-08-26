@@ -24,7 +24,19 @@ const listIncludes = {
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200, 'Name must be 200 characters or less').trim(),
-  provider: z.enum(['LOCAL', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'FTP']),
+  provider: z.enum([
+    'LOCAL',
+    'AMAZON_S3',
+    'GOOGLE_CLOUD_STORAGE',
+    'MICROSOFT_AZURE_BLOB',
+    'CLOUDFLARE_R2',
+    'WASABI',
+    'BACKBLAZE_B2',
+    'GOOGLE_DRIVE',
+    'DROPBOX',
+    'ONEDRIVE',
+    'FTP',
+  ]),
   config: z.string().default('{}'),
   isActive: z.boolean().default(true),
   siteId: z.string().optional(),
@@ -42,12 +54,20 @@ const SORTABLE = new Set(['createdAt', 'name', 'provider', 'isActive', 'lastTest
 // "ftp", "local" matches storage destinations by their displayed provider
 // — not just by the raw enum string or the destination name.
 
+// Human-readable labels for every supported provider. Used by the search
+// filter so typing "s3", "wasabi", "drive", "ftp" matches destinations by
+// their displayed provider — not just the raw enum or name.
 const PROVIDER_LABELS: Record<string, string> = {
   LOCAL: 'Local',
+  AMAZON_S3: 'Amazon S3',
+  GOOGLE_CLOUD_STORAGE: 'Google Cloud Storage',
+  MICROSOFT_AZURE_BLOB: 'Microsoft Azure Blob Storage',
+  CLOUDFLARE_R2: 'Cloudflare R2',
+  WASABI: 'Wasabi',
+  BACKBLAZE_B2: 'Backblaze B2',
   GOOGLE_DRIVE: 'Google Drive',
   DROPBOX: 'Dropbox',
   ONEDRIVE: 'OneDrive',
-  CLOUDFLARE_R2: 'Cloudflare R2',
   FTP: 'FTP',
 };
 
@@ -78,6 +98,48 @@ function validateConfigJson(configStr: string, provider: string): { valid: boole
       // Local path is optional — uses default backup directory if not specified
       break;
     }
+    case 'AMAZON_S3': {
+      if (!has('accessKeyId')) errors.push('Amazon S3 config requires "accessKeyId"');
+      if (!has('secretAccessKey')) errors.push('Amazon S3 config requires "secretAccessKey"');
+      if (!has('bucket')) errors.push('Amazon S3 config requires "bucket"');
+      if (!has('region')) errors.push('Amazon S3 config requires "region"');
+      // endpoint is optional
+      break;
+    }
+    case 'GOOGLE_CLOUD_STORAGE': {
+      // Coming-soon provider — creation is rejected by the POST handler
+      // before validation runs, but guard here too.
+      errors.push('Google Cloud Storage is coming soon and cannot be created yet.');
+      break;
+    }
+    case 'MICROSOFT_AZURE_BLOB': {
+      errors.push('Microsoft Azure Blob Storage is coming soon and cannot be created yet.');
+      break;
+    }
+    case 'CLOUDFLARE_R2': {
+      if (!has('accountId')) errors.push('Cloudflare R2 config requires "accountId"');
+      if (!has('accessKeyId')) errors.push('Cloudflare R2 config requires "accessKeyId"');
+      if (!has('secretAccessKey')) errors.push('Cloudflare R2 config requires "secretAccessKey"');
+      if (!has('bucket')) errors.push('Cloudflare R2 config requires "bucket"');
+      // endpoint optional (derived from accountId if omitted); region
+      // defaults to "auto" and is not surfaced in the form.
+      break;
+    }
+    case 'WASABI': {
+      if (!has('accessKeyId')) errors.push('Wasabi config requires "accessKeyId"');
+      if (!has('secretAccessKey')) errors.push('Wasabi config requires "secretAccessKey"');
+      if (!has('bucket')) errors.push('Wasabi config requires "bucket"');
+      if (!has('region')) errors.push('Wasabi config requires "region"');
+      // endpoint optional (derived from region)
+      break;
+    }
+    case 'BACKBLAZE_B2': {
+      if (!has('keyId')) errors.push('Backblaze B2 config requires "keyId"');
+      if (!has('applicationKey')) errors.push('Backblaze B2 config requires "applicationKey"');
+      if (!has('bucket')) errors.push('Backblaze B2 config requires "bucket"');
+      // endpoint optional (account-specific; recommended)
+      break;
+    }
     case 'GOOGLE_DRIVE': {
       if (!has('clientId')) errors.push('Google Drive config requires "clientId"');
       if (!has('clientSecret')) errors.push('Google Drive config requires "clientSecret"');
@@ -97,15 +159,6 @@ function validateConfigJson(configStr: string, provider: string): { valid: boole
       if (!has('clientSecret')) errors.push('OneDrive config requires "clientSecret"');
       if (!has('refreshToken')) errors.push('OneDrive config requires "refreshToken"');
       if (!has('folder')) errors.push('OneDrive config requires "folder"');
-      break;
-    }
-    case 'CLOUDFLARE_R2': {
-      if (!has('accountId')) errors.push('Cloudflare R2 config requires "accountId"');
-      if (!has('accessKeyId')) errors.push('Cloudflare R2 config requires "accessKeyId"');
-      if (!has('secretAccessKey')) errors.push('Cloudflare R2 config requires "secretAccessKey"');
-      if (!has('bucket')) errors.push('Cloudflare R2 config requires "bucket"');
-      // region + endpoint are optional (region defaults to "auto"; endpoint
-      // is derived from accountId by the R2 provider adapter if omitted).
       break;
     }
     case 'FTP': {
@@ -254,6 +307,23 @@ export async function POST(request: NextRequest) {
     }
 
     const d = parsed.data;
+
+    // Coming-soon providers cannot be created — reject with a clear
+    // message before running validation. The UI also marks these as
+    // "Coming soon" and disables Create, but the API enforces it too.
+    const { COMING_SOON_PROVIDERS } = await import('@/lib/backup/providers');
+    if (COMING_SOON_PROVIDERS.has(d.provider)) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'NOT_IMPLEMENTED',
+            message: `${PROVIDER_LABELS[d.provider] ?? d.provider} is coming soon and cannot be configured yet.`,
+          },
+          meta: { requestId: id },
+        },
+        { status: 400 },
+      );
+    }
 
     // Validate config JSON structure based on provider
     const configValidation = validateConfigJson(d.config, d.provider);

@@ -139,10 +139,15 @@ export type BackupScope =
 
 export type BackupStorageProvider =
   | 'LOCAL'
+  | 'AMAZON_S3'
+  | 'GOOGLE_CLOUD_STORAGE'
+  | 'MICROSOFT_AZURE_BLOB'
+  | 'CLOUDFLARE_R2'
+  | 'WASABI'
+  | 'BACKBLAZE_B2'
   | 'GOOGLE_DRIVE'
   | 'DROPBOX'
   | 'ONEDRIVE'
-  | 'CLOUDFLARE_R2'
   | 'FTP';
 
 export type BackupVerificationStatus =

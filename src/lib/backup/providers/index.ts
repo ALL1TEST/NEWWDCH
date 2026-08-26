@@ -1,14 +1,34 @@
 // ============================================================
 // Storage Provider Factory — creates the right adapter
 // ============================================================
+// Maps a BackupStorageProvider enum to a concrete adapter. Adding a
+// new provider means: (1) add a config interface to ./types.ts,
+// (2) add an adapter module, (3) add a factory branch here. The
+// Add Storage UI renders generically from the client-side provider
+// registry (src/lib/backup/provider-registry.tsx) and never needs
+// changes for a new provider.
 
 import { LocalStorageProvider } from './local';
-import { S3StorageProvider, R2StorageProvider } from './s3';
+import { S3StorageProvider, R2StorageProvider, WasabiStorageProvider, B2StorageProvider } from './s3';
 import { FtpStorageProvider } from './ftp';
+import { GoogleDriveStorageProvider } from './google-drive';
+import { DropboxStorageProvider } from './dropbox';
+import { OneDriveStorageProvider } from './onedrive';
 import type { StorageProvider } from './types';
 import { encrypt, decrypt } from '@/lib/encryption';
 
 export type { StorageProvider } from './types';
+
+/** Providers whose integration is NOT implemented yet. The UI shows
+ *  their fields (preview) but marks them "Coming soon" and the API
+ *  rejects creating one with a clear message. Test Connection is
+ *  disabled for these. Google Cloud Storage and Azure Blob require
+ *  their native SDKs + service-account flows; flagged here rather
+ *  than faked. */
+export const COMING_SOON_PROVIDERS = new Set<string>([
+  'GOOGLE_CLOUD_STORAGE',
+  'MICROSOFT_AZURE_BLOB',
+]);
 
 /**
  * Create a storage provider adapter from a BackupStorage record.
@@ -33,24 +53,29 @@ export async function createStorageProvider(
     case 'LOCAL':
       return new LocalStorageProvider(decryptedConfig as never);
 
+    case 'AMAZON_S3':
+      return new S3StorageProvider(decryptedConfig as never, 'Amazon S3');
+
     case 'CLOUDFLARE_R2':
       return new R2StorageProvider(decryptedConfig as never);
+
+    case 'WASABI':
+      return new WasabiStorageProvider(decryptedConfig as never);
+
+    case 'BACKBLAZE_B2':
+      return new B2StorageProvider(decryptedConfig as never);
 
     case 'FTP':
       return new FtpStorageProvider(decryptedConfig as never);
 
     case 'GOOGLE_DRIVE':
+      return new GoogleDriveStorageProvider(decryptedConfig as never);
+
     case 'DROPBOX':
+      return new DropboxStorageProvider(decryptedConfig as never);
+
     case 'ONEDRIVE':
-      // OAuth providers — the connection/config (client ID, client secret,
-      // refresh token, destination folder) is stored by the create flow,
-      // and the row-level Test Connection reports it as configured. The
-      // actual OAuth refresh + upload against the provider's API is an
-      // integration point for a production deployment (registering the
-      // OAuth app, exposing the callback URL). Until that integration is
-      // wired in, attempting to run a backup against an OAuth provider
-      // fails fast with a clear, actionable error.
-      throw new Error(`${providerType} requires an OAuth integration. Configure the OAuth client credentials in the storage destination, then wire the provider callback URL in production.`);
+      return new OneDriveStorageProvider(decryptedConfig as never);
 
     default:
       throw new Error(`Unknown storage provider: ${providerType}`);
@@ -58,18 +83,19 @@ export async function createStorageProvider(
 }
 
 /**
- * Fields that should be encrypted when storing the config. Restricted to
- * the providers supported by this CMS build (Local, Google Drive, Dropbox,
- * OneDrive, Cloudflare R2, FTP). Removed providers (Amazon S3, Backblaze B2,
- * SFTP) are intentionally absent so their secret keys can never be written
- * or surfaced by this code path.
+ * Fields that should be encrypted when storing the config. Covers every
+ * supported provider's secret fields. Secrets are encrypted at rest and
+ * masked ('••••••••') in API responses — never surfaced as plain text.
  */
 export const ENCRYPTED_FIELDS = new Set([
-  'secretAccessKey', // Cloudflare R2
-  'password',         // FTP
-  'clientSecret',     // Google Drive / OneDrive
+  'secretAccessKey',   // Amazon S3 / Cloudflare R2 / Wasabi
+  'applicationKey',    // Backblaze B2
+  'privateKey',        // Google Cloud Storage (forward-compat)
+  'accessKey',         // Microsoft Azure Blob (forward-compat)
+  'password',          // FTP
+  'clientSecret',      // Google Drive / OneDrive
   'appSecret',         // Dropbox
-  'refreshToken',     // Google Drive / Dropbox / OneDrive
+  'refreshToken',      // Google Drive / Dropbox / OneDrive
 ]);
 
 /**

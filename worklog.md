@@ -3210,3 +3210,47 @@ Stage Summary:
 - Provider change clears the previous provider's fields + resets the connection state. Hidden provider fields are never validated or submitted. The Create button enables only when (Name valid) + (current provider's required fields filled) + (connection state 'connected' for R2/FTP/OAuth; Local needs no connection). `isActive` reflects the actual connection state. Secrets are encrypted at rest and masked in every API response (GET list/single + PATCH response); the PATCH route merges configs so editing the name/folder preserves unchanged encrypted secrets.
 - Files modified: src/shared/types/index.ts, prisma/schema.prisma, src/modules/backups/storage-page.tsx (rewritten form section), src/app/api/backups/storage/route.ts, src/app/api/backups/storage/[id]/route.ts, src/lib/backup/providers/index.ts, src/lib/backup/providers/s3.ts, src/lib/backup/providers/types.ts, src/lib/backup/providers/sftp.ts (deleted), src/lib/backup-constants.ts, src/lib/settings-service.ts, src/app/api/backups/route.ts, src/app/api/backups/schedules/route.ts, src/app/api/backups/schedules/[id]/route.ts, src/app/api/backups/logs/route.ts, src/modules/backups/backups-list-page.tsx (comment), src/modules/backups/schedules-page.tsx (comment).
 - Screenshots: storage-page-initial.png, storage-add-dialog-local.png, provider-dropdown-open.png, storage-add-r2.png, r2-test-failed.png, storage-add-gdrive.png, gdrive-connected.png, storage-after-create.png, storage-add-ftp.png, storage-final-table.png.
+
+---
+Task ID: BACKUPS-STORAGE-PROVIDER-OVERHAUL
+Agent: main (orchestrator)
+Task: Refine the Add Storage system into a professional, dynamic provider-registry-driven CMS. 11 providers (no SFTP), categorized dropdown, concise per-provider forms, real Test Connection (no fake), coming-soon marking for unimplemented providers, secret masking, clean modal with fixed header/footer + internal scroll.
+
+Work Log:
+- Read current state: storage-page.tsx (1402 lines, 6-provider inline PROVIDER_CONFIG), API route.ts + [id]/route.ts, provider adapters (local/s3/ftp + factory), prisma schema BackupStorageProvider enum, shared types BackupStorageProvider union.
+- Expanded BackupStorageProvider to 11 providers in both prisma/schema.prisma (enum) and src/shared/types/index.ts (union). Ran `bun run db:push` (schema synced, client regenerated).
+- Backend adapters:
+  - src/lib/backup/providers/types.ts: rewrote with clean per-provider config interfaces (LocalConfig, S3Config, FtpConfig, GoogleDriveConfig, DropboxConfig, OneDriveConfig + forward-compat GoogleCloudStorageConfig/AzureBlobConfig). Updated StorageProvider docstring (testConnection MUST be real).
+  - src/lib/backup/providers/s3.ts: exposed base S3StorageProvider (Amazon S3, real ListObjectsV2 test), added WasabiStorageProvider (derives s3.<region>.wasabisys.com endpoint) and B2StorageProvider (S3-compatible via B2 endpoint). Cleaned testConnection error message (no stack traces).
+  - NEW src/lib/backup/providers/google-drive.ts: real OAuth refresh-token exchange (POST oauth2.googleapis.com/token) + Drive API files.list ping. Real testConnection.
+  - NEW src/lib/backup/providers/dropbox.ts: real OAuth refresh (api.dropboxapi.com/oauth2/token) + check/user ping.
+  - NEW src/lib/backup/providers/onedrive.ts: real Microsoft OAuth refresh (login.microsoftonline.com/common/oauth2/v2.0/token) + Graph /me ping.
+  - src/lib/backup/providers/index.ts: factory branches for AMAZON_S3/WASABI/BACKBLAZE_B2/GOOGLE_DRIVE/DROPBOX/ONEDRIVE (real adapters). Added COMING_SOON_PROVIDERS set (GCS, Azure). Expanded ENCRYPTED_FIELDS (secretAccessKey, applicationKey, privateKey, accessKey, password, clientSecret, appSecret, refreshToken).
+- API routes:
+  - src/app/api/backups/storage/route.ts: expanded createSchema enum to 11; expanded PROVIDER_LABELS to 11; expanded validateConfigJson for AMAZON_S3/GOOGLE_CLOUD_STORAGE/MICROSOFT_AZURE_BLOB/WASABI/BACKBLAZE_B2; added COMING_SOON_PROVIDERS rejection before validation (NOT_IMPLEMENTED, clear message).
+  - src/app/api/backups/storage/[id]/route.ts: expanded updateSchema enum; expanded validateConfigJson; replaced OAuth structural-only shortcut in test-connection with the REAL adapter (testStorageConnection) for every supported provider — no fake success.
+- Client-side provider registry (NEW src/lib/backup/provider-registry.ts): single source of truth. 11 ProviderDefinition entries grouped into 4 categories (LOCAL, OBJECT_STORAGE, CLOUD_DRIVE, FILE_TRANSFER) with CATEGORY_LABELS + CATEGORY_ORDER + helpers (getProviderDefinition, getProvidersByCategory). Each definition: id, name, category, icon (lucide), connectionType (none/credentials/oauth), actionLabel, requiresConnection, status (available/coming_soon), fields[] (key/label/type/required/placeholder/group). Field keys synced with backend validateConfigJson + ENCRYPTED_FIELDS. Concise placeholders, NO long helpText paragraphs.
+- Rewrote src/modules/backups/storage-page.tsx: renders GENERically from the registry (no provider-specific UI logic). Categorized ProviderDropdown (Radix Popover, portal, category separators, SOON badges, checkmark). ProviderBadge colored by category. renderConfigSection() groups fields by section label (CONNECTION/CREDENTIALS/DESTINATION) — only used groups render. Coming-soon state (amber banner + disabled field preview + Create disabled). Modal: p-0 overflow-hidden, fixed DialogHeader (border-b) + scrollable body (max-h-[60vh], .storage-modal-scroll thin scrollbar) + fixed DialogFooter (border-t, [Test/Connect] left + [Cancel][Create] right). handleTestOrConnect unified real test (credentials + oauth both POST action=test). maskedSecretFields guard blocks re-testing with masked values. connectionSignature/connectionStale invalidation on edit. onInteractOutside/onPointerDownOutside preventDefault on Dialog (fixes dropdown-closes-modal bug when selecting lower options via portal). Dropdown panel max-h-[70vh] so all 11+4 items fit without scroll on typical viewports.
+- Added .storage-modal-scroll thin-scrollbar CSS to src/app/globals.css (8px, 25% opacity, rounded).
+- Lint: 0 issues in any touched file (pre-existing issues in unrelated content-edit/seo modules remain, ignored per prior task).
+- Agent-browser verification (via gateway :81 with 5s retry landing; setsid+nohup to keep dev server alive within long commands; find role option + ref-capture for selection):
+  - Login (Admin quick-login) → dashboard ✓
+  - Settings → Backups → Storage tab ✓
+  - Add Storage modal opens, default Local: DESTINATION section + Path field, NO Test button, Create disabled ✓
+  - Provider dropdown: all 11 providers in 4 categorized groups (LOCAL/OBJECT STORAGE/CLOUD DRIVE/FILE TRANSFER), SOON badges on Google Cloud Storage + Microsoft Azure Blob Storage ✓
+  - Amazon S3: CREDENTIALS + Access Key ID/Secret Access Key/Bucket/Region/Endpoint + Test Connection/Cancel/Create footer ✓
+  - Cloudflare R2: CREDENTIALS + Account ID/Access Key ID/Secret Access Key/Bucket/Endpoint (NO Region — defaults to auto) + Test Connection footer ✓ (existing R2 functionality preserved)
+  - Google Drive: CONNECTION + Client ID/Client Secret/Refresh Token + Connect Google Drive footer ✓
+  - Google Cloud Storage: coming-soon banner, all fields disabled, Create disabled ✓ (no fake test)
+  - FTP: CREDENTIALS + Host/Port(=21)/Username/Password/Remote Directory/Secure FTP-FTPS toggle + Test Connection footer ✓
+  - Console: only HMR/React DevTools info logs, no runtime errors, no hydration mismatches ✓
+
+Stage Summary:
+- Add Storage is now a production-grade, registry-driven CMS form. Adding a future provider requires only: (1) a definition in provider-registry.ts, (2) a backend adapter + factory branch, (3) an API validation case — the Add Storage component never changes.
+- 11 providers supported: Local, Amazon S3, Google Cloud Storage (soon), Microsoft Azure Blob Storage (soon), Cloudflare R2, Wasabi, Backblaze B2, Google Drive, Dropbox, OneDrive, FTP. SFTP intentionally absent.
+- Real Test Connection everywhere it's implemented: Local (fs write test), Amazon S3/Wasabi/B2/Cloudflare R2 (ListObjectsV2 via @aws-sdk/client-s3), FTP (basic-ftp access), Google Drive/Dropbox/OneDrive (real OAuth refresh-token exchange + provider API ping). No fake success — GCS/Azure are honestly marked "coming soon" with disabled fields and a rejected create.
+- Secrets encrypted at rest (AES-256-GCM via ENCRYPTED_FIELDS), masked ('••••••••') in every API response, never surfaced in table/logs/console. Password-type fields render masked with a lock affordance.
+- Concise copy throughout: short labels, placeholder examples, section labels (CONNECTION/CREDENTIALS/DESTINATION), no long explanatory paragraphs.
+- Modal: clean/compact, fixed header + footer, only config content scrolls with a thin subtle scrollbar.
+- Bug fixed: provider dropdown (Radix Popover, portal-rendered) no longer closes the Add Storage modal when selecting an option — onInteractOutside/onPointerDownOutside preventDefault on the Dialog (also good form UX: no accidental close-on-outside-click losing data).
+- Existing Storage functionality (R2/Google Drive/Dropbox/OneDrive/FTP/Local) preserved; create/edit/delete flows intact.

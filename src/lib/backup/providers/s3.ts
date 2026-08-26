@@ -1,10 +1,11 @@
 // ============================================================
-// S3-Compatible Storage Provider — base + Cloudflare R2
+// S3-Compatible Storage Provider — base + Amazon S3, Cloudflare
+// R2, Wasabi, Backblaze B2.
 // ============================================================
-// Amazon S3 and Backblaze B2 were removed from this CMS build. The base
-// S3StorageProvider class is retained because Cloudflare R2 is
-// S3-compatible and reuses it. The factory only constructs R2 (via
-// R2StorageProvider), never the bare S3StorageProvider.
+// The base S3StorageProvider class is reused by every S3-compatible
+// destination. Each concrete subclass just sets a sensible default
+// endpoint and provider name. The factory in index.ts maps a
+// provider enum to the right subclass.
 
 import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { createHash } from 'node:crypto';
@@ -17,7 +18,7 @@ export class S3StorageProvider implements StorageProvider {
   protected bucket: string;
   protected keyPrefix: string;
 
-  constructor(config: S3Config, name = 'S3') {
+  constructor(config: S3Config, name = 'Amazon S3') {
     this.name = name;
     this.bucket = config.bucket;
     this.keyPrefix = 'backups/';
@@ -39,9 +40,9 @@ export class S3StorageProvider implements StorageProvider {
       const cmd = new ListObjectsV2Command({ Bucket: this.bucket, MaxKeys: 1 });
       await this.client.send(cmd);
       return { success: true, message: `Connected to ${this.name} bucket: ${this.bucket}` };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return { success: false, message: `${this.name} connection failed: ${msg}` };
+    } catch {
+      // Collapse noisy SDK errors into a clean, user-facing message.
+      return { success: false, message: 'Connection failed — invalid credentials or unreachable bucket.' };
     }
   }
 
@@ -67,7 +68,6 @@ export class S3StorageProvider implements StorageProvider {
     try {
       const head = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
       const size = head.ContentLength ?? null;
-      // S3 doesn't return SHA-256 via HeadObject; if checksum is needed, download and hash
       let checksumMatch = true;
       if (expectedChecksum) {
         const response = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
@@ -97,7 +97,7 @@ export class S3StorageProvider implements StorageProvider {
 // Cloudflare R2 is S3-compatible. The R2 config carries an `accountId`
 // (from the form); if the user didn't supply an explicit endpoint, derive
 // it from the account ID so the S3 client targets R2's API host rather
-// than the default AWS endpoint.
+// than the default AWS endpoint. R2 region defaults to "auto".
 export class R2StorageProvider extends S3StorageProvider {
   constructor(config: S3Config & { accountId?: string }) {
     const endpoint =
@@ -109,10 +109,46 @@ export class R2StorageProvider extends S3StorageProvider {
     super(
       {
         ...config,
+        region: config.region || 'auto',
         ...(endpoint ? { endpoint } : {}),
         forcePathStyle: true,
       },
       'Cloudflare R2',
+    );
+  }
+}
+
+// Wasabi is S3-compatible. If the user omits the endpoint, derive it from
+// the region so the client targets the Wasabi host (s3.<region>.wasabisys.com).
+export class WasabiStorageProvider extends S3StorageProvider {
+  constructor(config: S3Config) {
+    const region = config.region || 'us-east-1';
+    const endpoint =
+      config.endpoint && config.endpoint.trim() !== ''
+        ? config.endpoint
+        : `https://s3.${region}.wasabisys.com`;
+    super(
+      { ...config, region, endpoint, forcePathStyle: true },
+      'Wasabi',
+    );
+  }
+}
+
+// Backblaze B2 is S3-compatible via its S3 API. The user supplies the
+// S3 endpoint (displayed in the B2 bucket's "S3 Endpoint" field); if
+// omitted we cannot derive it reliably (it's account-specific), so we
+// fall through to the default AWS endpoint which will fail fast — the
+// form marks Endpoint optional but B2 in practice needs it.
+export class B2StorageProvider extends S3StorageProvider {
+  constructor(config: S3Config) {
+    super(
+      {
+        ...config,
+        region: config.region || 'us-west-002',
+        ...(config.endpoint ? { endpoint: config.endpoint } : {}),
+        forcePathStyle: true,
+      },
+      'Backblaze B2',
     );
   }
 }

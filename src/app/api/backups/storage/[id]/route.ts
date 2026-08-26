@@ -27,7 +27,19 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 const updateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
-  provider: z.enum(['LOCAL', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'FTP']).optional(),
+  provider: z.enum([
+    'LOCAL',
+    'AMAZON_S3',
+    'GOOGLE_CLOUD_STORAGE',
+    'MICROSOFT_AZURE_BLOB',
+    'CLOUDFLARE_R2',
+    'WASABI',
+    'BACKBLAZE_B2',
+    'GOOGLE_DRIVE',
+    'DROPBOX',
+    'ONEDRIVE',
+    'FTP',
+  ]).optional(),
   config: z.string().optional(),
   isActive: z.boolean().optional(),
 });
@@ -58,6 +70,40 @@ function validateConfigJson(configStr: string, provider: string): { valid: boole
       // Local path is optional — uses default backup directory if not specified
       break;
     }
+    case 'AMAZON_S3': {
+      if (!has('accessKeyId')) errors.push('Amazon S3 config requires "accessKeyId"');
+      if (!has('secretAccessKey')) errors.push('Amazon S3 config requires "secretAccessKey"');
+      if (!has('bucket')) errors.push('Amazon S3 config requires "bucket"');
+      if (!has('region')) errors.push('Amazon S3 config requires "region"');
+      break;
+    }
+    case 'GOOGLE_CLOUD_STORAGE':
+    case 'MICROSOFT_AZURE_BLOB': {
+      // Coming-soon providers cannot be updated into either; the API
+      // would reject creation, and existing rows can't exist. Guard.
+      errors.push(`${provider} is coming soon and cannot be configured.`);
+      break;
+    }
+    case 'CLOUDFLARE_R2': {
+      if (!has('accountId')) errors.push('Cloudflare R2 config requires "accountId"');
+      if (!has('accessKeyId')) errors.push('Cloudflare R2 config requires "accessKeyId"');
+      if (!has('secretAccessKey')) errors.push('Cloudflare R2 config requires "secretAccessKey"');
+      if (!has('bucket')) errors.push('Cloudflare R2 config requires "bucket"');
+      break;
+    }
+    case 'WASABI': {
+      if (!has('accessKeyId')) errors.push('Wasabi config requires "accessKeyId"');
+      if (!has('secretAccessKey')) errors.push('Wasabi config requires "secretAccessKey"');
+      if (!has('bucket')) errors.push('Wasabi config requires "bucket"');
+      if (!has('region')) errors.push('Wasabi config requires "region"');
+      break;
+    }
+    case 'BACKBLAZE_B2': {
+      if (!has('keyId')) errors.push('Backblaze B2 config requires "keyId"');
+      if (!has('applicationKey')) errors.push('Backblaze B2 config requires "applicationKey"');
+      if (!has('bucket')) errors.push('Backblaze B2 config requires "bucket"');
+      break;
+    }
     case 'GOOGLE_DRIVE': {
       if (!has('clientId')) errors.push('Google Drive config requires "clientId"');
       if (!has('clientSecret')) errors.push('Google Drive config requires "clientSecret"');
@@ -77,13 +123,6 @@ function validateConfigJson(configStr: string, provider: string): { valid: boole
       if (!has('clientSecret')) errors.push('OneDrive config requires "clientSecret"');
       if (!has('refreshToken')) errors.push('OneDrive config requires "refreshToken"');
       if (!has('folder')) errors.push('OneDrive config requires "folder"');
-      break;
-    }
-    case 'CLOUDFLARE_R2': {
-      if (!has('accountId')) errors.push('Cloudflare R2 config requires "accountId"');
-      if (!has('accessKeyId')) errors.push('Cloudflare R2 config requires "accessKeyId"');
-      if (!has('secretAccessKey')) errors.push('Cloudflare R2 config requires "secretAccessKey"');
-      if (!has('bucket')) errors.push('Cloudflare R2 config requires "bucket"');
       break;
     }
     case 'FTP': {
@@ -349,40 +388,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     // Parse the stored (encrypted) config to hand to the provider adapter.
     // createStorageProvider decrypts internally before constructing the
-    // adapter, so we pass the encrypted values straight through.
+    // adapter, so we pass the encrypted values straight through. Every
+    // supported provider (including OAuth cloud drives) has a REAL
+    // adapter that performs an actual round-trip — no structural-only
+    // "connected" shortcut. Coming-soon providers (GCS / Azure) are
+    // rejected at creation, so no stored row reaches here.
     let storedConfig: Record<string, unknown> = {};
     try { storedConfig = JSON.parse(storage.config || '{}'); } catch { storedConfig = {}; }
 
-    // OAuth providers (Google Drive / Dropbox / OneDrive) cannot complete a
-    // real authorization roundtrip in this sandbox (no public callback URL,
-    // no registered OAuth app). The "Connect" step in the create flow
-    // structurally validates the credentials; here we re-confirm that
-    // structural validity rather than pretending a live OAuth session was
-    // established. The stored config (client ID, client secret, refresh
-    // token) is exactly what the backup service needs to run the real OAuth
-    // refresh against the provider in a production environment.
-    const OAUTH_PROVIDERS = new Set(['GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE']);
-    let result: { success: boolean; message: string };
-
-    if (OAUTH_PROVIDERS.has(storage.provider)) {
-      // Structural validation already passed above; report the honest
-      // "configured, ready for production OAuth" state.
-      result = {
-        success: true,
-        message: 'OAuth credentials configured — live token refresh requires production OAuth callback.',
-      };
-    } else {
-      // LOCAL / CLOUDFLARE_R2 / FTP — run the real provider adapter test.
-      //   LOCAL → LocalStorageProvider.testConnection (fs write test, uses
-      //           the default backup dir when path is empty).
-      //   R2 → R2StorageProvider.testConnection (ListObjectsV2 via the
-      //        @aws-sdk/client-s3, with the endpoint auto-derived from the
-      //        account ID when not supplied).
-      //   FTP → FtpStorageProvider.testConnection (basic-ftp access +
-      //         ensureDir on the remote directory).
-      const { testStorageConnection } = await import('@/lib/backup/backup-service');
-      result = await testStorageConnection(storage.provider, storedConfig);
-    }
+    const { testStorageConnection } = await import('@/lib/backup/backup-service');
+    const result = await testStorageConnection(storage.provider, storedConfig);
 
     await db.backupStorage.update({
       where: { id: storageId },
