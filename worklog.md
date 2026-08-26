@@ -3346,3 +3346,25 @@ Stage Summary:
 - Files modified: src/modules/backups/storage-page.tsx (ProviderDropdown component rewritten; imports updated; removed Radix Popover imports).
 - Lint: 0 errors in storage-page.tsx (5 pre-existing errors in untouched files, unchanged).
 - Screenshots: dropdown-open-100.png, dropdown-1280x720.png, dropdown-final-100pct.png, dropdown-final-100pct-full.png in /home/z/my-project/tool-results/.
+
+---
+Task ID: SYNC-1
+Agent: Z.ai Code (main)
+Task: Clone https://github.com/ALL1TEST/NEWWDCH.git and synchronize the local dev application with the repository state.
+
+Work Log:
+- Inspected /home/z/my-project: was running default Z.ai scaffold (logo page) via `next dev -p 3000` (PID 1158).
+- Cloned ALL1TEST/NEWWDCH to /tmp/NEWWDCH; verified default branch `main`, HEAD f32fcbb.
+- Stopped old dev server processes; confirmed port 3000 free.
+- Replaced all old project files in /home/z/my-project with the repository clone (including .git, origin remote set to ALL1TEST/NEWWDCH.git). Kept environment mount `upload/` (writable merge).
+- Installed dependencies: `bun install --frozen-lockfile` (184 packages added: tiptap suite, aws-sdk-s3, nodemailer, ssh2, basic-ftp, archiver, unzipper, mammoth, lowlight, html2canvas, nanoid, @tailwindcss/typography).
+- Regenerated Prisma client; repository's own db/custom.db used as-is.
+- Started dev server via repo script `bun run dev` (next dev -p 3000). First compile 17.9s, GET / → 200.
+- Browser verification (agent-browser): login screen renders ("Welcome back / Sign in to your CMS Admin account", demo quick sign-in Admin/Editor/Author). Admin quick sign-in → Executive Dashboard fully loaded with sidebar modules (Articles, Calendar, Media, Users, Comments, Newsletter, SEO, AI, Automation, Settings) and live data (11 content, 4 media, 7 comments, 4 notifications).
+- API checks: /api/notifications/unread-count → {"data":{"count":4}}; /api/content returns seeded articles. No errors in dev.log.
+- Removed /tmp/NEWWDCH temp clone; final `git status -sb` → main...origin/main in sync (only db/custom.db modified by runtime writes).
+
+Stage Summary:
+- /home/z/my-project IS the repository clone at f32fcbb (origin = ALL1TEST/NEWWDCH.git); future sync = `git pull`.
+- Old scaffold completely removed; port 3000 serves the repository CMS app.
+- Dependencies match repo bun.lock exactly; app verified end-to-end in browser (login + dashboard with live backend data).
