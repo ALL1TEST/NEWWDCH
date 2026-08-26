@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BarChart3,
@@ -50,6 +50,15 @@ import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+} from 'recharts';
 
 // ==================== Types ====================
 
@@ -97,6 +106,8 @@ interface PageItem {
   impressions: number;
   ctr: number;
   position: number;
+  /** Resolved CMS content item id (when the pageUrl maps to an article). */
+  contentId?: string | null;
 }
 
 interface PaginatedList<T> {
@@ -188,9 +199,10 @@ interface KpiCardProps {
   value: string;
   iconColor?: string;
   iconBg?: string;
+  loading?: boolean;
 }
 
-function KpiCard({ icon: Icon, label, value, iconColor, iconBg }: KpiCardProps) {
+function KpiCard({ icon: Icon, label, value, iconColor, iconBg, loading }: KpiCardProps) {
   return (
     <Card className="p-4">
       <div className="flex items-center gap-3">
@@ -204,43 +216,100 @@ function KpiCard({ icon: Icon, label, value, iconColor, iconBg }: KpiCardProps) 
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm text-muted-foreground truncate">{label}</p>
-          <p className="text-xl font-bold tabular-nums leading-tight mt-0.5">{value}</p>
+          {loading ? (
+            <Skeleton className="h-5 w-16 mt-1" />
+          ) : (
+            <p className="text-xl font-bold tabular-nums leading-tight mt-0.5">{value}</p>
+          )}
         </div>
       </div>
     </Card>
   );
 }
 
-// ==================== CSS Bar Chart ====================
+// ==================== Performance Chart (recharts) ====================
 
 interface PerformanceChartProps {
   stats: DailyStat[];
   isLoading: boolean;
-  /** Number of days covered by the stats (drives the "Last N days" badge). */
-  days: number;
+  /** Human-readable label for the selected range (badge). */
+  rangeLabel: string;
   /** Called when the user clicks "Sync Now" inside the empty state. */
   onSync?: () => void;
   /** Whether a sync is currently in progress (disables the Sync button). */
   isSyncing?: boolean;
 }
 
-function PerformanceChart({ stats, isLoading, days, onSync, isSyncing }: PerformanceChartProps) {
+// Custom recharts tooltip — shows the exact date + per-day values.
+function ChartTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload: DailyStat }>;
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const point = payload[0].payload;
+  let dateLabel = point.date;
+  try {
+    dateLabel = new Date(`${point.date}T00:00:00`).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    /* keep raw date */
+  }
+  return (
+    <div className="rounded-md border bg-popover text-popover-foreground shadow-md px-3 py-2 text-xs min-w-[170px]">
+      <div className="font-medium mb-1.5">{dateLabel}</div>
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-sm bg-primary" /> Clicks
+        </span>
+        <span className="font-medium tabular-nums">{point.clicks.toLocaleString()}</span>
+      </div>
+      <div className="flex items-center justify-between gap-3 mt-0.5">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-sm bg-primary/30" /> Impressions
+        </span>
+        <span className="font-medium tabular-nums">{point.impressions.toLocaleString()}</span>
+      </div>
+      {point.ctr != null && (
+        <div className="flex items-center justify-between gap-3 mt-0.5 text-muted-foreground">
+          <span>CTR</span>
+          <span className="tabular-nums">{(point.ctr * 100).toFixed(2)}%</span>
+        </div>
+      )}
+      {point.position != null && (
+        <div className="flex items-center justify-between gap-3 mt-0.5 text-muted-foreground">
+          <span>Avg Position</span>
+          <span className="tabular-nums">{point.position.toFixed(1)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PerformanceChart({ stats, isLoading, rangeLabel, onSync, isSyncing }: PerformanceChartProps) {
   if (isLoading) {
     return (
       <div className="space-y-3">
         <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-56 w-full" />
       </div>
     );
   }
 
-  if (stats.length === 0) {
+  if (!stats || stats.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <BarChart3 className="h-12 w-12 text-muted-foreground/30 mb-3" strokeWidth={1.5} />
-        <p className="text-sm font-medium text-muted-foreground">No performance data available yet.</p>
+        <p className="text-sm font-medium text-muted-foreground">
+          No Search Console data available for this period.
+        </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Sync with Search Console to see chart data
+          Try a different range or sync with Search Console to see chart data.
         </p>
         {onSync && (
           <Button
@@ -262,8 +331,19 @@ function PerformanceChart({ stats, isLoading, days, onSync, isSyncing }: Perform
     );
   }
 
-  const maxClicks = Math.max(...stats.map((s) => s.clicks), 1);
-  const maxImpressions = Math.max(...stats.map((s) => s.impressions), 1);
+  // Defensive chronological sort (oldest → newest). The API already returns
+  // ascending by date, but a mis-sorted payload must never scramble the X-axis.
+  const data = [...stats]
+    .map((s) => ({
+      date: s.date,
+      clicks: s.clicks,
+      impressions: s.impressions,
+      ctr: s.ctr,
+      position: s.position,
+    }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+  const axisTick = { fontSize: 10, fill: 'hsl(var(--muted-foreground))' };
 
   return (
     <div className="space-y-4">
@@ -279,62 +359,90 @@ function PerformanceChart({ stats, isLoading, days, onSync, isSyncing }: Perform
           </span>
         </div>
         <Badge variant="outline" className="text-[10px] font-normal bg-background/80">
-          Last {days} days
+          {rangeLabel}
         </Badge>
       </div>
 
-      <div className="flex items-end gap-[3px] sm:gap-1.5 h-48">
-        {stats.map((stat) => {
-          const clickHeight = Math.max((stat.clicks / maxClicks) * 100, stat.clicks > 0 ? 4 : 0);
-          const impHeight = Math.max((stat.impressions / maxImpressions) * 100, stat.impressions > 0 ? 4 : 0);
-
-          return (
-            <div
-              key={stat.date}
-              className="flex-1 flex flex-col items-center gap-0.5 group relative min-w-0"
-            >
-              {/* Tooltip */}
-              <div className="absolute -top-20 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col items-center gap-0.5 bg-popover border rounded-md shadow-md px-2.5 py-2 z-10 pointer-events-none whitespace-nowrap">
-                <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                  {formatShortDate(stat.date)}
-                </span>
-                <span className="text-[10px] font-medium">
-                  {stat.clicks} clicks · {stat.impressions} imp
-                </span>
-                {stat.ctr != null && (
-                  <span className="text-[10px] text-muted-foreground">
-                    CTR: {(stat.ctr * 100).toFixed(2)}%
-                  </span>
-                )}
-                {stat.position != null && (
-                  <span className="text-[10px] text-muted-foreground">
-                    Pos: {stat.position.toFixed(1)}
-                  </span>
-                )}
-              </div>
-
-              {/* Bars container */}
-              <div className="flex items-end gap-[1px] w-full">
-                {/* Impressions bar (wider, lighter) */}
-                <div
-                  className="flex-1 rounded-t-sm bg-primary/20 transition-all duration-300"
-                  style={{ height: `${impHeight * 0.85}%` }}
-                />
-                {/* Clicks bar (narrower, solid) */}
-                <div
-                  className="w-[40%] rounded-t-sm bg-primary transition-all duration-300"
-                  style={{ height: `${clickHeight}%` }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Date labels */}
-      <div className="flex justify-between text-[10px] text-muted-foreground/60">
-        <span>{formatShortDate(stats[0]?.date ?? '')}</span>
-        <span>{formatShortDate(stats[stats.length - 1]?.date ?? '')}</span>
+      {/*
+        Dual Y-axis area chart: left axis = Impressions (large numbers),
+        right axis = Clicks (small numbers). Without two axes the Clicks series
+        would collapse to a flat line at the bottom and be unreadable. Colors
+        stay on the existing `primary` hue to preserve the page palette and the
+        manual legend above.
+      */}
+      <div className="h-56 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="scImpGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.04} />
+              </linearGradient>
+              <linearGradient id="scClkGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.9} />
+                <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.45} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid
+              strokeDasharray="3 3"
+              vertical={false}
+              stroke="hsl(var(--border))"
+              strokeOpacity={0.6}
+            />
+            <XAxis
+              dataKey="date"
+              tickFormatter={(value: string) => formatShortDate(value)}
+              minTickGap={20}
+              tick={axisTick}
+              tickLine={false}
+              axisLine={{ stroke: 'hsl(var(--border))' }}
+            />
+            <YAxis
+              yAxisId="impressions"
+              tickFormatter={(n: number) => formatNumber(n)}
+              tick={axisTick}
+              tickLine={false}
+              axisLine={false}
+              width={46}
+            />
+            <YAxis
+              yAxisId="clicks"
+              orientation="right"
+              tickFormatter={(n: number) => formatNumber(n)}
+              tick={axisTick}
+              tickLine={false}
+              axisLine={false}
+              width={40}
+            />
+            <RechartsTooltip
+              content={<ChartTooltip />}
+              cursor={{ stroke: 'hsl(var(--border))', strokeDasharray: '3 3' }}
+            />
+            <Area
+              yAxisId="impressions"
+              type="monotone"
+              dataKey="impressions"
+              name="Impressions"
+              stroke="hsl(var(--primary))"
+              strokeOpacity={0.55}
+              strokeWidth={1.5}
+              fill="url(#scImpGrad)"
+              fillOpacity={1}
+              isAnimationActive={false}
+            />
+            <Area
+              yAxisId="clicks"
+              type="monotone"
+              dataKey="clicks"
+              name="Clicks"
+              stroke="hsl(var(--primary))"
+              strokeWidth={2}
+              fill="url(#scClkGrad)"
+              fillOpacity={1}
+              isAnimationActive={false}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
@@ -442,16 +550,31 @@ function PagesTable({ pages, isLoading }: { pages: PageItem[]; isLoading: boolea
           {pages.map((item, i) => (
             <TableRow key={`${item.pageUrl}-${i}`}>
               <TableCell className="max-w-[280px]">
-                <a
-                  href={item.pageUrl.startsWith('http') ? item.pageUrl : `https://cms.example.com${item.pageUrl}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline"
-                  title={item.pageUrl}
-                >
-                  <span className="truncate max-w-[240px]">{item.pageUrl}</span>
-                  <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
-                </a>
+                {(() => {
+                  const isAbsolute = /^https?:\/\//i.test(item.pageUrl);
+                  // Internal article link → SPA hash route to the content detail.
+                  // External URL → opens in a new tab. Bare path → exact path link.
+                  const href = item.contentId
+                    ? `#content/${item.contentId}`
+                    : item.pageUrl;
+                  const external = !item.contentId && isAbsolute;
+                  return (
+                    <a
+                      href={href}
+                      target={external ? '_blank' : undefined}
+                      rel={external ? 'noopener noreferrer' : undefined}
+                      className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline underline-offset-2 decoration-primary/40"
+                      title={item.pageUrl}
+                    >
+                      <span className="truncate max-w-[240px]">{item.pageUrl}</span>
+                      {external ? (
+                        <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
+                      ) : (
+                        <ArrowUpRight className="h-3 w-3 shrink-0 opacity-50" />
+                      )}
+                    </a>
+                  );
+                })()}
               </TableCell>
               <TableCell className="text-right tabular-nums">{item.clicks.toLocaleString()}</TableCell>
               <TableCell className="text-right tabular-nums hidden sm:table-cell">
@@ -515,8 +638,41 @@ export function SeoSearchConsolePage() {
 function SeoSearchConsolePageInner() {
   const queryClient = useQueryClient();
   const [connectUrl, setConnectUrl] = useState('');
-  // Date range for the Performance Chart (days back from today).
-  const [chartDays, setChartDays] = useState(14);
+  // Performance Chart date range. `rangePreset` is one of the preset day
+  // counts ('7' | '14' | '28' | '90' | '180') or 'custom'. When 'custom' is
+  // picked we auto-seed from/to to the last 14 days so the chart always has
+  // a usable span immediately.
+  const [rangePreset, setRangePreset] = useState('14');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+
+  const toIsoDate = (d: Date) => d.toISOString().slice(0, 10);
+
+  const handleRangeChange = (v: string) => {
+    setRangePreset(v);
+    if (v === 'custom' && !customFrom && !customTo) {
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - 13);
+      setCustomFrom(toIsoDate(start));
+      setCustomTo(toIsoDate(end));
+    }
+  };
+
+  // Query params for the stats endpoint. Preset → { days }; custom → { from, to }.
+  const statsParams = useMemo<Record<string, string | number | undefined>>(
+    () => (rangePreset === 'custom' ? { from: customFrom, to: customTo } : { days: Number(rangePreset) }),
+    [rangePreset, customFrom, customTo],
+  );
+
+  // Badge label shown on the chart (also doubles as the range descriptor).
+  const rangeLabel = useMemo(() => {
+    if (rangePreset === 'custom') return `${customFrom || '—'} → ${customTo || '—'}`;
+    const n = Number(rangePreset);
+    if (n === 90) return 'Last 3 months';
+    if (n === 180) return 'Last 6 months';
+    return `Last ${n} days`;
+  }, [rangePreset, customFrom, customTo]);
 
   // Main query
   const { data, isLoading, error } = useQuery({
@@ -525,14 +681,37 @@ function SeoSearchConsolePageInner() {
     staleTime: 30_000,
   });
 
-  // Stats query — uses the user-selected `chartDays` range.
+  // Stats query — uses the user-selected range (preset days or custom span).
   const isConnected = data?.connection?.status === 'CONNECTED';
+  // Don't fetch stats for a half-filled custom range.
+  const statsEnabled =
+    isConnected && (rangePreset !== 'custom' || (!!customFrom && !!customTo));
   const { data: statsData, isLoading: statsLoading } = useQuery({
-    queryKey: queryKeys.seoSearchConsoleStats.list(chartDays),
-    queryFn: () => getApi<DailyStat[]>('/api/seo/search-console/stats', { days: chartDays }),
+    queryKey: queryKeys.seoSearchConsoleStats.list(statsParams),
+    queryFn: () => getApi<DailyStat[]>('/api/seo/search-console/stats', statsParams),
     staleTime: 60_000,
-    enabled: isConnected,
+    enabled: statsEnabled,
   });
+
+  // Summary (KPI cards) is derived from the SAME daily stats that feed the
+  // chart, so the cards always match the selected range — never a 30-day
+  // mismatch between the summary and the chart.
+  const rangeSummary = useMemo(() => {
+    const stats = statsData ?? [];
+    const totalClicks = stats.reduce((s, x) => s + x.clicks, 0);
+    const totalImpressions = stats.reduce((s, x) => s + x.impressions, 0);
+    const averageCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
+    const averagePosition =
+      stats.length > 0
+        ? stats.reduce((s, x) => s + (x.position ?? 0), 0) / stats.length
+        : 0;
+    return {
+      totalClicks,
+      totalImpressions,
+      averageCtr: Math.round(averageCtr * 100) / 100,
+      averagePosition: Math.round(averagePosition * 100) / 100,
+    };
+  }, [statsData]);
 
   // Queries query
   const { data: queriesData, isLoading: queriesLoading } = useQuery({
@@ -551,7 +730,6 @@ function SeoSearchConsolePageInner() {
   });
 
   const connection = data?.connection;
-  const summary = data?.summary;
 
   // Connect mutation
   const connectMutation = useMutation({
@@ -711,37 +889,42 @@ function SeoSearchConsolePageInner() {
             </div>
           </Card>
 
-          {/* KPI Stats Cards — Only when connected */}
-          {isConnected && summary && (
+          {/* KPI Stats Cards — Only when connected. Derived from the same
+              daily stats as the chart so totals always match the selected range. */}
+          {isConnected && (
             <section>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <KpiCard
                   icon={MousePointerClick}
                   label="Total Clicks"
-                  value={formatNumber(summary.totalClicks)}
+                  value={formatNumber(rangeSummary.totalClicks)}
                   iconColor="text-green-600 dark:text-green-400"
                   iconBg="bg-green-100 dark:bg-green-900/30"
+                  loading={statsLoading && !statsData}
                 />
                 <KpiCard
                   icon={Eye}
                   label="Total Impressions"
-                  value={formatNumber(summary.totalImpressions)}
+                  value={formatNumber(rangeSummary.totalImpressions)}
                   iconColor="text-emerald-600 dark:text-emerald-400"
                   iconBg="bg-emerald-100 dark:bg-emerald-900/30"
+                  loading={statsLoading && !statsData}
                 />
                 <KpiCard
                   icon={TrendingUp}
                   label="Average CTR"
-                  value={formatPercent(summary.averageCtr)}
+                  value={formatPercent(rangeSummary.averageCtr)}
                   iconColor="text-amber-600 dark:text-amber-400"
                   iconBg="bg-amber-100 dark:bg-amber-900/30"
+                  loading={statsLoading && !statsData}
                 />
                 <KpiCard
                   icon={Target}
                   label="Average Position"
-                  value={formatPosition(summary.averagePosition)}
+                  value={formatPosition(rangeSummary.averagePosition)}
                   iconColor="text-sky-600 dark:text-sky-400"
                   iconBg="bg-sky-100 dark:bg-sky-900/30"
+                  loading={statsLoading && !statsData}
                 />
               </div>
             </section>
@@ -783,13 +966,10 @@ function SeoSearchConsolePageInner() {
               <CardHeader className="pb-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <CardTitle className="text-base font-semibold">Performance Chart</CardTitle>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs text-muted-foreground hidden sm:inline">Range</span>
-                    <Select
-                      value={String(chartDays)}
-                      onValueChange={(v) => setChartDays(Number(v))}
-                    >
-                      <SelectTrigger className="h-8 w-[130px] text-xs">
+                    <Select value={rangePreset} onValueChange={handleRangeChange}>
+                      <SelectTrigger className="h-8 w-[140px] text-xs">
                         <SelectValue placeholder="Select range" />
                       </SelectTrigger>
                       <SelectContent>
@@ -798,8 +978,28 @@ function SeoSearchConsolePageInner() {
                         <SelectItem value="28">Last 28 days</SelectItem>
                         <SelectItem value="90">Last 3 months</SelectItem>
                         <SelectItem value="180">Last 6 months</SelectItem>
+                        <SelectItem value="custom">Custom range</SelectItem>
                       </SelectContent>
                     </Select>
+                    {rangePreset === 'custom' && (
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          type="date"
+                          value={customFrom}
+                          onChange={(e) => setCustomFrom(e.target.value)}
+                          className="h-8 w-[150px] text-xs"
+                          aria-label="Custom range start date"
+                        />
+                        <span className="text-xs text-muted-foreground">→</span>
+                        <Input
+                          type="date"
+                          value={customTo}
+                          onChange={(e) => setCustomTo(e.target.value)}
+                          className="h-8 w-[150px] text-xs"
+                          aria-label="Custom range end date"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardHeader>
@@ -807,7 +1007,7 @@ function SeoSearchConsolePageInner() {
                 <PerformanceChart
                   stats={statsData ?? []}
                   isLoading={statsLoading}
-                  days={chartDays}
+                  rangeLabel={rangeLabel}
                   onSync={() => syncMutation.mutate()}
                   isSyncing={syncMutation.isPending}
                 />

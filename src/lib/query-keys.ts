@@ -117,7 +117,9 @@ export const queryKeys = {
   seoSearchConsole: createQueryKeys('seo-search-console'),
   seoSearchConsoleStats: {
     all: ['seo-sc-stats'] as const,
-    list: (days?: number) => ['seo-sc-stats', 'list', days] as const,
+    // `range` encodes either a preset ({ days: 14 }) or a custom span
+    // ({ from, to }) so the query re-fetches whenever the range changes.
+    list: (range?: Record<string, unknown>) => ['seo-sc-stats', 'list', range] as const,
   },
   seoSearchConsoleQueries: {
     all: ['seo-sc-queries'] as const,

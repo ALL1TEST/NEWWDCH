@@ -2181,3 +2181,54 @@ Stage Summary:
 - localhost:3000 serves the cloned repo's CMS UI: login page (Admin/Editor/Author quick-login) → Executive Dashboard with all modules; APIs query the seeded DB and return 200; no runtime errors.
 - The local application now matches the GitHub repository (UI, pages, components, routes, API, logic, features). No old project is being served.
 - KEY OPERATIONAL NOTE for any future agent: to (re)start the dev server in this sandbox, use the double-fork pattern: `( setsid bash -c 'cd /home/z/my-project && exec bun run dev' </dev/null >/dev/null 2>&1 & )` and keep every Bash command well under the 60s tool timeout (a timeout kills the cgroup, taking the reparented server down with it). Do NOT run `bun run db:push` or it will wipe the seeded DB.
+
+---
+Task ID: SC-CHART-1
+Agent: Z.ai Code (main orchestrator)
+Task: Fix the Search Console page "Performance Chart" so it displays real data (line/area chart with readable axes + tooltips), make the date-range selector actually control the chart (incl. custom range + empty-state), make KPI cards consistent with the chart range, make Top Pages URLs real clickable internal links that navigate to articles, and fix Sync Now.
+
+Work Log:
+- Inspected src/modules/seo/seo-search-console-page.tsx (883 lines), the SC API routes (route.ts, stats/, queries/, pages/), the prisma SC models, the navigation store (hash-based SPA routing), and query-keys/api-client.
+- Queried the DB via prisma: real SC data EXISTS — 1 connection (https://cms.example.com, CONNECTED), 30 daily SearchConsoleStat rows (2026-07-27 → 2026-08-25; 3497 clicks, 89350 impressions, avg CTR 3.9%, avg pos 9.71), 8 SearchConsolePage rows (paths like /articles/nextjs-performance-optimization), 10 SearchConsoleQuery rows. ContentItem slugs match the article paths (e.g. slug "nextjs-performance-optimization").
+- Found the real problems:
+  1. PerformanceChart was a CSS bar chart (no real axes/tooltips), not a line/area chart.
+  2. KPI cards used the server summary which is computed from the LAST 30 stats (hardcoded `take: 30` in GET /api/seo/search-console) → mismatched the chart's selected range.
+  3. PagesTable rendered pageUrls as `<a target=_blank>` with a HARDCODED base `https://cms.example.com${path}` (violated "do not hardcode" + "internal link").
+  4. Date range had no "Custom range"; X-axis only showed first/last date.
+  5. Sync Now was BROKEN: `PATCH /api/seo/search-console?action=sync` sent NO body and the route did `request.json()` → 400 INVALID_JSON every time (pre-existing bug).
+
+- Backend changes:
+  - src/app/api/seo/search-console/stats/route.ts: now accepts `from` & `to` (YYYY-MM-DD) date params in addition to `days`. When both supplied, filters `date: { gte: from, lte: to }` (inclusive both ends; ISO strings compare lexically == chronologically). Falls back to `days` preset for backward compat. Returns actual from/to in meta.range.
+  - src/app/api/seo/search-console/pages/route.ts: for each page, extracts the last path segment as a candidate slug and batch-resolves a CMS ContentItem (`db.contentItem.findMany({ where: { slug: { in: [...] } })}`). Attaches `contentId` (string|null) to each returned page so the UI can render a real internal link to the article. Handles relative paths AND absolute URLs uniformly via `new URL(pageUrl, 'http://example.com')`.
+  - src/app/api/seo/search-console/route.ts: PATCH (and POST) now tolerate an EMPTY body — reads `request.text()`, defaults to `{}` when empty, only 400s on non-JSON payload. Fixes Sync Now (PATCH ?action=sync sends no fields). POST still rejects empty bodies via zod validation (siteUrl required).
+  - src/lib/query-keys.ts: seoSearchConsoleStats.list now accepts a range object `{days}` or `{from,to}` so the query key changes with the range (preset or custom) → correct cache invalidation + refetch.
+
+- Frontend changes (src/modules/seo/seo-search-console-page.tsx):
+  - Added recharts import (ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip) + useMemo.
+  - Replaced the CSS bar chart with a recharts dual-Y-axis AreaChart: left axis = Impressions, right axis = Clicks (so the much-smaller Clicks series stays readable instead of flat-lining on a single shared axis). Two Areas (Impressions = primary/30 gradient, Clicks = primary gradient) keep the EXISTING legend colors (Clicks solid primary, Impressions primary/30). X-axis shows real dates via tickFormatter=formatShortDate + minTickGap. CartesianGrid, two YAxes (formatNumber), custom ChartTooltip.
+  - ChartTooltip shows the exact date (full "Aug 25, 2026") + Clicks + Impressions + CTR + Avg Position for the hovered day.
+  - Empty-state now reads "No Search Console data available for this period." (exact requested text) + the Sync Now CTA. Chart NEVER renders blank when daily data exists (the only blank path is genuinely empty data, which shows the message instead).
+  - Defensive chronological sort (oldest→newest) on the client even though the API returns asc.
+  - Date-range UI: Select now has Last 7/14/28 days, Last 3/6 months, AND "Custom range". When Custom is picked, two `<Input type=date>` (from/to) appear and are auto-seeded to the last 14 days so the chart always has a span immediately. `rangeLabel` badge reflects the selection ("Last 7 days" / "Last 3 months" / "from → to"). Changing the range changes `statsParams` → new query key → immediate refetch → chart + KPIs update.
+  - KPI cards now derive from `rangeSummary` (computed on the client from the SAME `statsData` daily stats that feed the chart) — Total Clicks/Impressions = sum, Avg CTR = clicks/impressions, Avg Position = mean of daily positions. Added a `loading` prop to KpiCard (shows a Skeleton while the first stats load). The server summary is no longer used for the cards → no 30-day mismatch.
+  - PagesTable: each pageUrl is now a real `<a>` link using the data. If `contentId` resolved → `href="#content/{id}"` (real SPA hash-route anchor → triggers the nav store's hashchange listener → renders ContentDetailPage for that article). Else if absolute URL → `target=_blank` external. Else (bare path, e.g. "/") → `href={pageUrl}` (exact path). Display text = the exact SC pageUrl. Hover state: `hover:underline underline-offset-2 decoration-primary/40`. External icon (ExternalLink) kept for external links; ArrowUpRight for internal. No hardcoded base.
+
+- Verified end-to-end with Agent Browser (logged in as Admin → #seo/search-console):
+  - Chart renders: 1 recharts-surface, 2 .recharts-area elements. KPI values for 14d = ["1.6K", "39.4K", "4.00%", "9.5"] (range-consistent with the chart, not the 30-day server totals).
+  - X-axis shows REAL dates (not hardcoded): "Aug 12"→"Aug 25" for 14d; "Aug 19"→"Aug 25" for 7d; "Aug 13"→"Aug 25" for custom range 2026-08-13→2026-08-26. Dual Y-axes: left 0..3.8K (impressions), right 0..180 (clicks).
+  - Range change → immediate refetch + chart + KPI update. dev.log: `GET /api/seo/search-console/stats?days=7 200`; KPIs changed to ["782","18.3K","4.00%","9.1"].
+  - Custom range → date inputs appear; dev.log: `GET /api/seo/search-console/stats?from=2026-08-13&to=2026-08-26 200`.
+  - Top Pages URLs are real internal links: href="#content/cmt0pg31f000xuwmzz7oh5nq2" for /articles/nextjs-performance-optimization (etc.) — resolved via server-side ContentItem slug match. Clicking one navigated to `#content/cmt0pg31f000xuwmzz7oh5nq2` and rendered the ContentDetailPage (h1="Next.js Performance Optimization Techniques"). No cms.example.com hardcoding.
+  - Sync Now: dev.log `PATCH /api/seo/search-console?action=sync 200 in 151ms` (was 400 before the route fix). "Last synced" updated from "Aug 25, 12:57 PM" → "Aug 26, 10:48 AM". Queries + pages refetched after sync. Toast success shown.
+  - Lint clean on all 5 changed files (`bunx eslint ...` → no output).
+  - Screenshots: upload/sc-chart-14d.png, sc-hover2.png, sc-article-detail.png, sc-final.png.
+  - Note: the recharts hover tooltip could not be ACTIVATED under headless mouse simulation (recharts needs real pointer events on its interaction layer; `.recharts-tooltip-wrapper` stays visibility:hidden under synthetic/sweep mouse moves). The ChartTooltip component is implemented per the standard recharts `<Tooltip content=.../>` pattern and renders date+clicks+impressions+CTR+position when active — it will display in the real browser preview.
+
+Stage Summary:
+- Performance Chart is now a proper recharts dual-axis area chart plotting REAL daily Clicks + Impressions with readable axes (real dates on X, formatted numbers on Y) and a custom hover tooltip showing the exact date + per-day values. It never renders blank when daily data exists (empty-state message otherwise).
+- Date-range selector (Last 7/14/28 days, Last 3/6 months, Custom range) actually controls the chart data via ?days=N or ?from=&to=; X-axis reflects the selected range; no hardcoded dates.
+- KPI cards (Total Clicks, Total Impressions, Average CTR, Average Position) are computed from the SAME daily stats as the chart → fully consistent with the selected range.
+- Top Pages URLs are real clickable internal links (`<a href="#content/{id}">`) resolved server-side from the SC pageUrl slug → clicking navigates to the article's detail page in the CMS. No hardcoded base, exact path displayed, hover state, appropriate icons.
+- Top Search Queries table unchanged (already real data; "Top N" label reflects actual count).
+- Sync Now fixed (route tolerates empty body) → returns 200, updates lastSyncAt, invalidates + refetches summary/stats/queries/pages, shows loading spinner + success toast.
+- No page redesign; existing cards/spacing/typography/colors/controls preserved. Backend + frontend changes limited to the missing functionality.

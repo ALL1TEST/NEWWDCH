@@ -48,11 +48,54 @@ export async function GET(request: NextRequest) {
       db.searchConsolePage.count({ where }),
     ]);
 
+    // Resolve each page URL to a CMS ContentItem so the UI can render a real
+    // INTERNAL link that navigates to the article (via the #content/:id hash
+    // route). We extract the last path segment as the candidate slug and batch
+    // a single ContentItem lookup. Pages with no match get contentId=null and
+    // fall back to a plain anchor using the exact path from the data.
+    const candidateSlugs = Array.from(
+      new Set(
+        items
+          .map((p) => {
+            try {
+              // Treat relative paths (and absolute URLs) uniformly by parsing
+              // against a dummy origin; only the pathname interests us.
+              const u = new URL(p.pageUrl, 'http://example.com');
+              const parts = u.pathname.split('/').filter(Boolean);
+              return parts[parts.length - 1] ?? null;
+            } catch {
+              return null;
+            }
+          })
+          .filter((s): s is string => !!s && s.length > 0),
+      ),
+    );
+
+    const contentItems =
+      candidateSlugs.length > 0
+        ? await db.contentItem.findMany({
+            where: { slug: { in: candidateSlugs } },
+            select: { id: true, slug: true },
+          })
+        : [];
+    const slugToContentId = new Map(contentItems.map((c) => [c.slug, c.id]));
+
     // Normalize CTR to a fraction (0-1) so the frontend's formatPercent(n*100) works consistently.
-    const normalized = items.map((p) => ({
-      ...p,
-      ctr: p.ctr > 1 ? p.ctr / 100 : p.ctr,
-    }));
+    const normalized = items.map((p) => {
+      let slug: string | null = null;
+      try {
+        const u = new URL(p.pageUrl, 'http://example.com');
+        const parts = u.pathname.split('/').filter(Boolean);
+        slug = parts[parts.length - 1] ?? null;
+      } catch {
+        slug = null;
+      }
+      return {
+        ...p,
+        ctr: p.ctr > 1 ? p.ctr / 100 : p.ctr,
+        contentId: (slug && slugToContentId.get(slug)) || null,
+      };
+    });
 
     return NextResponse.json({
       data: { data: normalized, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } },

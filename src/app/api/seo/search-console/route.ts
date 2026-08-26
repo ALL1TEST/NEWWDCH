@@ -104,9 +104,15 @@ export async function POST(request: NextRequest) {
   const start = Date.now();
 
   try {
-    let body: unknown;
+    // Tolerate an empty body — a sync request (PATCH ?action=sync) sends no
+    // fields, and `request.json()` would throw on an empty buffer. Only reject
+    // when the client actually sent a non-JSON payload.
+    let body: unknown = {};
     try {
-      body = await request.json();
+      const text = await request.text();
+      if (text.trim().length > 0) {
+        body = JSON.parse(text);
+      }
     } catch {
       return NextResponse.json(
         { error: { code: 'INVALID_JSON', message: 'Request body must be valid JSON' }, meta: { requestId: id, timestamp: new Date().toISOString() } },
@@ -180,9 +186,15 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    let body: unknown;
+    // Tolerate an empty body — a sync request (PATCH ?action=sync) sends no
+    // fields, and `request.json()` would throw on an empty buffer. Only reject
+    // when the client actually sent a non-JSON payload.
+    let body: unknown = {};
     try {
-      body = await request.json();
+      const text = await request.text();
+      if (text.trim().length > 0) {
+        body = JSON.parse(text);
+      }
     } catch {
       return NextResponse.json(
         { error: { code: 'INVALID_JSON', message: 'Request body must be valid JSON' }, meta: { requestId: id, timestamp: new Date().toISOString() } },

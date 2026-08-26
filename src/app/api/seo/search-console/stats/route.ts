@@ -15,6 +15,25 @@ export async function GET(request: NextRequest) {
     const sp = new URL(request.url).searchParams;
     const days = Math.min(180, Math.max(1, Number(sp.get('days')) || 30));
 
+    // The chart supports both a "last N days" preset and a custom date range.
+    // `from`/`to` (YYYY-MM-DD) take precedence when both are supplied; otherwise
+    // we fall back to the `days` preset so the endpoint stays backward-compatible.
+    const fromParam = sp.get('from');
+    const toParam = sp.get('to');
+
+    let fromDate: string;
+    let toDate: string;
+    if (fromParam && toParam) {
+      fromDate = fromParam;
+      toDate = toParam;
+    } else {
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - days);
+      fromDate = start.toISOString().split('T')[0];
+      toDate = end.toISOString().split('T')[0];
+    }
+
     const siteFilter = await getSiteWhere(request);
 
     const connection = await db.searchConsoleConnection.findFirst({
@@ -28,15 +47,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Calculate date range
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-
+    // Date strings are ISO (YYYY-MM-DD), so lexical comparison == chronological
+    // comparison. Bounds are inclusive on both ends.
     const stats = await db.searchConsoleStat.findMany({
       where: {
         connectionId: connection.id,
-        date: { gte: startDate.toISOString().split('T')[0] },
+        date: { gte: fromDate, lte: toDate },
       },
       orderBy: { date: 'asc' },
     });
@@ -47,7 +63,7 @@ export async function GET(request: NextRequest) {
         requestId: id,
         timestamp: new Date().toISOString(),
         duration: Date.now() - start,
-        range: { from: startDate.toISOString().split('T')[0], to: endDate.toISOString().split('T')[0], days },
+        range: { from: fromDate, to: toDate, days: fromParam && toParam ? 0 : days },
       },
     });
   } catch (error) {
