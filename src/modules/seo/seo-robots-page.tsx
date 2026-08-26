@@ -185,38 +185,27 @@ function getDefaultContent(domain: string): string {
 
 // ==================== Syntax Highlighted Line ====================
 
-function HighlightedLine({ line, number }: { line: string; number: number }) {
+// Read-only syntax-highlighted line for the Preview modal. Deliberately
+// has NO line numbers — line numbers are editor chrome and would make the
+// served-response preview feel like a duplicate of the Editor. The Editor
+// (CodeEditor) is the only place that shows line numbers.
+function HighlightedLine({ line }: { line: string }) {
   const trimmed = line.trim();
 
   // Comment
   if (trimmed.startsWith('#')) {
-    return (
-      <div className="flex">
-        <span className="inline-block w-10 shrink-0 text-right pr-3 text-muted-foreground/40 select-none">{number}</span>
-        <span className="text-muted-foreground/60 italic">{line}</span>
-      </div>
-    );
+    return <div><span className="text-muted-foreground/60 italic">{line}</span></div>;
   }
 
   // Empty line
   if (!trimmed) {
-    return (
-      <div className="flex">
-        <span className="inline-block w-10 shrink-0 text-right pr-3 text-muted-foreground/40 select-none">{number}</span>
-        <span>&nbsp;</span>
-      </div>
-    );
+    return <div>&nbsp;</div>;
   }
 
   // Directive line
   const colonIdx = line.indexOf(':');
   if (colonIdx === -1) {
-    return (
-      <div className="flex">
-        <span className="inline-block w-10 shrink-0 text-right pr-3 text-muted-foreground/40 select-none">{number}</span>
-        <span className="text-red-500">{line}</span>
-      </div>
-    );
+    return <div><span className="text-red-500">{line}</span></div>;
   }
 
   const directive = line.slice(0, colonIdx + 1);
@@ -231,12 +220,9 @@ function HighlightedLine({ line, number }: { line: string; number: number }) {
   else directiveColor = 'text-amber-600 dark:text-amber-400';
 
   return (
-    <div className="flex">
-      <span className="inline-block w-10 shrink-0 text-right pr-3 text-muted-foreground/40 select-none">{number}</span>
-      <span>
-        <span className={directiveColor}>{directive}</span>
-        <span className="text-foreground/80">{rest}</span>
-      </span>
+    <div>
+      <span className={directiveColor}>{directive}</span>
+      <span className="text-foreground/80">{rest}</span>
     </div>
   );
 }
@@ -575,12 +561,16 @@ export function SeoRobotsPage() {
                 <span className="text-muted-foreground">{content.length} bytes</span>
               </div>
 
-              {/* Syntax-highlighted, read-only response body */}
-              <div className="overflow-auto bg-zinc-50 dark:bg-zinc-950/50 p-4 max-h-[50vh]">
-                <div className="font-mono text-sm leading-6 whitespace-pre-wrap">
+              {/* Read-only response body — syntax-highlighted, NO line
+                  numbers (line numbers are editor chrome; their absence
+                  keeps this clearly a served-response preview, not an
+                  editor duplicate). The body is non-editable: it's a
+                  <pre>-style block with select-text cursor, no focus ring. */}
+              <div className="overflow-auto bg-zinc-50 dark:bg-zinc-950/50 p-4 max-h-[50vh] select-text">
+                <div className="font-mono text-sm leading-6 whitespace-pre-wrap cursor-default">
                   {content.trim() ? (
                     content.split('\n').map((line, i) => (
-                      <HighlightedLine key={i} line={line} number={i + 1} />
+                      <HighlightedLine key={i} line={line} />
                     ))
                   ) : (
                     <span className="text-muted-foreground/50 italic"># robots.txt is empty</span>

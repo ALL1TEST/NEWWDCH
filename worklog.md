@@ -2394,3 +2394,52 @@ Stage Summary:
 - NO functionality, layout, dimensions, typography, spacing, icons, hover states, column behavior, or existing design changed — only the two specified UI tweaks.
 - All existing Redirects functionality preserved: Create/Edit/Delete, Status toggle (PATCH /api/redirects/:id), 301/302 types, search, filters, sort, pagination, CSV import/export, hit counting, real clickable From/To path links (from prior SEO-POLISH task).
 - Dev server remains running on port 3000. Screenshots: upload/redirects-1-light.png, upload/redirects-2-actions-menu.png, upload/redirects-3-dark.png.
+
+---
+Task ID: SEO-ROBOTS-PREVIEW-DEDUP + SEO-REDIRECTS-FUNNEL-REMOVE
+Agent: main
+Task: Two UI-only changes. (A) Robots.txt Preview must not duplicate the Editor — keep Editor as the editable source of truth, keep Preview as a read-only HTTP response preview that is visually DISTINCT from the Editor (no line numbers / editor chrome / Save buttons / textarea / line-editing behavior), keep the GET /robots.txt · 200 OK · text/plain · N bytes header frame, keep validation status, keep existing modal design/spacing/typography. (B) Remove only the small funnel/filter icon shown between the "Search redirects by path…" input and the "All Types" dropdown on the Redirects page; keep search input + All Types + All Status dropdowns + all filtering functionality + spacing/alignment unchanged.
+
+Work Log:
+
+Task A — Robots.txt Preview de-duplication (src/modules/seo/seo-robots-page.tsx):
+- Inspected the existing structure: CodeEditor (lines 274-330) is a <textarea> with a SEPARATE line-numbers column (zinc-100 box, w-[3.5rem]) — no syntax highlighting inside the textarea itself. The Preview modal (lines 540-649) already had an HTTP-response frame (GET /robots.txt, 200 OK [or "200 OK · Invalid"], text/plain, utf-8, N bytes), a read-only body using the HighlightedLine component, and a validation-state footer (green valid / red errors / amber warnings / amber empty notice).
+- Identified the duplication: HighlightedLine (lines 188-242) rendered EACH line with an inline `w-10` line-number span (e.g. `<span className="inline-block w-10 shrink-0 text-right pr-3 text-muted-foreground/40 select-none">{number}</span>`), which is editor chrome. Combined with showing the same robots.txt content, the Preview body looked like a second editor view.
+- Fix: refactored HighlightedLine to remove the `number` prop entirely and removed the line-number `<span>` from all 4 return paths (comment / empty / directive-without-colon / normal directive). The component now renders ONLY the syntax-highlighted directive + value (User-agent violet / Disallow red / Allow green / Sitemap sky / unknown amber) with no leading line-number column. Syntax highlighting is KEPT — it's a distinguishing feature since the Editor's textarea has no syntax highlighting.
+- Updated the Preview body call site (line ~572) to pass only `line={line}` (removed `number={i + 1}`). Added `select-text` to the body wrapper and `cursor-default` to the inner content div to reinforce the read-only, non-editable nature. Added a block comment explaining WHY line numbers are absent (editor chrome; their absence keeps this a served-response preview, not an editor duplicate).
+- NO other change to the Preview: HTTP response frame, "This is the exact response served at /robots.txt. Read-only." label, validation footer, modal Dialog/max-w-3xl/max-h-[85vh] all preserved. The Editor (CodeEditor) is untouched — still the editable source of truth with its line-numbers column + textarea.
+
+Task B — Redirects funnel icon removal (src/modules/seo/seo-redirects-page.tsx):
+- Located the funnel icon at line 1164: `<Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />` inside `filterContent`, positioned between the search input (rendered by DataTable's TableToolbar) and the "All Types" <Select>.
+- Removed the `<Filter ... />` JSX line. Removed the now-unused `Filter` import from the lucide-react import block (verified `Filter` was only used at that one JSX site — `rg "\bFilter\b"` returned only the import + the JSX + two unrelated comment lines).
+- NO other change: `filterContent` still renders the "All Types" <Select> (301/302/307/308 options) and the "All Status" <Select> (Active/Inactive) with the same `gap-2` flex layout, same `h-8 w-[150px]` / `h-8 w-[130px]` trigger sizes, same `text-xs` typography. The search input ("Search redirects by path...") is rendered by DataTable's TableToolbar and was not touched. All filtering functionality (typeFilter, statusFilter, table.searchValue → queryParams → /api/redirects) is untouched.
+
+LINT:
+- `bun run lint`: ZERO issues in seo-robots-page.tsx and seo-redirects-page.tsx. The 5 remaining lint problems are pre-existing in untouched files (data-table.tsx, content-create/edit-page.tsx, seo-broken-links-page.tsx, seo-social-preview-page.tsx).
+
+BROWSER VERIFICATION (agent-browser, logged in as admin@example.com):
+
+Task A — Robots.txt Preview:
+- Navigated to SEO → Robots.txt. Editor renders with textarea + 24 line-number spans (unchanged). Screenshot: upload/robots-1-editor.png.
+- Clicked "Preview Result" → modal opened. Screenshot: upload/robots-2-preview.png.
+- Evaluated the dialog: `{hasGet: true, has200: true, hasTextPlain: true, hasBytes: true, hasReadonly: true, hasEditorTextarea: false, saveBtns: ["Close"], hasLineNumbersInPreview: false}`.
+  * HTTP response frame present (GET /robots.txt, 200 OK, text/plain, N bytes) ✓
+  * "Read-only" label present ✓
+  * NO <textarea> inside the modal (no editor reuse) ✓
+  * Only button is "Close" (no Save/Restore/line-editing buttons) ✓
+  * NO line numbers (`w-10` spans) in the preview body ✓
+- Editor (CodeEditor) confirmed unchanged: textarea present + 24 line-number spans still rendered outside the modal ✓.
+- Console: only a pre-existing `Warning: Missing Description or aria-describedby for {DialogContent}` accessibility warning (present before this change, not introduced by it). No errors/exceptions.
+
+Task B — Redirects funnel icon:
+- Navigated to SEO → Redirects (clicked "Redirects 5" nav button on SEO Overview). Screenshot: upload/redirects-no-funnel.png.
+- Evaluated the toolbar (.p-4.pb-2): 3 SVGs total — `lucide-search` (search input magnifier) + 2 × `lucide-chevron-down` (dropdown arrows). NO `lucide-filter` / funnel icon ✓.
+- Search input present (`input[placeholder="Search redirects by path..."]`, value empty) ✓.
+- 3 comboboxes present: "All Types", "All Status", "25" (page size) ✓.
+- Opened "All Types" dropdown → 5 options: ["All Types", "301 Permanent", "302 Temporary", "307 Temporary", "308 Permanent"] ✓ (filtering functionality intact).
+- Console: no errors/exceptions.
+
+Stage Summary:
+- Task A: Preview no longer duplicates the Editor. HighlightedLine lost its line numbers (editor chrome), so the Preview body is now clearly a read-only served-response view (HTTP frame + syntax-highlighted body without line numbers + validation footer + "Close" only button + no textarea), while the Editor remains the sole editable source of truth with its line-numbers column + textarea. Existing modal design/spacing/typography and all robots.txt functionality (Save / Restore Default / Preview / Validation / Generated-Saved) preserved.
+- Task B: The funnel/filter icon between the search input and "All Types" dropdown is removed. Search input, "All Types", "All Status", page-size dropdown, gap-2 layout, trigger sizes, typography, and all filtering functionality are unchanged.
+- Files modified: src/modules/seo/seo-robots-page.tsx (HighlightedLine refactor + Preview body call site), src/modules/seo/seo-redirects-page.tsx (removed Filter icon JSX + import). Dev server remains running on port 3000. Screenshots: upload/robots-1-editor.png, upload/robots-2-preview.png, upload/redirects-no-funnel.png.

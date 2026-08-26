@@ -13,7 +13,6 @@ import {
   MoreHorizontal,
   Loader2,
   ArrowUpDown,
-  Filter,
   Upload,
   Download,
   AlertTriangle,
@@ -1161,7 +1160,6 @@ export function SeoRedirectsPage() {
 
   const filterContent = (
     <div className="flex items-center gap-2">
-      <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       <Select
         value={typeFilter}
         onValueChange={(v) => {
