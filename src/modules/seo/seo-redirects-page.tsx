@@ -49,7 +49,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
@@ -242,9 +241,15 @@ function StatusToggleCell({ row, onToggle, isPending }: StatusCellProps) {
         aria-label={active ? 'Deactivate redirect' : 'Activate redirect'}
         className={cn(
           'cursor-pointer',
-          active
-            ? 'data-[state=checked]:bg-emerald-500 dark:data-[state=checked]:bg-emerald-600'
-            : 'data-[state=unchecked]:bg-zinc-300 dark:data-[state=unchecked]:bg-zinc-700',
+          // Active/on color = BLACK (was emerald).
+          // Light mode: black track + default white thumb (bg-background) = clear.
+          // Dark mode: black track + forced white thumb — the Switch's default
+          // dark-mode checked thumb (bg-primary-foreground) is dark and would
+          // be invisible on a pure-black track, so we override it to white.
+          'data-[state=checked]:bg-black dark:data-[state=checked]:bg-black',
+          'dark:[&[data-state=checked]>span]:bg-white',
+          // Inactive/off state — keep visually clear (unchanged).
+          'data-[state=unchecked]:bg-zinc-300 dark:data-[state=unchecked]:bg-zinc-700',
         )}
       />
     </div>
@@ -1132,9 +1137,6 @@ export function SeoRedirectsPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
-                Redirect actions
-              </DropdownMenuLabel>
               <DropdownMenuItem onClick={() => handleOpenEdit(row)}>
                 <Pencil className="h-4 w-4 mr-2" />
                 Edit

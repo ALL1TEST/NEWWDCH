@@ -2352,3 +2352,45 @@ Stage Summary:
 - Implementation requirement met: Remove All is NOT just `setShowResolved(false)` — it cancels in-flight queries, clears all cached seo-issues queries, resets ALL filter state (showResolved + severityFilter + searchValue + currentPage), and invalidates overview queries. The visible table is DERIVED from the updated filter state via the queryParams → queryKey → API → issues chain (single source of truth).
 - UI design unchanged: no CSS/layout/markup changes; only the resetAllFilters useCallback body + a documentation comment were modified.
 - Files modified: src/modules/seo/seo-audit-page.tsx (resetAllFilters useCallback at lines 144-181). Dev server remains running on port 3000. Screenshots: upload/audit-1-initial.png, upload/audit-2-resolved.png, upload/audit-3-after-removeall.png.
+
+---
+Task ID: SEO-REDIRECTS-UI-TWEAKS
+Agent: main
+Task: Two small UI-only adjustments to the Redirects table — (1) Status toggle active/on color → black (keep off state clear, toggle stays functional, no column/behavior change); (2) remove the "Redirect actions" header text from the three-dot Actions dropdown so it opens directly with Edit + Delete (keep icons/spacing/hover/styling, no replacement header). Do NOT change any existing functionality, layout, dimensions, typography, or spacing.
+
+Work Log:
+- Read /home/z/my-project/src/modules/seo/seo-redirects-page.tsx. Located StatusToggleCell (lines 226-258) and the Actions dropdown (lines 1127-1151).
+- Verified Switch component (src/components/ui/switch.tsx): Root has default `data-[state=checked]:bg-primary data-[state=unchecked]:bg-input`; Thumb has `bg-background dark:data-[state=unchecked]:bg-foreground dark:data-[state=checked]:bg-primary-foreground`. So in dark mode the default checked thumb is dark — meaning a pure-black track would make the thumb invisible in dark mode. Solution: force the thumb to white in dark mode checked state via an arbitrary-variant selector.
+
+Change 1 — Status toggle active color = BLACK (src/modules/seo/seo-redirects-page.tsx, StatusToggleCell className):
+- Replaced the conditional emerald classes (`active ? 'data-[state=checked]:bg-emerald-500 dark:data-[state=checked]:bg-emerald-600' : '...'`) with unconditional classes that apply to both states:
+  * `data-[state=checked]:bg-black dark:data-[state=checked]:bg-black` — pure BLACK track when ON (both themes). twMerge overrides the Switch's default `data-[state=checked]:bg-primary`.
+  * `dark:[&[data-state=checked]>span]:bg-white` — force the thumb to WHITE in dark mode when checked (default dark-mode checked thumb `bg-primary-foreground` is dark and would be invisible on a pure-black track). Light mode keeps the default `bg-background` (white) thumb, no override needed.
+  * `data-[state=unchecked]:bg-zinc-300 dark:data-[state=unchecked]:bg-zinc-700` — OFF state unchanged, visually clear (light gray / dark gray).
+- Removed the `active ?` conditional entirely — the `data-[state=checked]` / `data-[state=unchecked]` variants already handle both states, so the conditional was redundant.
+
+Change 2 — Remove "Redirect actions" header (src/modules/seo/seo-redirects-page.tsx, Actions column render):
+- Removed the `<DropdownMenuLabel className="text-xs text-muted-foreground font-normal">Redirect actions</DropdownMenuLabel>` block from inside `<DropdownMenuContent>`. The dropdown now opens directly with `<DropdownMenuItem>Edit</DropdownMenuItem>` + `<DropdownMenuSeparator />` + `<DropdownMenuItem>Delete</DropdownMenuItem>`.
+- Removed the now-unused `DropdownMenuLabel` from the `@/components/ui/dropdown-menu` import (was the only usage in the file — verified via `rg "DropdownMenuLabel"` which returned only the import line).
+- No other changes to the Actions column: trigger button, MoreHorizontal icon, sr-only "Actions" label, DropdownMenuContent `align="end" className="w-48"`, Edit/Delete items, separator, icons (Pencil/Trash2), hover states, and styling all preserved.
+
+LINT:
+- `bun run lint`: ZERO issues in seo-redirects-page.tsx. The 5 remaining lint problems are pre-existing in untouched files (data-table.tsx, content-create/edit-page.tsx, seo-broken-links-page.tsx, seo-social-preview-page.tsx).
+
+BROWSER VERIFICATION (agent-browser, logged in as admin@example.com → Redirects page, 7 redirects present):
+- LIGHT MODE: evaluated all 7 Switch elements via getComputedStyle:
+  * 5 checked (ON): trackBg = `rgb(0, 0, 0)` = pure BLACK ✓; thumbBg = `lab(100 0 0)` = white ✓ (clear contrast).
+  * 2 unchecked (OFF): trackBg = `lab(84.98 0.6 -2.18)` = light gray (zinc-300) ✓; thumbBg = white ✓ (clear contrast).
+- DARK MODE (toggled theme): evaluated all 7 Switch elements:
+  * 5 checked (ON): trackBg = `rgb(0, 0, 0)` = pure BLACK ✓; thumbBg = `rgb(255, 255, 255)` = pure WHITE ✓ (forced override worked — thumb is clearly visible on the black track).
+  * 2 unchecked (OFF): trackBg = `lab(26.80 1.35 -4.68)` = dark gray (zinc-700) ✓; thumbBg = near-white ✓ (clear contrast).
+- ACTIONS DROPDOWN: clicked the first row's Actions (MoreHorizontal) trigger → dropdown opened. Evaluated the menu: `labelCount: 0` (no "Redirect actions" header) ✓, `itemCount: 2`, `items: ["Edit", "Delete"]` ✓. Edit item shows Pencil icon; Delete item shows Trash2 icon; separator between them. No replacement header/label added. Screenshot: upload/redirects-2-actions-menu.png.
+- TOGGLE FUNCTIONALITY: clicked a checked Switch → it became unchecked (redirect deactivated via API). dev.log confirms: `PATCH /api/redirects/cmt8o6idc0032t7qjhjvibpfv 200 in 121ms` (isActive updated). Then clicked it back → restored. Toggle is fully functional (PATCH endpoint works end-to-end).
+- CONSOLE: only Fast Refresh logs (from the code edit) — no errors, no warnings, no exceptions, no hydration mismatches.
+- Reverted theme to light mode after verification.
+
+Stage Summary:
+- Both UI-only changes applied to src/modules/seo/seo-redirects-page.tsx: (1) Status toggle ON color = black (`data-[state=checked]:bg-black` + forced white thumb in dark mode for contrast); (2) "Redirect actions" DropdownMenuLabel removed from the Actions dropdown + unused DropdownMenuLabel import dropped.
+- NO functionality, layout, dimensions, typography, spacing, icons, hover states, column behavior, or existing design changed — only the two specified UI tweaks.
+- All existing Redirects functionality preserved: Create/Edit/Delete, Status toggle (PATCH /api/redirects/:id), 301/302 types, search, filters, sort, pagination, CSV import/export, hit counting, real clickable From/To path links (from prior SEO-POLISH task).
+- Dev server remains running on port 3000. Screenshots: upload/redirects-1-light.png, upload/redirects-2-actions-menu.png, upload/redirects-3-dark.png.
