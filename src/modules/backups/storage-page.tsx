@@ -12,6 +12,8 @@ import {
   Plug,
   CheckCircle2,
   XCircle,
+  Check,
+  ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,12 +21,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from '@/components/ui/popover';
 import {
   Dialog,
   DialogContent,
@@ -72,7 +72,155 @@ interface StorageRow {
 interface StorageForm {
   name: string;
   provider: BackupStorageProvider;
-  config: string; // JSON string
+  // Per-field config values keyed by the provider field key (e.g.
+  // "bucket", "region", "accessKeyId"). Stored as strings because form
+  // inputs always produce strings; converted to the right type on submit.
+  // Values for fields that belong to OTHER providers are retained across
+  // provider switches (so the user doesn't lose typed input if they flip
+  // back), but only the current provider's fields are rendered, validated,
+  // and submitted — hidden fields are never sent to the API.
+  config: Record<string, string>;
+}
+
+// -------------------- Provider Field Definitions --------------------
+
+interface ProviderField {
+  key: string;
+  label: string;
+  type: 'text' | 'password' | 'number';
+  required: boolean;
+  placeholder?: string;
+  helpText?: string;
+  multiline?: boolean;
+}
+
+/** The configuration fields each provider needs, aligned with the
+ *  server-side `validateConfigJson` in /api/backups/storage/route.ts so the
+ *  form's required fields exactly match what the API enforces. Fields NOT
+ *  listed here (i.e. fields belonging to another provider) are neither
+ *  rendered nor validated when this provider is selected. */
+const PROVIDER_FIELDS: Record<BackupStorageProvider, ProviderField[]> = {
+  LOCAL: [
+    { key: 'path', label: 'Path', type: 'text', required: false, placeholder: '/var/backups', helpText: 'Local filesystem path for backups. Leave empty to use the default backup directory.' },
+  ],
+  AMAZON_S3: [
+    { key: 'bucket', label: 'Bucket', type: 'text', required: true, placeholder: 'my-backups' },
+    { key: 'region', label: 'Region', type: 'text', required: true, placeholder: 'us-east-1' },
+    { key: 'accessKeyId', label: 'Access Key ID', type: 'text', required: true },
+    { key: 'secretAccessKey', label: 'Secret Access Key', type: 'password', required: true },
+  ],
+  GOOGLE_DRIVE: [
+    { key: 'folderId', label: 'Folder ID', type: 'text', required: true, placeholder: 'root or folder ID' },
+    { key: 'credentials', label: 'Credentials (JSON)', type: 'text', required: true, multiline: true, placeholder: '{"client_id":"...","client_secret":"..."}', helpText: 'OAuth2 credentials JSON for the Google API project.' },
+  ],
+  DROPBOX: [
+    { key: 'accessToken', label: 'Access Token', type: 'password', required: true },
+  ],
+  ONEDRIVE: [
+    { key: 'clientId', label: 'Client ID', type: 'text', required: true },
+    { key: 'clientSecret', label: 'Client Secret', type: 'password', required: true },
+  ],
+  CLOUDFLARE_R2: [
+    { key: 'accountId', label: 'Account ID', type: 'text', required: true },
+    { key: 'bucket', label: 'Bucket', type: 'text', required: true },
+    { key: 'accessKeyId', label: 'Access Key ID', type: 'text', required: true },
+    { key: 'secretAccessKey', label: 'Secret Access Key', type: 'password', required: true },
+  ],
+  BACKBLAZE_B2: [
+    { key: 'bucket', label: 'Bucket', type: 'text', required: true },
+    { key: 'keyId', label: 'Key ID', type: 'text', required: true },
+    { key: 'applicationKey', label: 'Application Key', type: 'password', required: true },
+  ],
+  FTP: [
+    { key: 'host', label: 'Host', type: 'text', required: true, placeholder: 'ftp.example.com' },
+    { key: 'port', label: 'Port', type: 'number', required: true, placeholder: '21' },
+    { key: 'username', label: 'Username', type: 'text', required: true },
+    { key: 'password', label: 'Password', type: 'password', required: true },
+  ],
+  SFTP: [
+    { key: 'host', label: 'Host', type: 'text', required: true, placeholder: 'sftp.example.com' },
+    { key: 'port', label: 'Port', type: 'number', required: true, placeholder: '22' },
+    { key: 'username', label: 'Username', type: 'text', required: true },
+    { key: 'password', label: 'Password', type: 'password', required: true },
+  ],
+};
+
+// -------------------- Provider Dropdown (custom, CMS-style) --------------------
+
+/** Fully custom Provider dropdown — replaces the native/shadcn Select with
+ *  a polished CMS-style component. Built on the Radix Popover primitive so
+ *  it inherits portal rendering (no clipping by the modal's overflow),
+ *  outside-click close, Escape close, and viewport-aware Popper positioning.
+ *  The trigger button and option list are entirely custom-styled to match
+ *  the rest of the CMS form inputs (white bg, thin border, rounded, subtle
+ *  shadow, hover state, selected state with a checkmark). The panel width
+ *  matches the trigger width via the Radix `--radix-popper-anchor-width`
+ *  CSS variable. Opens/closes smoothly on click; closes on outside click,
+ *  Escape, and option selection. */
+function ProviderDropdown({
+  value,
+  onChange,
+}: {
+  value: BackupStorageProvider;
+  onChange: (v: BackupStorageProvider) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedLabel = PROVIDERS.find((p) => p.value === value)?.label ?? 'Select provider';
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-[color,box-shadow] hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <span className="truncate text-left text-foreground">{selectedLabel}</span>
+          <ChevronDown
+            className={cn('h-4 w-4 opacity-50 transition-transform', open && 'rotate-180')}
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={4}
+        collisionPadding={8}
+        className="p-1"
+        style={{ width: 'var(--radix-popper-anchor-width)' }}
+      >
+        {/* Inner scroll area: max-height capped so the panel never overflows
+            the modal vertically. With 9 providers at ~32px each (~290px
+            total), a 200px cap shows ~6 options and scrolls for the rest,
+            keeping the panel within the modal's content area on standard
+            viewport sizes. The outer PopoverContent inherits this height. */}
+        <div role="listbox" className="max-h-[180px] overflow-y-auto">
+          {PROVIDERS.map((p) => {
+            const isSelected = p.value === value;
+            return (
+              <button
+                key={p.value}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                onClick={() => {
+                  onChange(p.value);
+                  setOpen(false);
+                }}
+                className={cn(
+                  'flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent focus:bg-accent',
+                  isSelected && 'bg-accent font-medium',
+                )}
+              >
+                <span className="truncate">{p.label}</span>
+                {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 // -------------------- Provider Badge --------------------
@@ -116,8 +264,23 @@ const PROVIDERS: { value: BackupStorageProvider; label: string }[] = [
 const initialForm: StorageForm = {
   name: '',
   provider: 'LOCAL',
-  config: '{}',
+  config: {},
 };
+
+// -------------------- Validation --------------------
+
+/** Returns true when the Name field is non-empty AND every required field
+ *  for the currently-selected provider has a non-empty value. Fields that
+ *  belong to OTHER providers are intentionally NOT checked — the user's
+ *  requirement: "Do not validate hidden fields belonging to another
+ *  provider." Optional fields (required: false) are never checked. */
+function isFormValid(form: StorageForm): boolean {
+  if (!form.name.trim()) return false;
+  const fields = PROVIDER_FIELDS[form.provider] ?? [];
+  return fields.every(
+    (f) => !f.required || (form.config[f.key] != null && form.config[f.key].trim() !== ''),
+  );
+}
 
 // -------------------- Search Empty State (inline) --------------------
 
@@ -190,7 +353,7 @@ export function StoragePage() {
   const isSearchEmpty = !isLoading && storages.length === 0 && hasSearch;
 
   const createMutation = useMutation({
-    mutationFn: (body: Omit<StorageForm, 'config'> & { config: Record<string, unknown> }) =>
+    mutationFn: (body: { name: string; provider: BackupStorageProvider; config: string }) =>
       postApi('/api/backups/storage', body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all });
@@ -201,7 +364,7 @@ export function StoragePage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: Partial<Omit<StorageForm, 'config'> & { config: Record<string, unknown> }> }) =>
+    mutationFn: ({ id, body }: { id: string; body: { name: string; provider: BackupStorageProvider; config: string } }) =>
       patchApi(`/api/backups/storage/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all });
@@ -241,10 +404,17 @@ export function StoragePage() {
 
   const openEdit = (row: StorageRow) => {
     setEditingId(row.id);
+    // Flatten the stored config object into a string map for form inputs.
+    // Numbers (e.g. port: 21) are coerced to strings; nullish values become ''.
+    const storedConfig = row.config ?? {};
+    const formConfig: Record<string, string> = {};
+    for (const [k, v] of Object.entries(storedConfig)) {
+      formConfig[k] = v == null ? '' : String(v);
+    }
     setForm({
       name: row.name,
       provider: row.provider,
-      config: JSON.stringify(row.config || {}, null, 2),
+      config: formConfig,
     });
     setDialogOpen(true);
   };
@@ -255,19 +425,36 @@ export function StoragePage() {
     setForm(initialForm);
   };
 
+  // Update a single config field value within the form state. Preserves
+  // values for other providers' fields (they stay in `form.config` but are
+  // not rendered/validated/submitted when their provider isn't selected).
+  const updateConfigField = (key: string, value: string) => {
+    setForm((prev) => ({
+      ...prev,
+      config: { ...prev.config, [key]: value },
+    }));
+  };
+
   const handleSubmit = () => {
-    if (!form.name.trim()) return;
-    let parsedConfig: Record<string, unknown>;
-    try {
-      parsedConfig = JSON.parse(form.config);
-    } catch {
-      toast.error('Invalid JSON in configuration');
-      return;
+    if (!isFormValid(form)) return;
+    // Build the config object from ONLY the current provider's fields.
+    // This ensures hidden fields (from another provider) are never sent to
+    // the API, and the value type matches what the server expects (number
+    // fields like `port` are converted from string to Number). Empty
+    // optional fields are omitted entirely (the server treats absent keys
+    // the same as empty). The API schema expects `config` as a JSON string,
+    // so we JSON.stringify before sending.
+    const fields = PROVIDER_FIELDS[form.provider] ?? [];
+    const configObj: Record<string, unknown> = {};
+    for (const f of fields) {
+      const raw = form.config[f.key];
+      if (raw == null || raw.trim() === '') continue;
+      configObj[f.key] = f.type === 'number' ? Number(raw) : raw;
     }
     const body = {
       name: form.name,
       provider: form.provider,
-      config: parsedConfig,
+      config: JSON.stringify(configObj),
     };
     if (editingId) {
       updateMutation.mutate({ id: editingId, body });
@@ -473,36 +660,58 @@ export function StoragePage() {
 
             <div className="space-y-2">
               <Label htmlFor="storage-provider">Provider</Label>
-              <Select
+              <ProviderDropdown
                 value={form.provider}
-                onValueChange={(v) => updateForm('provider', v as BackupStorageProvider)}
-              >
-                <SelectTrigger id="storage-provider">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROVIDERS.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="storage-config">Configuration (JSON)</Label>
-              <Textarea
-                id="storage-config"
-                placeholder='{"bucket": "my-backups", "region": "us-east-1"}'
-                value={form.config}
-                onChange={(e) => updateForm('config', e.target.value)}
-                rows={6}
-                className="font-mono text-xs"
+                onChange={(v) => updateForm('provider', v)}
               />
-              <p className="text-xs text-muted-foreground">
-                Provider-specific configuration as JSON. For S3: bucket, region, accessKeyId, secretAccessKey.
-              </p>
             </div>
+
+            {/* Dynamic provider-specific configuration fields. Only the
+                fields for the currently-selected provider are rendered —
+                fields for other providers are hidden (and neither
+                validated nor submitted). Switching providers updates this
+                list immediately without clearing already-typed values for
+                fields shared across providers (e.g. `bucket` is used by
+                both AMAZON_S3 and CLOUDFLARE_R2, so switching between them
+                preserves the typed bucket name). */}
+            {(PROVIDER_FIELDS[form.provider] ?? []).length > 0 && (
+              <div className="space-y-3">
+                {(PROVIDER_FIELDS[form.provider] ?? []).map((f) => {
+                  const fieldValue = form.config[f.key] ?? '';
+                  const inputId = `storage-config-${f.key}`;
+                  return (
+                    <div key={f.key} className="space-y-2">
+                      <Label htmlFor={inputId}>
+                        {f.label}
+                        {f.required && <span className="text-destructive ml-0.5">*</span>}
+                      </Label>
+                      {f.multiline ? (
+                        <Textarea
+                          id={inputId}
+                          placeholder={f.placeholder}
+                          value={fieldValue}
+                          onChange={(e) => updateConfigField(f.key, e.target.value)}
+                          rows={4}
+                          className="font-mono text-xs"
+                        />
+                      ) : (
+                        <Input
+                          id={inputId}
+                          type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
+                          placeholder={f.placeholder}
+                          value={fieldValue}
+                          onChange={(e) => updateConfigField(f.key, e.target.value)}
+                          autoComplete={f.type === 'password' ? 'new-password' : undefined}
+                        />
+                      )}
+                      {f.helpText && (
+                        <p className="text-xs text-muted-foreground">{f.helpText}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>
@@ -510,7 +719,7 @@ export function StoragePage() {
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={isSaving || !form.name.trim()}
+              disabled={isSaving || !isFormValid(form)}
             >
               {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {editingId ? 'Update' : 'Create'}
