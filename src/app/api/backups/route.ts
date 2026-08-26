@@ -49,6 +49,16 @@ const createSchema = z.object({
 
 const SORTABLE = new Set(['createdAt', 'filename', 'type', 'status', 'size', 'scope', 'completedAt', 'durationMs']);
 
+// ---------- enum value sets (for `in`-based search) ------------------
+// Prisma forbids `contains` on enum columns, so enum-field search works by
+// computing the subset of enum values that include the query string.
+
+const BACKUP_SCOPE_VALUES = ['FULL', 'DATABASE_ONLY', 'MEDIA_ONLY', 'FILES_ONLY', 'SETTINGS_ONLY'] as const;
+const BACKUP_TYPE_VALUES = ['AUTOMATED', 'MANUAL'] as const;
+const BACKUP_STORAGE_PROVIDER_VALUES = ['LOCAL', 'AMAZON_S3', 'GOOGLE_DRIVE', 'DROPBOX', 'ONEDRIVE', 'CLOUDFLARE_R2', 'BACKBLAZE_B2', 'FTP', 'SFTP'] as const;
+const BACKUP_STATUS_VALUES = ['CREATING', 'COMPLETED', 'FAILED', 'RESTORING', 'RESTORED', 'VERIFYING', 'VERIFIED', 'DELETING'] as const;
+const BACKUP_ENCRYPTION_VALUES = ['NONE', 'ENCRYPTED', 'DECRYPTED'] as const;
+
 // ---------- utility: compute sha256 ----------------------------------
 
 async function computeFileSha256(filePath: string): Promise<string> {
@@ -93,11 +103,39 @@ export async function GET(request: NextRequest) {
     if (scope) where.scope = scope;
     if (provider) where.storageProvider = provider;
     if (search) {
-      where.OR = [
+      // Search across text fields (name, filename, note) AND enum-ish fields
+      // (scope, type, storageProvider, status, encryptionStatus).
+      //
+      // Prisma does NOT support `contains` on enum columns, so for enum
+      // fields we compute the subset of enum values whose string form
+      // includes the (upper-cased, space→underscore) query and match with `in`.
+      // This lets "manual" → "MANUAL", "database only" → "DATABASE_ONLY",
+      // "s3" → "AMAZON_S3", "completed" → "COMPLETED".
+      //
+      // SQLite's Prisma `contains` uses LIKE, which is ASCII case-insensitive
+      // by default, so "manual" matches "Manual Pre-Release Snapshot" too.
+      const enumQuery = search.toUpperCase().replace(/\s+/g, '_');
+      const matchEnum = <T extends string>(values: readonly T[]) =>
+        values.filter((v) => v.includes(enumQuery));
+
+      const orClauses: Record<string, unknown>[] = [
         { name: { contains: search } },
         { filename: { contains: search } },
         { note: { contains: search } },
       ];
+
+      const matchingScopes = matchEnum(BACKUP_SCOPE_VALUES);
+      if (matchingScopes.length) orClauses.push({ scope: { in: matchingScopes } });
+      const matchingTypes = matchEnum(BACKUP_TYPE_VALUES);
+      if (matchingTypes.length) orClauses.push({ type: { in: matchingTypes } });
+      const matchingProviders = matchEnum(BACKUP_STORAGE_PROVIDER_VALUES);
+      if (matchingProviders.length) orClauses.push({ storageProvider: { in: matchingProviders } });
+      const matchingStatuses = matchEnum(BACKUP_STATUS_VALUES);
+      if (matchingStatuses.length) orClauses.push({ status: { in: matchingStatuses } });
+      const matchingEncryption = matchEnum(BACKUP_ENCRYPTION_VALUES);
+      if (matchingEncryption.length) orClauses.push({ encryptionStatus: { in: matchingEncryption } });
+
+      where.OR = orClauses;
     }
 
     const orderBy: Record<string, string> = { [sort]: order };

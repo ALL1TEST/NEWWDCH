@@ -52,7 +52,7 @@ import {
 } from '@/components/patterns';
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
-import { cn, formatFileSize, formatDate, formatRelativeTime, labelize } from '@/lib/utils';
+import { cn, formatFileSize, formatRelativeTime, labelize } from '@/lib/utils';
 import { formatDurationMs, BACKUP_SCOPE_OPTIONS, BACKUP_STORAGE_OPTIONS, SCOPE_BADGE_CLASSES } from '@/lib/backup-constants';
 import type { ApiResponse, BackupStatus, BackupType, BackupScope, BackupStorageProvider } from '@/shared/types';
 import { toast } from 'sonner';
@@ -127,6 +127,24 @@ function VerificationBadge({ status }: { status: string | null }) {
   return <StatusBadge status={status} size="sm" />;
 }
 
+// -------------------- Search Empty State (inline) --------------------
+
+/** Inline empty state rendered inside the table when an active search yields
+ * zero results. Distinct from the standalone "No backups yet" state which only
+ * shows when the system genuinely has zero backups. */
+function NoSearchResultsEmpty({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+      <DatabaseBackup className="h-10 w-10 text-muted-foreground/40 mb-3" strokeWidth={1.5} />
+      <p className="text-sm font-medium text-foreground">No backups found</p>
+      <p className="text-xs text-muted-foreground mt-1">No backups match your search.</p>
+      <Button variant="outline" size="sm" className="mt-4" onClick={onClear}>
+        Clear search
+      </Button>
+    </div>
+  );
+}
+
 // -------------------- Initial Form --------------------
 
 const initialForm: CreateBackupForm = {
@@ -176,6 +194,9 @@ export function BackupsListPage() {
 
   const backups = data?.data ?? [];
   const pagination = data?.meta?.pagination;
+  const hasSearch = !!table.searchValue?.trim();
+  const isInitialEmpty = !isLoading && backups.length === 0 && !hasSearch;
+  const isSearchEmpty = !isLoading && backups.length === 0 && hasSearch;
 
   const createMutation = useMutation({
     mutationFn: (body: CreateBackupForm) => postApi('/api/backups', body),
@@ -226,34 +247,53 @@ export function BackupsListPage() {
   });
 
   const columns: ColumnDef<BackupRow>[] = [
-      ColumnDefHelper.textColumn<BackupRow>({
+      {
         id: 'name',
         header: 'Name',
         accessorKey: 'name',
-        className: 'font-medium',
-      }),
+        // With table-fixed layout the Name column absorbs the remaining
+        // width. `block truncate` keeps long names inside the cell with an
+        // ellipsis (full name on hover via title).
+        cell: ({ getValue }) => {
+          const value = (getValue() as string) ?? '';
+          if (!value) return <span className="text-muted-foreground">—</span>;
+          return (
+            <span className="block truncate font-medium" title={value}>
+              {value}
+            </span>
+          );
+        },
+      },
       {
         id: 'scope',
         header: 'Scope',
         accessorKey: 'scope',
         enableSorting: false,
-        size: 130,
-        cell: ({ getValue }) => <ScopeBadge scope={getValue() as BackupScope} />,
+        size: 100,
+        cell: ({ getValue }) => (
+          <div className="overflow-hidden">
+            <ScopeBadge scope={getValue() as BackupScope} />
+          </div>
+        ),
       },
       {
         id: 'type',
         header: 'Type',
         accessorKey: 'type',
         enableSorting: false,
-        size: 120,
-        cell: ({ getValue }) => <TypeBadge type={getValue() as BackupType} />,
+        size: 80,
+        cell: ({ getValue }) => (
+          <div className="overflow-hidden">
+            <TypeBadge type={getValue() as BackupType} />
+          </div>
+        ),
       },
       {
         id: 'size',
         header: 'Size',
         accessorFn: (row) => row.size,
         enableSorting: false,
-        size: 100,
+        size: 64,
         cell: ({ getValue }) => (
           <span className="tabular-nums text-sm text-muted-foreground">
             {formatFileSize(getValue() as number)}
@@ -265,56 +305,86 @@ export function BackupsListPage() {
         header: 'Storage',
         accessorKey: 'storageProvider',
         enableSorting: false,
-        size: 120,
-        cell: ({ getValue }) => (
-          <span className="text-xs text-muted-foreground">{labelize(getValue() as string)}</span>
-        ),
+        size: 92,
+        cell: ({ getValue }) => {
+          const v = getValue() as string;
+          return (
+            <div className="overflow-hidden">
+              <span className="block truncate text-xs text-muted-foreground" title={labelize(v)}>
+                {labelize(v)}
+              </span>
+            </div>
+          );
+        },
       },
       {
         id: 'encryptionEnabled',
         header: 'Encryption',
         accessorKey: 'encryptionStatus',
         enableSorting: false,
-        size: 110,
-        cell: ({ getValue }) => <EncryptionBadge status={getValue() as string} />,
+        size: 92,
+        cell: ({ getValue }) => (
+          <div className="overflow-hidden">
+            <EncryptionBadge status={getValue() as string} />
+          </div>
+        ),
       },
       {
         id: 'verificationStatus',
         header: 'Verification',
         accessorKey: 'verificationStatus',
         enableSorting: false,
-        size: 110,
-        cell: ({ getValue }) => <VerificationBadge status={getValue() as string | null} />,
+        size: 88,
+        cell: ({ getValue }) => (
+          <div className="overflow-hidden">
+            <VerificationBadge status={getValue() as string | null} />
+          </div>
+        ),
       },
       {
         id: 'status',
         header: 'Status',
         accessorKey: 'status',
-        size: 120,
-        cell: ({ getValue }) => <StatusBadge status={getValue() as string} size="sm" />,
+        size: 92,
+        cell: ({ getValue }) => (
+          <div className="overflow-hidden">
+            <StatusBadge status={getValue() as string} size="sm" />
+          </div>
+        ),
       },
       {
         id: 'duration',
         header: 'Duration',
         accessorKey: 'durationMs',
         enableSorting: false,
-        size: 90,
+        size: 64,
         cell: ({ getValue }) => (
           <span className="tabular-nums text-xs text-muted-foreground">
             {formatDurationMs(getValue() as number | null)}
           </span>
         ),
       },
-      ColumnDefHelper.dateColumn<BackupRow>({
+      {
         id: 'createdAt',
         header: 'Created',
         accessorKey: 'createdAt',
-        format: (d) => formatRelativeTime(d),
-        size: 140,
-      }),
+        size: 120,
+        cell: ({ getValue }) => {
+          const value = getValue() as string | Date;
+          if (!value) return <span className="text-muted-foreground">—</span>;
+          const rel = formatRelativeTime(value);
+          return (
+            <div className="overflow-hidden">
+              <span className="block truncate text-xs text-muted-foreground" title={rel}>
+                {rel}
+              </span>
+            </div>
+          );
+        },
+      },
       ColumnDefHelper.actionColumn<BackupRow>({
         id: 'actions',
-        size: 50,
+        size: 44,
         render: (row) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -374,7 +444,7 @@ export function BackupsListPage() {
         }
       />
 
-      {backups.length === 0 && !isLoading ? (
+      {isInitialEmpty ? (
         <EmptyState
           icon={DatabaseBackup}
           title="No backups yet"
@@ -400,7 +470,22 @@ export function BackupsListPage() {
             table.setCurrentPage(1);
           }}
           getRowId={(row) => row.id}
+          // Strict, fixed column layout so the dense 11-column table stays
+          // edge-to-edge with its card (Created column included) on desktop,
+          // and only scrolls horizontally on genuinely narrower viewports.
+          tableFixed
+          tableMinWidth={900}
           emptyMessage="No backups found."
+          emptyState={
+            isSearchEmpty ? (
+              <NoSearchResultsEmpty
+                onClear={() => {
+                  table.setSearchValue('');
+                  table.setCurrentPage(1);
+                }}
+              />
+            ) : undefined
+          }
         />
       )}
 

@@ -86,6 +86,15 @@ export interface DataTableProps<TData, TValue> {
   getRowId?: (row: TData) => string;
   /** Page-size change handler — when provided, the rows-per-page selector becomes functional */
   onPageSizeChange?: (size: number) => void;
+  /** When true, the <table> uses `table-layout: fixed` so declared column
+   *  widths are STRICT (content is truncated/overflowed rather than expanding
+   *  the column). Useful for dense tables that must stay inside their card. */
+  tableFixed?: boolean;
+  /** Minimum table width in px. Combined with the table-container's
+   *  `overflow-x-auto`, this enables horizontal scrolling only when the
+   *  viewport is narrower than `tableMinWidth` (e.g. on mobile) while keeping
+   *  the table edge-to-edge with its card on wider viewports. */
+  tableMinWidth?: number;
 }
 
 // -------------------- useDataTable Hook --------------------
@@ -515,7 +524,7 @@ function DataTablePagination({
   const rangeEnd = Math.min(currentPage * pageSize, totalItems);
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-2 py-3 border-t">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-t">
       <div className="text-xs text-muted-foreground">
         Showing {rangeStart}–{rangeEnd} of {totalItems} items
       </div>
@@ -693,6 +702,8 @@ export function DataTable<TData, TValue>({
   filterContent,
   getRowId,
   onPageSizeChange,
+  tableFixed = false,
+  tableMinWidth,
 }: DataTableProps<TData, TValue>) {
   const hasRowSelection = !!onSelectionChange;
   const columnCount = columns.length + (hasRowSelection ? 1 : 0);
@@ -797,8 +808,11 @@ export function DataTable<TData, TValue>({
     (filterContent != null) ||
     (selectedIds.length > 0 && bulkActions && bulkActions.length > 0);
 
+  const tableStyle = tableMinWidth ? { minWidth: `${tableMinWidth}px` } : undefined;
+  const tableClassName = cn(tableFixed && 'table-fixed');
+
   return (
-    <div className="space-y-0">
+    <div className="rounded-lg border overflow-hidden">
       {showToolbar && (
         <TableToolbar
           searchPlaceholder={searchPlaceholder}
@@ -811,52 +825,50 @@ export function DataTable<TData, TValue>({
           filterContent={filterContent}
         />
       )}
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead
-                    key={header.id}
-                    style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}
-                  >
+      <Table className={tableClassName} style={tableStyle}>
+        <TableHeader>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <TableRow key={headerGroup.id}>
+              {headerGroup.headers.map((header) => (
+                <TableHead
+                  key={header.id}
+                  style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}
+                >
+                  {flexRender(
+                    header.column.columnDef.header,
+                    header.getContext(),
+                  )}
+                </TableHead>
+              ))}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {isLoading ? (
+            <SkeletonRows columnCount={columnCount} />
+          ) : data.length === 0 ? (
+            <DataTableEmpty icon={emptyIcon} message={emptyMessage} state={emptyState} />
+          ) : (
+            table.getRowModel().rows.map((row) => (
+              <TableRow
+                key={row.id}
+                data-state={selectedIds.includes(row.id) ? 'selected' : undefined}
+                className={cn(onRowClick && 'cursor-pointer')}
+                onClick={() => onRowClick?.(row.original)}
+              >
+                {row.getVisibleCells().map((cell) => (
+                  <TableCell key={cell.id}>
                     {flexRender(
-                      header.column.columnDef.header,
-                      header.getContext(),
+                      cell.column.columnDef.cell,
+                      cell.getContext(),
                     )}
-                  </TableHead>
+                  </TableCell>
                 ))}
               </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <SkeletonRows columnCount={columnCount} />
-            ) : data.length === 0 ? (
-              <DataTableEmpty icon={emptyIcon} message={emptyMessage} state={emptyState} />
-            ) : (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={selectedIds.includes(row.id) ? 'selected' : undefined}
-                  className={cn(onRowClick && 'cursor-pointer')}
-                  onClick={() => onRowClick?.(row.original)}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+            ))
+          )}
+        </TableBody>
+      </Table>
       <DataTablePagination
         currentPage={currentPage}
         pageSize={pageSize}
