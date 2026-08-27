@@ -14,6 +14,21 @@ interface NavigationState {
 }
 
 /**
+ * Canonical SEO sub-pages. The legacy standalone routes ('sitemap', 'robots',
+ * 'redirects') were consolidated into the Settings page as tabs, so they are
+ * canonicalized to "settings/<tab>" HERE — synchronously, at the single point
+ * where raw hash text becomes navigation state. Every consumer (SeoRouter,
+ * Breadcrumbs, sub-nav, page title) therefore reads the canonical sub-page from
+ * the very first paint and no intermediate/duplicate Robots.txt-style screen can
+ * flash while some component "catches up".
+ */
+const SEO_LEGACY_SUBPAGES: Record<string, string> = {
+  'sitemap': 'settings/sitemap',
+  'robots': 'settings/robots',
+  'redirects': 'settings/redirects',
+};
+
+/**
  * Parse a hash string like "#content", "#content/cm2x123", "#content/new"
  * into { mod, itemId, subPage }.
  */
@@ -28,6 +43,12 @@ function parseHash(hash: string): {
 
   const mod = segments[0] || 'dashboard';
   const second = segments[1] ?? null;
+
+  // Canonicalize legacy SEO standalone routes (e.g. "#seo/robots") to their
+  // compound Settings form ("settings/robots") BEFORE any state is stored.
+  if (mod === 'seo' && second && SEO_LEGACY_SUBPAGES[second.toLowerCase()]) {
+    return { mod, itemId: null, subPage: SEO_LEGACY_SUBPAGES[second.toLowerCase()] };
+  }
 
   // All known sub-page keywords across ALL modules.
   // IMPORTANT: Settings has children named 'seo', 'api', 'media', 'ai', etc.
@@ -104,9 +125,25 @@ function buildHash(mod: string, itemId?: string | null, subPage?: string | null)
 
 // -------------------- Initial State --------------------
 
-const initialState = parseHash(
-  typeof window !== 'undefined' ? window.location.hash : '#'
-);
+const RAW_INITIAL_HASH =
+  typeof window !== 'undefined' ? window.location.hash : '#';
+
+const initialState = parseHash(RAW_INITIAL_HASH);
+
+// If the initial URL used a legacy form (e.g. "#seo/robots"), canonicalize the
+// address bar too — the rendered page is already canonical, so this is purely a
+// cosmetic URL cleanup with no visual effect.
+if (typeof window !== 'undefined') {
+  const canonicalHash = buildHash(
+    initialState.mod,
+    initialState.itemId,
+    initialState.subPage,
+  );
+  const normalizedInitial = `#${RAW_INITIAL_HASH.replace(/^#\/?/, '')}`;
+  if (normalizedInitial !== '#' && normalizedInitial !== canonicalHash) {
+    window.history.replaceState(null, '', canonicalHash || '#');
+  }
+}
 
 // -------------------- Store --------------------
 
@@ -149,5 +186,12 @@ if (typeof window !== 'undefined') {
       currentItemId: parsed.itemId,
       currentSubPage: parsed.subPage,
     });
+
+    // Canonicalize legacy hash forms (e.g. "#seo/robots") in the address bar.
+    // replaceState does NOT fire hashchange, so no loop is possible.
+    const canonical = buildHash(parsed.mod, parsed.itemId, parsed.subPage);
+    if (hash !== canonical && canonical) {
+      window.history.replaceState(null, '', canonical);
+    }
   });
 }

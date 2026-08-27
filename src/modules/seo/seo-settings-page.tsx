@@ -41,13 +41,15 @@ export function SeoSettingsPage({ initialTab = 'sitemap' }: { initialTab?: Setti
   // `redirects` query scope, so it auto-invalidates whenever the Redirects
   // page creates / deletes / toggles a redirect (those mutations all call
   // queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all })).
-  const { data: redirectCountData } = useQuery<RedirectCountResponse>({
+  const { data: redirectCountData, isLoading: isRedirectCountLoading } = useQuery<RedirectCountResponse>({
     queryKey: queryKeys.redirects.count(),
     queryFn: () =>
       getApi<RedirectCountResponse>('/api/redirects', { page: 1, pageSize: 1 }),
     staleTime: 10_000,
   });
-  const redirectCount = redirectCountData?.pagination?.total ?? 0;
+  // Undefined while loading — the badge stays hidden instead of flashing an
+  // incorrect "0" before the real count arrives (no intermediate state).
+  const redirectCount = redirectCountData?.pagination?.total;
 
   return (
     <div className="space-y-6">
@@ -75,7 +77,7 @@ export function SeoSettingsPage({ initialTab = 'sitemap' }: { initialTab?: Setti
             >
               <Icon className="h-4 w-4" />
               {tab.label}
-              {tab.key === 'redirects' && (
+              {tab.key === 'redirects' && !isRedirectCountLoading && redirectCount !== undefined && (
                 <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground tabular-nums">
                   {redirectCount.toLocaleString()}
                 </span>

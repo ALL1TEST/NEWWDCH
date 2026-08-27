@@ -2,18 +2,13 @@
 
 import React, { Suspense } from 'react';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
-import { Loader2, Search, ClipboardCheck, BarChart3, Settings, FileText } from 'lucide-react';
+import { Loader2, Search, ClipboardCheck, BarChart3, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SeoOverviewPage } from './seo-overview-page';
 import { SeoAuditPage } from './seo-audit-page';
 import { SeoSearchConsolePage } from './seo-search-console-page';
 import { SeoSettingsPage } from './seo-settings-page';
 import { SeoDetailPage } from './seo-detail-page';
-
-// Legacy pages kept for internal reuse inside Settings (redirects) but no longer routed standalone.
-import { SeoRedirectsPage } from './seo-redirects-page';
-import { SeoSitemapPage } from './seo-sitemap-page';
-import { SeoRobotsPage } from './seo-robots-page';
 
 function PageLoader() {
   return (
@@ -40,9 +35,13 @@ function SeoSubNav() {
     <div className="mb-6 overflow-x-auto -mx-1 px-1">
       <div className="flex items-center gap-1 min-w-max pb-1">
         {SEO_TABS.map((tab) => {
+          // Compound Settings routes ("settings/robots", "settings/sitemap",
+          // "settings/redirects") keep the "Settings" tab highlighted.
           const isActive = tab.key === null
             ? !currentSubPage
-            : currentSubPage === tab.key;
+            : tab.key === 'settings'
+              ? currentSubPage === 'settings' || (!!currentSubPage && currentSubPage.startsWith('settings/'))
+              : currentSubPage === tab.key;
           const Icon = tab.icon;
           return (
             <button
@@ -81,13 +80,12 @@ const SETTINGS_TAB_MAP: Record<string, string> = {
   'settings/robots': 'robots',
 };
 
-// Legacy sub-page → canonical sub-page. Applied SYNCHRONOUSLY in SeoRouter
-// (see below) so we render the correct page on the very first paint — never
-// an intermediate/wrong screen. The URL is normalized to the canonical form
-// via navigate() in an effect (no visual change, just a clean hash).
-//   - 'robots'/'sitemap'/'redirects' previously mapped to 'settings' (which
-//     rendered the SITEMAP tab — wrong). Now they map to 'settings/<tab>'
-//     so the correct tab opens directly.
+// Legacy sub-page → canonical sub-page. CANONICALIZATION NOW HAPPENS IN THE
+// NAVIGATION STORE (parseHash — see SEO_LEGACY_SUBPAGES), so the store never
+// holds legacy values and this map is a dormant safety net: if any code ever
+// sets a legacy sub-page via a direct setState/navigate call, the very first
+// render STILL resolves it synchronously — the user can never see an
+// intermediate/wrong page (e.g. the old standalone Robots.txt screen).
 const LEGACY_REDIRECT: Record<string, string | null> = {
   'indexing': 'audit',
   'canonicals': 'audit',
@@ -103,11 +101,9 @@ function SeoRouter() {
   const rawSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
 
-  // Synchronous legacy redirect: compute the canonical sub-page BEFORE render.
-  // This guarantees we paint the correct page immediately — the user never sees
-  // an intermediate Overview or wrong-tab screen. (Previously the redirect ran
-  // in a useEffect, so the first render showed <SeoOverviewPage /> for a frame
-  // before switching — that was the "incorrect/intermediate Robots.txt screen".)
+  // Synchronous legacy redirect (safety net — see comment above): compute the
+  // canonical sub-page BEFORE render so the first paint is always the correct
+  // page. The store-level parseHash normalization is the primary mechanism.
   const currentSubPage = (rawSubPage && rawSubPage in LEGACY_REDIRECT)
     ? LEGACY_REDIRECT[rawSubPage]
     : rawSubPage;
@@ -179,7 +175,8 @@ export { SeoOverviewPage } from './seo-overview-page';
 export { SeoAuditPage } from './seo-audit-page';
 export { SeoSearchConsolePage } from './seo-search-console-page';
 export { SeoSettingsPage } from './seo-settings-page';
-// Legacy exports kept for backwards compatibility (internal reuse)
+// Legacy standalone pages — no longer routed directly; SeoSettingsPage embeds
+// them as tabs (Sitemap | Robots.txt | Redirects). Re-exported for compat.
 export { SeoRedirectsPage } from './seo-redirects-page';
 export { SeoSitemapPage } from './seo-sitemap-page';
 export { SeoRobotsPage } from './seo-robots-page';

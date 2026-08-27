@@ -3368,3 +3368,23 @@ Stage Summary:
 - /home/z/my-project IS the repository clone at f32fcbb (origin = ALL1TEST/NEWWDCH.git); future sync = `git pull`.
 - Old scaffold completely removed; port 3000 serves the repository CMS app.
 - Dependencies match repo bun.lock exactly; app verified end-to-end in browser (login + dashboard with live backend data).
+
+---
+Task ID: SEO-ROBOTS-NAV-FLASH-2
+Agent: Z.ai Code (main)
+Task: Fix Robots.txt page navigation/rendering issue — an incorrect/intermediate Robots.txt screen (red "Validation Errors: content is empty" banner + empty editor + "Redirects 0" badge) briefly appeared before the correct populated page. The user must NEVER see the intermediate screen; loading must use a skeleton; correct page design/functionality preserved.
+
+Work Log:
+- Reproduced with an in-browser MutationObserver probe (first-paint init script): cold load of #seo/robots captured the EXACT intermediate frame: "Robots.txt | Validation Errors | Line 1: Robots.txt content is empty | Redirects 0" before the populated editor appeared. Root cause: SeoRobotsPage ran validateRobots('') while GET /api/seo/robots was still loading (content state initialized to ''), painting a false validation error; the Redirects tab badge also flashed 0 before its count query resolved.
+- Fix 1 — src/modules/seo/seo-robots-page.tsx: validation memo now returns [] while isLoading (warnings = isLoading ? [] : validateRobots(content)); the "Failed to load" error card is also gated on !isLoading. During loading the editor card shows its existing Skeleton (proper loading state per requirement). Validation during actual editing is unchanged (verified: typing "garbage line no colon" shows "Invalid syntax (missing colon)").
+- Fix 2 — src/modules/seo/seo-settings-page.tsx: Redirects badge hidden until the count query resolves (redirectCount undefined while loading instead of ?? 0) — kills the 0→7 flash.
+- Fix 3 — src/lib/stores/navigation-store.ts: canonicalized legacy SEO sub-pages ('sitemap'|'robots'|'redirects' → 'settings/<x>') synchronously in parseHash (SEO_LEGACY_SUBPAGES map) so EVERY consumer (SeoRouter, Breadcrumbs, sub-nav) reads canonical state from the very first paint; initial legacy URLs and hashchange events now also canonicalize the address bar via replaceState (no hashchange loop — replaceState doesn't fire hashchange).
+- Fix 4 — src/modules/seo/index.tsx: removed dead legacy imports (SeoSitemapPage/SeoRedirectsPage/SeoRobotsPage direct imports; re-exports kept), updated LEGACY_REDIRECT comments (now a dormant safety net), and SeoSubNav keeps the "Settings" tab highlighted on compound settings/* routes.
+- Verification (agent-browser + frame probes): (a) cold reload #seo/robots → frames: auth spinner → layout+title (+skeleton) → editor with content — NO validation banner, NO 0 badge; (b) cold reload #seo/settings/robots → same clean sequence; (c) Overview → Robots.txt card → single correct frame; (d) Sitemap tab → Robots.txt tab → single correct frame; (e) history back/forward → instant correct render; (f) editor typing → Modified indicator + Save enables; Restore Default dialog opens/cancels; Save disabled when clean; (g) Sitemap/Redirects tabs render correctly with badge 7; (h) final screenshot matches required design (Robots.txt heading, Sitemap/Robots.txt/Redirects nav, Editor, Save, Restore Default, editor content).
+- bun run lint: all 4 modified files pass (0 problems); remaining repo lint errors are pre-existing in untouched files (data-table, storage-page, content-create/edit, seo-broken-links, seo-social-preview).
+- Dev server crashed once during work (OOM after long session); restarted via bun run dev, HTTP 200, no runtime errors in dev.log.
+
+Stage Summary:
+- The intermediate/incorrect Robots.txt screen is eliminated on ALL paths (legacy URL, canonical URL, in-app navigation, history). Loading now uses the existing skeleton only.
+- Zero functional or design changes to the correct Robots.txt page; validation, Save, Restore Default, editor, tabs all preserved.
+- Files changed: src/modules/seo/seo-robots-page.tsx, src/modules/seo/seo-settings-page.tsx, src/lib/stores/navigation-store.ts, src/modules/seo/index.tsx.

@@ -286,7 +286,16 @@ export function SeoRobotsPage() {
     toast.info('Restored to default robots.txt template');
   }, [domain]);
 
-  const warnings = useMemo(() => validateRobots(content), [content]);
+  // IMPORTANT: never validate while the server content is still loading — an
+  // editor that is empty only because the GET /api/seo/robots response has not
+  // arrived yet is NOT a validation error. Rendering the red "Robots.txt content
+  // is empty" banner during that window flashed an incorrect intermediate
+  // Robots.txt screen before the real content appeared. While loading we render
+  // the page skeleton instead (see editor card below).
+  const warnings = useMemo(
+    () => (isLoading ? [] : validateRobots(content)),
+    [isLoading, content],
+  );
   const warningLines = useMemo(() => {
     const s = new Set<number>();
     warnings.forEach((w) => { if (w.line) s.add(w.line); });
@@ -308,7 +317,7 @@ export function SeoRobotsPage() {
   return (
     <div className="space-y-4">
       {/* Error state */}
-      {error && (
+      {error && !isLoading && (
         <Card className="border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20">
           <CardContent className="p-4 flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
