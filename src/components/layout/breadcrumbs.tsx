@@ -147,6 +147,68 @@ const SUBPAGE_LABELS: Record<string, Record<string, string>> = {
   },
 };
 
+// -------------------- Text-Only Trail Helper --------------------
+// Renders a cumulative text-only breadcrumb trail with ">" separators
+// (NO module icons, NO chevron-separator icons). Used by the dynamic
+// cumulative-trail modules (Backups, SEO, AI, Automation, Newsletter)
+// and the Content (Articles) branch.
+//
+// items: [{ label, isCurrent }]. The last item (or any marked isCurrent)
+// is rendered as BreadcrumbPage (foreground); others as plain spans.
+// If withSitePrefix, prepend "All Sites" (or the active site name) + ">"
+// before the trail (used by the Content list/detail/edit pages).
+function TextOnlyTrail({
+  items,
+  activeSite,
+  isAllSites,
+  withSitePrefix = false,
+}: {
+  items: { label: string; isCurrent?: boolean }[];
+  activeSite?: { name: string } | null;
+  isAllSites: boolean;
+  withSitePrefix?: boolean;
+}) {
+  const filtered = items.filter((i) => i && i.label);
+  if (filtered.length === 0) return null;
+  return (
+    <Breadcrumb>
+      <BreadcrumbList>
+        {withSitePrefix && activeSite && !isAllSites && (
+          <>
+            <BreadcrumbItem>
+              <span className="text-xs text-muted-foreground font-medium">{activeSite.name}</span>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator>{'>'}</BreadcrumbSeparator>
+          </>
+        )}
+        {withSitePrefix && isAllSites && (
+          <>
+            <BreadcrumbItem>
+              <span className="text-xs text-muted-foreground font-medium">All Sites</span>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator>{'>'}</BreadcrumbSeparator>
+          </>
+        )}
+        {filtered.map((item, idx) => {
+          const isLast = idx === filtered.length - 1;
+          return (
+            <React.Fragment key={idx}>
+              {idx > 0 && <BreadcrumbSeparator>{'>'}</BreadcrumbSeparator>}
+              <BreadcrumbItem>
+                {isLast || item.isCurrent ? (
+                  <BreadcrumbPage>{item.label}</BreadcrumbPage>
+                ) : (
+                  <span>{item.label}</span>
+                )}
+              </BreadcrumbItem>
+            </React.Fragment>
+          );
+        })}
+      </BreadcrumbList>
+    </Breadcrumb>
+  );
+}
+
 // -------------------- Component ------------------
 
 export function Breadcrumbs() {
@@ -207,14 +269,6 @@ export function Breadcrumbs() {
 
     return items;
   }, [currentModule, currentItemId, currentSubPage, isAllSites]);
-
-  // SEO Settings pages (Sitemap, Robots.txt, Redirects) manage their own title
-  // and tab bar — hide the global breadcrumb to avoid duplicate navigation.
-  // Covers both "settings" and compound keys "settings/sitemap",
-  // "settings/robots", "settings/redirects".
-  if (currentModule === 'seo' && currentSubPage && (currentSubPage === 'settings' || currentSubPage.startsWith('settings/'))) {
-    return null;
-  }
 
   // Backups module — DYNAMIC cumulative breadcrumb trail in the topbar
   // (right after the "All Sites" selector). The trail follows the Backups
@@ -278,16 +332,171 @@ export function Breadcrumbs() {
     );
   }
 
+  // SEO module — DYNAMIC cumulative text-only trail (no icons, no "All Sites"):
+  //   Overview (root)        → (no breadcrumb)
+  //   audit                   → Overview > SEO Audit
+  //   search-console          → Overview > SEO Audit > Search Console
+  //   settings                → Overview > SEO Audit > Search Console > Settings
+  //   settings/sitemap        → … > Settings > Sitemap
+  //   settings/robots         → … > Sitemap > Robots
+  //   settings/redirects      → … > Robots > Redirects
+  // Legacy sub-pages (indexing/canonicals/internal-links/schema → audit,
+  // social-preview → overview, sitemap/robots/redirects → settings/X) are
+  // canonicalized by the SEO module router; mapped here as a safety net.
+  if (currentModule === 'seo') {
+    const SEO_TRAIL: { key: string | null; label: string }[] = [
+      { key: null, label: 'Overview' },
+      { key: 'audit', label: 'SEO Audit' },
+      { key: 'search-console', label: 'Search Console' },
+      { key: 'settings', label: 'Settings' },
+      { key: 'settings/sitemap', label: 'Sitemap' },
+      { key: 'settings/robots', label: 'Robots' },
+      { key: 'settings/redirects', label: 'Redirects' },
+    ];
+    const SEO_LEGACY: Record<string, string | null> = {
+      indexing: 'audit', canonicals: 'audit', 'internal-links': 'audit',
+      schema: 'audit', 'social-preview': null,
+      sitemap: 'settings/sitemap', robots: 'settings/robots', redirects: 'settings/redirects',
+    };
+    const eff = currentSubPage && SEO_LEGACY[currentSubPage] !== undefined
+      ? SEO_LEGACY[currentSubPage]
+      : currentSubPage;
+    const currentIndex = SEO_TRAIL.findIndex(
+      (t) => (t.key === null ? !eff : t.key === eff),
+    );
+    if (currentIndex <= 0) return null; // Overview/root → no breadcrumb
+    const trail = SEO_TRAIL.slice(0, currentIndex + 1).map((t, i) => ({
+      label: t.label,
+      isCurrent: i === currentIndex,
+    }));
+    return <TextOnlyTrail items={trail} activeSite={activeSite} isAllSites={isAllSites} />;
+  }
+
+  // AI module — cumulative text-only trail (no icons, no "All Sites"):
+  //   AI (providers/root)     → (no breadcrumb)
+  //   models                  → AI > Models
+  //   prompts                 → AI > Models > Prompt Library
+  //   settings                → AI > Models > Prompt Library > Settings
+  // Legacy: playground/jobs/logs/marketplace → providers (root), usage → settings.
+  if (currentModule === 'ai') {
+    const AI_TRAIL: { key: string | null; label: string }[] = [
+      { key: null, label: 'AI' },
+      { key: 'models', label: 'Models' },
+      { key: 'prompts', label: 'Prompt Library' },
+      { key: 'settings', label: 'Settings' },
+    ];
+    const AI_LEGACY: Record<string, string | null> = {
+      providers: null, playground: null, jobs: null, logs: null, marketplace: null,
+      usage: 'settings',
+    };
+    const eff = currentSubPage && AI_LEGACY[currentSubPage] !== undefined
+      ? AI_LEGACY[currentSubPage]
+      : currentSubPage;
+    const currentIndex = AI_TRAIL.findIndex(
+      (t) => (t.key === null ? !eff : t.key === eff),
+    );
+    if (currentIndex <= 0) return null;
+    const trail = AI_TRAIL.slice(0, currentIndex + 1).map((t, i) => ({
+      label: t.label,
+      isCurrent: i === currentIndex,
+    }));
+    return <TextOnlyTrail items={trail} activeSite={activeSite} isAllSites={isAllSites} />;
+  }
+
+  // Automation module — cumulative text-only trail (no icons, no "All Sites"):
+  //   Automation (list/root)  → (no breadcrumb)
+  //   runs                    → Automation > Runs
+  //   create (incl. edit/generate) → Automation > Runs > Create New
+  if (currentModule === 'automation') {
+    const AUTO_TRAIL: { key: string | null; label: string }[] = [
+      { key: null, label: 'Automation' },
+      { key: 'runs', label: 'Runs' },
+      { key: 'create', label: 'Create New' },
+    ];
+    const eff = currentSubPage === 'edit' || currentSubPage === 'generate'
+      ? 'create'
+      : currentSubPage;
+    const currentIndex = AUTO_TRAIL.findIndex(
+      (t) => (t.key === null ? !eff : t.key === eff),
+    );
+    if (currentIndex <= 0) return null;
+    const trail = AUTO_TRAIL.slice(0, currentIndex + 1).map((t, i) => ({
+      label: t.label,
+      isCurrent: i === currentIndex,
+    }));
+    return <TextOnlyTrail items={trail} activeSite={activeSite} isAllSites={isAllSites} />;
+  }
+
+  // Newsletter module — cumulative text-only trail (no icons, no "All Sites"):
+  //   Newsletter (root)       → (no breadcrumb)
+  //   subscribers             → Newsletter > Subscribers
+  //   campaigns               → Newsletter > Subscribers > Campaigns
+  if (currentModule === 'newsletter') {
+    const NEWS_TRAIL: { key: string | null; label: string }[] = [
+      { key: null, label: 'Newsletter' },
+      { key: 'subscribers', label: 'Subscribers' },
+      { key: 'campaigns', label: 'Campaigns' },
+    ];
+    const currentIndex = NEWS_TRAIL.findIndex(
+      (t) => (t.key === null ? !currentSubPage : t.key === currentSubPage),
+    );
+    if (currentIndex <= 0) return null;
+    const trail = NEWS_TRAIL.slice(0, currentIndex + 1).map((t, i) => ({
+      label: t.label,
+      isCurrent: i === currentIndex,
+    }));
+    return <TextOnlyTrail items={trail} activeSite={activeSite} isAllSites={isAllSites} />;
+  }
+
+  // Content (Articles) module — text-only breadcrumbs (no module icon,
+  // ">" separators). List/detail/edit keep the "All Sites" prefix; the
+  // Create sub-page drops it per spec ("Articles > Create New").
+  if (currentModule === 'content') {
+    // Create sub-page: "Articles > Create New" (no All Sites, no icons)
+    if (!currentItemId && (currentSubPage === 'new' || currentSubPage === 'create')) {
+      return (
+        <TextOnlyTrail
+          items={[
+            { label: 'Articles' },
+            { label: 'Create New', isCurrent: true },
+          ]}
+          activeSite={activeSite}
+          isAllSites={isAllSites}
+          withSitePrefix={false}
+        />
+      );
+    }
+    // List / Detail / Edit — keep "All Sites" prefix, text-only
+    const items: { label: string; isCurrent?: boolean }[] = [{ label: 'Articles' }];
+    if (currentItemId) {
+      items.push({ label: `#${currentItemId.slice(0, 8)}` });
+      if (currentSubPage === 'edit') {
+        items.push({ label: 'Edit' });
+      }
+    }
+    items[items.length - 1].isCurrent = true;
+    return (
+      <TextOnlyTrail
+        items={items}
+        activeSite={activeSite}
+        isAllSites={isAllSites}
+        withSitePrefix
+      />
+    );
+  }
+
   // Modules that should NOT render a topbar breadcrumb — the topbar keeps
   // ONLY the "All Sites" selector for these (no breadcrumb path next to it):
   //   - Standalone pages with no sub-pages & no hierarchy to show:
-  //     Dashboard, Calendar, Users, Comments, SMTP Settings (settings module).
+  //     Dashboard, Calendar, Users, Comments, SMTP Settings (settings module),
+  //     Media.
   //     (currentModule is null/undefined on initial load → treated as Dashboard.)
   //   - Settings-grouped sidebar-only modules: Email Templates, Notifications
   //     (the sidebar is their only navigation).
-  // Backups keeps its own dynamic trail (the branch above) and is excluded here.
+  // Backups, SEO, AI, Automation, Newsletter, Content keep their own dynamic
+  // trails (the branches above) and are excluded here.
   const NO_BREADCRUMB_MODULES = new Set([
-    'dashboard', 'calendar', 'users', 'comments', 'settings',
+    'dashboard', 'calendar', 'users', 'comments', 'settings', 'media',
     'email-templates', 'notifications',
   ]);
   if (!currentModule || NO_BREADCRUMB_MODULES.has(currentModule)) {

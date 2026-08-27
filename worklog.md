@@ -4770,3 +4770,37 @@ Verification (agent-browser, light + dark):
 
 Stage Summary:
 - The 5 standalone pages (Dashboard, Calendar, Users, Comments, SMTP Settings) now show NO breadcrumb path in the top header — only the "All Sites" selector remains there. This supersedes the task-24 behavior (which had ADDED the SMTP breadcrumb and fixed Calendar's capitalization). The Backups dynamic trail, SEO/AI/Articles breadcrumbs, and Email Templates/Notifications sidebar-only behavior are all unchanged. Single file changed: `src/components/layout/breadcrumbs.tsx`.
+
+---
+Task ID: 26
+Agent: main (orchestrator)
+Task: Per-module topbar breadcrumb overhaul — cumulative text-only trails (like Backups) for SEO, AI, Automation, Newsletter; icon removal + "Articles > Create New" for Articles; full breadcrumb removal for Media. Other modules (Dashboard, Calendar, Users, Comments, SMTP, Backups, Email Templates, Notifications, categories/tags/profile/billing/audit/jobs) unchanged.
+
+Work Log:
+- Edited ONLY `src/components/layout/breadcrumbs.tsx`:
+  1. Added a module-level `TextOnlyTrail` helper component that renders a cumulative text-only breadcrumb trail with ">" separators (NO module icons, NO chevron-separator icons). Supports an optional `withSitePrefix` to prepend "All Sites" / active site name (used by Content list/detail/edit).
+  2. Removed the old "SEO settings sub-pages → return null" check (lines 211-217) so the new SEO cumulative trail can render for settings/sitemap/robots/redirects.
+  3. Added 5 new dedicated branches (after the Backups branch, before NO_BREADCRUMB_MODULES), each using TextOnlyTrail:
+     - SEO: trail [Overview, SEO Audit, Search Console, Settings, Sitemap, Robots, Redirects] keyed by [null, audit, search-console, settings, settings/sitemap, settings/robots, settings/redirects] + legacy safety map (indexing/canonicals/internal-links/schema→audit, social-preview→null, sitemap/robots/redirects→settings/X). Root (Overview) → no breadcrumb.
+     - AI: trail [AI, Models, Prompt Library, Settings] keyed by [null, models, prompts, settings] + legacy map (providers/playground/jobs/logs/marketplace→null=root, usage→settings). Root (providers) → no breadcrumb.
+     - Automation: trail [Automation, Runs, Create New] keyed by [null, runs, create] (edit/generate→create). Root → no breadcrumb.
+     - Newsletter: trail [Newsletter, Subscribers, Campaigns] keyed by [null, subscribers, campaigns]. Root → no breadcrumb (but app redirects #newsletter→subscribers, so subscribers shows "Newsletter > Subscribers").
+     - Content (Articles): Create sub-page (#content/create, subPage='create') → "Articles > Create New" (withSitePrefix=false, no All Sites). List/detail/edit keep "All Sites" prefix but are text-only (no FileText icon, text ">" separators): List="All Sites > Articles", Detail="All Sites > Articles > #ID", Edit="All Sites > Articles > #ID > Edit". Note: #content/new is parsed by the nav store as itemId='new' (detail page for a non-existent item), NOT the create page — create is #content/create. The branch handles both correctly.
+  4. Added 'media' to NO_BREADCRUMB_MODULES (now: dashboard, calendar, users, comments, settings, media, email-templates, notifications) → #media shows NO topbar breadcrumb.
+- No other files touched. No page files changed (all affected modules either don't use PageHeader or already use breadcrumbs={false}, so no in-page duplicate).
+
+Verification (agent-browser, light + dark; clean DOM eval via [data-slot=breadcrumb-item]):
+- ARTICLES: #content → "All Sites > Articles" (text-only, 0 svg); #content/create → "Articles > Create New" (text-only, no All Sites, 0 svg).
+- SEO: #seo → NONE (root); #seo/audit → "Overview > SEO Audit"; #seo/search-console → "Overview > SEO Audit > Search Console"; #seo/settings → "… > Settings"; #seo/settings/sitemap → "… > Settings > Sitemap"; #seo/settings/robots → "… > Sitemap > Robots"; #seo/settings/redirects → "… > Robots > Redirects".
+- AI: #ai → NONE (root); #ai/models → "AI > Models"; #ai/prompts → "AI > Models > Prompt Library"; #ai/settings → "AI > Models > Prompt Library > Settings".
+- AUTOMATION: #automation → NONE; #automation/runs → "Automation > Runs"; #automation/create → "Automation > Runs > Create New".
+- NEWSLETTER: #newsletter → "Newsletter > Subscribers" (auto-redirect); #newsletter/subscribers → "Newsletter > Subscribers"; #newsletter/campaigns → "Newsletter > Subscribers > Campaigns".
+- MEDIA: #media → NONE (breadcrumb removed).
+- Icon removal confirmed: svgCount=0 for content, content/create, seo/audit, ai/models, automation/runs, newsletter/campaigns (text-only with ">" separators).
+- Regression (unchanged): Backups trail (#backups/backups → "Overview > Backups", #backups/logs → full trail); Dashboard/Calendar/Users/Comments/SMTP/Media → no breadcrumb (task 25); Email Templates/Notifications → no breadcrumb; categories/tags/profile/billing → "All Sites > X" WITH icons (svg=2); jobs → "All Sites > Jobs" with icons. (audit shows lowercase 'audit' — pre-existing, not in scope.)
+- Dark mode: content/create, seo/settings/redirects, newsletter/campaigns all render correctly.
+- Lint: 4 pre-existing errors + 3 warnings (content-create/edit, seo-broken-links) — NO new errors. dev.log: only the pre-existing yauzl warning; pages load 200.
+- Screenshots: tool-results/seo-trail.png, tool-results/articles-create.png.
+
+Stage Summary:
+- 6 modules' topbar breadcrumbs reworked per spec: SEO/AI/Automation/Newsletter now use cumulative text-only trails (no icons, no "All Sites", root shows no breadcrumb) exactly matching the user's listed item order; Articles is text-only with "All Sites > Articles" on the list and "Articles > Create New" (no All Sites) on the create page; Media has no breadcrumb. Backups, the task-25 standalone pages, and all other modules are unchanged. Single file changed: `src/components/layout/breadcrumbs.tsx`.
