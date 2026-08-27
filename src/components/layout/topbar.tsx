@@ -29,6 +29,7 @@ import {
 import { Breadcrumbs } from '@/components/layout/breadcrumbs';
 import { NotificationBell } from '@/components/layout/notification-bell';
 import { UserProfileMenu } from '@/components/layout/user-profile-menu';
+import { PlanBadge } from '@/components/layout/plan-badge';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
@@ -485,10 +486,8 @@ export function Topbar() {
                     ACTIVE plan's own badgeStyle config — no per-plan
                     branching here. Switching plan re-renders this trigger
                     via the zustand selector automatically. The plan's text
-                    badge (label = currentPlan.name) lives ONLY inside the
-                    profile dropdown header (see user-profile-menu.tsx) to
-                    avoid a duplicated "Beta Beta" read between the avatar
-                    trigger and the open menu. */}
+                    badge (PlanBadge) is shared with the profile dropdown
+                    header so the two always render identically. */}
                 <Avatar className={cn(
                   'h-8 w-8 rounded-full ring-2 ring-offset-2 ring-offset-background',
                   getPlanBadgeStyle(currentPlan).ring,
@@ -498,6 +497,10 @@ export function Topbar() {
                     {user ? getInitials(user.name) : 'U'}
                   </AvatarFallback>
                 </Avatar>
+                {/* Plan badge centered at the bottom of the avatar —
+                    same PlanBadge component used in the dropdown header,
+                    anchored to the avatar via absolute positioning. */}
+                <PlanBadge className="absolute -bottom-1.5 left-1/2 -translate-x-1/2" />
               </Button>
             </UserProfileMenu>
           </>
