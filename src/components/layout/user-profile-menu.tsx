@@ -14,6 +14,10 @@ import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useSidebarStore } from '@/lib/stores/sidebar-store';
 import { useLocaleStore } from '@/lib/i18n';
 import {
+  useSubscriptionStore,
+  getPlanBadgeStyle,
+} from '@/lib/stores/subscription-store';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -54,10 +58,10 @@ export function UserProfileMenu({
   const closeMobile = useSidebarStore((s) => s.closeMobile);
   const locale = useLocaleStore((s) => s.locale);
   const setLocale = useLocaleStore((s) => s.setLocale);
-  // NOTE: no plan badge here — the plan badge lives ONLY on the topbar
-  // avatar trigger (this menu's own trigger). Duplicating it inside the
-  // dropdown header read as "Beta Beta"; removing it keeps a single,
-  // always-in-sync subscription badge per the top-right avatar.
+  // Plan badge in the dropdown header — mirrors the top-right avatar
+  // trigger's badge exactly (same classes / colors / label source) so
+  // the active plan is visible inside the menu as well as on the avatar.
+  const { currentPlan } = useSubscriptionStore();
 
   const handleNavigate = (targetMod: string) => {
     useNavigationStore.getState().navigate(targetMod);
@@ -95,9 +99,26 @@ export function UserProfileMenu({
               </AvatarFallback>
             </Avatar>
             <div className="flex min-w-0 flex-col space-y-0.5">
-              <p className="truncate text-sm font-medium leading-5">
-                {user?.name ?? 'User'}
-              </p>
+              {/* Name + plan badge on the first line. The badge reuses the
+                  exact same classes / colors / label source as the
+                  top-right avatar trigger's badge (see topbar.tsx) so the
+                  two are always in sync; only the absolute anchoring
+                  (which positioned the avatar badge at -bottom-1.5) is
+                  dropped here since this badge sits inline next to the
+                  name rather than overlapping an avatar. */}
+              <div className="flex min-w-0 items-center gap-1.5">
+                <p className="truncate text-sm font-medium leading-5">
+                  {user?.name ?? 'User'}
+                </p>
+                <span
+                  className={cn(
+                    'flex items-center rounded-md px-1.5 py-0.5 text-[8px] font-bold leading-none whitespace-nowrap ring-2 ring-background shrink-0',
+                    getPlanBadgeStyle(currentPlan).avatar,
+                  )}
+                >
+                  {currentPlan.name}
+                </span>
+              </div>
               <p className="truncate text-xs leading-4 text-muted-foreground">
                 {user?.email ?? ''}
               </p>

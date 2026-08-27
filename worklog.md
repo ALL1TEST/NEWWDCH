@@ -3696,3 +3696,26 @@ Stage Summary:
 - Dev server: fresh Next.js 16.1.3 (Turbopack) process (pid 12766) on port 3000, started after killing all previous dev/watcher processes; no stale server remains.
 - localhost:3000 verified serving the repository's UI: login page → Admin dashboard (all 10 sidebar modules + Settings submenu) → Backups module → Storage tab with Add Storage button and providers table.
 - No repository source code was modified to make the sync appear successful; the only working-tree differences are runtime DB state and verification screenshots.
+
+---
+Task ID: beta-badge-dropdown
+Agent: main
+Task: Add the "Beta" badge back to the profile dropdown header, next to "Admin User", matching the exact style, size, position, and colors of the existing Beta badge shown on the top-right profile avatar. Do not change avatar, name, email, menu items, or any other styling.
+
+Work Log:
+- Read `src/components/layout/user-profile-menu.tsx` and found a stale comment (lines 57–60) that explicitly documented why the plan badge had previously been removed from the dropdown header ("Duplicating it inside the dropdown header read as 'Beta Beta'").
+- Located the canonical Beta badge in `src/components/layout/topbar.tsx` (lines 499–506): a `<span>` using classes `flex items-center rounded-md px-1.5 py-0.5 text-[8px] font-bold leading-none whitespace-nowrap ring-2 ring-background` + color from `getPlanBadgeStyle(currentPlan).avatar`, with label `{currentPlan.name}`.
+- Confirmed the Beta plan's `badgeStyle.avatar` resolves to `bg-amber-500 text-white` (from `src/lib/stores/subscription-store.ts` PLANS table), giving the exact color match.
+- Added `useSubscriptionStore, getPlanBadgeStyle` to the imports in `user-profile-menu.tsx` (from `@/lib/stores/subscription-store`).
+- Added `const { currentPlan } = useSubscriptionStore();` inside `UserProfileMenu` and replaced the stale "no plan badge here" NOTE comment with a fresh comment explaining the badge now mirrors the topbar avatar's badge.
+- Restructured the dropdown header name row: kept the parent vertical stack (name line + email line) intact, but wrapped the name `<p>` and the new badge `<span>` in a single `flex min-w-0 items-center gap-1.5` row so the badge sits inline immediately to the right of "Admin User". Reused the EXACT same classes as the topbar badge, only dropping the `absolute -bottom-1.5 left-1/2 -translate-x-1/2` anchor (avatar-specific) and adding `shrink-0` so the badge is never compressed by long names.
+- Left the avatar (`h-9 w-9 shrink-0 ring-1 ring-border` + AvatarImage/AvatarFallback), the email `<p>`, the dividers, and every menu item (Profile, Language EN/FR, Manage Subscription, Log out) byte-for-byte unchanged.
+- Lint: `bun run lint` reports 4 pre-existing errors + 3 warnings, all in `src/modules/seo/seo-broken-links-page.tsx` and unrelated files; NO errors in `user-profile-menu.tsx` or `subscription-store.ts`.
+- Browser verification via agent-browser: logged in as Admin → opened the top-right avatar profile dropdown → DOM eval of the dropdown header returned `"Admin User\n\nBeta\n\nadmin@example.com"`, confirming the badge text is now rendered between the name and the email inside the header.
+- VLM (z-ai vision, glm-5v-turbo) analyzed the screenshot `/home/z/my-project/tool-results/profile-dropdown-beta-badge.png` and confirmed: (1) a small amber/orange "Beta" badge is present next to the user's name in the dropdown header; (2) it has an amber/orange background with white text, small size, and rounded-corner pill shape that matches the typical plan badge; (3) the avatar, name, email, and all menu items are intact and unchanged.
+
+Stage Summary:
+- Single-file change: `src/components/layout/user-profile-menu.tsx` (added import, added `useSubscriptionStore` selector, replaced stale comment, wrapped name+badge in a flex row, reused topbar badge classes verbatim minus the absolute anchor + added `shrink-0`).
+- Result: the dropdown header now shows `Admin User [Beta]` on the first line and `admin@example.com` on the second line, with the badge using the identical amber-500/white color, `text-[8px] font-bold`, `px-1.5 py-0.5`, `rounded-md`, `ring-2 ring-background` styling as the top-right avatar's Beta badge.
+- Nothing else (avatar, name, email, menu items, dividers, sidebar trigger styling, topbar trigger badge) was modified.
+- Verification artifacts: `/home/z/my-project/tool-results/profile-dropdown-beta-badge.png`.
