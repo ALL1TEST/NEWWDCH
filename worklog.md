@@ -4804,3 +4804,39 @@ Verification (agent-browser, light + dark; clean DOM eval via [data-slot=breadcr
 
 Stage Summary:
 - 6 modules' topbar breadcrumbs reworked per spec: SEO/AI/Automation/Newsletter now use cumulative text-only trails (no icons, no "All Sites", root shows no breadcrumb) exactly matching the user's listed item order; Articles is text-only with "All Sites > Articles" on the list and "Articles > Create New" (no All Sites) on the create page; Media has no breadcrumb. Backups, the task-25 standalone pages, and all other modules are unchanged. Single file changed: `src/components/layout/breadcrumbs.tsx`.
+
+---
+Task ID: 27
+Agent: main (orchestrator)
+Task: Remove ALL topbar breadcrumbs from 6 modules — Backups, Articles (content), Newsletter, SEO, AI, Automation — so the topbar keeps ONLY the "All Sites" selector for every page/sub-page/tab of these modules.
+
+Work Log:
+- Read current `src/components/layout/breadcrumbs.tsx` — confirmed it still contained the dynamic cumulative-trail branches from the prior task (Backups "Overview > Backups > Schedules > Restore > Storage > Logs"; SEO "Overview > SEO Audit > Search Console > Settings > Sitemap > Robots > Redirects"; AI "AI > Models > Prompt Library > Settings"; Automation "Automation > Runs > Create New"; Newsletter "Newsletter > Subscribers > Campaigns"; Content/Articles "All Sites > Articles" / "Articles > Create New").
+- Confirmed exact module keys via `src/lib/stores/navigation-store.ts` + `src/components/layout/sidebar.tsx`: `backups`, `content` (Articles), `newsletter` (singular), `seo`, `ai`, `automation`.
+- Rewrote `src/components/layout/breadcrumbs.tsx`:
+  - REMOVED the `TextOnlyTrail` helper (now unused).
+  - REMOVED all 6 dynamic cumulative-trail branches (Backups, SEO, AI, Automation, Newsletter, Content/Articles) + their comments.
+  - MOVED the `NO_BREADCRUMB_MODULES` check to the TOP of the render (right after the `crumbs` useMemo, before any module-specific branch) so it short-circuits ALL of these modules on every sub-page/tab.
+  - ADDED the 6 modules to `NO_BREADCRUMB_MODULES`: now `['dashboard','calendar','users','comments','settings','media','email-templates','notifications','backups','content','seo','ai','automation','newsletter']`.
+  - Kept the single-item branch + default render branch unchanged so non-excluded modules (categories/tags/analytics/security/jobs/profile/billing/all-sites/newsletters) still render their "All Sites > X" breadcrumb normally.
+- Verified with agent-browser (light + dark) on EVERY sub-page/tab:
+  - Backups: #backups, #backups/backups, #backups/schedules, #backups/restore, #backups/storage, #backups/logs → headerBC=0 + All Sites=YES
+  - Articles: #content, #content/new → headerBC=0 + All Sites=YES
+  - Newsletter: #newsletter (→subscribers), #newsletter/subscribers, #newsletter/campaigns → headerBC=0 + All Sites=YES
+  - SEO: #seo, #seo/audit, #seo/search-console, #seo/settings, #seo/settings/sitemap, #seo/settings/robots, #seo/settings/redirects → headerBC=0 + All Sites=YES
+  - AI: #ai (→providers), #ai/models, #ai/prompts, #ai/settings → headerBC=0 + All Sites=YES
+  - Automation: #automation, #automation/runs, #automation/create → headerBC=0 + All Sites=YES
+  - Dark mode (added `dark` class, then removed): Backups/Schedules, SEO/Audit, AI/Models, Automation/Runs all headerBC=0; confirmed `isDark:false` after restore.
+- Regression check (unchanged behavior):
+  - Task-25 no-breadcrumb pages: #calendar, #users, #comments, #settings, #email-templates, #notifications → all headerBC=0 + All Sites=YES (still correct).
+  - Non-excluded modules (default branch still works): #categories, #tags, #analytics, #security, #jobs, #profile → all headerBC=5 with navText="All Sites Categories" etc. (breadcrumb intact).
+- Lint: `bun run lint` → 4 pre-existing errors + 3 pre-existing warnings (content-create/edit-page, seo-broken-links-page); breadcrumbs.tsx is CLEAN (no issues).
+- dev.log: only the pre-existing `yauzl` module-not-found warning; `✓ Compiled in 1078ms` after edit.
+- Screenshot: `tool-results/backups-no-breadcrumb.png` (Backups/Schedules, light, topbar shows only All Sites selector).
+
+Stage Summary:
+- Single-file change: `src/components/layout/breadcrumbs.tsx` (rewrote — removed ~200 lines of dead dynamic-trail code + TextOnlyTrail helper; consolidated to one `NO_BREADCRUMB_MODULES` check at the top).
+- The 6 modules Backups / Articles / Newsletter / SEO / AI / Automation now render NO topbar breadcrumb on ANY of their pages/sub-pages/tabs — the topbar shows ONLY the "All Sites" selector, matching the user's "remove (…)" spec for each.
+- All previously-excluded modules (task 25 set + Media) and the sidebar-only modules (Email Templates, Notifications) keep their no-breadcrumb behavior.
+- All other modules keep their normal "All Sites > [icon] Label" breadcrumb (default branch untouched).
+- Light + dark both verified; no regressions; lint clean for the changed file.
