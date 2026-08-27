@@ -196,17 +196,52 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Root scroll lock — see the explanatory comment block below.
+     <main> is the SOLE vertical scroll container (the app shell is
+     viewport-clamped via h-svh + overflow-hidden). Without this lock,
+     Chromium lets <html> also scroll when <main>'s content overflows
+     (a scrollHeight-propagation quirk), producing the "double
+     vertical scrollbar" seen on table-heavy pages. Locking html/body
+     to the viewport guarantees a SINGLE scrollbar (the one on <main>)
+     across every page, with zero layout shift. */
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
   body {
     @apply bg-background text-foreground;
   }
 }
 
 /* ============================================================
+   ROOT SCROLL LOCK — single vertical scrollbar guarantee
+   ------------------------------------------------------------
+   The app shell (SidebarProvider) is viewport-clamped
+   (`h-svh` + `overflow-hidden`) and `<main>` is the SOLE vertical
+   scroll container (`flex-1 min-h-0 overflow-y-auto`). Without this
+   lock, Chromium lets `<html>` ALSO scroll when `<main>`'s content
+   overflows (a scrollHeight-propagation quirk where the root
+   documentElement picks up the overflowing content of a nested
+   `overflow:auto` box). That produces a SECOND vertical scrollbar
+   alongside `<main>`'s — the "double scrollbar" seen on table-heavy
+   pages (Users, SEO Audit, Comments, Backups, Backup Logs).
+
+   Locking html/body to the viewport height with `overflow: hidden`
+   guarantees a SINGLE vertical scrollbar (the one on `<main>`) across
+   EVERY page, with zero layout shift. The shell already clips its own
+   overflow, so nothing real is hidden; <main> still scrolls normally.
+   The global thin-scrollbar rule below continues to style <main> and
+   every inner scroll region (sidebar, tables, modals, cards, lists).
+   ============================================================ */
+
+/* ============================================================
    GLOBAL THIN SCROLLBAR
    ------------------------------------------------------------
-   One slim, subtle, theme-adaptive scrollbar applied across the
-   ENTIRE application — the page level (html/body) AND every inner
-   scrollable area (sidebar, tables, modals, cards, lists, etc.).
+   One slim, subtle, theme-adaptive scrollbar applied to every
+   INNER scrollable area in the application — the main content
+   scroller (<main>) and every nested region (sidebar, tables,
+   modals, cards, lists, etc.).
 
    • Minimal width (8px) but easy to grab — stays functional.
    • Transparent track; the thumb is a slim rounded pill inset

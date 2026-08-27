@@ -4385,3 +4385,56 @@ Stage Summary:
 - Theme-adaptive by construction: the semi-transparent hue-less thumb auto-blends with the background (soft gray on white in light mode, soft gray on near-black in dark mode) — one rule, both themes, no .dark override.
 - ZERO layout footprint (overlay scrollbar) → page layout/content/spacing UNCHANGED; all sidebar hover/tooltip/Expand behavior (Tasks 15/15b/16), dropdowns, profile, notifications, footer, theme toggle, routing preserved. Only globals.css edited; no component/.tsx files touched.
 - Verified via DOM probe (scrollbar-width=thin, 0px footprint), live stylesheet rule dump (all 7 rules present), functional scroll test, and VLM (dark-mode screenshot shows the thin light-gray thumb at the right edge; both modes render with intact layout).
+
+---
+Task ID: 18
+Agent: main (orchestrator)
+Task: Fix layout issues on 5 pages (Users, SEO Audit, Comments, Backups, Backup Logs): remove the duplicate/double vertical scrollbars (each page must have ONE main vertical scrollbar only), make the page content/table area use the correct single scroll container without nested page scrolling, keep existing layout/sizing/spacing/functionality, on Comments remove the large empty/blank space below the table (content should end naturally after pagination), all 5 pages consistent + responsive, do NOT modify unrelated components/UI.
+
+Work Log:
+- Read worklog (Tasks 15-17). Located the 5 target page files: `src/modules/users/users-list-page.tsx`, `src/modules/seo/seo-audit-page.tsx`, `src/modules/comments/comments-page.tsx`, `src/modules/backups/backups-list-page.tsx`, `src/modules/backups/logs-page.tsx`.
+- Read the app shell to find the scroll architecture:
+  * `src/app/page.tsx` → dynamically imports `admin-app.tsx`.
+  * `src/components/layout/admin-app.tsx` → renders `<AdminShell>{ModuleComponent}</AdminShell>`.
+  * `src/components/layout/admin-shell.tsx` → `<SidebarProvider>` (root: `flex h-svh w-full overflow-hidden` = viewport-clamped) wraps `<div className="flex h-full w-full bg-background overflow-hidden">` (inner row) → `<div className="flex-1 flex flex-col min-w-0 min-h-0">` (content column) → `<Topbar />` + `<main className="flex-1 min-h-0 overflow-y-auto p-6">{children}</main>`.
+  * So `<main>` is the SOLE intended vertical scroll container (flex-1 min-h-0 overflow-y-auto). The 5 page components each return a plain `<div className="space-y-4">` (or space-y-6 for Comments) with PageHeader + DataTable — NO inner vertical scroll container of their own. The DataTable pattern's outer is `<div className="rounded-lg border overflow-hidden">` and the Table's `data-slot="table-container"` is `overflow-x-auto` (HORIZONTAL only). So the pages do NOT add a 2nd vertical scroller themselves.
+- DIAGNOSED the real root cause via agent-browser DOM probe on the Users page:
+  * `html.scrollHeight = 1049` while `html.clientHeight = 800` (viewport) → **html CAN scroll** (the UA treats root `overflow:visible` as `auto`, so html shows a scrollbar whenever its scrollHeight exceeds the viewport).
+  * `main.scrollHeight = 1046`, `main.clientHeight = 744` → main ALSO scrolls.
+  * Result: TWO vertical scrollbars (html's + main's) = the "double scrollbar."
+  * The leak: the lowest in-flow element is the page wrapper `<div class="space-y-4">` (height 998, bottom y=1077). main has `overflow-y:auto` so it CLIPS that content and scrolls internally (main box = 744). BUT Chromium computes `documentElement.scrollHeight` by walking ALL descendants including the overflowing content inside `overflow:auto` boxes (a long-standing scrollHeight-propagation quirk), so html.scrollHeight gets inflated to ~1049 even though main clips the content. Task 17 then made that root scrollbar VISIBLE (`scrollbar-width: thin` globally), which exposed this latent quirk as a visible 2nd scrollbar.
+  * Confirmed the SAME pattern on all 5 pages (Users html.scrollH 1049, Comments 3566, SEO Audit, Backups, Backup Logs).
+- DIAGNOSED the Comments "huge empty space below the table" as a SYMPTOM of the same root-scrollbar quirk: on the Comments page, `body` (= the viewport-clamped SidebarProvider shell) is exactly 800px tall, but `html.scrollHeight` is inflated to 3566 by main's overflowing content. Scrolling the OUTER html scrollbar therefore scrolled the viewport past the 800px body into ~2766px of phantom EMPTY SPACE below the actual content — exactly the "huge empty area below the comments table" the user saw. (Verified the comments card itself ends naturally: pagination is the last child inside the card, card.bottom = page bottom; no min-h/max-h on the card or rows.)
+- FIX — a SINGLE CSS rule added to `src/app/globals.css` (the only file changed; no .tsx/component files touched), inside the existing `@layer base` block:
+  ```css
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
+  ```
+  * Locks html + body to the viewport height with `overflow: hidden` → html can NEVER scroll (no root scrollbar), eliminating the 2nd scrollbar on EVERY page at once.
+  * `<main>` keeps its own `overflow-y: auto` → it becomes the SOLE vertical scrollbar across the whole app, exactly as the shell architecture intends.
+  * The shell (SidebarProvider `h-svh overflow-hidden`) already clips its own overflow, so locking html/body hides nothing real; main still scrolls normally with the global thin-scrollbar styling from Task 17.
+  * NOTE on Tailwind v4 processing: the FIRST attempt placed this rule as an UNLAYERED top-level rule (between `@layer base` and the global thin-scrollbar block). agent-browser stylesheet dump confirmed Tailwind v4 did NOT emit it in that position (the `*` scrollbar rules below it WERE emitted, but `html, body` was not). Moving the rule INSIDE `@layer base` (where the existing `body { @apply bg-background text-foreground }` lives) made Tailwind emit it reliably; computed styles then confirmed `html.oy=hidden, html.height=800px, html.canScroll=false`.
+- UNCHANGED (per constraints): page layouts, sizing, spacing, the shell structure, sidebar/topbar, all hover/tooltip/Expand behavior (Tasks 15/15b/16), the global thin-scrollbar styling (Task 17), dropdowns, DataTable internals, Comments bespoke list, Backups/Logs tables, dialogs, routing. Only `globals.css` edited.
+
+Verification (agent-browser, persisted admin session):
+- Per-page scroll-chain probe (desktop 1280×800) — `htmlCanScroll` + list of every actually-scrolling element:
+  * Users (`#users`): htmlCanScroll=**false**, scrollables=[MAIN] (1) ✓
+  * SEO Audit (`#seo/audit`, h1="SEO Audit"): htmlCanScroll=**false**, scrollables=[MAIN] (1) ✓
+  * Comments (`#comments`): htmlCanScroll=**false**, scrollables=[MAIN] (1) ✓
+  * Backups (`#backups`, h1="Backups"): htmlCanScroll=**false**, scrollables=[MAIN] (1) ✓
+  * Backup Logs (`#backups/logs`, h1="Backup Logs"): htmlCanScroll=**false**, scrollables=[MAIN] (1) ✓
+  → ALL 5 pages now have exactly ONE vertical scrollbar (the one on `<main>`); the 2nd (root/html) scrollbar is gone.
+- Comments empty-space fix verified: navigated to the sparse "Trash" tab (6 comments), scrolled `<main>` to its absolute bottom (scrollTop = scrollH - clientH = 1017-744 = 273), and VLM-confirmed the content "ends naturally near the bottom of the visible area" — last comment row ("Deleted Visitor") immediately followed by the pagination footer ("Showing 1 to 6 of 6" + « < 1 > » buttons), only minimal container padding below. No huge empty area. (The phantom 2766px root-scroll space that previously sat below the 800px body is eliminated because html no longer scrolls.)
+- Responsive check (mobile 375×720, Users page): htmlCanScroll=**false**, scrollables=[MAIN] (1) — single scrollbar on mobile too; root lock works at narrow widths. ✓
+- Regression check (Dashboard, unrelated page): htmlCanScroll=**false**, scrollables=[MAIN, DIV max-h-[400px]] — the Dashboard keeps its OWN intentional inner `max-h-[400px]` notification panel scroll (a designed mini-scroll region, NOT a layout bug); the root is locked, no double-scrollbar. No regression. ✓
+- Computed-style confirmation: `html.overflowY="hidden"`, `html.height="800px"`, `html.scrollHeight=800`, `html.canScroll=false`; `body` same; `main.overflowY="auto"`, `main.scrollHeight`>`clientHeight`, scrolls. ✓
+- `bun run lint`: 0 errors in globals.css (it's CSS, not linted by ESLint). The 4 pre-existing errors (data-table.tsx, content-edit-page.tsx, seo-broken-links-page.tsx) are unchanged and unrelated. yauzl warning pre-existing.
+- Dev server healthy throughout (CSS HMR'd cleanly; prisma queries + 200 responses flowing).
+- Screenshots in /home/z/my-project/tool-results/: users-single-scrollbar.png, comments-trash-bottom.png.
+
+Stage Summary:
+- Root cause of the double vertical scrollbar on Users/SEO Audit/Comments/Backups/Backup Logs: Chromium's `documentElement.scrollHeight` quirk — when `<main>` (the shell's sole intended scroller, `flex-1 min-h-0 overflow-y-auto`) overflows, the root `<html>` also reports scrollHeight>viewport and scrolls, showing a 2nd scrollbar. Task 17 made that root scrollbar visible (`scrollbar-width: thin`), exposing the latent quirk. The Comments "huge empty space below the table" was the same quirk: scrolling the outer html scrollbar scrolled past the 800px body into ~2766px of phantom empty space.
+- FIX: one CSS rule in `src/app/globals.css` (inside `@layer base`): `html, body { height: 100%; overflow: hidden }` — locks the root to the viewport so html can never scroll; `<main>` becomes the SOLE vertical scrollbar across the entire app (consistent on every page). Zero layout/spacing/functionality change; the shell was already viewport-clamped. Only globals.css edited; no .tsx/component files touched.
+- Verified all 5 pages have exactly ONE scrollbar (main) on desktop (1280×800) AND mobile (375×720); Comments empty space gone (VLM-confirmed content ends naturally at pagination); Dashboard (unrelated) no regression; lint clean (4 pre-existing errors unchanged).
