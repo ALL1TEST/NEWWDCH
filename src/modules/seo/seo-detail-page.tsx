@@ -114,6 +114,7 @@ export function SeoDetailPage({ type }: { type: DetailType }) {
       <PageHeader
         title={meta.title}
         description={meta.description}
+        breadcrumbs={false}
       />
 
       <Card>

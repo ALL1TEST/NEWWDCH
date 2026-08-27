@@ -5,27 +5,19 @@ import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
   DatabaseBackup, HardDrive, CheckCircle2, Clock, XCircle,
-  Plus, BarChart3, Activity as ActivityIcon, Database,
+  Plus, BarChart3, Activity as ActivityIcon,
 } from 'lucide-react';
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb';
 import { getApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useChartTheme } from '@/lib/chart-theme';
 import { cn, formatFileSize, formatRelativeTime, truncate } from '@/lib/utils';
 import { formatDurationMs } from '@/lib/backup-constants';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
-import { useSiteStore } from '@/lib/stores/site-store';
 
 // -------------------- Types --------------------
 
@@ -102,53 +94,6 @@ function StatCardSkeleton() {
   );
 }
 
-// -------------------- Backups Breadcrumb --------------------
-// Mirrors the SEO page's breadcrumb pattern (rendered via the global
-// <Breadcrumbs /> + <PageHeader>): site-context prefix > current module crumb.
-// Lives directly below the top header (below the BackupsSubNav tabs),
-// aligned with the main content's left edge. Same position/spacing/typography/
-// icons/alignment as the SEO page's breadcrumb (text-xs muted-foreground
-// prefix + Database icon + BreadcrumbPage).
-// NOTE: the global <Breadcrumbs /> component intentionally returns null for
-// the `backups` module (it lives in the SETTINGS_CHILDREN set so the topbar
-// keeps only the "All Sites" site selector); this inline breadcrumb is the
-// sole breadcrumb on the Backups Overview page.
-
-function BackupsBreadcrumb() {
-  const activeSite = useSiteStore((s) => s.getActiveSite());
-  const isAllSites = useSiteStore((s) => s.isAllSites());
-
-  return (
-    <Breadcrumb className="mb-3">
-      <BreadcrumbList>
-        {/* Site context prefix — exactly matches the SEO page's breadcrumb */}
-        {isAllSites ? (
-          <>
-            <BreadcrumbItem>
-              <span className="text-xs text-muted-foreground font-medium">All Sites</span>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-          </>
-        ) : activeSite ? (
-          <>
-            <BreadcrumbItem>
-              <span className="text-xs text-muted-foreground font-medium">{activeSite.name}</span>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-          </>
-        ) : null}
-        {/* Current module crumb — Database icon + BreadcrumbPage (last item) */}
-        <BreadcrumbItem>
-          <span className="flex items-center gap-1">
-            <Database className="h-3.5 w-3.5" />
-            <BreadcrumbPage>Backups</BreadcrumbPage>
-          </span>
-        </BreadcrumbItem>
-      </BreadcrumbList>
-    </Breadcrumb>
-  );
-}
-
 // -------------------- Dashboard Page --------------------
 
 export function DashboardPage() {
@@ -181,25 +126,22 @@ export function DashboardPage() {
 
   if (isLoading || !stats) {
     return (
-      <>
-        <BackupsBreadcrumb />
-        <div className="space-y-6 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <Skeleton className="h-8 w-32 mb-2" />
-              <Skeleton className="h-4 w-64" />
-            </div>
-            <Skeleton className="h-9 w-32" />
+      <div className="space-y-6 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton className="h-8 w-32 mb-2" />
+            <Skeleton className="h-4 w-64" />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => <StatCardSkeleton key={i} />)}
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Skeleton className="h-64 rounded-xl" />
-            <Skeleton className="h-64 rounded-xl" />
-          </div>
+          <Skeleton className="h-9 w-32" />
         </div>
-      </>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => <StatCardSkeleton key={i} />)}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Skeleton className="h-64 rounded-xl" />
+          <Skeleton className="h-64 rounded-xl" />
+        </div>
+      </div>
     );
   }
 
@@ -215,9 +157,7 @@ export function DashboardPage() {
     : 'No backups yet';
 
   return (
-    <>
-      <BackupsBreadcrumb />
-      <div className="space-y-8 p-6">
+    <div className="space-y-8 p-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -393,6 +333,5 @@ export function DashboardPage() {
         </Card>
       </div>
     </div>
-    </>
   );
 }

@@ -83,7 +83,7 @@ export function SeoSocialPreviewPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Social Preview" description="Preview how your pages appear when shared on social media" />
+      <PageHeader title="Social Preview" description="Preview how your pages appear when shared on social media" breadcrumbs={false} />
 
       {/* Content Selector */}
       <Card className="p-4">

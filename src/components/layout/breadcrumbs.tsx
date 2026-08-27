@@ -214,9 +214,19 @@ export function Breadcrumbs() {
   }
 
   // Settings and its sub-pages — sidebar is the only navigation, hide breadcrumb.
-  // This includes modules now grouped under Settings: Backups, Email Templates, Notifications.
-  const SETTINGS_CHILDREN = new Set(['settings', 'backups', 'email-templates', 'notifications']);
+  // This includes modules now grouped under Settings: Email Templates, Notifications.
+  // (Backups now shows the breadcrumb on the Overview page — see special case below.)
+  const SETTINGS_CHILDREN = new Set(['settings', 'email-templates', 'notifications']);
   if (SETTINGS_CHILDREN.has(currentModule)) {
+    return null;
+  }
+
+  // Backups: show the breadcrumb ONLY on the Overview (no currentSubPage) so
+  // the topbar displays "All Sites > Backups" next to the site selector —
+  // matching the Users/Newsletter/SEO pages. Backups sub-pages (Logs,
+  // Schedules, Restore, Storage, Backups list) still hide the breadcrumb
+  // (they each render their own PageHeader and we don't want a duplicate).
+  if (currentModule === 'backups' && currentSubPage) {
     return null;
   }
 

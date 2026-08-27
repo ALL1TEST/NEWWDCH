@@ -400,6 +400,7 @@ export function SeoAuditPage() {
       <PageHeader
         title="SEO Audit"
         description="Run a comprehensive technical SEO audit of your content"
+        breadcrumbs={false}
         action={(
           <Button size="sm" onClick={() => auditMutation.mutate()} disabled={auditMutation.isPending}>
             {auditMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ClipboardCheck className="h-4 w-4 mr-2" />}

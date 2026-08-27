@@ -651,6 +651,7 @@ export function NewsletterPage() {
       <PageHeader
         title="Newsletter"
         description="Manage subscribers and campaigns"
+        breadcrumbs={false}
       />
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>

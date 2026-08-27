@@ -88,7 +88,7 @@ export function SeoSchemaPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Schema.org / JSON-LD" description="Inspect structured data generated for your content" />
+      <PageHeader title="Schema.org / JSON-LD" description="Inspect structured data generated for your content" breadcrumbs={false} />
 
       <Card className="p-4">
         <div className="flex items-end gap-3">

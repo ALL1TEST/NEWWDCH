@@ -696,6 +696,7 @@ export function UsersListPage() {
       <PageHeader
         title="Users"
         description="Manage user accounts and permissions"
+        breadcrumbs={false}
         action={
           <Button size="sm" onClick={() => setInviteDialogOpen(true)}>
             <UserPlus className="h-4 w-4 mr-2" />

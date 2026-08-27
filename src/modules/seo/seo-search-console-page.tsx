@@ -767,6 +767,7 @@ function SeoSearchConsolePageInner() {
       <PageHeader
         title="Search Console"
         description="Monitor your site's performance in Google Search"
+        breadcrumbs={false}
       />
 
       {/* Error state */}

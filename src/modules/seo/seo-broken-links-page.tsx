@@ -431,6 +431,7 @@ export function SeoBrokenLinksPage() {
       <PageHeader
         title="Broken Links"
         description="Find and fix broken links across your website"
+        breadcrumbs={false}
         action={
           <Button
             size="sm"

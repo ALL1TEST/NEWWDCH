@@ -67,7 +67,7 @@ export function SeoInternalLinksPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Internal Links" description="Analyze internal linking structure and discover orphan pages" />
+      <PageHeader title="Internal Links" description="Analyze internal linking structure and discover orphan pages" breadcrumbs={false} />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="p-3"><p className="text-xs text-muted-foreground">Total Pages</p><p className="text-lg font-bold tabular-nums">{summary.totalItems}</p></Card>

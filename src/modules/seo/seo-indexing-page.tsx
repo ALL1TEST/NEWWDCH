@@ -325,6 +325,7 @@ export function SeoIndexingPage() {
       <PageHeader
         title="Indexing"
         description="Monitor and manage your content's indexing status"
+        breadcrumbs={false}
         action={
           <Button
             size="sm"

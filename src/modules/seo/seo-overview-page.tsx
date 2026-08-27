@@ -359,7 +359,7 @@ export function SeoOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="SEO Overview" description="Monitor your site's search engine optimization health and performance" />
+      <PageHeader title="SEO Overview" description="Monitor your site's search engine optimization health and performance" breadcrumbs={false} />
 
       {error && (
         <Card className="border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20">
