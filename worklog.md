@@ -4037,3 +4037,45 @@ Stage Summary:
 - The expanded site logo (LogoMark) is UNCHANGED — DOM + pixel confirmed it still has its bg-primary box.
 - Works in both Light and Dark mode (DOM + dense pixel sweeps confirm: 0 light/dark box pixels in the hover-state button area; at-rest has the bg-primary box in both themes).
 - The headless browser's (hover: hover):false media-gate limitation required injecting non-gated hover rules to verify the hover state. On a real browser, hover:bg-transparent + hover:text-muted-foreground + the group-hover swap all activate natively. The injected styles were removed after verification.
+
+---
+Task ID: 13
+Agent: main (orchestrator)
+Task: Fix the 2 sidebar logo states: (1) normal/expanded logo keeps its black bg-primary background UNCHANGED; (2) collapsed-state — when the sidebar is collapsed and the logo becomes the Expand icon (on hover), remove ONLY the black background from that Expand icon (keep icon visible, same size/position/functionality). Do not remove bg from the normal at-rest "C" logo.
+
+Work Log:
+- Re-read CollapsedLogoButton (sidebar.tsx ~L291-377) — task 12's implementation used Tailwind CSS hover variants: `hover:bg-transparent` + `hover:text-muted-foreground` on the button + `group-hover:hidden`/`group-hover:block` for the C↔icon swap. This was CORRECT on paper but has a critical real-world flaw.
+- ROOT CAUSE identified: Tailwind v4 wraps ALL `hover:` and `group-hover:` utility variants inside `@media (hover: hover)`. On any browser/preview environment that reports `(hover: none)` (headless browsers, touch devices, some preview iframes), these utilities NEVER activate — so the swap AND the bg-transparent would silently fail (the "C" would keep its black box and no Expand icon would appear on hover). This is almost certainly why the previous CSS-based fix (task 12) wasn't visible in the preview.
+- Proved this was the issue: in the headless browser, `window.matchMedia('(hover: hover)').matches` returned FALSE, and native `agent-browser hover` did NOT trigger the CSS hover variants (task 12 needed non-gated CSS injection to verify).
+- FIX: rewrote CollapsedLogoButton to use React state (useState + onMouseEnter/onMouseLeave) instead of CSS :hover / group-hover variants. Mouse events fire on ANY pointer input regardless of the `@media (hover: hover)` media query, so the swap + bg-transparent now work identically in EVERY environment (desktop, touch, headless, preview iframe).
+- Implementation (sidebar.tsx ~L326-377):
+  * `const [hovered, setHovered] = useState(false)`
+  * `onMouseEnter={() => setHovered(true)}` / `onMouseLeave={() => setHovered(false)}`
+  * Conditional className via `cn(...)`: hovered → `bg-transparent text-muted-foreground` (Expand-icon state: NO background, gray icon); at-rest → `bg-primary text-primary-foreground` (normal logo: black box, white "C").
+  * Conditional render: hovered → `<PanelLeftOpen className="h-4 w-4" />`; at-rest → `<span>C</span>`.
+  * Kept EVERYTHING else unchanged: h-8 w-8 (size), shrink-0, cursor-pointer, items-center, justify-center, rounded-lg, font-bold, text-sm, outline-none, transition-opacity, hover:opacity-90 (kept as a subtle enhancement; non-critical since the swap is state-driven), focus-visible:ring-2, focus-visible:ring-ring, select-none, onClick={toggleSidebar}, Tooltip, sr-only span.
+  * Removed the now-unused `group` class (no longer using group-hover).
+  * Updated JSDoc to document the React state approach and the rationale (media-gate bypass).
+- Verified the expanded LogoMark component (sidebar.tsx ~L279-288) was NOT touched — still has its own bg-primary + text-primary-foreground.
+- Ran `bun run lint` — 0 sidebar.tsx errors. Dev.log: server running, no compile/runtime errors.
+- agent-browser NATIVE verification (viewport 1440x900, logged in as admin) — NO CSS injection needed this time (React state responds to real mouse events):
+  * DARK MODE — AT REST: DOM bgColor=lab(90.95) = light box (bg-primary in dark mode, theme-adaptive ✓), color=lab(7.78)=dark "C", childTag=SPAN childText="C". Pixel (24,28)=(229,229,229)=light box present. ✓ (normal logo keeps background)
+  * DARK MODE — NATIVE HOVER (agent-browser hover @e2): DOM bgColor=rgba(0,0,0,0)=TRANSPARENT ✓, color=lab(66.128)=muted-foreground gray ✓, hasSvg=true svgDisplay=block (icon visible) ✓, spanText=null (C swapped out via conditional render) ✓, btnHover=true. Pixel sweep of button area (8-40,13-44): light(>200)=0, dark(<50)=226, gray=30 — ZERO light box pixels (only dark sidebar + 30 gray icon strokes). ✓ (Expand icon has no background)
+  * DARK MODE — MOUSE-LEAVE: DOM bgColor=lab(90.95) (box restored ✓), childTag=SPAN childText="C" ✓, btnHover=false. Pixel (24,28)=(229,229,229)=box restored. ✓
+  * LIGHT MODE — AT REST: DOM bgColor=lab(7.78)=near-black (bg-primary in light mode ✓), color=lab(98.26)=white "C", childTag=SPAN childText="C". Pixel (24,28)=(23,23,23)=BLACK box present. ✓
+  * LIGHT MODE — NATIVE HOVER: DOM bgColor=rgba(0,0,0,0)=TRANSPARENT ✓, color=lab(48.496)=muted-foreground gray ✓, hasSvg=true svgDisplay=block ✓. Pixel sweep: light(>200)=226, dark(<50)=0, gray=30 — ZERO dark box pixels (226 light = sidebar bg through transparent button, 30 gray = icon strokes). ✓ DEFINITIVE: no black box on hover.
+  * REGRESSION — expanded LogoMark unchanged: DOM totalBgPrimary=8, headerLogoClasses includes "bg-primary text-primary-foreground". Pixel LogoMark center=(23,23,23)=black box (in light mode). ✓
+  * CLICK-TO-EXPAND: clicked the collapsed logo (e2), sidebar expanded (snapshot showed "Collapse sidebar" button e3 return). onClick toggleSidebar functionality unchanged. ✓
+- VLM note: the VLM continued to misperceive a "dark box behind the icon" in the light-hover screenshot — DISPROVEN by the pixel sweep (0 dark pixels in the button area). The VLM conflates the PanelLeftOpen icon's own rectangle outline (the panel-shape glyph) with a "background box." DOM + pixel data are ground truth.
+- Cleaned up: no injected test styles needed (React state is native).
+- Screenshots in /home/z/my-project/tool-results/: task13-hover-native-dark.png, task13-rest-native-dark.png, task13-rest-native-light.png, task13-hover-native-light.png, task13-expanded-logo-regression.png.
+
+Stage Summary:
+- Switched CollapsedLogoButton from media-gated CSS hover variants (task 12) to React state (useState + onMouseEnter/onMouseLeave). This is the ROOT-CAUSE fix for why the previous hover-based fix wasn't visible in the preview environment.
+- At rest: "C" on bg-primary box (black-in-light / light-in-dark — theme-adaptive, normal logo background UNCHANGED).
+- On hover: PanelLeftOpen icon on bg-transparent (NO background), muted-foreground gray color (visible on transparent/page bg in both Light and Dark mode).
+- On mouse-leave: restores the "C" + bg-primary box.
+- Icon glyph (PanelLeftOpen): unchanged. Size (h-8 w-8 button, h-4 w-4 icon): unchanged. Position: unchanged. onClick (toggleSidebar → expands sidebar): unchanged. Tooltip: unchanged.
+- The expanded site logo (LogoMark) is UNCHANGED — still has its bg-primary box.
+- NATIVELY verified in the headless browser (no CSS injection) in BOTH Light and Dark mode: at-rest has the box, hover has no box (0 box-colored pixels in the button area per dense pixel sweep).
+- Works in ALL environments now (desktop, touch, headless, preview iframe) because React mouse events are not gated by @media (hover: hover).
