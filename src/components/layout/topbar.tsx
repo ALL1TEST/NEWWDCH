@@ -9,15 +9,15 @@ import { Separator } from '@/components/ui/separator';
 
 // -------------------- Topbar --------------------
 //
-// The "All Sites" site selector has been removed entirely. The sidebar
-// header now contains only the "CMS Admin" logo row + search/collapse
-// controls, and the navigation starts directly below the header — no
-// empty placeholder is left behind.
+// The "All Sites" site selector lives INSIDE THE SIDEBAR HEADER, directly
+// below the "CMS Admin" logo row — see `src/components/layout/site-
+// selector.tsx` → `SiteSelector`, rendered inside `SidebarHeader` in
+// sidebar.tsx. It is NOT rendered here in the topbar (no duplication).
 //
 // The topbar now only carries: the mobile drawer toggle, the breadcrumb
 // path, and the mobile-only Search icon. Desktop collapse control +
-// search live in the sidebar header; theme/notifications/profile live in
-// the sidebar footer.
+// search live in the sidebar header; the site selector lives in the
+// sidebar header; theme/notifications/profile live in the sidebar footer.
 
 export function Topbar() {
   const openCommandPalette = useCommandPaletteStore((s) => s.open);

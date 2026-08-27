@@ -338,7 +338,7 @@ export function SiteSelector() {
             collisionPadding: 12,
             children: 'Switch Site',
           }}
-          className="h-9"
+          className="h-9 border border-sidebar-border bg-background/60 shadow-sm hover:bg-sidebar-accent hover:border-sidebar-accent-foreground/20 hover:shadow-md data-[state=open]:bg-sidebar-accent data-[state=open]:border-sidebar-accent-foreground/20 data-[active=true]:bg-sidebar-accent/60 transition-all duration-150"
           aria-label={
             activeSite
               ? `Switch site — current: ${activeSite.name}`
@@ -349,7 +349,7 @@ export function SiteSelector() {
             <LayoutGrid className="h-4 w-4 shrink-0" aria-hidden="true" />
           ) : activeSite ? (
             <span
-              className={`h-2 w-2 rounded-full shrink-0 ${getSiteColor(activeSite.slug)}`}
+              className={`h-2 w-2 rounded-full shrink-0 ring-2 ring-background ${getSiteColor(activeSite.slug)}`}
               aria-hidden="true"
             />
           ) : (
