@@ -3766,3 +3766,28 @@ Work Log:
 Stage Summary:
 - Three-file change: new `src/components/layout/plan-badge.tsx` (the single-source `PlanBadge` component); `src/components/layout/topbar.tsx` (restored the badge on the top-right avatar using `PlanBadge`); `src/components/layout/user-profile-menu.tsx` (replaced the inline span with `PlanBadge`, dropped now-unused subscription-store imports).
 - Result: the Beta badge on the top-right profile avatar and the Beta badge next to "Admin User" in the dropdown header are now the SAME component instance (one `PlanBadge`), so they can never visually drift. Computed styles are byte-for-byte identical; VLM confirms visual identity. The avatar, name, email, and all menu items are unchanged. No unrelated UI/layout was modified.
+
+---
+Task ID: dropdown-header-match-reference
+Agent: main
+Task: Make the profile dropdown header look exactly like the reference image — larger avatar with the plan's colored ring, Beta badge next to the name.
+
+Work Log:
+- Read worklog.md and current state of user-profile-menu.tsx + topbar.tsx + plan-badge.tsx (shared PlanBadge component already exists, used in both topbar and dropdown)
+- Analyzed reference image upload/pasted_image_1787831913397.png via VLM: reference dropdown header has a LARGER avatar (~48-56px) with a colored plan ring and the Beta badge positioned next to the name
+- Analyzed current dropdown via agent-browser + VLM: avatar was only ~40px with a thin gray border (ring-1 ring-border) — did NOT match reference
+- Edited src/components/layout/user-profile-menu.tsx:
+  - Added import for useSubscriptionStore + getPlanBadgeStyle from subscription-store
+  - Added `const { currentPlan } = useSubscriptionStore();` selector
+  - Changed header Avatar from `h-9 w-9 ring-1 ring-border` (36px, gray) to `h-11 w-11 rounded-full ring-2 ring-offset-2 ring-offset-background` + `getPlanBadgeStyle(currentPlan).ring` (44px, plan-colored amber ring) — same ring treatment as the topbar avatar trigger
+  - Bumped AvatarFallback from text-xs to text-sm to match the larger avatar
+- Verified compilation: dev.log shows ✓ Compiled with no new errors
+- Browser-verified via agent-browser: opened dropdown (ref @e11), screenshot tool-results/dropdown-final.png
+- VLM final check confirmed all 4 criteria: (1) avatar is prominent ~44-48px, (2) avatar has visible amber ring, (3) Beta badge next to name, (4) badge amber bg + white text
+
+Stage Summary:
+- Dropdown header avatar now matches the reference: larger (h-11 w-11) with the plan-derived colored ring (ring-2 ring-offset-2 + getPlanBadgeStyle ring), identical ring treatment to the top-right topbar avatar trigger
+- Beta badge remains next to "Admin User" via the shared PlanBadge component (single source of truth) — no custom badge created
+- Avatar, name, email, and all menu items unchanged; only the avatar size/ring was adjusted in the dropdown header
+- No lint regressions in user-profile-menu.tsx (pre-existing errors in storage-page.tsx are unrelated)
+- Artifacts: tool-results/current-dropdown.png (before), tool-results/dropdown-after-fix.png + dropdown-final.png (after), tool-results/compare-ref-vs-current.png (side-by-side)

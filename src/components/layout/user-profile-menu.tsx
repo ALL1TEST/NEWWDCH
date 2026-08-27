@@ -14,6 +14,10 @@ import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useSidebarStore } from '@/lib/stores/sidebar-store';
 import { useLocaleStore } from '@/lib/i18n';
 import {
+  useSubscriptionStore,
+  getPlanBadgeStyle,
+} from '@/lib/stores/subscription-store';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -55,6 +59,10 @@ export function UserProfileMenu({
   const closeMobile = useSidebarStore((s) => s.closeMobile);
   const locale = useLocaleStore((s) => s.locale);
   const setLocale = useLocaleStore((s) => s.setLocale);
+  // Active plan — drives the colored ring on the header avatar so the
+  // dropdown header's avatar matches the top-right topbar avatar trigger
+  // exactly (same ring color/thickness/offset).
+  const { currentPlan } = useSubscriptionStore();
 
   const handleNavigate = (targetMod: string) => {
     useNavigationStore.getState().navigate(targetMod);
@@ -82,12 +90,22 @@ export function UserProfileMenu({
             breaking the two-line alignment. */}
         <DropdownMenuLabel className="font-normal px-2 py-2">
           <div className="flex min-w-0 items-center gap-2.5">
-            <Avatar className="h-9 w-9 shrink-0 ring-1 ring-border">
+            {/* Header avatar — visually identical ring treatment to the
+                top-right topbar avatar trigger: same size class family
+                (rounded-full), same ring-2 + ring-offset-2 + plan-derived
+                ring color, so the two avatars look like the same profile
+                "chip" in both locations. Slightly larger (h-11 w-11) than
+                the topbar trigger (h-8 w-8) so it reads as the prominent
+                header of the open menu, matching the reference layout. */}
+            <Avatar className={cn(
+              'h-11 w-11 shrink-0 rounded-full ring-2 ring-offset-2 ring-offset-background',
+              getPlanBadgeStyle(currentPlan).ring,
+            )}>
               <AvatarImage
                 src={user?.avatarUrl ?? undefined}
                 alt={user?.name ?? 'User'}
               />
-              <AvatarFallback className="text-xs font-medium">
+              <AvatarFallback className="text-sm font-medium">
                 {user ? getInitials(user.name) : 'U'}
               </AvatarFallback>
             </Avatar>
