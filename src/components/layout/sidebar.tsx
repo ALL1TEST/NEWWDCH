@@ -353,53 +353,64 @@ function LogoMark() {
  *
  * HOVER BEHAVIOR (collapsed state only — this button is rendered ONLY
  * inside the collapsed-rail cluster, so the expanded LogoMark is untouched):
- *   • at rest ............ shows the "C" logo mark on its bg-primary black
- *                           box (NORMAL LOGO — background UNCHANGED, same
- *                           as the expanded LogoMark).
- *   • on mouse-enter ..... the "C" is replaced by a PanelLeftOpen icon AND
- *                           the button's background becomes transparent so
- *                           ONLY the Expand icon is visible with no box
- *                           behind it. The icon color switches to
- *                           muted-foreground (gray) so it stays visible
- *                           against the transparent/page bg in both Light
- *                           and Dark mode.
- *   • on mouse-leave ..... restores the "C" logo mark AND its bg-primary box.
- *   • click ............. calls toggleSidebar (existing functionality, unchanged).
+ * The `hovered` prop is LIFTED to the rail level (see AppSidebar's
+ * `railHovered` state + the onMouseEnter/onMouseLeave handlers on the
+ * <Sidebar> root). This means the swap fires when the mouse is ANYWHERE
+ * over the collapsed 48px rail — NOT only when the pointer is directly
+ * over the logo cell:
+ *   • rail at rest ........  shows the "C" logo mark on its bg-primary
+ *                            black box (NORMAL LOGO — background UNCHANGED,
+ *                            same as the expanded LogoMark).
+ *   • mouse over ANY rail   the "C" is replaced by a PanelLeftOpen icon
+ *     item (Dashboard,       AND the button's background becomes
+ *     Articles, …, Profile,  transparent so ONLY the Expand icon is
+ *     Theme, Settings, …)    visible with no box behind it. The icon
+ *                            color switches to muted-foreground (gray)
+ *                            so it stays visible against the
+ *                            transparent/page bg in both Light and Dark.
+ *   • mouse leaves the     restores the "C" logo mark AND its bg-primary
+ *     entire rail            box (onMouseLeave on the <Sidebar> root).
+ *   • click ............. calls toggleSidebar (existing functionality,
+ *                         unchanged).
+ *
+ * Each rail item keeps its OWN Radix Tooltip label (Dashboard, Articles,
+ * Profile, etc.) — the lifted `hovered` prop ONLY drives the logo cell's
+ * C↔PanelLeftOpen swap; it does NOT touch any item's tooltip. The logo's
+ * own "Expand" Tooltip still fires ONLY when the pointer is directly over
+ * the logo button (the Tooltip trigger is the button itself, independent
+ * of the `hovered` prop).
  *
  * Background is removed ONLY from the temporary Expand-icon state; the
  * normal logo (at rest) keeps its bg-primary background exactly as-is.
  *
- * Implementation: React state (useState + onMouseEnter/onMouseLeave) — NOT
- * CSS :hover / group-hover variants. This is deliberate: Tailwind v4 wraps
- * its hover:/group-hover: utilities inside @media (hover: hover), so on
- * any browser that reports (hover: none) (headless, touch, some preview
- * iframes) those utilities NEVER activate and the swap + bg-transparent
- * would silently fail. React mouse events fire on ANY pointer input
- * regardless of the hover media query, so the behavior is identical in
- * every environment. The conditional className + conditional render swap
- * the bg/color/glyph atomically per state. Works in both Light and Dark.
+ * Implementation: React state lifted to AppSidebar (railHovered +
+ * onMouseEnter/onMouseLeave on <Sidebar>) — NOT CSS :hover / group-hover
+ * variants. This is deliberate: Tailwind v4 wraps its hover:/group-hover:
+ * utilities inside @media (hover: hover), so on any browser that reports
+ * (hover: none) (headless, touch, some preview iframes) those utilities
+ * NEVER activate and the swap + bg-transparent would silently fail. React
+ * mouse events fire on ANY pointer input regardless of the hover media
+ * query, so the behavior is identical in every environment. The
+ * conditional className + conditional render swap the bg/color/glyph
+ * atomically per state. Works in both Light and Dark.
  */
-function CollapsedLogoButton() {
+function CollapsedLogoButton({ hovered }: { hovered: boolean }) {
   const { toggleSidebar } = useSidebar();
-  // Local hover state drives the logo↔Expand-icon swap AND the per-state
-  // background/color. Using React state (not CSS :hover / group-hover)
-  // guarantees the swap works in ALL environments — including browsers
-  // that report (hover: none), where Tailwind's @media (hover: hover)-
-  // gated hover:/group-hover: variants would never activate.
-  const [hovered, setHovered] = useState(false);
   return (
     /* Hover-only "Expand" tooltip: instant (provider delayDuration=0),
        appears on mouse-enter, disappears on mouse-leave. Radix closes it
        on any pointer exit — disableHoverableContent guarantees it can
-       never linger or trap the pointer. */
+       never linger or trap the pointer. The Tooltip trigger is the logo
+       button itself, so the "Expand" TEXT fires ONLY on direct logo hover
+       (NOT on rail-level hover of other items) — the C↔PanelLeftOpen ICON
+       swap, by contrast, is driven by the lifted `hovered` prop and fires
+       for ANY rail item. */
     <Tooltip disableHoverableContent>
       <TooltipTrigger asChild>
         <button
           type="button"
           onClick={toggleSidebar}
           aria-label="Expand sidebar"
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
           className={cn(
             'flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg font-bold text-sm outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring select-none',
             // NORMAL LOGO STATE (at rest): bg-primary black box +
@@ -891,12 +902,32 @@ export function AppSidebar() {
     [routeDerivedSection],
   );
 
+  // Rail-level hover state for the COLLAPSED sidebar. When the mouse is
+  // anywhere over the 48px collapsed rail (any icon — logo, nav items,
+  // Settings, Theme, Notifications, Profile), this flips to true and the
+  // logo cell swaps "C" → PanelLeftOpen (the Expand affordance) via the
+  // `hovered` prop passed to CollapsedLogoButton. Lifted here (not inside
+  // CollapsedLogoButton) so the Expand icon appears on hover of ANY rail
+  // item, not only the logo. Each item keeps its own Radix Tooltip label
+  // (independent of this state); the logo's own "Expand" Tooltip still
+  // fires only on direct logo hover. React mouse events (not CSS :hover)
+  // so it works in headless / (hover:none) environments too. The
+  // handlers attach to <Sidebar> which forwards ...props to the visible
+  // fixed sidebar-container div, so mouseenter fires the moment the
+  // pointer enters the rail and mouseleave fires only when it leaves the
+  // entire rail subtree (moving between icons stays "hovered").
+  const [railHovered, setRailHovered] = useState(false);
+
   if (!user) return null;
 
   const groups = buildNavGroups(visibleItems);
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar
+      collapsible="icon"
+      onMouseEnter={() => setRailHovered(true)}
+      onMouseLeave={() => setRailHovered(false)}
+    >
       {/* ---- Header: one 32px icon cell per row, all centered at x=24px ---- */}
       <SidebarHeader className="px-2 py-3 shrink-0">
         {/* Expanded: [logo][title][…spacer…][Search][Collapse toggle].
@@ -934,7 +965,7 @@ export function AppSidebar() {
             (same 32px grid cell, same x=24 center-line), and the invisible
             SidebarRail edge strip keeps its native toggle behavior too. */}
         <div className="hidden flex-col items-center group-data-[collapsible=icon]:flex">
-          <CollapsedLogoButton />
+          <CollapsedLogoButton hovered={railHovered} />
         </div>
       </SidebarHeader>
 

@@ -4277,3 +4277,52 @@ Stage Summary:
 - FIX: added `disableHoverableContent` to the `<Tooltip>` in 4 files (ui/sidebar.tsx SidebarMenuButton, theme-toggle.tsx, notification-bell.tsx, user-profile-menu.tsx). Now EVERY collapsed-rail tooltip opens instantly on hover-enter AND closes instantly on hover-leave — identical snappy behavior to the logo. No lingering label when moving between rows.
 - All non-functional guarantees preserved: collapsed width (48px), icon positions (x=24 center-line), icons, click-to-open dropdowns (Notifications 320px + Profile 224px, side=right align=end sideOffset=16 collisionPadding=12), click-to-expand logo (toggleSidebar), Portal rendering (document.body z-50, overflow-hidden-immune), light+dark theme-adaptive.
 - If the user still perceives "no change": they should hard-refresh the Preview Panel (the previous session's edits are committed but the iframe may have cached the pre-fix bundle). The hover labels appear the instant the mouse enters any collapsed-rail icon and disappear the instant it leaves.
+
+---
+Task ID: 16
+Agent: main (orchestrator)
+Task: User changed the requirement — when the sidebar is COLLAPSED, hovering ANY area/item on the left sidebar (Logo, Dashboard, Articles, Media, Users, Comments, Newsletter, SEO, AI, Automation, Settings, Theme, Notifications, Profile, etc.) must show the "Expand" icon in the logo cell. NOT limited to logo hover only. Keep each item's own tooltip working. Do not change expanded sidebar / dropdowns / profile / notifications / unrelated UI.
+
+Work Log:
+- Read worklog + current sidebar.tsx. Confirmed the previous (Task 15/15b) behavior had the Expand icon swap EXCLUSIVE to logo-only hover (CollapsedLogoButton used its OWN internal useState driven by onMouseEnter/onMouseLeave on the button itself).
+- ROOT CHANGE — lifted the hover state from the logo button to the entire collapsed rail:
+  * AppSidebar: added `const [railHovered, setRailHovered] = useState(false);` (before the `if (!user) return null;` early return — hooks rule preserved).
+  * AppSidebar: passed `onMouseEnter={() => setRailHovered(true)}` + `onMouseLeave={() => setRailHovered(false)}` to `<Sidebar collapsible="icon" ...>`. The ui/sidebar.tsx `Sidebar` component forwards `...props` to the visible fixed `sidebar-container` div, so mouseenter fires the moment the pointer enters the 48px rail and mouseleave fires only when it leaves the entire rail subtree (moving between icons stays "hovered" — mouseenter/mouseleave don't re-fire for descendant-to-descendant moves).
+  * CollapsedLogoButton: changed signature from `function CollapsedLogoButton()` (internal useState) to `function CollapsedLogoButton({ hovered }: { hovered: boolean })` (prop-driven). Removed the internal `const [hovered, setHovered] = useState(false);` AND the `onMouseEnter`/`onMouseLeave` handlers on the button. The conditional className (`hovered ? 'bg-transparent text-muted-foreground' : 'bg-primary text-primary-foreground'`) + conditional render (`hovered ? <PanelLeftOpen/> : <span>C</span>`) now read the LIFTED prop, so the C↔PanelLeftOpen swap fires for ANY rail item hover, not just the logo.
+  * AppSidebar render: `<CollapsedLogoButton />` → `<CollapsedLogoButton hovered={railHovered} />`.
+  * Updated the JSDoc block above CollapsedLogoButton (HOVER BEHAVIOR section) + the inline Tooltip comment to document that `hovered` is now rail-level (not logo-only), each item keeps its own Radix Tooltip label, and the logo's own "Expand" Tooltip still fires only on direct logo hover (the Tooltip trigger is the button itself, independent of the `hovered` prop).
+- UNCHANGED (per user's explicit constraints):
+  * Each rail item's own tooltip label (Dashboard, Articles, …, Toggle theme, Notifications, Profile) — driven by Radix Tooltip on each item, independent of railHovered. Still uses `disableHoverableContent` (Task 15b) for instant open/close.
+  * Expanded sidebar behavior — CollapsedLogoButton is inside `group-data-[collapsible=icon]:flex` so it's `hidden` (display:none) when expanded; railHovered being true in expanded state has NO visual effect (no PanelLeftOpen appears).
+  * Dropdowns (Notifications 320px panel, Profile 224px menu) — still open on click via the DropdownMenuTrigger; `hidden={open}` suppression of the hover Tooltip while a dropdown is open is intact.
+  * Collapsed width (48px), icon positions (x=24 center-line), icons, click-to-expand logo (toggleSidebar), Portal rendering (document.body z-50), light+dark theme-adaptive, COLLAPSED_TOOLTIP_PROPS positioning constant.
+- Ran `bun run lint` — 0 errors in sidebar.tsx. The 4 pre-existing errors (data-table.tsx, storage-page.tsx, content-create/edit-page.tsx, seo-broken-links-page.tsx) are unrelated and unchanged.
+- Dev server had died (connection refused) — restarted `bun run dev` in background; server came back up in ~3s. No compile errors from the edits.
+- agent-browser NATIVE verification (reloaded, logged in as admin via persisted session, collapsed via CollapseToggle):
+  * Hover Dashboard (e19) → tooltipText="Dashboard", tooltipCount=1, logoChildTag="svg", logoSvgClass="lucide lucide-panel-left-open", logoBg="rgba(0,0,0,0)" (transparent) ✓
+  * Hover Articles (e20) → "Articles", logoChildTag="svg" (panel-left-open), bg transparent ✓
+  * Hover Calendar (e21) → "Calendar", logo=svg ✓
+  * Hover Media (e22) → "Media", logo=svg ✓
+  * Hover Users (e23) → "Users", logo=svg ✓
+  * Hover Comments (e24) → "Comments", logo=svg ✓
+  * Hover Newsletter (e25) → "Newsletter", logo=svg ✓
+  * Hover SEO (e26) → "SEO", logo=svg ✓
+  * Hover AI (e27) → "AI", logo=svg ✓
+  * Hover Automation (e28) → "Automation", logo=svg ✓
+  * Hover Settings (e29) → "Settings", logo=svg ✓
+  * Hover Toggle theme (e3) → "Toggle theme", logo=svg ✓
+  * Hover Notifications (e4) → "Notifications", logo=svg ✓
+  * Hover Profile (e5) → "Profile", logo=svg ✓
+  * Hover Logo (e2) → "Expand" tooltip + logo=svg (panel-left-open) ✓ (logo's own Tooltip fires on direct logo hover, as designed)
+  * Mouse LEAVE rail (move to 600,450) → tooltipCount=0, logoChildTag="SPAN", logoBg="lab(7.78)"=bg-primary black, logoText="C" ✓ (reverted instantly)
+  * Click Logo (e2) → sidebar EXPANDS (Collapse sidebar button reappears, CMS Admin title visible) ✓ — click-to-expand still works.
+  * Expanded regression: hover Articles (e18) → expandButtonVisible=false (CollapsedLogoButton hidden when expanded, no PanelLeftOpen) ✓.
+- VLM visual confirmation (light mode, task16-articles-expand.png): hovering Articles → "(1) A panel-left-open / expand arrow icon (gray, no solid black background box)" in the top-left logo cell ✓. (Dark-mode VLM gave a generic hallucination on small UI text — DOM ground truth confirmed logoChild=svg lucide-panel-left-open in both modes; the bg is theme-adaptive transparent.)
+- Screenshots in /home/z/my-project/tool-results/: task16-articles-expand.png, task16-articles-expand-dark.png.
+
+Stage Summary:
+- Lifted the collapsed-rail hover state from CollapsedLogoButton (internal useState + button-level onMouseEnter/Leave) to AppSidebar (railHovered useState + <Sidebar>-level onMouseEnter/onMouseLeave). The C↔PanelLeftOpen swap now fires when the mouse is ANYWHERE over the 48px collapsed rail — hovering Dashboard, Articles, Calendar, Media, Users, Comments, Newsletter, SEO, AI, Automation, Settings, Theme, Notifications, OR Profile all reveal the Expand icon in the logo cell (verified for every single item).
+- Each rail item keeps its OWN Radix Tooltip label (independent of railHovered) — verified each item shows its own label while the logo cell simultaneously shows PanelLeftOpen. The logo's own "Expand" Tooltip still fires only on direct logo hover.
+- Mouse leaving the entire rail reverts the logo to "C" on bg-primary instantly (onMouseLeave on the <Sidebar> root). Moving BETWEEN icons within the rail keeps railHovered=true (no flicker) — mouseenter/mouseleave don't re-fire for descendant-to-descendant moves.
+- Expanded sidebar: CollapsedLogoButton is hidden (group-data-[collapsible=icon]:flex), so no PanelLeftOpen appears when expanded. Click-to-expand logo (toggleSidebar) still works. Dropdowns (Notifications/Profile) and all other UI unchanged.
+- Collapsed width (48px), icon positions, icons, Portal z-50 rendering, disableHoverableContent (instant tooltip close from Task 15b), light+dark theme-adaptive — ALL preserved.
