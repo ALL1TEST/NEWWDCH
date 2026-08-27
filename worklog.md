@@ -3455,3 +3455,19 @@ Stage Summary:
 - Single-source UserProfileMenu now shared by topbar + collapsed rail; rail bottom = Search / Bell(badge) / avatar on one axis; sidebar never auto-expands from utility clicks; Settings popover behavior untouched.
 - Artifact: dev-only Next badge moved to bottom-right (config, not hack).
 - Dev server restarted with new config, running on :3000; screenshots in .verify/ (collapsed-rail-v2, profile-popover, dark-profile-popover, command-palette, rail-bell-panel, expanded-footer, light-expanded-regression, mobile-drawer, after-logout).
+
+---
+Task ID: UI-COLLAPSED-RAIL-UTILITIES-V2
+Agent: Z.ai Code (main)
+Task: Correction round — move Theme/Notifications/Profile into collapsed rail bottom (order: Theme → Bell → Avatar), remove rail Search, hide header duplicates while collapsed, remove collapse icon before "All Sites".
+
+Work Log:
+- Created src/components/layout/theme-toggle.tsx: single-source ThemeToggle (same next-themes state, same Sun/Moon markup as old inline topbar button; optional withTooltip for rail).
+- Topbar: (a) SidebarTrigger + its separator now sm:hidden — desktop header starts directly with [All Sites ▼] (no gap, flex reflows); mobile keeps the drawer hamburger; (b) useSidebar() → railCollapsed = !isMobile && state==='collapsed'; Theme/NotificationBell/UserProfileMenu render in header ONLY when NOT railCollapsed → zero duplicates, mobile unaffected; (c) swapped inline theme button for <ThemeToggle />; removed unused useTheme/toggleTheme.
+- Sidebar rail footer cluster now exactly: [ThemeToggle w/ tooltip] [NotificationBell] [bare AU avatar] (Search icon removed from rail per reference diagram; divider dropped; search remains a header control in all states).
+- Browser-verified (admin, 1440/1024/375, light+dark): collapsed rail = C → 11 nav icons → ☀/☾ → Bell(4) → AU, all x-centers identical (24px; 30px @zoom 1.25 emulation), railWidth stays 48 through all popovers; header while collapsed = [All Sites][breadcrumbs][Search…] ONLY (theme/bell/profile hidden, no dup); rail theme toggle flips dark↔light (html class verified); bell panel + Settings floating submenu + avatar menu (Profile/Language/Manage Subscription/Log out) all open beside rail without expanding; expanded state restores original sidebar (Admin User + ADMIN + logout) and full header controls; mobile 375 keeps hamburger + drawer + all header controls; wide Search button = flex 192px at ≥sm, icon variant below; console/page errors none; eslint clean on all touched files.
+
+Stage Summary:
+- Collapsed rail bottom = Theme → Notifications → Profile exactly per reference; header shows these only when sidebar expanded (desktop) or on mobile; collapse icon before All Sites fully removed (desktop) with collapse functionality preserved via sidebar CollapseToggle / C-logo / rail edge / mobile hamburger.
+- Reused single components everywhere: ThemeToggle, NotificationBell, UserProfileMenu — no second theme state, no duplicated notification/profile systems, no fake controls.
+- Screenshots: .verify/v2-*.png (expanded, collapsed, dark rail/bell/settings/avatar, 1024, mobile, final expanded). Dev server running on :3000.

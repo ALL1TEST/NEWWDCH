@@ -1,11 +1,8 @@
 'use client';
 
-import { useTheme } from 'next-themes';
 import { useState, useCallback, useEffect } from 'react';
 import {
   Search,
-  Sun,
-  Moon,
   Settings,
   Plus,
   Check,
@@ -32,7 +29,8 @@ import {
 import { Breadcrumbs } from '@/components/layout/breadcrumbs';
 import { NotificationBell } from '@/components/layout/notification-bell';
 import { UserProfileMenu } from '@/components/layout/user-profile-menu';
-import { SidebarTrigger } from '@/components/ui/sidebar';
+import { ThemeToggle } from '@/components/layout/theme-toggle';
+import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 import {
   Dialog,
@@ -420,20 +418,24 @@ function SiteSelector() {
 export function Topbar() {
   const user = useAuthStore((s) => s.user);
   const openCommandPalette = useCommandPaletteStore((s) => s.open);
-  const { theme, setTheme } = useTheme();
-  const toggleTheme = () => {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
-  };
+
+  // When the DESKTOP rail is collapsed, Theme / Notifications / Profile
+  // live in the sidebar's bottom utility cluster — the header must not
+  // duplicate them. Mobile (drawer mode) always keeps the header controls.
+  const { state: sidebarState, isMobile: isSidebarMobile } = useSidebar();
+  const railCollapsed = !isSidebarMobile && sidebarState === 'collapsed';
 
   // Current plan for the avatar badge
   const { currentPlan } = useSubscriptionStore();
 
   return (
     <header className="h-14 shrink-0 border-b bg-background flex items-center gap-2 px-3 sm:px-4">
-      {/* Mobile menu toggle + Sidebar trigger */}
-      <SidebarTrigger className="-ml-1" />
+      {/* Mobile drawer toggle ONLY — on desktop the collapse control lives
+          in the sidebar itself (header toggle / C-logo / rail edge), so no
+          collapse icon sits before the site selector. */}
+      <SidebarTrigger className="-ml-1 sm:hidden" />
 
-      <Separator orientation="vertical" className="mr-1 h-4" />
+      <Separator orientation="vertical" className="mr-1 h-4 sm:hidden" />
 
       {/* Site Selector */}
       <SiteSelector />
@@ -467,49 +469,46 @@ export function Topbar() {
           <span className="sr-only">Search</span>
         </Button>
 
-        {/* Theme toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={toggleTheme}
-        >
-          <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-          <span className="sr-only">Toggle theme</span>
-        </Button>
+        {/* Theme / Notifications / Profile — hidden while the collapsed
+            rail shows them (single source, no duplicates). */}
+        {!railCollapsed && (
+          <>
+            {/* Theme toggle (shared component, same next-themes state) */}
+            <ThemeToggle />
 
-        {/* Notifications */}
-        <NotificationBell />
+            {/* Notifications */}
+            <NotificationBell />
 
-        {/* User profile dropdown — single shared implementation.
-            Same trigger markup as before; menu lives in UserProfileMenu. */}
-        <UserProfileMenu align="end">
-          <Button variant="ghost" className="relative h-8 w-8 rounded-full ml-2">
-            <Avatar className={cn(
-              'h-8 w-8 rounded-full ring-2 ring-offset-2 ring-offset-background',
-              currentPlan.badgeVariant === 'beta' && 'ring-amber-500',
-              currentPlan.badgeVariant === 'pro' && 'ring-violet-500',
-              currentPlan.badgeVariant === 'max' && 'ring-emerald-500',
-            )}>
-              <AvatarImage src={user?.avatarUrl ?? undefined} alt={user?.name ?? 'User'} />
-              <AvatarFallback className="text-xs">
-                {user ? getInitials(user.name) : 'U'}
-              </AvatarFallback>
-            </Avatar>
-            {/* Plan badge centered at the bottom of the avatar */}
-            <span
-              className={cn(
-                'absolute -bottom-1.5 left-1/2 -translate-x-1/2 flex items-center rounded-md px-1.5 py-0.5 text-[8px] font-bold leading-none whitespace-nowrap ring-2 ring-background',
-                currentPlan.badgeVariant === 'beta' && 'bg-amber-500 text-white',
-                currentPlan.badgeVariant === 'pro' && 'bg-violet-500 text-white',
-                currentPlan.badgeVariant === 'max' && 'bg-emerald-500 text-white',
-              )}
-            >
-              {getPlanLabel(currentPlan.badgeVariant)}
-            </span>
-          </Button>
-        </UserProfileMenu>
+            {/* User profile dropdown — single shared implementation.
+                Same trigger markup as before; menu lives in UserProfileMenu. */}
+            <UserProfileMenu align="end">
+              <Button variant="ghost" className="relative h-8 w-8 rounded-full ml-2">
+                <Avatar className={cn(
+                  'h-8 w-8 rounded-full ring-2 ring-offset-2 ring-offset-background',
+                  currentPlan.badgeVariant === 'beta' && 'ring-amber-500',
+                  currentPlan.badgeVariant === 'pro' && 'ring-violet-500',
+                  currentPlan.badgeVariant === 'max' && 'ring-emerald-500',
+                )}>
+                  <AvatarImage src={user?.avatarUrl ?? undefined} alt={user?.name ?? 'User'} />
+                  <AvatarFallback className="text-xs">
+                    {user ? getInitials(user.name) : 'U'}
+                  </AvatarFallback>
+                </Avatar>
+                {/* Plan badge centered at the bottom of the avatar */}
+                <span
+                  className={cn(
+                    'absolute -bottom-1.5 left-1/2 -translate-x-1/2 flex items-center rounded-md px-1.5 py-0.5 text-[8px] font-bold leading-none whitespace-nowrap ring-2 ring-background',
+                    currentPlan.badgeVariant === 'beta' && 'bg-amber-500 text-white',
+                    currentPlan.badgeVariant === 'pro' && 'bg-violet-500 text-white',
+                    currentPlan.badgeVariant === 'max' && 'bg-emerald-500 text-white',
+                  )}
+                >
+                  {getPlanLabel(currentPlan.badgeVariant)}
+                </span>
+              </Button>
+            </UserProfileMenu>
+          </>
+        )}
       </div>
     </header>
   );
