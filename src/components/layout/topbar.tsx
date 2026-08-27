@@ -36,6 +36,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { BackupsSubNav } from '@/modules/backups/backups-sub-nav';
 
 // -------------------- Site Colors ----------------
 
@@ -410,6 +412,15 @@ function SiteSelector() {
 
 export function Topbar() {
   const openCommandPalette = useCommandPaletteStore((s) => s.open);
+  // The Backups section has internal sub-pages/tabs (Overview, Backups,
+  // Schedules, Restore, Storage, Logs). When the user is on the Backups
+  // module, render the BackupsSubNav in the topbar (next to the "All Sites"
+  // selector) instead of the global Breadcrumbs — matching the user's
+  // "move the internal navigation tabs into the TOP HEADER, directly next
+  // to the 'All Sites' selector" request. All other modules keep the
+  // standard Breadcrumbs.
+  const currentModule = useNavigationStore((s) => s.currentModule);
+  const isBackupsModule = currentModule === 'backups';
 
   return (
     <header className="h-14 shrink-0 border-b bg-background flex items-center gap-2 px-3 sm:px-4">
@@ -429,9 +440,13 @@ export function Topbar() {
 
       <Separator orientation="vertical" className="mx-1 h-4" />
 
-      {/* Breadcrumbs */}
-      <div className="flex-1 overflow-hidden">
-        <Breadcrumbs />
+      {/* Breadcrumbs (default) OR Backups section tabs (when on the Backups
+          module). The Backups section is the only module whose internal
+          sub-pages/tabs live in the topbar — keeps the tab navigation right
+          next to the "All Sites" selector so the user always sees which
+          Backups sub-page they're on without scrolling the page content. */}
+      <div className="flex-1 overflow-hidden flex items-center">
+        {isBackupsModule ? <BackupsSubNav /> : <Breadcrumbs />}
       </div>
 
       {/* Right side actions — the standalone Theme / Notifications /
