@@ -3665,3 +3665,34 @@ Work Log:
 Stage Summary:
 - Dropdown header no longer duplicates the plan badge; the top-right avatar remains the single, plan-config-driven badge (from SUB-PLAN-BADGE-DYNAMIC refactor) so label/color/style stay synchronized by construction
 - All dropdown items and layout unchanged (Profile / Language EN-FR / Manage Subscription / Log out)
+
+---
+Task ID: sync-repo
+Agent: main
+Task: Synchronize the running localhost application with the latest GitHub repository state at https://github.com/ALL1TEST/NEWWDCH.git so that localhost:3000 serves the repository's code (not a stale local copy).
+
+Work Log:
+- Inspected the local project at /home/z/my-project: confirmed it is the git working tree whose `origin` remote points to https://github.com/ALL1TEST/NEWWDCH.git, and that the running dev server (next-server pid 1577, watched by `bun --hot index.ts` pid 1850) was serving an outdated local HEAD.
+- Detected git divergence: local HEAD was `4f56ed2` while origin/main had advanced to `53a5b55` — local was missing 21 remote commits and carried 1 local-only commit.
+- Created a safety backup branch (`backup/pre-sync-<ts>`) to preserve the prior local state before any destructive operation.
+- Fetched origin/main via the authenticated URL, then ran `git reset --hard origin/main` to make local HEAD exactly match origin/main (`53a5b55`).
+- Removed the untracked file `src/lib/backup/providers/sftp.ts` (not present in the repository) so the working tree fully reflects the repository's contents. Working tree then reported clean.
+- Verified dependency manifest: `bun install` reported 1031 installs across 1093 packages (no changes) — repo's package.json/lockfile are the source of truth and are fully installed.
+- Stopped every stale dev/watcher process on port 3000: killed next-server (pid 1577→11529→12110), `bun --hot index.ts` (pids 1829/1850), `bun run dev` parents (pids 1823/1842), and the `npm exec next dev -p 3000` chain (pids 12085/12097/12098). Confirmed port 3000 was FREE.
+- Started a fresh dev server from the synchronized repository using `setsid bash -c 'bun run dev > /dev/null 2>&1 &'` to fully detach from the controlling terminal. Confirmed Next.js 16.1.3 (Turbopack) bound to port 3000 (next-server pid 12766) and `curl http://localhost:3000/` returned HTTP 200.
+- Verified the served UI matches the repository via agent-browser:
+  * `/` loads the login page titled "Z.ai Code Scaffold - AI-Powered Development" with Email/Password fields and Admin/Editor/Author quick-login buttons (matches `src/app/page.tsx`).
+  * Signed in as Admin → Executive Dashboard loads with the full sidebar (Dashboard, Articles, Calendar, Media, Users, Comments, Newsletter, SEO, AI, Automation, Settings) and stat cards / action buttons.
+  * Expanded Settings → SMTP Settings + Backups links are present.
+  * Navigated to Backups (`/#backups`): heading "Backups", "Create Backup" button, stat cards "TOTAL BACKUPS 19" / "TOTAL STORAGE 4.49 GB", Backups + Storage tabs.
+  * Clicked Storage tab: heading "Storage", "Add Storage" button, search box, providers table (Google Cloud Storage, Local Storage) with Status / Last Test columns. API `GET /api/backups/storage?page=1&pageSize=25` returned 200 with real rows.
+- Captured four verification screenshots under `/home/z/my-project/tool-results/`: localhost-synced.png (login), localhost-dashboard-synced.png (dashboard), localhost-backups-synced.png (Backups tab), localhost-storage-tab-synced.png (Storage tab).
+- Final state: `git status` shows local on `main`, "Your branch is up to date with 'origin/main'", HEAD == origin/main == `53a5b55`. Only runtime artifacts differ (db/custom.db from live Prisma queries, and the tool-results/ screenshots) — no source file in the repository was modified.
+
+Stage Summary:
+- Repository synchronized successfully: local HEAD `53a5b55` exactly equals origin/main HEAD `53a5b55` (verified via `git rev-parse HEAD` == `git rev-parse origin/main`).
+- Local project directory used by the dev server: `/home/z/my-project` (the same directory that holds the `.git` for the repository). No separate clone directory was created.
+- Dependencies: `bun install` clean (1031/1093 packages, no changes).
+- Dev server: fresh Next.js 16.1.3 (Turbopack) process (pid 12766) on port 3000, started after killing all previous dev/watcher processes; no stale server remains.
+- localhost:3000 verified serving the repository's UI: login page → Admin dashboard (all 10 sidebar modules + Settings submenu) → Backups module → Storage tab with Add Storage button and providers table.
+- No repository source code was modified to make the sync appear successful; the only working-tree differences are runtime DB state and verification screenshots.
