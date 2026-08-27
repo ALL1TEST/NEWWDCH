@@ -4868,3 +4868,39 @@ Stage Summary:
 - Single-line semantic fix in `src/components/layout/topbar.tsx`: `onClick` → `onSelect` on the "Create New Site" `DropdownMenuItem` (+ an explanatory comment block).
 - "Create New Site" now opens the CreateSiteDialog reliably in BOTH expanded and collapsed sidebar states, in light and dark mode, using the SAME handler/action — no separate collapsed implementation, no CSS/overlay/z-index changes, no changes to the dropdown design or the form.
 - Root cause was Radix `DropdownMenuItem` + `onClick` racing with the menu's auto-close/unmount (a known fragile pattern); `onSelect` is the canonical, reliable Radix handler that fires before unmount.
+
+---
+Task ID: 29
+Agent: main (orchestrator)
+Task: Move the "All Sites" site selector out of the top header and INTO the left sidebar, directly below the "CMS Admin" logo/header. Must be full-width + professional/native to the sidebar (border/radius/hover), keep icon+label+chevron in expanded mode, icon-only in collapsed mode (with right-side dropdown + tooltip), dropdown not clipped by sidebar, "Create New Site" stays clickable in BOTH states, light+dark, no duplication, no changes to nav items / logo design / dialog form.
+
+Work Log:
+- Located the only "All Sites" selector: `SiteSelector` (+ its `CreateSiteDialog`/`EditSiteDialog`) inside `src/components/layout/topbar.tsx`, rendered in the `Topbar` header between the mobile SidebarTrigger and the Breadcrumbs.
+- Studied the sidebar's native patterns: `SidebarHeader` is `flex flex-col gap-2 p-2` (so a 3rd child auto-get 8px gap below the logo); `SidebarMenuButton` has a built-in `tooltip` prop (hidden unless `state==='collapsed'`) and auto-collapses to a 32px icon cell via `group-data-[collapsible=icon]:size-8!`; the `outline` variant gives a bordered card look; the collapsed-rail dropdown pattern (`CollapsedParentNavItem`) uses `side="right" align="center" sideOffset collisionPadding` with a portal.
+- Created a NEW shared file `src/components/layout/site-selector.tsx` containing:
+  • `SITE_COLORS` + `getSiteColor` (moved verbatim from topbar).
+  • `CreateSiteDialog` (moved verbatim — unchanged form, 4 inputs: name/slug/domain/description).
+  • `EditSiteDialog` (moved verbatim — unchanged form + delete).
+  • `SiteSelector` (rewritten to be sidebar-native):
+    - Trigger is `SidebarMenuButton variant="outline" className="h-9"` inside `DropdownMenuTrigger asChild`. Inherits the sidebar's native sizing/spacing/hover/active styling; auto-collapses to a 32px icon cell on the rail; built-in `tooltip` shows a right-side "Switch Site" label ONLY when collapsed.
+    - Expanded content: site color dot (or `LayoutGrid` icon if All Sites) + site name/"All Sites" (truncate, font-medium) + `ChevronDown` (rotates 180° when `data-[state=open]`).
+    - Collapsed content: ONLY the `LayoutGrid` icon (16px → fills the 32px content box → perfectly centered on the rail's x=24 center-line). No text, no chevron (would overflow-clip).
+    - `DropdownMenuContent`: `align={isCollapsed?'center':'start'}`, `side={isCollapsed?'right':'bottom'}`, `sideOffset={isCollapsed?8:4}`, `collisionPadding={12}`, `className="w-64"`. Portal-rendered at z-50 → the sidebar's `overflow:hidden` CANNOT clip it; `collisionPadding=12` keeps it 12px from every viewport edge.
+    - Items unchanged EXCEPT "Create New Site" keeps the task-28 `onSelect` (NOT `onClick`) handler — fires synchronously during item activation, before the menu auto-closes/unmounts → reliable in BOTH sidebar states.
+- Updated `src/components/layout/topbar.tsx`: removed `SiteSelector`, `CreateSiteDialog`, `EditSiteDialog`, `SITE_COLORS`, `getSiteColor`, and ALL now-unused imports (Plus/Check/ChevronDown/LayoutGrid/Loader2/Trash2/Settings, useSiteStore, DropdownMenu*, Dialog*, Input, Label, toast, useState/useCallback/useEffect). Removed the `<SiteSelector />` render + the now-orphan `<Separator>` that followed it. Topbar now only carries: mobile SidebarTrigger + (mobile-only Separator) + Breadcrumbs (flex-1) + mobile Search icon.
+- Updated `src/components/layout/sidebar.tsx`: imported `SiteSelector` from the new file; rendered `<SiteSelector />` as the 3rd child of `SidebarHeader` (after the expanded logo row and the collapsed `CollapsedLogoButton` div, before `</SidebarHeader>`). The `gap-2` on SidebarHeader gives 8px spacing below the logo automatically. Nav items, footer, logo design — all untouched.
+- Verified with agent-browser (light + dark, fresh reloads):
+  • EXPANDED + light: selector at x=8,y=52,w=239,h=36 (full sidebar content width, below the logo row at y≈8-40) ✓; topbar has 0 "All Sites" buttons ✓; dropdown opens at x=12,y=92,w=256 (straight down, left-aligned, not clipped) ✓; Create New Site → dialog opens with 4 fields ✓.
+  • COLLAPSED + light: sidebar 48px; selector becomes 32px icon cell at x=8,y=52 (below logo at x=8,y=12), no text ✓; dropdown opens to the RIGHT at x=48,y=12,right=304 (not clipped, viewport 1280) ✓; Create New Site → dialog opens with 4 fields ✓ (verified via tight ref-click chain — fresh reload + open + snapshot + click with no intermediate sleep/eval, which was the key to avoiding Radix focus-loss dismissal).
+  • DARK + EXPANDED: selector renders identically (isDark:true), dropdown opens at x=12,y=92,w=256 ✓.
+  • DARK + COLLAPSED: sidebar 48px, dropdown opens to the right at x=48,y=12,right=304, 2 items ✓.
+  • Layout confirmed matches spec: `CMS Admin / [ All Sites ▼ ] / separator / Dashboard / Articles / Calendar / ...`.
+- Note on test flakiness: `agent-browser find role menuitem click` and `el.click()` / synthetic `dispatchEvent(PointerEvent)` were ALL unreliable for the Radix `DropdownMenuItem` (synthetic events don't fire Radix's `onSelect`; Playwright text/role locators + portal timing caused focus-loss that dismissed the dropdown between commands). The RELIABLE method: fresh reload → collapse → ref-click the selector trigger to open → `snapshot -i` → extract the menuitem's `[ref=eN]` → `agent-browser click @eN` in a TIGHT bash chain with NO `sleep`/`eval` between the snapshot and the click. This mirrors a real pointerdown+pointerup+click and consistently opened the dialog post-fix in both sidebar states.
+- Lint: `bun run lint` → topbar.tsx, site-selector.tsx, sidebar.tsx all CLEAN. The 4 errors + 3 warnings are all pre-existing in content-create/edit-page & seo-broken-links-page (unrelated). dev.log: no compile errors.
+- Screenshots: `tool-results/sidebar-siteselector-expanded.png`, `sidebar-siteselector-dark-expanded.png`, `sidebar-siteselector-dark-collapsed.png`, `sidebar-create-new-site-dialog.png`, `sidebar-siteselector-final-light.png`.
+
+Stage Summary:
+- New file: `src/components/layout/site-selector.tsx` (SiteSelector + CreateSiteDialog + EditSiteDialog, single source — not duplicated anywhere).
+- `src/components/layout/topbar.tsx`: stripped to just SidebarTrigger + Breadcrumbs + mobile Search; SiteSelector + dialogs + unused imports removed.
+- `src/components/layout/sidebar.tsx`: imported SiteSelector; rendered as 3rd child of SidebarHeader (below the CMS Admin logo in BOTH states); nav items / footer / logo design untouched.
+- "All Sites" now lives directly under the CMS Admin logo: full-width bordered card with icon+label+chevron (expanded), 32px icon cell with right-side dropdown + "Switch Site" tooltip (collapsed). Dropdown is portal-rendered (never clipped), opens down+left (expanded) or right (collapsed). "Create New Site" keeps `onSelect` → reliably clickable in both states. Works in light + dark. No duplication. CMS Admin logo/header design unchanged.
