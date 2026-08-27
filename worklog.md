@@ -3565,3 +3565,18 @@ Stage Summary:
 - Expanded sidebar header now reads [C][CMS Admin] …spacer… [🔍][⬒] exactly as instructed; collapsed/mobile keep exactly one reachable Search; sidebar collapse behavior, tooltips, palette, and theme switching all verified end-to-end.
 - Bonus: command palette Escape-to-close restored (page no longer lockable behind an invisible backdrop).
 - Screenshots: .verify/v8-expanded-light.png, v8-collapsed-light.png, v8-expanded-dark.png, v8-collapsed-dark.png.
+
+---
+Task ID: UI-REMOVE-ALLSITES-ADJACENT-SEARCH
+Agent: Z.ai Code (main)
+Task: Remove the Search icon that sits next to the "All Sites" selector in the topbar (the collapsed-rail fallback), since the sidebar header already carries the Search icon.
+
+Work Log:
+- topbar.tsx: deleted the {railCollapsed && <Button aria-label="Search">} block (the fallback that rendered between the sidebar edge and "All Sites ▼" when the desktop rail was collapsed). Left the existing leading Separator untouched — expanded already rendered [sep][All Sites], so collapsed now matches exactly: no search icon, selector directly at the topbar start.
+- Search placement now: expanded desktop → sidebar header [C][CMS Admin]…[🔍][⬒] (x=179/215, unchanged); collapsed desktop → none (0 visible Search buttons, DOM-counted; All Sites pill moved from x≈145 to x=81 right after the 48px rail); mobile 375 → topbar right-cluster copy only (not adjacent to All Sites, untouched per scope).
+- openCommandPalette/Search imports still used by the mobile-only topbar search — no import cleanup needed; eslint clean for the touched file (remaining project errors are the pre-existing unrelated ones logged in UI-SEARCH-NEXT-TO-COLLAPSE-ICON).
+- Browser-verified: fresh load expanded → 1 visible search (sidebar header); collapse → 0 visible searches, rail 48px; expand-back → geometry identical (179/215, no jump); dark collapsed → 0 searches, clean render; light restored; mobile 375 → exactly 1 (topbar right); console/pageerrors zero; stuck overlays 0; dev.log clean.
+
+Stage Summary:
+- Exactly one Search surface per instruction: ONLY the sidebar-header Search (next to the Collapse toggle) exists on desktop; the duplicate next to "All Sites" is gone in both rail states; mobile keeps its single right-cluster search.
+- Screenshots: .verify/v9-collapsed-light.png, v9-collapsed-dark.png.

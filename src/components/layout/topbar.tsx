@@ -436,21 +436,9 @@ export function Topbar() {
 
       <Separator orientation="vertical" className="mr-1 h-4 sm:hidden" />
 
-      {/* COLLAPSED rail only: the sidebar-header Search icon is hidden with
-          the header row, so the topbar carries it here (exactly one Search
-          visible per state). */}
-      {railCollapsed && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={openCommandPalette}
-          aria-label="Search"
-        >
-          <Search className="h-4 w-4" />
-          <span className="sr-only">Search</span>
-        </Button>
-      )}
+      {/* NOTE: no Search icon next to "All Sites" — Search lives in the
+          sidebar header (next to the Collapse toggle) when expanded; the
+          topbar must not duplicate it. */}
 
       <Separator orientation="vertical" className="mx-1 h-4 shrink-0" />
 
