@@ -41,7 +41,28 @@ const TYPE_COLOR: Record<NotificationType, string> = {
   ACTION_REQUIRED: 'text-orange-500 bg-orange-500/10',
 };
 
-export function NotificationBell() {
+export function NotificationBell({
+  side,
+  align = 'end',
+  sideOffset,
+  alignOffset,
+  collisionPadding,
+}: {
+  /** Optional Radix side override (e.g. 'top' to open upward from a
+      bottom-anchored trigger like the sidebar footer). When omitted the
+      default 'bottom' is used (legacy topbar behavior). */
+  side?: 'top' | 'right' | 'bottom' | 'left';
+  /** Alignment relative to the trigger. Defaults to 'end'. */
+  align?: 'start' | 'center' | 'end';
+  /** Vertical gap between trigger and dropdown (px). */
+  sideOffset?: number;
+  /** Horizontal shift from the alignment anchor (px). A positive value
+      with align='start' shifts the dropdown rightward — used by the
+      sidebar footer to mirror the profile dropdown's gap logic. */
+  alignOffset?: number;
+  /** Viewport collision padding (px). */
+  collisionPadding?: number;
+} = {}) {
   const queryClient = useQueryClient();
   const navigate = useNavigationStore((s) => s.navigate);
   const closeMobile = useSidebarStore((s) => s.closeMobile);
@@ -131,7 +152,14 @@ export function NotificationBell() {
             )}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-80 p-0 overflow-hidden rounded-lg shadow-lg">
+        <DropdownMenuContent
+          align={align}
+          side={side}
+          sideOffset={sideOffset}
+          alignOffset={alignOffset}
+          collisionPadding={collisionPadding}
+          className="w-80 p-0 overflow-hidden rounded-lg shadow-lg z-[60]"
+        >
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2.5 bg-background">
             <div className="flex items-center gap-2">

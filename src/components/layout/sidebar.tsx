@@ -816,7 +816,7 @@ export function AppSidebar() {
             bottom-anchored trigger; Radix collision handling keeps it
             inside the viewport at any height. */}
         <div className="flex items-center gap-3 px-2 py-2 group-data-[collapsible=icon]:hidden">
-          <UserProfileMenu side="top" align="start" collisionPadding={8}>
+          <UserProfileMenu side="top" align="start" sideOffset={8} alignOffset={8} collisionPadding={12}>
             <Button
               type="button"
               variant="ghost"
@@ -852,10 +852,13 @@ export function AppSidebar() {
           {/* Notifications bell — replaces the previous standalone Log out
               button. Uses the SAME NotificationBell component as the
               collapsed rail and the topbar (live unread badge + dropdown
-              panel + polling all reused). Log out is still reachable via
-              the profile dropdown menu (UserProfileMenu above) so no
-              functionality is lost. */}
-          <NotificationBell />
+              panel + polling all reused). Positioning props mirror the
+              profile dropdown above (side/align/sideOffset/alignOffset/
+              collisionPadding) so both dropdowns open upward with the
+              same gap from the sidebar's left edge — never flush, never
+              clipped. Log out is still reachable via the profile dropdown
+              menu (UserProfileMenu above) so no functionality is lost. */}
+          <NotificationBell side="top" align="start" sideOffset={8} alignOffset={8} collisionPadding={12} />
         </div>
 
         {/* Collapsed rail: icon-only utility cluster + bare avatar.

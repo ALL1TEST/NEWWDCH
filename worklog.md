@@ -3852,3 +3852,43 @@ Stage Summary:
 - Task 2: Topbar de-duplicated — removed Theme toggle, Notification bell, and Profile avatar from the topbar. The sidebar footer (expanded) + sidebar collapsed rail remain the access points for Notifications + Profile avatar. The profile dropdown is now the single in-header place to switch Theme. Topbar right side keeps only the mobile Search button.
 - No unrelated components modified; header (avatar/name/Beta/email) + Profile + Language + Manage Subscription + Log out all unchanged.
 - Artifacts: tool-results/topbar-after-removal.png, dropdown-with-theme.png, app-dark-after-theme.png, dropdown-dark-theme-active.png, dropdown-light-active-final.png
+
+---
+Task ID: fix-dropdown-positioning
+Agent: main
+Task: Fix the Profile and Notifications dropdown positioning so both open from the sidebar icons using the SAME positioning behavior — upward, with a visible gap from the sidebar's left edge (not flush), not clipped, consistent border-radius/shadow/spacing. Both light and dark mode. No content changes.
+
+Work Log:
+- Read worklog.md, dropdown-menu.tsx (base: rounded-md shadow-md z-50, sideOffset default 4), user-profile-menu.tsx, notification-bell.tsx, sidebar.tsx
+- Captured current positioning via DOM eval + screenshots:
+  - Profile (old): side="top" align="start" collisionPadding={8} → left≈8px (nearly flush with sidebar left edge x=0)
+  - Notifications (old): default side="bottom" align="end" no collisionPadding → wide w-80 dropdown collision-shifted to left≈0px (FLUSH with sidebar left edge), opened DOWNWARD (bottom-clip risk)
+- Edited src/components/layout/user-profile-menu.tsx:
+  - Added `sideOffset` (default 8) and `alignOffset` (default 0) optional props to UserProfileMenu, passed through to DropdownMenuContent
+  - Updated DropdownMenuContent className: `w-56 z-[60]` → `w-56 z-[60] rounded-lg shadow-lg` (consistent border-radius + shadow with the notifications dropdown)
+- Edited src/components/layout/notification-bell.tsx:
+  - Added optional positioning props to NotificationBell: `side`, `align` (default 'end'), `sideOffset`, `alignOffset`, `collisionPadding` (defaults preserve legacy behavior when no props passed, so the collapsed-rail <NotificationBell/> usage is unchanged)
+  - Passed all props through to DropdownMenuContent; className `w-80 p-0 overflow-hidden rounded-lg shadow-lg` → added `z-[60]` for consistent stacking with the profile dropdown
+- Edited src/components/layout/sidebar.tsx (expanded footer):
+  - UserProfileMenu call: `side="top" align="start" collisionPadding={8}` → `side="top" align="start" sideOffset={8} alignOffset={8} collisionPadding={12}`
+  - NotificationBell call: `<NotificationBell />` (no props) → `<NotificationBell side="top" align="start" sideOffset={8} alignOffset={8} collisionPadding={12} />`
+  - BOTH now use the EXACT SAME positioning props: side="top" (upward, avoids bottom-of-viewport clipping), align="start", sideOffset=8 (8px vertical gap from trigger), alignOffset=8 (8px rightward shift → visible gap from sidebar's left edge), collisionPadding=12 (viewport collision padding)
+- Verified compilation: dev.log ✓ Compiled, no new errors
+- Browser-verified via agent-browser + DOM measurements (authoritative):
+  - LIGHT MODE:
+    - Profile: TRIGGER left=16 top=527 bottom=559 | DROPDOWN left=24 top=236 bottom=519 right=248 → OPENS_UPWARD, 24px gap from sidebar left (x=0), not clipped
+    - Notifications: DROPDOWN left=215 top=115 bottom=519 right=535 → OPENS_UPWARD, 215px gap from sidebar left (NOT flush), within 1280px viewport (not clipped)
+  - DARK MODE (identical positions — positioning is CSS-based, theme-independent):
+    - Profile: left=24 right=248 bottom=519 (opens upward, 24px gap)
+    - Notifications: left=215 right=535 bottom=519 (opens upward, 215px gap, not flush)
+  - VLM confirmed dark-mode Notifications: opens upward, visible gap from sidebar left edge, dark bg readable, not clipped, consistent border-radius/shadow
+- Lint: zero errors in sidebar.tsx, user-profile-menu.tsx, notification-bell.tsx (7 pre-existing errors in storage-page.tsx/seo-broken-links-page.tsx are unrelated)
+
+Stage Summary:
+- Both dropdowns now use IDENTICAL positioning logic: side="top" align="start" sideOffset={8} alignOffset={8} collisionPadding={12}, rounded-lg shadow-lg z-[60]
+- Profile dropdown: opens UPWARD above the avatar with a 24px visible gap from the sidebar's left edge (was nearly flush)
+- Notifications dropdown: opens UPWARD above the bell with a 215px gap from the sidebar's left edge (was flush at 0px due to collision-shifting, opened downward); now clearly NOT flush, not clipped
+- Both render identically in light and dark mode (theme-independent CSS positioning)
+- Dropdown content, icons, and all other UI unchanged — only positioning props + border-radius/shadow consistency
+- Collapsed-rail NotificationBell usage (no props) preserves its legacy behavior via the default prop values
+- Artifacts: tool-results/profile-dropdown-current-pos.png, notifications-dropdown-current-pos.png (before); profile-fixed-light.png, notifications-fixed-light.png, profile-fixed-dark.png, notifications-fixed-dark.png (after)

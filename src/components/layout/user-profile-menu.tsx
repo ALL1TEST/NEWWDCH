@@ -47,13 +47,22 @@ export function UserProfileMenu({
   children,
   side,
   align = 'end',
-  collisionPadding,
+  sideOffset = 8,
+  alignOffset = 0,
+  collisionPadding = 8,
 }: {
   /** The dropdown trigger element (must accept refs / event props). */
   children: React.ReactNode;
   /** Optional Radix side override (e.g. right for the collapsed rail). */
   side?: 'top' | 'right' | 'bottom' | 'left';
   align?: 'start' | 'center' | 'end';
+  /** Vertical gap between the trigger and the dropdown (px). */
+  sideOffset?: number;
+  /** Horizontal shift from the alignment anchor (px). A positive value
+      with align="start" shifts the dropdown rightward — used by the
+      sidebar footer to create a visible gap from the sidebar's left
+      edge so the dropdown opens slightly inside the page. */
+  alignOffset?: number;
   /** Optional viewport collision padding (corner-anchored triggers). */
   collisionPadding?: number;
 }) {
@@ -86,9 +95,11 @@ export function UserProfileMenu({
           popover: header → Profile → Language → Manage Subscription →
           Log out, with a subtle divider between every section. */}
       <DropdownMenuContent
-        className="w-56 z-[60]"
+        className="w-56 z-[60] rounded-lg shadow-lg"
         side={side}
         align={align}
+        sideOffset={sideOffset}
+        alignOffset={alignOffset}
         collisionPadding={collisionPadding}
       >
         {/* 1 — Profile header: circular avatar on the LEFT, vertically
