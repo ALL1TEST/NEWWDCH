@@ -481,10 +481,14 @@ export function Topbar() {
                 Same trigger markup as before; menu lives in UserProfileMenu. */}
             <UserProfileMenu align="end">
               <Button variant="ghost" className="relative h-8 w-8 rounded-full ml-2">
-                {/* Subscription-aware styling: ring + badge colors come from
-                    the ACTIVE plan's own badgeStyle config — no per-plan
+                {/* Subscription-aware styling: ring color comes from the
+                    ACTIVE plan's own badgeStyle config — no per-plan
                     branching here. Switching plan re-renders this trigger
-                    via the zustand selector automatically. */}
+                    via the zustand selector automatically. The plan's text
+                    badge (label = currentPlan.name) lives ONLY inside the
+                    profile dropdown header (see user-profile-menu.tsx) to
+                    avoid a duplicated "Beta Beta" read between the avatar
+                    trigger and the open menu. */}
                 <Avatar className={cn(
                   'h-8 w-8 rounded-full ring-2 ring-offset-2 ring-offset-background',
                   getPlanBadgeStyle(currentPlan).ring,
@@ -494,16 +498,6 @@ export function Topbar() {
                     {user ? getInitials(user.name) : 'U'}
                   </AvatarFallback>
                 </Avatar>
-                {/* Plan badge centered at the bottom of the avatar —
-                    label = the plan's own configured name. */}
-                <span
-                  className={cn(
-                    'absolute -bottom-1.5 left-1/2 -translate-x-1/2 flex items-center rounded-md px-1.5 py-0.5 text-[8px] font-bold leading-none whitespace-nowrap ring-2 ring-background',
-                    getPlanBadgeStyle(currentPlan).avatar,
-                  )}
-                >
-                  {currentPlan.name}
-                </span>
               </Button>
             </UserProfileMenu>
           </>

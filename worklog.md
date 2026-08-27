@@ -3719,3 +3719,27 @@ Stage Summary:
 - Result: the dropdown header now shows `Admin User [Beta]` on the first line and `admin@example.com` on the second line, with the badge using the identical amber-500/white color, `text-[8px] font-bold`, `px-1.5 py-0.5`, `rounded-md`, `ring-2 ring-background` styling as the top-right avatar's Beta badge.
 - Nothing else (avatar, name, email, menu items, dividers, sidebar trigger styling, topbar trigger badge) was modified.
 - Verification artifacts: `/home/z/my-project/tool-results/profile-dropdown-beta-badge.png`.
+
+---
+Task ID: remove-topbar-beta-badge
+Agent: main
+Task: Remove the "Beta" badge text/box (positioned below the profile picture at the top of the site) from the topbar avatar trigger, while keeping the same style badge on the profile dropdown header (added in the previous task). User-supplied reference: upload/pasted_image_1787831913397.png showing the dropdown with the Beta badge next to "Admin User".
+
+Work Log:
+- Re-analyzed the user's screenshot via VLM (z-ai vision, glm-5v-turbo): the uploaded image shows the profile dropdown open, with the Beta badge (amber background, white "Beta" text, pill shape) sitting to the right of "Admin User" inside the dropdown header. The top-right topbar avatar's own Beta badge (positioned `absolute -bottom-1.5 left-1/2 -translate-x-1/2`, below the profile picture, with amber background surrounding the "Beta" text) was the reference for "Below the profile picture, there is a beta text box surrounded by a beta color" at the top of the site.
+- Read `src/components/layout/topbar.tsx` lines 478–514 and located the Beta badge span (lines 497–506) inside the topbar avatar button: `<span className={cn('absolute -bottom-1.5 left-1/2 -translate-x-1/2 flex items-center rounded-md px-1.5 py-0.5 text-[8px] font-bold leading-none whitespace-nowrap ring-2 ring-background', getPlanBadgeStyle(currentPlan).avatar)}>{currentPlan.name}</span>`.
+- Removed ONLY that `<span>` badge (text + colored box) from the topbar avatar button. Kept the `<Avatar>` element (with its image, fallback, and `ring-2 ring-offset-2 ring-offset-background ring-amber-500` colored ring) intact so the avatar itself is unchanged.
+- Updated the surrounding comment to explain that the plan's text badge now lives ONLY inside the profile dropdown header (see user-profile-menu.tsx) — eliminating the duplicated "Beta Beta" read between the avatar trigger and the open menu.
+- Left `src/components/layout/user-profile-menu.tsx` (the dropdown header badge added in the previous task) completely untouched — it still renders the same amber pill with "Beta" text next to "Admin User".
+- Lint: `bun run lint` reports no errors in `topbar.tsx` or `user-profile-menu.tsx` (the 4 pre-existing errors + 3 warnings are all in `src/modules/seo/seo-broken-links-page.tsx` and unrelated files).
+- Browser verification via agent-browser (logged in as Admin, dashboard visible):
+  * DOM eval of the topbar avatar button: `hasBetaSpan: false`, `spanCount: 1` (only the avatar span remains), `innerHTML` = just the `<span data-slot="avatar">…<img></span>`. The Beta span is gone.
+  * Accessible name of the topbar avatar button changed from "Admin User Beta" (before) → "Admin User" (after), confirming the badge text is no longer in the button's text content.
+  * DOM eval of the dropdown header `DropdownMenuLabel`: still returns `"Admin User |  | Beta |  | admin@example.com"` — the Beta badge is intact inside the dropdown header next to the name and above the email.
+  * VLM (z-ai vision) re-verified the topbar screenshot with a focused prompt: (1) No small text label, badge, or pill positioned below/overlapping the avatar; (2) the amber ring around the avatar is preserved (part of the avatar styling, not a text box); (3) the avatar is a clean circle with no overlapping text labels.
+- Verification artifacts: `/home/z/my-project/tool-results/topbar-avatar-badge-removed.png`, `/home/z/my-project/tool-results/topbar-after-removal.png`, `/home/z/my-project/tool-results/dropdown-badge-still-present.png`.
+
+Stage Summary:
+- Single-file change: `src/components/layout/topbar.tsx` (removed the `<span>` Beta badge — text + colored box — from the topbar avatar button; updated the surrounding comment; net −13/+7 lines).
+- Result: the "Beta" text box surrounded by the amber beta color that used to sit below the top-right profile picture at the top of the site is GONE. The avatar itself (image, ring, fallback) and all other topbar elements are unchanged. The same amber-styled "Beta" badge is still rendered exactly once — inside the profile dropdown header next to "Admin User" (added in the previous task) — so there's no longer a duplicated "Beta Beta" read.
+- No other styling, menu items, sidebar, or behavior was modified.
