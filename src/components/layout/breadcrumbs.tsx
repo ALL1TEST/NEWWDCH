@@ -26,7 +26,6 @@ import {
   CreditCard,
   LayoutGrid,
   Calendar,
-  Server,
   type LucideIcon,
 } from 'lucide-react';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
@@ -279,51 +278,19 @@ export function Breadcrumbs() {
     );
   }
 
-  // SMTP Settings (settings module) — standalone page with NO internal
-  // sub-pages. Render a single "SMTP Settings" breadcrumb in the topbar
-  // (with the site prefix), mirroring the other standalone pages
-  // (Dashboard, Calendar, Users, Comments). Email Templates and
-  // Notifications remain sidebar-only (no topbar breadcrumb) — see
-  // SETTINGS_CHILDREN below. Backups keeps its own dynamic trail (above).
-  if (currentModule === 'settings') {
-    return (
-      <Breadcrumb>
-        <BreadcrumbList>
-          {activeSite && !isAllSites && (
-            <>
-              <BreadcrumbItem>
-                <span className="text-xs text-muted-foreground font-medium">{activeSite.name}</span>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-            </>
-          )}
-          {isAllSites && (
-            <>
-              <BreadcrumbItem>
-                <span className="text-xs text-muted-foreground font-medium">All Sites</span>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-            </>
-          )}
-          <BreadcrumbItem>
-            <span className="flex items-center gap-1">
-              <Server className="h-3.5 w-3.5" />
-              <BreadcrumbPage>SMTP Settings</BreadcrumbPage>
-            </span>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
-    );
-  }
-
-  // Email Templates & Notifications — sidebar is the only navigation,
-  // hide the topbar breadcrumb. (The settings/SMTP module is handled by
-  // the dedicated branch above and renders an "All Sites > SMTP Settings"
-  // trail. Backups renders its own dynamic trail above.) Standalone pages
-  // without sub-pages (Dashboard, Calendar, Users, Comments, SMTP Settings)
-  // keep ONLY the topbar breadcrumb (no internal one).
-  const SETTINGS_CHILDREN = new Set(['email-templates', 'notifications']);
-  if (SETTINGS_CHILDREN.has(currentModule)) {
+  // Modules that should NOT render a topbar breadcrumb — the topbar keeps
+  // ONLY the "All Sites" selector for these (no breadcrumb path next to it):
+  //   - Standalone pages with no sub-pages & no hierarchy to show:
+  //     Dashboard, Calendar, Users, Comments, SMTP Settings (settings module).
+  //     (currentModule is null/undefined on initial load → treated as Dashboard.)
+  //   - Settings-grouped sidebar-only modules: Email Templates, Notifications
+  //     (the sidebar is their only navigation).
+  // Backups keeps its own dynamic trail (the branch above) and is excluded here.
+  const NO_BREADCRUMB_MODULES = new Set([
+    'dashboard', 'calendar', 'users', 'comments', 'settings',
+    'email-templates', 'notifications',
+  ]);
+  if (!currentModule || NO_BREADCRUMB_MODULES.has(currentModule)) {
     return null;
   }
 

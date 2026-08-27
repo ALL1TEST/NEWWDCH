@@ -4738,3 +4738,35 @@ Stage Summary:
 - Two real bugs fixed in `breadcrumbs.tsx`: (a) Calendar breadcrumb was lowercase "calendar" with no icon (now "Calendar" with Calendar icon), (b) SMTP Settings had NO topbar breadcrumb at all (now "All Sites > SMTP Settings" with Server icon).
 - Backups dynamic trail, Email Templates/Notifications sidebar-only behavior, and all other modules' breadcrumbs are UNCHANGED.
 - Single file changed: `src/components/layout/breadcrumbs.tsx`. Screenshots: `tool-results/smtp-breadcrumb.png`, `tool-results/calendar-breadcrumb.png`.
+
+---
+Task ID: 25
+Agent: main (orchestrator)
+Task: Remove the top-header breadcrumb path entirely from the 5 standalone pages — Dashboard ("All Sites > Executive Dashboard"), Calendar ("All Sites > Calendar"), Users ("All Sites > Users"), Comments ("All Sites > Comments"), SMTP ("All Sites > SMTP Settings"). The topbar should keep ONLY the "All Sites" selector next to them (no breadcrumb path). Other pages/modules unaffected.
+
+Work Log:
+- Edited ONLY `src/components/layout/breadcrumbs.tsx`:
+  1. Removed the dedicated `if (currentModule === 'settings')` branch added in task 24 (which rendered "All Sites > SMTP Settings") — no longer needed.
+  2. Removed the now-unused `Server` import (Calendar import kept — still referenced by ICON_MAP['calendar']).
+  3. Replaced BOTH the task-24 settings branch AND the separate `SETTINGS_CHILDREN` check (['email-templates','notifications']) with a single merged `NO_BREADCRUMB_MODULES` set: `{ 'dashboard', 'calendar', 'users', 'comments', 'settings', 'email-templates', 'notifications' }`. Returns `null` for any of these OR when `!currentModule` (initial-load/null = Dashboard). Placed AFTER the Backups dynamic-trail branch so Backups is unaffected. SEO-settings-subpages check (earlier in the component) is unchanged.
+- No other files touched (topbar, sidebar, page files, PageHeader all unchanged). The topbar still renders `<Breadcrumbs/>` in the same slot; the component now returns `null` for these modules so the slot is empty (the "All Sites" selector + its separator remain, then empty space).
+
+Verification (agent-browser, light + dark):
+- #dashboard      : headerBC=0 | AllSitesSelector=YES  (light+dark)
+- #calendar       : headerBC=0 | AllSitesSelector=YES  (light+dark)
+- #users          : headerBC=0 | AllSitesSelector=YES  (light+dark)
+- #comments       : headerBC=0 | AllSitesSelector=YES  (light+dark)
+- #settings/smtp  : headerBC=0 | AllSitesSelector=YES  (light+dark)
+- Regression (breadcrumbs KEPT):
+  - #backups/backups -> headerBC=1 "Overview > Backups" (seps=1; trail unchanged)
+  - #seo             -> headerBC=1 "All Sites > SEO"
+  - #seo/audit       -> headerBC=1 "All Sites > SEO > SEO Audit"
+  - #ai              -> headerBC=1 "All Sites > AI > Providers"
+  - #content         -> headerBC=1 "All Sites > Articles"
+  - #email-templates -> headerBC=0 (unchanged, sidebar-only)
+  - #notifications   -> headerBC=0 (unchanged, sidebar-only)
+- Lint: 4 pre-existing errors + 3 warnings (content-create/edit, seo-broken-links) — NO new errors. Calendar import still used by ICON_MAP assignment so no unused-import warning.
+- dev.log: only the pre-existing yauzl warning; pages load 200. Screenshot: `tool-results/dashboard-no-breadcrumb.png`.
+
+Stage Summary:
+- The 5 standalone pages (Dashboard, Calendar, Users, Comments, SMTP Settings) now show NO breadcrumb path in the top header — only the "All Sites" selector remains there. This supersedes the task-24 behavior (which had ADDED the SMTP breadcrumb and fixed Calendar's capitalization). The Backups dynamic trail, SEO/AI/Articles breadcrumbs, and Email Templates/Notifications sidebar-only behavior are all unchanged. Single file changed: `src/components/layout/breadcrumbs.tsx`.
