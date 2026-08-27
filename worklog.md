@@ -3650,3 +3650,18 @@ Stage Summary:
 - Badge is now 100% subscription-driven: one source of truth (per-plan badgeStyle + name in PLANS config), consumed by topbar avatar (ring+solid pill), profile dropdown header (soft chip), billing cards, profile page
 - Plan changes propagate live (zustand) to every surface without reload; labels/colors/styles come solely from plan config — adding a 4th plan requires only a new PLANS entry
 - Avatar structure, profile menu items, and layout untouched (frozen per instructions)
+
+---
+Task ID: SUB-REMOVE-DUP-BADGE-DROPDOWN
+Agent: main (orchestrator)
+Task: Remove the duplicate "Beta" text/badge from the profile dropdown header — plan badge must live only on the top-right profile avatar (already dynamic from SUB-PLAN-BADGE-DYNAMIC); no new badge in the dropdown; keep everything else unchanged.
+
+Work Log:
+- user-profile-menu.tsx: deleted the plan chip (span with getPlanBadgeStyle(currentPlan).soft + currentPlan.name) from the dropdown header name row — header restored to [avatar] name / email exactly
+- Removed now-unused useSubscriptionStore/getPlanBadgeStyle import and currentPlan selector from the component (no dead code); left an explanatory NOTE comment pointing at the single-source badge on the topbar avatar trigger
+- Topbar badge code untouched — it remains the single subscription-aware badge (ring + solid pill from per-plan badgeStyle config)
+- Verified in browser (fresh login, trusted clicks): expanded sidebar → dropdown header "Admin User / admin@example.com" with NO Beta chip (allSpans contains no plan text), topbar pill "Beta" intact; collapsed rail → same clean header, no chip; screenshots .verify/v12-dropdown-no-dup-badge.png, v12-collapsed-no-dup-badge.png; 0 console errors, 0 page errors; eslint on touched file clean
+
+Stage Summary:
+- Dropdown header no longer duplicates the plan badge; the top-right avatar remains the single, plan-config-driven badge (from SUB-PLAN-BADGE-DYNAMIC refactor) so label/color/style stay synchronized by construction
+- All dropdown items and layout unchanged (Profile / Language EN-FR / Manage Subscription / Log out)
