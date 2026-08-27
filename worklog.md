@@ -4840,3 +4840,31 @@ Stage Summary:
 - All previously-excluded modules (task 25 set + Media) and the sidebar-only modules (Email Templates, Notifications) keep their no-breadcrumb behavior.
 - All other modules keep their normal "All Sites > [icon] Label" breadcrumb (default branch untouched).
 - Light + dark both verified; no regressions; lint clean for the changed file.
+
+---
+Task ID: 28
+Agent: main (orchestrator)
+Task: Fix the "Create New Site" button inside the "All Sites" dropdown so it works when the sidebar is COLLAPSED (previously: dropdown opened but clicking the item did nothing). Must work in both expanded + collapsed sidebar states, light + dark, reusing the same handler (no separate collapsed implementation), without changing the dropdown design/layout or the CreateSiteDialog form.
+
+Work Log:
+- Investigated: the only "All Sites" dropdown lives in `src/components/layout/topbar.tsx` `SiteSelector` (rendered in the topbar — same component in both sidebar states; the sidebar itself has NO site selector, only nav/profile/notifications/theme).
+- Reproduced the bug with agent-browser: opened the All Sites dropdown in collapsed mode and dispatched `el.click()` on the "Create New Site" `DropdownMenuItem`. Result: the dropdown CLOSED (Radix registered the selection) but `setShowCreate(true)` did NOT run → `dialogOpen:false`. Same happened in expanded mode via `el.click()`. (Ref-clicks via Playwright were intermittent — worked sometimes, confirming the flakiness.)
+- Root cause: the "Create New Site" item used `onClick={() => setShowCreate(true)}`. On a Radix `DropdownMenuItem`, `onClick` is a synthetic React event that fires AFTER Radix's own item-selection logic has already started closing/unmounting the menu content. The handler raced with the unmount and silently no-op'd (the menu closed but the dialog never opened). This was especially visible for "Create New Site" because it renders a full `Dialog` (heavier than the quick `setActiveSite`/`setAllSites` store updates used by the other items). It was NOT an overlay/z-index/pointer-events issue — `document.elementsFromPoint()` at the item center returned only [item, dropdown-content, html] (nothing on top).
+- Fix (`src/components/layout/topbar.tsx`, line ~398): changed the "Create New Site" `DropdownMenuItem` handler from `onClick` to Radix's canonical `onSelect`:
+    <DropdownMenuItem onSelect={() => setShowCreate(true)}>
+  `onSelect` fires SYNCHRONOUSLY during item activation (before the menu auto-closes/unmounts), so the handler always runs. The action (`setShowCreate(true)`) is IDENTICAL to before and is reused for BOTH sidebar states — no branching, no separate collapsed implementation. The `CreateSiteDialog` is rendered as a SIBLING of the `DropdownMenu` (not inside it), so closing the menu does not unmount the dialog.
+- Did NOT touch: the dropdown trigger, the "All Sites" menuitem, the individual-site items, the edit-site gear button, the `CreateSiteDialog`/`EditSiteDialog` forms, the sidebar, or any CSS/z-index. Other items keep their existing `onClick` handlers (unchanged behavior).
+- Verified with agent-browser across ALL 4 combinations (fresh reload each time, sidebar toggled via the Collapse/Expand control, dark mode via `document.documentElement.classList.add/remove('dark')`):
+    • Light + Expanded  → ref-click Create New Site → dialogOpen:true ✓
+    • Light + Collapsed  → ref-click Create New Site → dialogOpen:true ✓ (4 form fields: name/slug/domain/description)
+    • Dark  + Collapsed  → ref-click Create New Site → dialogOpen:true ✓
+    • Dark  + Expanded   → ref-click Create New Site → dialogOpen:true ✓
+- Also verified: the "All Sites" menuitem (still using its original `onClick`) still fires — clicking it closes the dropdown (Radix select runs). The dialog closes cleanly with Escape. No console errors during any interaction.
+- Note on testing: `agent-browser find text "Create New Site" click` and `find role menuitem click` were INTERMITTENT (Playwright text/role locators + Radix portal timing caused "Element not found" / focus-loss flakiness between commands). The reliable method was: open dropdown → `snapshot -i` → extract the menuitem's `[ref=eN]` → `agent-browser click @eN` in a tight sequence. This mirrors a real pointerdown+pointerup+click and consistently opened the dialog post-fix.
+- Lint: `bun run lint` → topbar.tsx CLEAN (the 4 pre-existing errors + 3 warnings are all in content-create/edit-page & seo-broken-links-page, unrelated). dev.log: only the pre-existing `yauzl` warning + normal API requests.
+- Screenshot: `tool-results/create-new-site-collapsed.png` (collapsed sidebar, light mode, CreateSiteDialog open with all 4 fields).
+
+Stage Summary:
+- Single-line semantic fix in `src/components/layout/topbar.tsx`: `onClick` → `onSelect` on the "Create New Site" `DropdownMenuItem` (+ an explanatory comment block).
+- "Create New Site" now opens the CreateSiteDialog reliably in BOTH expanded and collapsed sidebar states, in light and dark mode, using the SAME handler/action — no separate collapsed implementation, no CSS/overlay/z-index changes, no changes to the dropdown design or the form.
+- Root cause was Radix `DropdownMenuItem` + `onClick` racing with the menu's auto-close/unmount (a known fragile pattern); `onSelect` is the canonical, reliable Radix handler that fires before unmount.

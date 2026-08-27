@@ -387,8 +387,15 @@ function SiteSelector() {
             </div>
           )}
           <DropdownMenuSeparator />
-          {/* Create new site */}
-          <DropdownMenuItem onClick={() => setShowCreate(true)}>
+          {/* Create new site — uses Radix's canonical `onSelect` (NOT
+              `onClick`) so the handler fires synchronously during item
+              activation, BEFORE the menu auto-closes/unmounts. `onClick`
+              races with the menu's dismissal and can silently no-op (the
+              dropdown closes but the dialog never opens) — this was the
+              "Create New Site does nothing in collapsed sidebar" bug. The
+              same action (setShowCreate(true)) is reused for BOTH sidebar
+              states; no branching, no separate collapsed implementation. */}
+          <DropdownMenuItem onSelect={() => setShowCreate(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Create New Site
           </DropdownMenuItem>
