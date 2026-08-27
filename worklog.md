@@ -4904,3 +4904,24 @@ Stage Summary:
 - `src/components/layout/topbar.tsx`: stripped to just SidebarTrigger + Breadcrumbs + mobile Search; SiteSelector + dialogs + unused imports removed.
 - `src/components/layout/sidebar.tsx`: imported SiteSelector; rendered as 3rd child of SidebarHeader (below the CMS Admin logo in BOTH states); nav items / footer / logo design untouched.
 - "All Sites" now lives directly under the CMS Admin logo: full-width bordered card with icon+label+chevron (expanded), 32px icon cell with right-side dropdown + "Switch Site" tooltip (collapsed). Dropdown is portal-rendered (never clipped), opens down+left (expanded) or right (collapsed). "Create New Site" keeps `onSelect` → reliably clickable in both states. Works in light + dark. No duplication. CMS Admin logo/header design unchanged.
+
+---
+Task ID: 30
+Agent: main (orchestrator)
+Task: Remove the "All Sites" site selector from the left sidebar (it was moved there in Task 29) and clean up the empty space left behind so the sidebar is compact and properly aligned. Do NOT re-add the selector anywhere.
+
+Work Log:
+- Read `src/components/layout/sidebar.tsx` to locate the selector usage: `<SiteSelector />` was rendered as the 3rd child of `SidebarHeader` (after the expanded logo row and the collapsed `CollapsedLogoButton` div) at the bottom of the header, directly above `<SidebarSeparator className="mx-0" />`.
+- Removed the `import { SiteSelector } from '@/components/layout/site-selector';` line (line 85) — no other references to `SiteSelector` or `site-selector` remain in `sidebar.tsx`.
+- Removed the entire `{/* All Sites site selector — lives BELOW... */}` comment block + `<SiteSelector />` JSX from `SidebarHeader`. The header now contains ONLY the expanded logo row (`[logo][CMS Admin][spacer][Search][Collapse toggle]`) and the collapsed-rail `CollapsedLogoButton` div. There is NO empty placeholder, reserved height, or extra margin/padding left where the selector used to be — `SidebarHeader`'s native `flex flex-col gap-2 p-2` (overridden by `px-2 py-3 shrink-0`) now only wraps the two mutually-exclusive logo rows.
+- The `SidebarSeparator` (1px line) and `SidebarContent` (with `flex min-h-0 flex-1`) immediately follow the header, so the navigation starts directly below the logo row + 12px top/bottom header padding — no blank gap.
+- Updated the misleading comment block at the top of `src/components/layout/topbar.tsx` (which still claimed the selector "lives in the sidebar header") to reflect that the selector has been removed entirely and the sidebar is now compact.
+- Did NOT touch `src/components/layout/site-selector.tsx` itself (left the file in place — it is simply no longer imported/rendered; the user explicitly said "Do not add another All Sites selector", and leaving the file lets it be re-wired later if needed without re-creating the component).
+- Did NOT touch nav items, footer, logo design, sidebar width, icons, or any existing styling.
+- Verified: `Grep` for `SiteSelector|site-selector` across `src/` → only remaining hits are the definition in `site-selector.tsx:312` and the now-corrected historical comment in `topbar.tsx` (no render references).
+- Lint: `bun run lint` → the 4 errors + 3 warnings are all pre-existing in `content-create/edit-page` & `seo-broken-links-page` (unrelated to this task); `sidebar.tsx` and `topbar.tsx` are CLEAN.
+
+Stage Summary:
+- `src/components/layout/sidebar.tsx`: removed the `SiteSelector` import and its `<SiteSelector />` render (3rd child of `SidebarHeader`). The header is now compact — only the CMS Admin logo row (expanded) / "C" logo cell (collapsed), with the separator + nav content starting directly underneath. No empty space, no placeholder, no extra margin/padding left behind.
+- `src/components/layout/topbar.tsx`: updated the stale header comment to reflect that the selector is gone (no render change).
+- Sidebar width, nav items, icons, footer, and existing styling are all untouched. Both collapsed and expanded layouts remain clean and aligned.

@@ -82,7 +82,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { SiteSelector } from '@/components/layout/site-selector';
 import { cn } from '@/lib/utils';
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
 import { useSubscriptionStore } from '@/lib/stores/subscription-store';
@@ -968,18 +967,6 @@ export function AppSidebar() {
         <div className="hidden flex-col items-center group-data-[collapsible=icon]:flex">
           <CollapsedLogoButton hovered={railHovered} />
         </div>
-
-        {/* All Sites site selector — lives BELOW the CMS Admin logo in BOTH
-            sidebar states. Uses `SidebarMenuButton` (variant="outline") as
-            its trigger so it inherits the sidebar's native sizing/spacing/
-            hover/active styling and auto-collapses to a 32px icon cell on
-            the rail (`group-data-[collapsible=icon]:size-8`). Its built-in
-            `tooltip` prop shows a right-side "Switch Site" label ONLY when
-            collapsed. The dropdown opens DOWN+left in expanded mode and to
-            the RIGHT in collapsed mode (portal-rendered at z-50 → never
-            clipped by the sidebar's overflow-hidden). See
-            src/components/layout/site-selector.tsx for the full impl. */}
-        <SiteSelector />
       </SidebarHeader>
 
       <SidebarSeparator className="mx-0" />
