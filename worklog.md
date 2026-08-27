@@ -4695,3 +4695,46 @@ Stage Summary:
 - No duplicate breadcrumb in the page content (inPageBC=0 on every Backups page — the 5 sub-pages' PageHeader still has breadcrumbs={false} from Task 22; the Overview page renders its own h1 directly).
 - The BackupsSubNav tab row (Overview/Backups/Schedules/Restore/Storage/Logs) stays IN THE PAGE content, UNCHANGED (same labels, icons, active styling, click handlers, routing) — verified inPageNavCount=1, headerNavCount=0 on every Backups page.
 - Other modules unaffected (Dashboard keeps "All Sites > Executive Dashboard"). Only 1 file edited: src/components/layout/breadcrumbs.tsx (replaced the static Backups block with the dynamic trail). All other files, layouts, sidebar, content, and functionality preserved.
+
+---
+Task ID: 24
+Agent: main (orchestrator)
+Task: Remove duplicate internal breadcrumb from standalone pages (Dashboard, Calendar, Users, Comments, SMTP Settings). The ONLY breadcrumb/path for these pages should be in the global top header next to the "All Sites" selector. Do NOT change titles/layouts/tables/filters/buttons. Keep Backups behavior separate. Apply in Light + Dark.
+
+Work Log:
+- Investigated the 5 target pages via agent-browser DOM eval (`header/main [data-slot=breadcrumb], nav[aria-label=breadcrumb]` counts + outerHTML).
+- Finding: NO in-page breadcrumb currently exists on any of the 5 pages (mainBC=0 for all). Dashboard/Calendar/Comments/SMTP-settings do NOT use <PageHeader/>; Users-list uses <PageHeader breadcrumbs={false}/> (already disabled). The page content starts directly with the <h1> title. So the "remove duplicate internal breadcrumb" requirement was ALREADY satisfied — no page edits needed.
+- Topbar breadcrumb state BEFORE fix:
+  - Dashboard  -> "All Sites > Executive Dashboard" (OK)
+  - Calendar    -> "All Sites > calendar"  (BUG: lowercase, no icon — 'calendar' missing from MODULE_LABELS/ICON_MAP)
+  - Users       -> "All Sites > Users" (OK)
+  - Comments    -> "All Sites > Comments" (OK)
+  - SMTP (#settings/smtp) -> NONE (BUG: 'settings' in SETTINGS_CHILDREN returned null)
+- Edited ONLY `src/components/layout/breadcrumbs.tsx`:
+  1. Imports: added `Calendar` and `Server` to the lucide-react import block.
+  2. ICON_MAP: added `calendar: Calendar` (so the Calendar breadcrumb gets an icon like Users/Comments).
+  3. MODULE_LABELS: added `calendar: 'Calendar'` (fixes lowercase -> proper title-case label).
+  4. Added a dedicated `if (currentModule === 'settings')` branch (placed BEFORE the SETTINGS_CHILDREN check, right after the Backups branch) that renders a single "SMTP Settings" breadcrumb item with the site prefix ("All Sites" when isAllSites, active site name otherwise) and a Server icon — mirroring the standalone-page pattern. Removed `'settings'` from SETTINGS_CHILDREN (now `['email-templates', 'notifications']`) so Email Templates & Notifications keep their sidebar-only (no topbar breadcrumb) behavior.
+- No other files touched (page files, sidebar, topbar, PageHeader all unchanged).
+
+Verification (agent-browser, light + dark):
+- #dashboard       : headerBC=1 mainBC=0 | "All Sites > Executive Dashboard"  (light+dark)
+- #calendar        : headerBC=1 mainBC=0 | "All Sites > Calendar"            (light+dark)  [FIXED]
+- #users           : headerBC=1 mainBC=0 | "All Sites > Users"              (light+dark)
+- #comments        : headerBC=1 mainBC=0 | "All Sites > Comments"           (light+dark)
+- #settings/smtp   : headerBC=1 mainBC=0 | "All Sites > SMTP Settings"      (light+dark)  [FIXED]
+- Regression checks (unchanged):
+  - #backups          -> headerBC=0 (Overview tab, no breadcrumb — correct)
+  - #backups/backups  -> "Overview > Backups"  (1 separator, items=["Overview","Backups"], seps=1 — Backups dynamic trail untouched)
+  - #backups/logs     -> "Overview > Backups > Schedules > Restore > Storage > Logs" (unchanged)
+  - #email-templates  -> headerBC=0 (SETTINGS_CHILDREN, no topbar breadcrumb — correct)
+  - #notifications    -> headerBC=0 (SETTINGS_CHILDREN, no topbar breadcrumb — correct)
+  - #seo / #seo/audit / #ai / #content -> normal breadcrumbs, unaffected
+- Lint: 4 pre-existing errors + 3 warnings (content-create/edit, seo-broken-links) — NO new errors introduced by this task.
+- dev.log: only the pre-existing yauzl module-not-found warning; pages load 200.
+
+Stage Summary:
+- The 5 standalone pages (Dashboard, Calendar, Users, Comments, SMTP Settings) now show EXACTLY ONE breadcrumb — in the global top header next to the "All Sites" selector — with the user-specified text. There is NO duplicate internal breadcrumb row above the page title (verified mainBC=0 for all 5).
+- Two real bugs fixed in `breadcrumbs.tsx`: (a) Calendar breadcrumb was lowercase "calendar" with no icon (now "Calendar" with Calendar icon), (b) SMTP Settings had NO topbar breadcrumb at all (now "All Sites > SMTP Settings" with Server icon).
+- Backups dynamic trail, Email Templates/Notifications sidebar-only behavior, and all other modules' breadcrumbs are UNCHANGED.
+- Single file changed: `src/components/layout/breadcrumbs.tsx`. Screenshots: `tool-results/smtp-breadcrumb.png`, `tool-results/calendar-breadcrumb.png`.
