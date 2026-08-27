@@ -3791,3 +3791,30 @@ Stage Summary:
 - Avatar, name, email, and all menu items unchanged; only the avatar size/ring was adjusted in the dropdown header
 - No lint regressions in user-profile-menu.tsx (pre-existing errors in storage-page.tsx are unrelated)
 - Artifacts: tool-results/current-dropdown.png (before), tool-results/dropdown-after-fix.png + dropdown-final.png (after), tool-results/compare-ref-vs-current.png (side-by-side)
+
+---
+Task ID: sidebar-footer-and-darkmode
+Agent: main
+Task: (1) Add full dark-mode support to the profile dropdown header. (2) Sidebar footer: replace Logout button with Notifications bell, replace "ADMIN" badge with "Beta" badge styled like ADMIN but with amber accent.
+
+Work Log:
+- Read worklog.md and current state of user-profile-menu.tsx, sidebar.tsx, notification-bell.tsx, badge.tsx, plan-badge.tsx
+- Analyzed reference image upload/pasted_image_1787831594945.png (shows CURRENT sidebar footer with ADMIN badge + logout — the "before" state to change)
+- Verified dark-mode dropdown via agent-browser (toggled dark via localStorage + document.classList): dropdown bg dark, text readable, amber avatar ring + amber Beta badge render correctly against dark bg. Confirmed the existing theme-aware tokens (ring-offset-background, ring-background, text-muted-foreground) already provide full dark-mode support — no hardcoded light-only colors. Task 1 satisfied by verification (no code change needed; the theme tokens already adapt).
+- Edited src/components/layout/sidebar.tsx for Task 2:
+  - Added import: useSubscriptionStore from '@/lib/stores/subscription-store'
+  - Added selector: `const { currentPlan } = useSubscriptionStore();` in AppSidebar
+  - Removed now-unused `const logout = useAuthStore((s) => s.logout);`
+  - Removed now-unused `LogOut` from lucide-react imports
+  - Footer profile header Badge: changed from `variant="secondary"` + `{user.role.replace(/_/g,' ')}` (→ "ADMIN") to `bg-amber-500 text-white border-transparent` + `{currentPlan.name}` (→ "Beta"). Kept IDENTICAL sizing/spacing classes: `mt-0.5 h-4 w-fit text-[10px] px-1.5` (same height, font size, padding, rounded-md, margin) so the badge is visually proportional and aligned to "Admin User" exactly like the old ADMIN badge.
+  - Footer right-side action: replaced the entire Tooltip+Button(LogOut) block with `<NotificationBell />` — the SAME shared component used in the collapsed rail and topbar (live unread badge + dropdown panel + polling). Log out remains accessible via the UserProfileMenu "Log out" menu item.
+  - Updated stale comments ("[name/role][logout]" → "[name/plan-badge][bell]")
+- Verified compilation: dev.log shows ✓ Compiled, no new errors
+- Browser-verified via agent-browser + VLM (light mode): sidebar footer shows (1) avatar unchanged, (2) "Admin User" unchanged, (3) "Beta" badge with amber/orange bg, (4) bell icon with red "4" unread badge replacing logout. Badge proportional and aligned.
+- Browser-verified dark mode: sidebar footer Beta badge amber + readable, bell visible, name readable; dropdown dark bg + amber ring + amber Beta badge + readable text. All good.
+
+Stage Summary:
+- Task 1 (dropdown dark mode): already fully supported via theme-aware CSS tokens — verified in dark mode, no code change needed
+- Task 2 (sidebar footer): "ADMIN" role badge → "Beta" plan badge (same dimensions h-4/text-[10px]/px-1.5/rounded-md/mt-0.5, amber accent bg-amber-500 text-white); Logout button → NotificationBell (shared component, unread badge + dropdown); avatar + "Admin User" unchanged; LogOut import + logout selector removed (no longer used)
+- No lint regressions: sidebar.tsx and user-profile-menu.tsx lint clean (7 pre-existing errors in storage-page.tsx/seo-broken-links-page.tsx are unrelated)
+- Artifacts: tool-results/sidebar-footer-after.png + sidebar-footer-dark.png (sidebar), dropdown-darkmode.png + dropdown-dark-final.png + final-light-dropdown.png (dropdown), final-light-sidebar.png

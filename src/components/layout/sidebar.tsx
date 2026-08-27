@@ -21,7 +21,6 @@ import {
   Database,
   Activity,
   MailPlus,
-  LogOut,
   ChevronRight,
   Plug,
   Key,
@@ -84,6 +83,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
+import { useSubscriptionStore } from '@/lib/stores/subscription-store';
 import { NotificationBell } from '@/components/layout/notification-bell';
 import { UserProfileMenu } from '@/components/layout/user-profile-menu';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
@@ -672,7 +672,9 @@ function NavGroupSection({
 
 export function AppSidebar() {
   const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+  // Active plan — the footer role badge shows the plan NAME (e.g. "Beta")
+  // instead of the static user role, styled with the plan's amber accent.
+  const { currentPlan } = useSubscriptionStore();
   const currentModule = useNavigationStore((s) => s.currentModule);
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const openCommandPalette = useCommandPaletteStore((s) => s.open);
@@ -806,7 +808,7 @@ export function AppSidebar() {
       <SidebarSeparator className="mx-0" />
 
       <SidebarFooter className="shrink-0">
-        {/* Expanded: [profile-menu avatar][name/role][logout].
+        {/* Expanded: [profile-menu avatar][name/plan-badge][bell].
             The avatar opens the SAME shared UserProfileMenu as the
             collapsed rail and the topbar (single source — identical
             content/styling), so the profile dropdown works consistently
@@ -834,25 +836,26 @@ export function AppSidebar() {
             <span className="truncate text-sm font-medium leading-tight">
               {user.name}
             </span>
-            <Badge variant="secondary" className="mt-0.5 h-4 w-fit text-[10px] px-1.5">
-              {user.role.replace(/_/g, ' ')}
+            {/* Plan badge — SAME shape/size/typography/spacing as the
+                previous role badge (h-4, text-[10px], px-1.5, rounded-md,
+                mt-0.5, w-fit) but rendered with the active plan's amber
+                accent (bg-amber-500 text-white) instead of the generic
+                secondary surface. Shows the plan NAME ("Beta") so it stays
+                in sync with the PlanBadge used in the topbar avatar trigger
+                and the profile dropdown header. */}
+            <Badge
+              className="mt-0.5 h-4 w-fit text-[10px] px-1.5 bg-amber-500 text-white border-transparent"
+            >
+              {currentPlan.name}
             </Badge>
           </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 rounded-md"
-                onClick={() => void logout()}
-                aria-label="Log out"
-              >
-                <LogOut className="h-4 w-4" />
-                <span className="sr-only">Log out</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Log out</TooltipContent>
-          </Tooltip>
+          {/* Notifications bell — replaces the previous standalone Log out
+              button. Uses the SAME NotificationBell component as the
+              collapsed rail and the topbar (live unread badge + dropdown
+              panel + polling all reused). Log out is still reachable via
+              the profile dropdown menu (UserProfileMenu above) so no
+              functionality is lost. */}
+          <NotificationBell />
         </div>
 
         {/* Collapsed rail: icon-only utility cluster + bare avatar.
