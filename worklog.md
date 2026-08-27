@@ -3892,3 +3892,38 @@ Stage Summary:
 - Dropdown content, icons, and all other UI unchanged — only positioning props + border-radius/shadow consistency
 - Collapsed-rail NotificationBell usage (no props) preserves its legacy behavior via the default prop values
 - Artifacts: tool-results/profile-dropdown-current-pos.png, notifications-dropdown-current-pos.png (before); profile-fixed-light.png, notifications-fixed-light.png, profile-fixed-dark.png, notifications-fixed-dark.png (after)
+
+---
+Task ID: 9
+Agent: main (orchestrator)
+Task: Fix ONLY the collapsed-state dropdown positioning for Profile and Notifications dropdowns (expanded-state positioning must NOT change). Both must open fully inside the viewport with a visible gap from the collapsed sidebar, using identical positioning, in both Light and Dark mode.
+
+Work Log:
+- Read prior worklog + sidebar.tsx (full, 912 lines) + user-profile-menu.tsx + notification-bell.tsx to map current state.
+- Identified the two footer clusters:
+  * EXPANDED cluster (sidebar.tsx ~L818-862): `<UserProfileMenu side="top" align="start" sideOffset={8} alignOffset={8} collisionPadding={12}>` + `<NotificationBell side="top" align="start" sideOffset={8} alignOffset={8} collisionPadding={12} />` — user confirmed CORRECT, must NOT touch.
+  * COLLAPSED cluster (sidebar.tsx ~L877-905): `<NotificationBell />` (NO props → defaulted to `side="bottom" align="end"` = opens DOWNWARD, wrong for collapsed rail) + `<UserProfileMenu side="right" align="end" collisionPadding={8}>` (no sideOffset → only 8px default gap, no explicit collision padding). Both mis-positioned in collapsed state.
+- Root cause: collapsed cluster had inconsistent + incomplete positioning — the bell opened downward (clearly wrong), and the avatar had no explicit sideOffset/collisionPadding matching the bell.
+- Fix (MultiEdit, ONLY the collapsed cluster at L877-905):
+  * `<NotificationBell />` → `<NotificationBell side="right" align="end" sideOffset={16} collisionPadding={12} />`
+  * `<UserProfileMenu side="right" align="end" collisionPadding={8}>` → `<UserProfileMenu side="right" align="end" sideOffset={16} collisionPadding={12}>`
+  * Both now use IDENTICAL positioning: side="right" (opens to the right of the 48px rail, inside the main viewport), align="end" (dropdown bottom aligns with trigger bottom → grows upward from the bottom-corner avatar; Radix collision handling flips/shifts if it would clip the top), sideOffset=16 (~8px visible gap from the rail's right edge — trigger right edge ~x=40, rail right edge ~x=48, dropdown left edge ~x=56), collisionPadding=12 (12px viewport collision padding so neither the 224px profile menu nor the 320px notifications panel can touch the viewport edges or get clipped).
+  * Added detailed comments explaining each prop's role and that the expanded-state positioning above is intentionally untouched.
+- Verified expanded cluster code (L818-862) was NOT modified by the edit (MultiEdit only matched the collapsed cluster strings).
+- Ran `bun run lint` — 0 new errors in sidebar.tsx (only pre-existing errors in storage-page.tsx / seo-broken-links-page.tsx / backup-service.ts remain, all unrelated).
+- Dev.log clean: "✓ Compiled in 0ms", no runtime/hydration errors during verification.
+- agent-browser end-to-end verification (viewport 1440x900):
+  * COLLAPSED + Light: profile dropdown gapFromRail=9px, x=56, right=280, bottom=888 — fully inside viewport, visible gap, not clipped. VLM confirmed.
+  * COLLAPSED + Light: notifications dropdown gapFromRail=9px, x=56, right=376, bottom=852 — identical gap, fully inside viewport, not clipped. VLM confirmed.
+  * COLLAPSED + Dark (via ThemeToggle): profile dropdown gapFromRail=9px, x=56, right=280, bottom=888 — IDENTICAL to light. VLM confirmed.
+  * COLLAPSED + Dark: notifications dropdown gapFromRail=9px, x=56, right=376, bottom=852 — IDENTICAL to light. VLM confirmed.
+  * EXPANDED regression (Light): profile dropdown x=24, y=559, bottom=842 (opens upward from bottom-left avatar, alignOffset=8) — UNCHANGED. Notifications dropdown x=215, y=438, bottom=842 (opens upward from bell) — UNCHANGED. Original expanded-state behavior preserved.
+- Screenshots saved in /home/z/my-project/tool-results/: collapsed-profile-light.png, collapsed-notifications-light.png, collapsed-profile-dark.png, collapsed-notifications-dark.png, expanded-profile-regression.png, expanded-notifications-regression.png.
+
+Stage Summary:
+- ONLY collapsed-state positioning logic modified (sidebar.tsx L877-905 cluster). Expanded-state code (L818-862) untouched.
+- Both collapsed dropdowns now use the SAME positioning: side="right" align="end" sideOffset=16 collisionPadding=12.
+- Both open fully inside the viewport (right edge well within 1440px viewport, bottom within 900px), with a consistent 9px visible gap from the collapsed sidebar's right edge — never flush, never clipped, never touching the left edge.
+- Works identically in Light and Dark mode (all colors from theme tokens, positioning is pure Radix geometry).
+- No dropdown content, size, or styling changed; no unrelated components touched.
+- agent-browser + VLM verified all 4 collapsed scenarios (profile-light, notifications-light, profile-dark, notifications-dark) + 2 expanded regression checks.

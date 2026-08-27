@@ -878,15 +878,69 @@ export function AppSidebar() {
           {/* Theme toggle — shared component, same theme state as header */}
           <ThemeToggle withTooltip />
 
-          {/* Existing notification bell — icon-only trigger, live badge */}
-          <NotificationBell />
+          {/* Collapsed-rail notification bell — icon-only trigger, live
+              badge. Positioning MIRRORS the collapsed-rail profile menu
+              directly below (same side / align / sideOffset /
+              collisionPadding) so both dropdowns behave identically:
+                side="right"          → opens to the RIGHT of the 48px rail,
+                                       fully inside the main viewport
+                align="end"           → dropdown's bottom aligns with the
+                                       bell's bottom, so it grows UPWARD
+                                       (Radix collision handling flips /
+                                       shifts it if it would otherwise clip
+                                       the top of the viewport)
+                sideOffset=16         → visible ~8px GAP from the rail's
+                                       right edge (trigger is centered in the
+                                       48px rail → right edge ~x=40, rail
+                                       right edge ~x=48, dropdown left edge
+                                       ~x=56 → 8px gap)
+                collisionPadding=12   → 12px viewport collision padding so
+                                       the 320px-wide panel can never touch
+                                       the viewport edges or get clipped
+              The expanded-state positioning (side="top" align="start"
+              sideOffset=8 alignOffset=8 collisionPadding=12 above) is NOT
+              touched — only the collapsed rail is fixed here. */}
+          <NotificationBell
+            side="right"
+            align="end"
+            sideOffset={16}
+            collisionPadding={12}
+          />
 
-          {/* Avatar ONLY — tapping it opens the shared profile menu.
-              side="right" + align="end" makes the menu grow UPWARD from
-              the bottom-corner avatar, so it is always fully inside the
-              viewport beside the collapsed rail. The sidebar itself never
-              expands; outside click / Esc close it (Radix portal, z-50). */}
-          <UserProfileMenu side="right" align="end" collisionPadding={8}>
+          {/* Collapsed-rail avatar — tapping it opens the shared profile
+              menu. Positioning is IDENTICAL to the collapsed-rail
+              NotificationBell directly above (same side / align /
+              sideOffset / collisionPadding) so both dropdowns behave
+              identically:
+                side="right"          → opens to the RIGHT of the 48px rail,
+                                       fully inside the main viewport (never
+                                       touches the left edge / never opens
+                                       outside the viewport)
+                align="end"           → menu's bottom aligns with the
+                                       avatar's bottom, so it grows UPWARD
+                                       from the bottom-corner trigger (Radix
+                                       collision handling flips / shifts it
+                                       if it would otherwise clip the top of
+                                       the viewport)
+                sideOffset=16         → visible ~8px GAP from the rail's
+                                       right edge (avatar right edge ~x=40,
+                                       rail right edge ~x=48, menu left edge
+                                       ~x=56 → 8px gap; matches the bell)
+                collisionPadding=12   → 12px viewport collision padding so
+                                       the 224px-wide menu can never touch
+                                       the viewport edges or get clipped
+              The sidebar itself never expands; outside click / Esc close
+              it (Radix portal, z-50). The expanded-state positioning
+              (side="top" align="start" sideOffset=8 alignOffset=8
+              collisionPadding=12 above) is NOT touched — only the collapsed
+              rail is fixed here. Works identically in Light + Dark mode
+              (all colors come from theme tokens). */}
+          <UserProfileMenu
+            side="right"
+            align="end"
+            sideOffset={16}
+            collisionPadding={12}
+          >
             <Button
               type="button"
               variant="ghost"
