@@ -47,8 +47,6 @@ import {
   Gauge,
   Zap,
   Server,
-  PanelLeftClose,
-  PanelLeftOpen,
   type LucideIcon,
 } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
@@ -318,29 +316,13 @@ function CollapsedLogoButton() {
   );
 }
 
-/** Collapse/expand control that lives INSIDE the sidebar header. */
-function CollapseToggle({ side = 'right' }: { side?: 'left' | 'right' }) {
-  const { state, toggleSidebar, isMobile } = useSidebar();
-  const collapsed = !isMobile && state === 'collapsed';
-  const Icon = collapsed ? PanelLeftOpen : PanelLeftClose;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0 rounded-md"
-          onClick={toggleSidebar}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          <Icon className="h-4 w-4 text-muted-foreground" />
-          <span className="sr-only">Toggle sidebar</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side={side}>{collapsed ? 'Expand' : 'Collapse'}</TooltipContent>
-    </Tooltip>
-  );
-}
+/**
+ * The sidebar collapse/expand control lives in the TOPBAR (grouped right
+ * after the Search icon, per reference) so it sits next to Search in both
+ * sidebar states with identical geometry. The C logo (collapsed rail) and
+ * the invisible SidebarRail edge strip keep their existing toggle
+ * behavior, but there is only ONE visible dedicated toggle button.
+ */
 // This custom component uses CSS grid for smooth open/close animation.
 // It conditionally renders children so closed sections occupy ZERO layout space.
 
@@ -740,15 +722,13 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       {/* ---- Header: one 32px icon cell per row, all centered at x=24px ---- */}
       <SidebarHeader className="px-2 py-3 shrink-0">
-        {/* Expanded: [logo][title][collapse control] single row */}
+        {/* Expanded: [logo][title] — the collapse toggle lives in the
+            topbar, grouped with Search (single visible control). */}
         <div className="flex h-8 items-center gap-2 group-data-[collapsible=icon]:hidden">
           <LogoMark />
           <span className="truncate font-semibold text-sm tracking-tight whitespace-nowrap text-text-primary">
             CMS Admin
           </span>
-          <div className="ml-auto shrink-0">
-            <CollapseToggle side="bottom" />
-          </div>
         </div>
         {/* Collapsed rail: ONLY the "C" logo. The previously stacked
             collapse-toggle icon was removed on purpose — no extra icon may

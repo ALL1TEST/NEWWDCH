@@ -10,6 +10,8 @@ import {
   LayoutGrid,
   Loader2,
   Trash2,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { getInitials, cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/stores/auth-store';
@@ -32,6 +34,11 @@ import { UserProfileMenu } from '@/components/layout/user-profile-menu';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {
   Dialog,
   DialogContent,
@@ -422,7 +429,7 @@ export function Topbar() {
   // When the DESKTOP rail is collapsed, Theme / Notifications / Profile
   // live in the sidebar's bottom utility cluster — the header must not
   // duplicate them. Mobile (drawer mode) always keeps the header controls.
-  const { state: sidebarState, isMobile: isSidebarMobile } = useSidebar();
+  const { state: sidebarState, isMobile: isSidebarMobile, toggleSidebar } = useSidebar();
   const railCollapsed = !isSidebarMobile && sidebarState === 'collapsed';
 
   // Current plan for the avatar badge
@@ -430,17 +437,16 @@ export function Topbar() {
 
   return (
     <header className="h-14 shrink-0 border-b bg-background flex items-center gap-2 px-3 sm:px-4">
-      {/* Mobile drawer toggle ONLY — on desktop the collapse control lives
-          in the sidebar itself (header toggle / C-logo / rail edge), so no
-          collapse icon sits before the site selector. */}
+      {/* Mobile drawer toggle ONLY — on desktop the single collapse/expand
+          control is the panel button right next to Search (per reference). */}
       <SidebarTrigger className="-ml-1 sm:hidden" />
 
       <Separator orientation="vertical" className="mr-1 h-4 sm:hidden" />
 
-      {/* Standalone global Search — ALWAYS visible in BOTH sidebar states,
-          directly after the sidebar's collapse/expand control. Fully
-          independent from the All Sites selector (separator in between,
-          never visually attached). */}
+      {/* Reference header group: [Search][Collapse/Expand] — the Search
+          icon sits immediately next to the sidebar toggle in BOTH states
+          (icon flips Close/Open). Desktop only; mobile keeps the drawer
+          hamburger. */}
       <Button
         variant="ghost"
         size="icon"
@@ -451,6 +457,28 @@ export function Topbar() {
         <Search className="h-4 w-4" />
         <span className="sr-only">Search</span>
       </Button>
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden sm:inline-flex h-8 w-8 shrink-0"
+            onClick={toggleSidebar}
+            aria-label={railCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {railCollapsed ? (
+              <PanelLeftOpen className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <PanelLeftClose className="h-4 w-4 text-muted-foreground" />
+            )}
+            <span className="sr-only">Toggle sidebar</span>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">
+          {railCollapsed ? 'Expand' : 'Collapse'}
+        </TooltipContent>
+      </Tooltip>
 
       <Separator orientation="vertical" className="mx-1 h-4 shrink-0" />
 

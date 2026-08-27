@@ -3516,3 +3516,18 @@ Work Log:
 Stage Summary:
 - Header left cluster is now stable across states: [Sidebar: Collapse↔Expand] [Search — always] [All Sites ▼ — always separate]. No appearing/disappearing Search, no duplicates, All Sites functionality untouched.
 - Screenshots: .verify/v5-expanded.png, v5-collapsed.png, v5-tooltip.png.
+
+---
+Task ID: UI-HEADER-SEARCH-NEXT-TO-COLLAPSE
+Agent: Z.ai Code (main)
+Task: Group the header controls exactly like the reference image — [Search][Collapse/Expand] adjacent, in both sidebar states.
+
+Work Log:
+- Moved the sidebar collapse/expand toggle OUT of the sidebar header (expanded row is now [C][CMS Admin] only) INTO the topbar, placed immediately after the Search icon → group [🔍][⬒] per reference image, same surface, 8px apart, both states.
+- Toggle icon flips PanelLeftClose (expanded) ↔ PanelLeftOpen (collapsed) with bottom tooltip "Collapse"/"Expand"; single visible dedicated toggle (DOM-counted 1) + 1 Search; C-logo click and invisible rail edge strip keep existing toggle behavior; toggle hidden on mobile (<sm) where the drawer hamburger remains.
+- Removed now-unused CollapseToggle component + PanelLeft imports from sidebar.tsx.
+- Browser-verified: expanded → Search x=272, Toggle x=312, All Sites x=369; click toggles to rail 48px with group intact (Search x=64, Expand x=104); icon flip + tooltip verified; expand-back works; mobile 375 header = [hamburger][Search][All Sites][Theme][Bell][Profile]; dark mode group renders cleanly; console/page errors zero; eslint clean.
+
+Stage Summary:
+- Header left cluster in BOTH sidebar states: [Search][Collapse/Expand] | [All Sites ▼] | breadcrumbs — matching the provided reference crop; single-purpose controls, no duplicates, no layout jump.
+- Screenshots: .verify/v6-expanded.png, v6-collapsed.png, v6-dark.png.
