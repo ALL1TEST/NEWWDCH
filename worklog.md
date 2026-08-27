@@ -3927,3 +3927,39 @@ Stage Summary:
 - Works identically in Light and Dark mode (all colors from theme tokens, positioning is pure Radix geometry).
 - No dropdown content, size, or styling changed; no unrelated components touched.
 - agent-browser + VLM verified all 4 collapsed scenarios (profile-light, notifications-light, profile-dark, notifications-dark) + 2 expanded regression checks.
+
+---
+Task ID: 10
+Agent: main (orchestrator)
+Task: After the sidebar is collapsed, add hover behavior to the site logo: hovering the collapsed-rail "C" logo temporarily replaces it with an "Expand" icon (PanelLeftOpen, the visual opposite of the CollapseToggle's PanelLeftClose); on mouse-leave restore the "C"; clicking still expands the sidebar (existing toggle unchanged); expanded-state logo untouched (no hover replacement).
+
+Work Log:
+- Re-read current CollapsedLogoButton (sidebar.tsx ~L290-318): plain `<button>` rendering text "C" inside a `<Tooltip disableHoverableContent>` wrapper, onClick={toggleSidebar}, aria-label="Expand sidebar", tooltip "Expand" on the right. Only rendered inside the collapsed-rail cluster (`group-data-[collapsible=icon]:flex`), so it only exists when the sidebar is collapsed — the expanded LogoMark is a separate, untouched component.
+- Added `PanelLeftOpen` to the lucide-react imports (line 50, right after `PanelLeftClose`).
+- Rewrote CollapsedLogoButton to use a pure-CSS group-hover swap (no React state, no re-render):
+  * Button gets `group` class added to its existing className (kept all other classes: bg-primary, h-8 w-8, hover:opacity-90, focus-visible:ring-2, etc.).
+  * "C" text is wrapped in `<span className="group-hover:hidden">C</span>` — visible at rest (default span display), hidden on hover (group-hover:hidden → display:none).
+  * Added `<PanelLeftOpen className="hidden h-4 w-4 group-hover:block" />` — hidden at rest (hidden → display:none), visible on hover (group-hover:block → display:block, wins over `hidden` due to higher specificity of `.group:hover .group-hover\:block`).
+  * h-4 w-4 matches the CollapseToggle's PanelLeftClose icon size; text-primary-foreground inherited from the button (white-on-primary, same as the "C").
+  * sr-only span + Tooltip + onClick={toggleSidebar} all preserved unchanged.
+  * Updated JSDoc to document the new hover behavior.
+- Verified the expanded-state code path (LogoMark in SidebarHeader) was NOT touched — it's a plain `<div>` with no `group` class and no `group-hover:` variants, so it structurally cannot have a hover swap. The expanded logo remains unchanged by design.
+- Ran `bun run lint` — 0 new errors in sidebar.tsx (only pre-existing errors in storage-page.tsx / seo-broken-links-page.tsx / backup-service.ts). Dev.log: "✓ Compiled in 1468ms", no runtime/hydration errors.
+- agent-browser verification (viewport 1440x900, logged in as admin):
+  * Collapsed the sidebar (clicked "Collapse sidebar" e3).
+  * AT REST: DOM check confirmed "C" span display=block (visible), PanelLeftOpen svg display=none (hidden). VLM confirmed the button shows the letter "C".
+  * HOVER (agent-browser hover @e2): DOM check confirmed btnHover=true, btnDataState="delayed-open" (Tooltip opened — proves :hover is active). However the svg stayed display=none and the "C" stayed display=block — the group-hover:* rules did NOT activate.
+  * Root cause investigation: dumped the stylesheet text and found Tailwind v4 generates the group-hover rules INSIDE a `@media (hover: hover)` wrapper: `.group-hover\:block:is(:where(.group):hover *) { display: block; }`. Then checked `window.matchMedia('(hover: hover)').matches` → FALSE, and `(hover: none)` → TRUE. The headless Playwright Chromium reports itself as a NON-hover device (like a touch screen), so the `@media (hover: hover)` block never activates. This is a well-known headless-browser-env limitation — NOT a code bug.
+  * Proved the CSS structure is correct: injected a test `<style>` with the same rules WITHOUT the `@media (hover: hover)` wrapper (`.group:hover .group-hover\:hidden { display:none !important } .group:hover .group-hover\:block { display:block !important }`), re-hovered → DOM check confirmed cDisplay=none, svgDisplay=block. VLM confirmed the button now shows a "sidebar expand icon (rectangle + vertical line + arrow pointing right)" instead of "C". This proves the class names, the group/child DOM structure, and the swap logic are all correct — only the media-query gate (a browser-env limitation) blocked it in headless mode.
+  * MOUSE-LEAVE (agent-browser mouse move 400 400): DOM check confirmed cDisplay=block, svgDisplay=none, btnHover=false, btnState="closed" — "C" restored. VLM confirmed "the letter C".
+  * CLICK (agent-browser click @e2): sidebar expanded (snapshot now shows "Collapse sidebar" button e3, the collapsed-rail "Expand sidebar" button unmounted). URL unchanged. Existing toggleSidebar functionality is unchanged.
+  * Removed the injected test style for cleanup.
+- Screenshots in /home/z/my-project/tool-results/: collapsed-logo-at-rest.png (C visible), collapsed-logo-hovered.png (C still — due to headless media-query gate, NOT a code bug), collapsed-logo-hovered-fixed.png (icon visible, with non-gated rules proving structure), collapsed-logo-restored.png (C restored after mouse-leave).
+
+Stage Summary:
+- Only the collapsed-rail logo button (CollapsedLogoButton, sidebar.tsx ~L314-344) was modified. The expanded-state LogoMark, CollapseToggle, SidebarHeader, SidebarFooter, and all other sidebar elements are untouched.
+- Implementation: pure-CSS group-hover swap — no React state, no re-render, no JS event handlers. Standard Tailwind v4 `group` + `group-hover:hidden` / `hidden group-hover:block` pattern.
+- The "Expand" icon is `PanelLeftOpen` (lucide-react), the visual opposite of the CollapseToggle's `PanelLeftClose` — so the collapsed logo reads as a discoverable "click to expand" affordance on hover.
+- At rest: shows "C" (logo). On hover: shows PanelLeftOpen icon. On mouse-leave: restores "C". On click: expands the sidebar (toggleSidebar unchanged).
+- The expanded-state logo has NO hover replacement (structurally guaranteed — LogoMark is a plain div with no group-hover classes).
+- The fix works on any real desktop/laptop browser (where `(hover: hover)` matches). The headless Playwright verification required a one-off non-gated style injection to PROVE the CSS structure is correct, because headless Chromium reports `(hover: hover): false` — this is a verification-env limitation, not a code bug. The injected style was removed after verification.

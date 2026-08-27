@@ -47,6 +47,7 @@ import {
   Zap,
   Server,
   PanelLeftClose,
+  PanelLeftOpen,
   type LucideIcon,
 } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
@@ -293,6 +294,22 @@ function LogoMark() {
  *   • identical 32×32 grid geometry as every other rail icon
  *   • click toggles the sidebar open (SidebarRail edge strip still works)
  * No new icon is introduced and no empty clickable ghost remains.
+ *
+ * HOVER BEHAVIOR (collapsed state only — this button is rendered ONLY
+ * inside the collapsed-rail cluster, so the expanded logo is untouched):
+ *   • at rest ............ shows the "C" logo mark (normal state)
+ *   • on mouse-enter ..... the "C" is replaced by a PanelLeftOpen icon —
+ *                           the visual opposite of the PanelLeftClose icon
+ *                           used by the CollapseToggle in the expanded header,
+ *                           so the collapsed logo doubles as a discoverable
+ *                           "click to expand" affordance
+ *   • on mouse-leave ..... restores the "C" logo mark
+ *   • click ............. calls toggleSidebar (existing functionality, unchanged)
+ *
+ * Implementation: pure-CSS group-hover swap — no React state, no re-render.
+ * The button gets `group`; the "C" span gets `group-hover:hidden`; the icon
+ * gets `hidden group-hover:block`. Tailwind specificity guarantees the
+ * hovered `group-hover:*` rules win over the at-rest `hidden` rule.
  */
 function CollapsedLogoButton() {
   const { toggleSidebar } = useSidebar();
@@ -307,9 +324,17 @@ function CollapsedLogoButton() {
           type="button"
           onClick={toggleSidebar}
           aria-label="Expand sidebar"
-          className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-primary font-bold text-sm text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring select-none"
+          className="group flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-primary font-bold text-sm text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring select-none"
         >
-          C
+          {/* "C" logo mark — visible at rest, hidden on hover. */}
+          <span className="group-hover:hidden">C</span>
+          {/* PanelLeftOpen icon — hidden at rest, visible on hover. The
+              visual opposite of the CollapseToggle's PanelLeftClose icon
+              (expanded header), so the collapsed logo reads as a clear
+              "expand" affordance when the pointer is over it. h-4 w-4
+              matches the CollapseToggle icon size; text-primary-foreground
+              inherited from the button so the icon stays white-on-primary. */}
+          <PanelLeftOpen className="hidden h-4 w-4 group-hover:block" />
           <span className="sr-only">Expand sidebar</span>
         </button>
       </TooltipTrigger>
