@@ -495,11 +495,13 @@ export function DashboardPage() {
                 <Tooltip
                   contentStyle={{
                     borderRadius: '8px',
-                    border: '1px solid hsl(var(--border))',
-                    backgroundColor: 'hsl(var(--popover))',
-                    color: 'hsl(var(--popover-foreground))',
+                    border: '1px solid var(--border)',
+                    backgroundColor: 'var(--popover)',
+                    color: 'var(--popover-foreground)',
                     fontSize: '12px',
                   }}
+                  labelStyle={{ color: 'var(--muted-foreground)' }}
+                  itemStyle={{ color: 'var(--popover-foreground)' }}
                 />
                 <Area type="monotone" dataKey="visitors" stroke="#8b5cf6" strokeWidth={2} fill="url(#fillVisitors)" />
                 <Area type="monotone" dataKey="sessions" stroke="#10b981" strokeWidth={2} fill="url(#fillSessions)" />
@@ -589,12 +591,14 @@ export function DashboardPage() {
                   <Tooltip
                     contentStyle={{
                       borderRadius: '8px',
-                      border: '1px solid hsl(var(--border))',
-                      backgroundColor: 'hsl(var(--popover))',
-                      color: 'hsl(var(--popover-foreground))',
+                      border: '1px solid var(--border)',
+                      backgroundColor: 'var(--popover)',
+                      color: 'var(--popover-foreground)',
                       fontSize: '12px',
                     }}
-                    cursor={{ fill: 'hsl(var(--muted))', radius: 4 }}
+                    labelStyle={{ color: 'var(--muted-foreground)' }}
+                    itemStyle={{ color: 'var(--popover-foreground)' }}
+                    cursor={{ fill: 'var(--muted)', radius: 4 }}
                   />
                   <Bar dataKey="value" name="Articles" radius={[0, 4, 4, 0]} maxBarSize={28}>
                     {statusChartData.map((entry) => (

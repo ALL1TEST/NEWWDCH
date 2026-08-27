@@ -95,6 +95,34 @@
   color: var(--text-primary);
 }
 
+/*
+ * ==============================
+ * RECHARTS THEME BASELINE
+ * ==============================
+ * Theme-aware defaults for recharts' SVG text primitives. Charts draw their
+ * tick/legend/label colors as SVG *presentation attributes*, which lose to
+ * any stylesheet rule — so this baseline guarantees no chart ever renders
+ * library-default near-black (#666/#000) text on dark backgrounds, even if a
+ * page forgets to pass explicit colors through `lib/chart-theme.ts`.
+ *
+ * Explicitly colored series (legend entries with inline styles, tooltips with
+ * inline contentStyle) keep winning over these rules because inline styles
+ * beat stylesheet declarations.
+ */
+.recharts-cartesian-axis-tick-value,
+.recharts-cartesian-axis .recharts-cartesian-axis-tick text {
+  fill: var(--text-muted);
+}
+.recharts-pie-label-text,
+.recharts-radial-bar-label {
+  fill: var(--text-secondary);
+}
+/* Default legend item text when the entry carries no inline color */
+.recharts-legend-item-text[style=""],
+.recharts-legend-item-text:not([style]) {
+  color: var(--text-secondary);
+}
+
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);

@@ -471,7 +471,7 @@ export function TagsPage() {
                         className="h-2 w-2 rounded-full shrink-0"
                         style={{
                           backgroundColor:
-                            tag.color ?? 'hsl(var(--muted-foreground))',
+                            tag.color ?? 'var(--muted-foreground)',
                         }}
                       />
                       {tag.name}
@@ -639,7 +639,7 @@ export function TagsPage() {
                       className="absolute left-0 top-0 bottom-0 w-1"
                       style={{
                         backgroundColor:
-                          tag.color ?? 'hsl(var(--muted-foreground))',
+                          tag.color ?? 'var(--muted-foreground)',
                       }}
                     />
                     {/* Checkbox */}
@@ -678,7 +678,7 @@ export function TagsPage() {
                           className="h-3 w-3 rounded-full shrink-0"
                           style={{
                             backgroundColor:
-                              tag.color ?? 'hsl(var(--muted-foreground))',
+                              tag.color ?? 'var(--muted-foreground)',
                           }}
                         />
                         <span className="font-semibold text-sm truncate">
@@ -750,7 +750,7 @@ export function TagsPage() {
                         className="h-2.5 w-2.5 rounded-full shrink-0"
                         style={{
                           backgroundColor:
-                            tag.color ?? 'hsl(var(--muted-foreground))',
+                            tag.color ?? 'var(--muted-foreground)',
                         }}
                       />
                       <span className="text-sm font-medium truncate">
@@ -912,7 +912,7 @@ export function TagsPage() {
                       style={{
                         backgroundColor:
                           analytics.mostUsed.color ??
-                          'hsl(var(--muted-foreground))',
+                          'var(--muted-foreground)',
                       }}
                     />
                     <span className="text-sm font-medium truncate">
@@ -966,7 +966,7 @@ export function TagsPage() {
                             style={{
                               backgroundColor:
                                 item.color ??
-                                'hsl(var(--muted-foreground))',
+                                'var(--muted-foreground)',
                             }}
                           />
                           <span className="text-sm truncate flex-1">

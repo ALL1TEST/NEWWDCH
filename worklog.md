@@ -3414,3 +3414,26 @@ Stage Summary:
 - Collapsed sidebar is a single 32px-cell icon column: logo, collapse control, nav icons (incl. AI star), avatar and logout all share one center-line; no overflow.
 - Settings submenu works in BOTH sidebar states with fully decoupled state: inline accordion when expanded, portal floating popover when collapsed; sidebar never auto-expands; navigation keeps the current collapse state; popover closes on Esc/outside/item-click and matches existing design tokens in both themes.
 - No page-specific CSS hacks introduced; fixes live in shared tokens + reusable components.
+
+---
+Task ID: UI-FINAL-1
+Agent: main (orchestrator)
+Task: Final UI pass — remove extra icon next to collapsed logo; hide admin profile in collapsed rail; fix dark-mode chart text at ROOT CAUSE (Backup Activity + Search Console Performance + global audit); keep Settings popover & collapse behavior intact.
+
+Work Log:
+- ROOT CAUSE of black chart text: theme tokens in globals.css hold plain OKLCH values, but every chart wrapped them as `hsl(var(--token))` → invalid color → recharts fell back to default near-black tick/label paint (invisible on dark bg).
+- Created `src/lib/chart-theme.ts`: shared theme-aware chart palette (LIGHT/DARK mirroring globals.css tokens) + `useChartTheme()` hook (next-themes resolvedTheme) + composite tooltip styles/axis-tick factory. Single chart color system for the whole CMS.
+- Added RECHARTS THEME BASELINE to `src/app/globals.css`: stylesheet rules for `.recharts-cartesian-axis-tick-value`, `.recharts-pie-label-text`, default legend text using `var(--text-muted/--text-secondary)` — safety net that beats any SVG presentation attribute; light-mode appearance unchanged (same gray family).
+- `src/components/layout/sidebar.tsx`: collapsed header now renders ONLY the "C" logo (removed the extra CollapseToggle icon below it). New `CollapsedLogoButton` (same 32px grid cell, x=24 center-line) toggles expansion; SidebarRail edge toggle preserved. Removed the entire collapsed-footer profile block (avatar/name/role tooltip/logout) — bottom of rail is clean; expanded layout untouched; bottom separator hidden while collapsed.
+- Fixed ALL broken color wrappers: `backups/dashboard-page.tsx` (Backup Activity: axis ticks, grid, cursor, tooltip, bar fill → chart theme), `seo/seo-search-console-page.tsx` (Performance: axisTick, grid, axis line, cursor, gradient stops, area strokes → chart theme), `dashboard-page.tsx` (tooltips → live `var()` inline styles + label/item colors), `analytics-page.tsx` + `ai/usage-page.tsx` (ticks/grids/tooltips themed; removed hardcoded zinc/#e4e4e7/#a1a1aa), `tags-page.tsx` (8× `hsl(var(--muted-foreground))` → `var(--muted-foreground)`).
+- Dark-audit sweep: all remaining `text-black` instances sit on intentional light amber/yellow backgrounds (kept); X-icon chip self-inverts; social previews/FABs have proper dark: variants. Zero `hsl(var(...))` wrappers left in modules.
+- Added `scripts/seed-demo-charts.ts` (dev seeder: 6 completed backups + 14 days of Search Console stats) so charts render for verification.
+- Verification (3 agent-browser sessions, real login, 1440×900): collapsed rail = only C logo + 11 icons on one axis + empty footer (screenshots 02/03/04); Settings popover opens beside collapsed rail, Escape AND real-pointer outside-click dismiss, nav to Backups keeps rail collapsed; C-logo click expands and restores Admin User + Log out; dark mode: backup ticks lab(66.1)=oklch .708 muted, bars oklch chart-1, tooltip dark popover chrome, SC chart 3 axes ALL ticks single muted fill, grid oklch(1 0 0/10%), area stroke primary, Range label muted (screenshots 05/06/10/11); light mode regression: ticks lab(48.5)=oklch .556, design unchanged (screenshots 08/09/12). No runtime/hydration errors; lint clean for all touched files (8 pre-existing repo errors untouched).
+- Handoff: dev server left RUNNING (setsid-detached, pid verified next-session, HTTP 200 on :3000).
+
+Stage Summary:
+- Charts are now theme-aware by construction: shared `useChartTheme()` + global CSS baseline; no page hacks, no `!important`, no duplicated color systems (palette mirrors globals.css tokens; sync note in file header).
+- Collapsed sidebar per spec: [C logo] → 11 nav icons → clean bottom (no admin profile, no extra icon, no ghost clickables).
+- Expanded sidebar unchanged incl. Admin User + logout; Settings popover decoupled from collapse state (regression-verified).
+- NOTE: verified computed colors report as `lab(...)` because browsers normalize oklch→lab; values match tokens exactly.
+- Dev-only seeder lives at scripts/seed-demo-charts.ts (rerun if demo data removed).

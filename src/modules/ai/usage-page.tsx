@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useSiteStore } from '@/lib/stores/site-store';
+import { useChartTheme } from '@/lib/chart-theme';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -47,6 +48,8 @@ const CHART_COLORS = [
 // -------------------- Component --------------------
 
 export function UsagePage() {
+  // Shared theme-aware chart palette (see lib/chart-theme.ts).
+  const chart = useChartTheme();
   const activeSiteId = useSiteStore((s) => s.activeSiteId);
   const [period, setPeriod] = useState<'day' | 'week' | 'month'>('month');
 
@@ -89,7 +92,7 @@ export function UsagePage() {
               <CardContent className="p-4 flex items-center gap-3">
                 <div className={`p-2 rounded-lg ${kpi.color}`}><Icon className="h-4 w-4" /></div>
                 <div>
-                  <p className="text-xs text-zinc-500">{kpi.label}</p>
+                  <p className="text-xs text-muted-foreground">{kpi.label}</p>
                   <div className="text-lg font-bold">{isLoading ? <Skeleton className="h-6 w-16 inline-block" /> : kpi.value}</div>
                 </div>
               </CardContent>
@@ -103,9 +106,9 @@ export function UsagePage() {
           {[1, 2].map((i) => <Card key={i}><CardContent className="p-6"><Skeleton className="h-[300px] w-full" /></CardContent></Card>)}
         </div>
       ) : isError ? (
-        <Card><CardContent className="p-8 text-center text-zinc-500">Failed to load usage data.</CardContent></Card>
+        <Card><CardContent className="p-8 text-center text-muted-foreground">Failed to load usage data.</CardContent></Card>
       ) : !summary ? (
-        <Card><CardContent className="p-8 text-center text-zinc-500">No usage data available.</CardContent></Card>
+        <Card><CardContent className="p-8 text-center text-muted-foreground">No usage data available.</CardContent></Card>
       ) : (
         <>
           {/* Budget Progress */}
@@ -114,10 +117,10 @@ export function UsagePage() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm font-medium">Monthly Budget</p>
-                  <p className="text-sm text-zinc-500">${summary.budget.spent.toFixed(2)} / ${summary.budget.monthlyBudget.toFixed(2)}</p>
+                  <p className="text-sm text-muted-foreground">${summary.budget.spent.toFixed(2)} / ${summary.budget.monthlyBudget.toFixed(2)}</p>
                 </div>
                 <Progress value={summary.budget.monthlyBudget > 0 ? (summary.budget.spent / summary.budget.monthlyBudget) * 100 : 0} />
-                <p className="text-xs text-zinc-400 mt-1">Warning at {summary.budget.warningThreshold}%</p>
+                <p className="text-xs text-muted-foreground mt-1">Warning at {summary.budget.warningThreshold}%</p>
               </CardContent>
             </Card>
           )}
@@ -131,15 +134,19 @@ export function UsagePage() {
                 {summary.dailyUsage?.length > 0 ? (
                   <ResponsiveContainer width="100%" height={250}>
                     <LineChart data={summary.dailyUsage}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
-                      <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#a1a1aa" />
-                      <YAxis tick={{ fontSize: 11 }} stroke="#a1a1aa" />
-                      <RechartsTooltip />
+                      <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                      <XAxis dataKey="date" tick={chart.axisTick(11)} tickLine={false} axisLine={{ stroke: chart.border }} />
+                      <YAxis tick={chart.axisTick(11)} tickLine={false} axisLine={false} />
+                      <RechartsTooltip
+                        contentStyle={chart.tooltipStyle}
+                        labelStyle={chart.tooltipLabelStyle}
+                        itemStyle={chart.tooltipItemStyle}
+                      />
                       <Line type="monotone" dataKey="requests" stroke="#10b981" strokeWidth={2} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-[250px] flex items-center justify-center text-zinc-400 text-sm">No daily data</div>
+                  <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm">No daily data</div>
                 )}
               </CardContent>
             </Card>
@@ -151,15 +158,20 @@ export function UsagePage() {
                 {summary.costByProvider?.length > 0 ? (
                   <ResponsiveContainer width="100%" height={250}>
                     <BarChart data={summary.costByProvider}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
-                      <XAxis dataKey="provider" tick={{ fontSize: 11 }} stroke="#a1a1aa" />
-                      <YAxis tick={{ fontSize: 11 }} stroke="#a1a1aa" />
-                      <RechartsTooltip />
+                      <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                      <XAxis dataKey="provider" tick={chart.axisTick(11)} tickLine={false} axisLine={{ stroke: chart.border }} />
+                      <YAxis tick={chart.axisTick(11)} tickLine={false} axisLine={false} />
+                      <RechartsTooltip
+                        cursor={{ fill: chart.mutedBg, opacity: 0.5 }}
+                        contentStyle={chart.tooltipStyle}
+                        labelStyle={chart.tooltipLabelStyle}
+                        itemStyle={chart.tooltipItemStyle}
+                      />
                       <Bar dataKey="cost" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-[250px] flex items-center justify-center text-zinc-400 text-sm">No cost data</div>
+                  <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm">No cost data</div>
                 )}
               </CardContent>
             </Card>
@@ -189,7 +201,11 @@ export function UsagePage() {
                       <Cell fill="#f59e0b" />
                     </Pie>
                     <Legend iconSize={10} wrapperStyle={{ fontSize: 12 }} />
-                    <RechartsTooltip />
+                    <RechartsTooltip
+                      contentStyle={chart.tooltipStyle}
+                      labelStyle={chart.tooltipLabelStyle}
+                      itemStyle={chart.tooltipItemStyle}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -204,7 +220,7 @@ export function UsagePage() {
                     <TableHeader><TableRow><TableHead>Provider</TableHead><TableHead className="text-right">Requests</TableHead><TableHead className="text-right">Cost</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {(summary.topProviders ?? []).length === 0 ? (
-                        <TableRow><TableCell colSpan={3} className="text-center py-4 text-zinc-400 text-sm">No data</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={3} className="text-center py-4 text-muted-foreground text-sm">No data</TableCell></TableRow>
                       ) : (summary.topProviders ?? []).map((p, i) => (
                         <TableRow key={p.provider || i}>
                           <TableCell className="text-sm font-medium">{p.provider}</TableCell>
@@ -228,7 +244,7 @@ export function UsagePage() {
                     <TableHeader><TableRow><TableHead>Model</TableHead><TableHead className="text-right">Requests</TableHead><TableHead className="text-right">Cost</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {(summary.topModels ?? []).length === 0 ? (
-                        <TableRow><TableCell colSpan={3} className="text-center py-4 text-zinc-400 text-sm">No data</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={3} className="text-center py-4 text-muted-foreground text-sm">No data</TableCell></TableRow>
                       ) : (summary.topModels ?? []).map((m, i) => (
                         <TableRow key={m.model || i}>
                           <TableCell className="text-sm font-medium max-w-[120px] truncate">{m.model}</TableCell>

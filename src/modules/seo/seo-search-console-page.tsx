@@ -48,6 +48,7 @@ import { Separator } from '@/components/ui/separator';
 import { PageHeader } from '@/components/patterns';
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
+import { useChartTheme } from '@/lib/chart-theme';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -290,6 +291,9 @@ function ChartTooltip({
 }
 
 function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceChartProps) {
+  // Shared theme-aware chart palette (see lib/chart-theme.ts).
+  const t = useChartTheme();
+
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -341,7 +345,10 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
     }))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
-  const axisTick = { fontSize: 10, fill: 'hsl(var(--muted-foreground))' };
+  // Theme-aware axis tick style — NEVER `hsl(var(--token))`: the design
+  // tokens hold plain oklch values and re-wrapping them is invalid CSS
+  // that silently falls back to black in recharts.
+  const axisTick = t.axisTick(10);
 
   return (
     <div className="space-y-4">
@@ -368,18 +375,18 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
           <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="scImpGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.04} />
+                <stop offset="0%" stopColor={t.primary} stopOpacity={0.3} />
+                <stop offset="100%" stopColor={t.primary} stopOpacity={0.04} />
               </linearGradient>
               <linearGradient id="scClkGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.9} />
-                <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.45} />
+                <stop offset="0%" stopColor={t.primary} stopOpacity={0.9} />
+                <stop offset="100%" stopColor={t.primary} stopOpacity={0.45} />
               </linearGradient>
             </defs>
             <CartesianGrid
               strokeDasharray="3 3"
               vertical={false}
-              stroke="hsl(var(--border))"
+              stroke={t.grid}
               strokeOpacity={0.6}
             />
             <XAxis
@@ -388,7 +395,7 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
               minTickGap={20}
               tick={axisTick}
               tickLine={false}
-              axisLine={{ stroke: 'hsl(var(--border))' }}
+              axisLine={{ stroke: t.border }}
             />
             <YAxis
               yAxisId="impressions"
@@ -409,14 +416,14 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
             />
             <RechartsTooltip
               content={<ChartTooltip />}
-              cursor={{ stroke: 'hsl(var(--border))', strokeDasharray: '3 3' }}
+              cursor={{ stroke: t.border, strokeDasharray: '3 3' }}
             />
             <Area
               yAxisId="impressions"
               type="monotone"
               dataKey="impressions"
               name="Impressions"
-              stroke="hsl(var(--primary))"
+              stroke={t.primary}
               strokeOpacity={0.55}
               strokeWidth={1.5}
               fill="url(#scImpGrad)"
@@ -428,7 +435,7 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
               type="monotone"
               dataKey="clicks"
               name="Clicks"
-              stroke="hsl(var(--primary))"
+              stroke={t.primary}
               strokeWidth={2}
               fill="url(#scClkGrad)"
               fillOpacity={1}

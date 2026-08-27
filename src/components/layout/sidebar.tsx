@@ -284,6 +284,33 @@ function LogoMark() {
   );
 }
 
+/**
+ * Collapsed-rail logo cell. Since the extra collapse-toggle icon was removed
+ * from below the logo, THIS cell is the explicit expand control:
+ *   • identical 32×32 grid geometry as every other rail icon
+ *   • click toggles the sidebar open (SidebarRail edge strip still works)
+ * No new icon is introduced and no empty clickable ghost remains.
+ */
+function CollapsedLogoButton() {
+  const { toggleSidebar } = useSidebar();
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label="Expand sidebar"
+          className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-primary font-bold text-sm text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring select-none"
+        >
+          C
+          <span className="sr-only">Expand sidebar</span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right">Expand</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /** Collapse/expand control that lives INSIDE the sidebar header. */
 function CollapseToggle({ side = 'right' }: { side?: 'left' | 'right' }) {
   const { state, toggleSidebar, isMobile } = useSidebar();
@@ -716,11 +743,14 @@ export function AppSidebar() {
             <CollapseToggle side="bottom" />
           </div>
         </div>
-        {/* Collapsed rail: logo cell stacked above its collapse control —
-            identical geometry to every nav icon below it (rule #2). */}
-        <div className="hidden flex-col items-center gap-1 group-data-[collapsible=icon]:flex">
-          <LogoMark />
-          <CollapseToggle />
+        {/* Collapsed rail: ONLY the "C" logo. The previously stacked
+            collapse-toggle icon was removed on purpose — no extra icon may
+            appear under/next to the logo.
+            Expand affordance: the logo cell itself toggles the sidebar
+            (same 32px grid cell, same x=24 center-line), and the invisible
+            SidebarRail edge strip keeps its native toggle behavior too. */}
+        <div className="hidden flex-col items-center group-data-[collapsible=icon]:flex">
+          <CollapsedLogoButton />
         </div>
       </SidebarHeader>
 
@@ -739,9 +769,12 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
 
-      <SidebarSeparator className="mx-0" />
+      {/* Hide the bottom separator while collapsed — with the footer
+          intentionally empty in that state there is nothing to separate,
+          so the rail bottom stays clean (no orphan hairline). */}
+      <SidebarSeparator className="mx-0 group-data-[collapsible=icon]:hidden" />
 
-      <SidebarFooter className="shrink-0">
+      <SidebarFooter className="shrink-0 group-data-[collapsible=icon]:p-0">
         {/* Expanded: unchanged row layout [avatar][name/role][logout] */}
         <div className="flex items-center gap-3 px-2 py-2 group-data-[collapsible=icon]:hidden">
           <Avatar className="h-8 w-8 shrink-0">
@@ -775,44 +808,10 @@ export function AppSidebar() {
           </Tooltip>
         </div>
 
-        {/* Collapsed rail: avatar + logout as stacked 32px cells sharing the
-            exact center-line of every other sidebar icon (no overflow). */}
-        <div className="hidden flex-col items-center gap-1 py-2 group-data-[collapsible=icon]:flex">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                aria-label={user.name}
-                className="flex h-8 w-8 cursor-default select-none items-center justify-center"
-              >
-                <Avatar className="h-6 w-6">
-                  <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} />
-                  <AvatarFallback className="text-[10px]">
-                    {getInitials(user.name)}
-                  </AvatarFallback>
-                </Avatar>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <span className="block font-medium">{user.name}</span>
-              <span className="block text-muted-foreground">{user.role.replace(/_/g, ' ')}</span>
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-md"
-                onClick={() => void logout()}
-                aria-label="Log out"
-              >
-                <LogOut className="h-4 w-4" />
-                <span className="sr-only">Log out</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Log out</TooltipContent>
-          </Tooltip>
-        </div>
+        {/* Collapsed rail: NO admin profile block is rendered here BY DESIGN.
+            Avatar / name / role tooltip and the logout icon only exist in
+            the expanded layout above; expanding the sidebar restores them.
+            This keeps the bottom of the 48px rail clean per spec. */}
       </SidebarFooter>
 
       <SidebarRail />

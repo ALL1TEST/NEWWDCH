@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { PageHeader } from '@/components/patterns';
 import { getApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
+import { useChartTheme } from '@/lib/chart-theme';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import type { PostStatus, ChartDataPoint } from '@/shared/types';
 import {
@@ -114,6 +115,8 @@ function StatCard({
 // -------------------- Main Component --------------------
 
 export function AnalyticsPage() {
+  // Shared theme-aware chart palette (see lib/chart-theme.ts).
+  const chart = useChartTheme();
   const [preset, setPreset] = useState<DatePreset>('30d');
 
   // Fetch summary
@@ -230,10 +233,15 @@ export function AnalyticsPage() {
             ) : (
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={barChartData} layout="vertical" margin={{ left: 10, right: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 12 }} />
-                  <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11 }} />
-                  <Tooltip />
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={chart.grid} />
+                  <XAxis type="number" tick={{ fontSize: 12, fill: chart.textMuted }} tickLine={false} axisLine={false} />
+                  <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11, fill: chart.textMuted }} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={chart.tooltipStyle}
+                    labelStyle={chart.tooltipLabelStyle}
+                    itemStyle={chart.tooltipItemStyle}
+                    cursor={{ fill: chart.mutedBg, opacity: 0.5 }}
+                  />
                   <Bar dataKey="views" fill={BAR_COLOR} radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -270,7 +278,11 @@ export function AnalyticsPage() {
                       />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip
+                    contentStyle={chart.tooltipStyle}
+                    labelStyle={chart.tooltipLabelStyle}
+                    itemStyle={chart.tooltipItemStyle}
+                  />
                   <Legend
                     verticalAlign="bottom"
                     height={36}

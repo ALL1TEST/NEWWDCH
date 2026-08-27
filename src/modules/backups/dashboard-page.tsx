@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
+import { useChartTheme } from '@/lib/chart-theme';
 import { cn, formatFileSize, formatRelativeTime, truncate } from '@/lib/utils';
 import { formatDurationMs } from '@/lib/backup-constants';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
@@ -97,6 +98,9 @@ function StatCardSkeleton() {
 
 export function DashboardPage() {
   const navigate = useNavigationStore((s) => s.navigate);
+  // Shared theme-aware chart palette — keeps ALL chart text readable in
+  // dark mode without page-specific overrides.
+  const chart = useChartTheme();
   const { data: stats, isLoading } = useQuery({
     queryKey: queryKeys.backupStats.dashboard(),
     queryFn: () => getApi<BackupStats>('/api/backups/stats'),
@@ -248,19 +252,16 @@ export function DashboardPage() {
             {trendData.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={trendData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.5} />
-                  <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={11} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis tickLine={false} axisLine={false} fontSize={11} allowDecimals={false} tickMargin={4} stroke="hsl(var(--muted-foreground))" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chart.grid} opacity={0.5} />
+                  <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={11} tickMargin={8} tick={{ fill: chart.textMuted }} />
+                  <YAxis tickLine={false} axisLine={false} fontSize={11} allowDecimals={false} tickMargin={4} tick={{ fill: chart.textMuted }} />
                   <RechartsTooltip
-                    cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
-                    contentStyle={{
-                      borderRadius: '8px',
-                      border: '1px solid hsl(var(--border))',
-                      background: 'hsl(var(--popover))',
-                      fontSize: '12px',
-                    }}
+                    cursor={{ fill: chart.mutedBg, opacity: 0.3 }}
+                    contentStyle={chart.tooltipStyle}
+                    labelStyle={chart.tooltipLabelStyle}
+                    itemStyle={chart.tooltipItemStyle}
                   />
-                  <Bar dataKey="count" fill="hsl(var(--chart-1))" radius={[6, 6, 0, 0]} maxBarSize={48} />
+                  <Bar dataKey="count" fill={chart.chart1} radius={[6, 6, 0, 0]} maxBarSize={48} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
