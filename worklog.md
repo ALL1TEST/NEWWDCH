@@ -4957,3 +4957,34 @@ Stage Summary:
 - `src/components/layout/site-selector.tsx`: enhanced the trigger button from a subtle 1px box-shadow border to a real visible `border border-sidebar-border` + `bg-background/60` + `shadow-sm` + `hover:` + `data-[state=open]:` + `data-[active=true]:` styling → reads as a professional bordered card native to the sidebar (NOT a plain button). Added `ring-2 ring-background` to the active-site color dot.
 - `src/components/layout/topbar.tsx`: updated the stale comment block to reflect that the selector now lives inside the sidebar header (NOT in the topbar — no duplication).
 - The SiteSelector's existing native behaviors are preserved: full-width inside the sidebar (SidebarMenuButton default w-full), auto-collapses to a 32px icon cell on the rail (`group-data-[collapsible=icon]:size-8!`), right-side "Switch Site" tooltip ONLY when collapsed, dropdown opens DOWN+left when expanded and to the RIGHT when collapsed, portal-rendered (never clipped), `collisionPadding={12}` from every viewport edge, "Create New Site" uses `onSelect` (reliable in both sidebar states), works in light + dark. Sidebar width, nav items, footer, and CMS Admin logo design are all untouched.
+
+---
+Task ID: 32
+Agent: main (orchestrator)
+Task: Remove the empty blank space at the top of the dashboard above the "Executive Dashboard" text. (Follow-up to Task 31 — the previous fix in Task 32-pre only reduced `<main>`'s top padding from 24px → 0px, but a much larger empty strip remained because the topbar itself was a 56px-tall empty white bar with no breadcrumb to show on the dashboard module.)
+
+Work Log:
+- Investigated the actual layout in the browser (Agent Browser + Range API): topbar (h-14 = 56px) ends at y=56; `<main>` starts at y=56 (pt-0 from the previous fix); the dashboard's outer `<div className="space-y-6">` starts at y=56; the page-header div starts at y=56; the h1 box starts at y=56; the actual "Executive Dashboard" text glyphs start at y=58 (only 2px of line-height leading above the text). So the structural "empty space" the user perceived was NOT the main's padding (already 0) — it was the empty 56px topbar itself.
+- Root cause: on the dashboard module, `Breadcrumbs` returns `null` (the dashboard is in the `NO_BREADCRUMB_MODULES` set inside `src/components/layout/breadcrumbs.tsx`). On desktop, the `Topbar` had NOTHING left to show (the SidebarTrigger + Separator + Search button are all `sm:hidden`), so the entire 56px header was an empty white strip with just a `border-b` line at the bottom.
+- Refactored `src/components/layout/breadcrumbs.tsx`:
+  • Extracted the previously-inline `NO_BREADCRUMB_MODULES` Set to module scope.
+  • Added a new exported helper `hasBreadcrumb(currentModule)` that returns `true` if the given module should render a topbar breadcrumb, `false` otherwise (treats `null`/`undefined` initial-load state as `false` — Dashboard).
+  • `Breadcrumbs` now calls `hasBreadcrumb(currentModule)` instead of inline-checking the Set — same behavior, just shared.
+- Updated `src/components/layout/topbar.tsx`:
+  • Imported `useNavigationStore` (for `currentModule`) + `hasBreadcrumb` + `cn`.
+  • Computed `showBreadcrumb = hasBreadcrumb(currentModule)` at the top of `Topbar`.
+  • Conditionally adds `sm:hidden` to the `<header>` className when `!showBreadcrumb` → on desktop, the entire topbar is `display:none` (no 56px empty strip); on mobile it stays visible (h-14) because the mobile SidebarTrigger lives here.
+  • Added a comprehensive header comment explaining the VERTICAL SPACE RULE (mobile always visible; desktop hidden when no breadcrumb).
+- Did NOT touch the topbar's height, border, breadcrumb content, SidebarTrigger, Search button, or any module's breadcrumb logic. The Set of no-breadcrumb modules is unchanged.
+- Verified with agent-browser (light mode, signed in as Admin):
+  • DASHBOARD (desktop, 1280×800): topbar hidden (headerRect 0×0, display:none). Main starts at y=0. h1 box at y=0. "Executive Dashboard" text glyphs at y=2. No empty space above the title ✓. VLM: "no empty blank space at the very top… the 'Executive Dashboard' text starts near the top of the viewport".
+  • CALENDAR (desktop, no-breadcrumb module): topbar hidden (display:none, 0×0). "Calendar" h1 at y=0 ✓.
+  • PROFILE (desktop, breadcrumb module): topbar VISIBLE (headerRect x=256,y=0,w=1024,h=56). Breadcrumb "All Sites > Profile" shows in the topbar. Content below ✓. VLM: "topbar containing the breadcrumb 'All Sites > Profile'… layout is clean with no empty space".
+  • DASHBOARD (mobile, 600×800): topbar VISIBLE (headerRect x=0,y=0,w=600,h=56, display:flex). SidebarTrigger (hamburger) accessible. "Executive Dashboard" h1 at y=56 (right below the topbar) ✓. VLM: "top horizontal bar containing a hamburger menu icon on the left and a search icon on the right… 'Executive Dashboard' title is positioned directly below this bar with no empty space".
+- Lint: `bun run lint` → topbar.tsx, breadcrumbs.tsx, admin-shell.tsx all CLEAN. The 4 errors + 3 warnings are all pre-existing in `content-create/edit-page` & `seo-broken-links-page` (unrelated). dev.log: no compile errors.
+- Screenshots: `tool-results/dashboard-top-no-topbar.png`, `profile-with-topbar.png`, `dashboard-mobile.png`, `dashboard-mobile-final.png`, `dashboard-mobile-closed-drawer.png`, `calendar-desktop.png`.
+
+Stage Summary:
+- `src/components/layout/breadcrumbs.tsx`: extracted `NO_BREADCRUMB_MODULES` to module scope + exported new `hasBreadcrumb(currentModule)` helper. `Breadcrumbs` now uses the helper (same behavior).
+- `src/components/layout/topbar.tsx`: imports `useNavigationStore` + `hasBreadcrumb` + `cn`; computes `showBreadcrumb`; conditionally applies `sm:hidden` to the `<header>` when the current module has no breadcrumb → on desktop the topbar (and its 56px empty strip) is `display:none` for Dashboard / Calendar / Users / Comments / Media / Settings / Email-Templates / Notifications / Backups / Articles / SEO / AI / Automation / Newsletter. On mobile the topbar stays visible (for the SidebarTrigger drawer toggle). Modules WITH breadcrumbs (Profile, Billing) keep the topbar visible on desktop with the breadcrumb path.
+- Net effect: the empty blank white strip above "Executive Dashboard" (and above the title on every other no-breadcrumb module) is GONE on desktop. The title sits flush at the top of the viewport, vertically aligned with the sidebar's top. Mobile layout is preserved (topbar still there for the hamburger). Pages with breadcrumbs are unchanged. No duplication, no missing controls.

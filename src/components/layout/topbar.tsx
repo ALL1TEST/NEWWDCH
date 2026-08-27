@@ -2,10 +2,12 @@
 
 import { Search } from 'lucide-react';
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
+import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { Button } from '@/components/ui/button';
-import { Breadcrumbs } from '@/components/layout/breadcrumbs';
+import { Breadcrumbs, hasBreadcrumb } from '@/components/layout/breadcrumbs';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 
 // -------------------- Topbar --------------------
 //
@@ -14,16 +16,35 @@ import { Separator } from '@/components/ui/separator';
 // selector.tsx` → `SiteSelector`, rendered inside `SidebarHeader` in
 // sidebar.tsx. It is NOT rendered here in the topbar (no duplication).
 //
-// The topbar now only carries: the mobile drawer toggle, the breadcrumb
-// path, and the mobile-only Search icon. Desktop collapse control +
-// search live in the sidebar header; the site selector lives in the
-// sidebar header; theme/notifications/profile live in the sidebar footer.
+// The topbar carries: the mobile drawer toggle, the breadcrumb path (when
+// the current module renders one), and the mobile-only Search icon.
+//
+// VERTICAL SPACE RULE:
+// On mobile the topbar is ALWAYS visible (h-14) because the mobile drawer
+// toggle (`SidebarTrigger`) lives here.
+// On DESKTOP, when the current module has NO breadcrumb to show (see
+// `hasBreadcrumb()` in `breadcrumbs.tsx` — Dashboard, Calendar, Users,
+// Comments, Media, Settings, etc.), the topbar would be an empty 56px
+// white strip — so we hide it entirely (`sm:hidden`) on desktop in that
+// case. The main content then sits flush against the top of the viewport,
+// right under where the topbar used to be (no empty blank space above
+// the page title). When the module DOES have a breadcrumb (e.g. Profile,
+// Billing), the topbar shows normally on desktop with the breadcrumb path.
 
 export function Topbar() {
   const openCommandPalette = useCommandPaletteStore((s) => s.open);
+  const currentModule = useNavigationStore((s) => s.currentModule);
+  const showBreadcrumb = hasBreadcrumb(currentModule);
 
   return (
-    <header className="h-14 shrink-0 border-b bg-background flex items-center gap-2 px-3 sm:px-4">
+    <header
+      className={cn(
+        'h-14 shrink-0 border-b bg-background flex items-center gap-2 px-3 sm:px-4',
+        // On desktop, hide the entire topbar when there is no breadcrumb to
+        // show — otherwise it's a 56px empty white strip above the title.
+        !showBreadcrumb && 'sm:hidden',
+      )}
+    >
       {/* Mobile drawer toggle — the desktop collapse control lives in the
           sidebar header, next to the CMS Admin name. */}
       <SidebarTrigger className="-ml-1 sm:hidden" />
@@ -34,7 +55,7 @@ export function Topbar() {
           sidebar header (below the CMS Admin logo) — not in the topbar.
           For modules that render a topbar breadcrumb, this shows the
           "All Sites > [icon] Label" path; for no-breadcrumb modules the
-          topbar keeps just empty space here. */}
+          topbar is hidden entirely on desktop (see the className above). */}
       <div className="flex-1 overflow-hidden flex items-center">
         <Breadcrumbs />
       </div>

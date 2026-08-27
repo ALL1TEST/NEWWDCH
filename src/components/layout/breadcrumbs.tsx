@@ -149,6 +149,24 @@ const SUBPAGE_LABELS: Record<string, Record<string, string>> = {
 
 // -------------------- Component ------------------
 
+// Modules that should NOT render a topbar breadcrumb — see the comment
+// inside `Breadcrumbs` for the full rationale.
+const NO_BREADCRUMB_MODULES = new Set([
+  'dashboard', 'calendar', 'users', 'comments', 'settings', 'media',
+  'email-templates', 'notifications',
+  'backups', 'content', 'seo', 'ai', 'automation', 'newsletter',
+]);
+
+// Returns `true` if the given module should render a topbar breadcrumb,
+// `false` otherwise. `null` / `undefined` (initial load → Dashboard) returns
+// `false` (no breadcrumb).
+export function hasBreadcrumb(
+  currentModule: string | null | undefined,
+): boolean {
+  if (!currentModule) return false;
+  return !NO_BREADCRUMB_MODULES.has(currentModule);
+}
+
 export function Breadcrumbs() {
   const currentModule = useNavigationStore((s) => s.currentModule);
   const currentItemId = useNavigationStore((s) => s.currentItemId);
@@ -220,12 +238,7 @@ export function Breadcrumbs() {
   //     also render NO breadcrumb per the latest spec — the topbar keeps only
   //     the "All Sites" selector for ALL their sub-pages/tabs:
   //     Backups, Articles (content), SEO, AI, Automation, Newsletter.
-  const NO_BREADCRUMB_MODULES = new Set([
-    'dashboard', 'calendar', 'users', 'comments', 'settings', 'media',
-    'email-templates', 'notifications',
-    'backups', 'content', 'seo', 'ai', 'automation', 'newsletter',
-  ]);
-  if (!currentModule || NO_BREADCRUMB_MODULES.has(currentModule)) {
+  if (!hasBreadcrumb(currentModule)) {
     return null;
   }
 
