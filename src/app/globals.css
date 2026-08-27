@@ -201,86 +201,51 @@
   }
 }
 
-/* Thin sidebar scrollbar */
-.sidebar-thin-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-.sidebar-thin-scroll:hover {
-  scrollbar-color: oklch(0.7 0 0 / 30%) transparent;
-}
-.sidebar-thin-scroll::-webkit-scrollbar {
-  width: 4px;
-}
-.sidebar-thin-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.sidebar-thin-scroll::-webkit-scrollbar-thumb {
-  background-color: transparent;
-  border-radius: 4px;
-}
-.sidebar-thin-scroll:hover::-webkit-scrollbar-thumb {
-  background-color: oklch(0.7 0 0 / 30%);
-}
+/* ============================================================
+   GLOBAL THIN SCROLLBAR
+   ------------------------------------------------------------
+   One slim, subtle, theme-adaptive scrollbar applied across the
+   ENTIRE application — the page level (html/body) AND every inner
+   scrollable area (sidebar, tables, modals, cards, lists, etc.).
 
-/* Thin, subtle horizontal scrollbar for table scroll containers.
-   Appears only when the table is wider than its card; stays inside the
-   card bounds and never overflows the parent. */
-[data-slot="table-container"] {
+   • Minimal width (8px) but easy to grab — stays functional.
+   • Transparent track; the thumb is a slim rounded pill inset
+     2px from the rail edges so it never touches content.
+   • The thumb uses a semi-transparent NEUTRAL color (no hue),
+     so it auto-blends with whatever sits behind it: on the light
+     theme it reads as a soft gray pill on white; on the dark theme
+     the same pill reads as a soft gray on near-black. One rule,
+     both themes, no .dark override needed.
+   • Hover slightly deepens the thumb for affordance.
+   • Earlier per-element scrollbar blocks (sidebar / table /
+     modal) were removed so this single rule is the consistent
+     source of truth for every scrollable region.
+   ============================================================ */
+*,
+*::before,
+*::after {
   scrollbar-width: thin;
-  scrollbar-color: oklch(0.7 0 0 / 25%) transparent;
+  scrollbar-color: oklch(0.5 0 0 / 35%) transparent;
 }
-[data-slot="table-container"]::-webkit-scrollbar {
+*::-webkit-scrollbar {
+  width: 8px;
   height: 8px;
-  width: 8px;
 }
-[data-slot="table-container"]::-webkit-scrollbar-track {
+*::-webkit-scrollbar-track {
   background: transparent;
 }
-[data-slot="table-container"]::-webkit-scrollbar-thumb {
-  background-color: oklch(0.7 0 0 / 25%);
-  border-radius: 8px;
+*::-webkit-scrollbar-thumb {
+  background-color: oklch(0.5 0 0 / 35%);
+  border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-[data-slot="table-container"]::-webkit-scrollbar-thumb:hover {
-  background-color: oklch(0.7 0 0 / 45%);
+*::-webkit-scrollbar-thumb:hover {
+  background-color: oklch(0.5 0 0 / 55%);
 }
-[data-slot="table-container"]::-webkit-scrollbar-corner {
+*::-webkit-scrollbar-thumb:active {
+  background-color: oklch(0.5 0 0 / 70%);
+}
+*::-webkit-scrollbar-corner {
   background: transparent;
-}
-
-/* Thin, subtle scrollbar for the Add Storage modal's scrollable config
-   area. The modal keeps header + footer fixed and only the config
-   content scrolls; this keeps that scroll visually subtle. */
-.storage-modal-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: oklch(0.7 0 0 / 25%) transparent;
-}
-.storage-modal-scroll::-webkit-scrollbar {
-  width: 8px;
-}
-.storage-modal-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.storage-modal-scroll::-webkit-scrollbar-thumb {
-  background-color: oklch(0.7 0 0 / 25%);
-  border-radius: 8px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-.storage-modal-scroll::-webkit-scrollbar-thumb:hover {
-  background-color: oklch(0.7 0 0 / 45%);
-}
-
-/* Mask (hide) the page-level vertical scrollbar globally while keeping
-   scroll fully functional. The scrollbar is hidden visually but users
-   can still scroll via mouse wheel, trackpad, keyboard, or drag. */
-html {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE/Edge */
-}
-html::-webkit-scrollbar {
-  width: 0;
-  display: none; /* Chrome/Safari/Opera */
 }

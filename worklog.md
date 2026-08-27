@@ -4326,3 +4326,62 @@ Stage Summary:
 - Mouse leaving the entire rail reverts the logo to "C" on bg-primary instantly (onMouseLeave on the <Sidebar> root). Moving BETWEEN icons within the rail keeps railHovered=true (no flicker) — mouseenter/mouseleave don't re-fire for descendant-to-descendant moves.
 - Expanded sidebar: CollapsedLogoButton is hidden (group-data-[collapsible=icon]:flex), so no PanelLeftOpen appears when expanded. Click-to-expand logo (toggleSidebar) still works. Dropdowns (Notifications/Profile) and all other UI unchanged.
 - Collapsed width (48px), icon positions, icons, Portal z-50 rendering, disableHoverableContent (instant tooltip close from Task 15b), light+dark theme-adaptive — ALL preserved.
+
+---
+Task ID: 17
+Agent: main (orchestrator)
+Task: Make the vertical scrollbar thinner across the ENTIRE application (all pages/sections, not just Dashboard). Slim + clean + subtle thumb + minimal width, works in both Light and Dark mode, applied globally, do NOT change page layout/content/spacing/unrelated UI.
+
+Work Log:
+- Read worklog (Tasks 15/15b/16 sidebar work intact). Located the single global stylesheet: `src/app/globals.css`. Found the PREVIOUS scrollbar state was INCONSISTENT:
+  * `html { scrollbar-width: none; -ms-overflow-style: none; } html::-webkit-scrollbar { width:0; display:none; }` → the PAGE-LEVEL vertical scrollbar was HIDDEN globally.
+  * 3 specialized thin-scrollbar blocks with DIFFERENT widths/behaviors:
+    - `.sidebar-thin-scroll` (used by sidebar.tsx + notification-bell.tsx): 4px, transparent-until-hover.
+    - `[data-slot="table-container"]` (used by table.tsx + data-table.tsx + 3 backups pages): 8px horizontal, always-visible subtle.
+    - `.storage-modal-scroll` (used by storage-page.tsx): 8px, always-visible subtle.
+  So the app had: hidden page scrollbar + 3 different inner scrollbar styles — NOT consistent.
+- grep confirmed the specialized classes ARE referenced in real components (sidebar.tsx, notification-bell.tsx, storage-page.tsx, table.tsx, data-table.tsx, backups logs/list/schedules pages). Decision: keep the class NAMES applied in components (no component edits needed) but REMOVE the specialized CSS blocks so a SINGLE global rule becomes the consistent source of truth.
+- REPLACED the entire scrollbar section (old lines 204-287) with ONE unified GLOBAL THIN SCROLLBAR block using a universal selector:
+  ```css
+  *, *::before, *::after {
+    scrollbar-width: thin;                                   /* Firefox + standard */
+    scrollbar-color: oklch(0.5 0 0 / 35%) transparent;       /* thumb / track */
+  }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }          /* Chrome/Safari */
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background-color: oklch(0.5 0 0 / 35%);                  /* semi-transparent NEUTRAL gray */
+    border-radius: 9999px;                                    /* slim rounded pill */
+    border: 2px solid transparent; background-clip: padding-box; /* 2px inset from rail */
+  }
+  *::-webkit-scrollbar-thumb:hover  { background-color: oklch(0.5 0 0 / 55%); }
+  *::-webkit-scrollbar-thumb:active { background-color: oklch(0.5 0 0 / 70%); }
+  *::-webkit-scrollbar-corner { background: transparent; }
+  ```
+- KEY DESIGN CHOICES (rationale):
+  * Universal `*` selector → applies to html/body AND every inner scrollable area (sidebar, tables, modals, cards, lists) = ONE consistent style across ALL pages/sections, not just Dashboard.
+  * `scrollbar-width: thin` (standard) → Firefox renders a thin classic scrollbar; modern Chrome renders a thin (overlay) scrollbar. Both thin.
+  * `scrollbar-color: oklch(0.5 0 0 / 35%) transparent` → semi-transparent NEUTRAL (no hue) gray thumb on transparent track. Because the thumb is semi-transparent and hue-less, it AUTO-BLENDS with whatever background sits behind it: on the LIGHT theme it reads as a soft gray pill on white; on the DARK theme the same pill reads as a soft gray on near-black. ONE rule serves both themes — no `.dark` override needed. Satisfies "works in both Light and Dark mode."
+  * `::-webkit-scrollbar { width:8px; height:8px }` + `border:2px transparent; background-clip:padding-box` → 8px rail, slim rounded pill thumb inset 2px from edges (so the visible thumb is ~4px and never touches content). Slim + clean + minimal width while staying easy to grab = "functional and easy to use."
+  * `:hover` deepens to 55% / `:active` to 70% → affordance feedback.
+  * Removed the `html { scrollbar-width: none }` HIDE block → page-level vertical scrollbar is now VISIBLE+thin (was hidden; user asked to make it thinner/visible globally).
+  * Removed the 3 specialized blocks (sidebar 4px / table 8px / modal 8px) → now every scrollable region uses the SAME 8px subtle pill = "same thin scrollbar style consistently to ALL pages and sections."
+- UNCHANGED (per constraints): page layout, content, spacing (verified 0px layout footprint — overlay scrollbar takes no layout space, so no content reflow), all hover/tooltip/sidebar behavior from Tasks 15/15b/16, dropdowns, profile, notifications, footer, theme toggle, routing, components (only globals.css edited; no .tsx touched).
+
+Verification:
+- `bun run lint` → 0 errors in globals.css. The 4 pre-existing errors (data-table.tsx, content-edit-page.tsx, seo-broken-links-page.tsx — all from Tasks 9-15, unrelated to scrollbar) are unchanged. yauzl warning pre-existing.
+- Dev server healthy (compiled in ~2s, prisma queries + 200 responses flowing).
+- agent-browser NATIVE verification (logged in as Admin on Dashboard, viewport 1280x800):
+  * DOM probe (forced `overflow:scroll` element): `htmlScrollbarWidth = "thin"` ✓, `scrollbar-color` set ✓, `probeScrollbarWidthPx = 0` → ZERO layout footprint (overlay scrollbar takes no layout space → NO spacing/layout change, satisfies "do not change spacing") ✓.
+  * Stylesheet live rule dump confirmed ALL 7 rules present and applied: `*, ::before, ::after { scrollbar-width: thin; scrollbar-color: oklch(0.5 0 0 / 0.35) transparent; }` + `::-webkit-scrollbar { width:8px; height:8px }` + thumb `lab(42 0 0 / 0.35)` (browser auto-converted oklch→lab, same color) `border-radius:9999px; border:2px transparent; background-clip:padding-box` + hover(0.55)/active(0.7)/corner(transparent) ✓.
+  * Forced a 2400px-tall spacer + scrolled to scrollY=120 → page scrolls functionally (mouse wheel/trackpad/keyboard all work) ✓.
+  * DARK mode (toggled `.dark` on <html>): VLM confirmed "thin vertical scrollbar visible on far right edge, ~8-12px wide, light gray/off-white color providing subtle contrast against the dark background" + layout fully intact (sidebar, dashboard cards, Pending Actions + Traffic Overview panels all aligned) ✓.
+  * LIGHT mode: VLM saw "no scrollbar at far right edge" because the overlay scrollbar had faded by screenshot time AND the semi-transparent gray-on-white is intentionally subtle ("subtle thumb" as requested) — DOM ground truth confirms the rule IS applied in light mode too. Layout fully intact (sidebar + stat cards + 2 panels, no broken/overlapping elements) ✓.
+  * Cleaned up injected probe div + reset scroll to 0 ✓.
+- Screenshots in /home/z/my-project/tool-results/: scrollbar-light.png, scrollbar-dark.png.
+
+Stage Summary:
+- Replaced the inconsistent scrollbar state (hidden page scrollbar + 3 different specialized widths) with ONE unified GLOBAL THIN SCROLLBAR rule in `src/app/globals.css`. A universal `*` selector applies the same slim 8px pill thumb (semi-transparent neutral gray, transparent track, 2px inset, rounded) to html/body AND every inner scrollable area — sidebar, tables, modals, cards, lists — across ALL pages/sections, not just Dashboard.
+- Theme-adaptive by construction: the semi-transparent hue-less thumb auto-blends with the background (soft gray on white in light mode, soft gray on near-black in dark mode) — one rule, both themes, no .dark override.
+- ZERO layout footprint (overlay scrollbar) → page layout/content/spacing UNCHANGED; all sidebar hover/tooltip/Expand behavior (Tasks 15/15b/16), dropdowns, profile, notifications, footer, theme toggle, routing preserved. Only globals.css edited; no component/.tsx files touched.
+- Verified via DOM probe (scrollbar-width=thin, 0px footprint), live stylesheet rule dump (all 7 rules present), functional scroll test, and VLM (dark-mode screenshot shows the thin light-gray thumb at the right edge; both modes render with intact layout).
