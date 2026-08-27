@@ -3963,3 +3963,39 @@ Stage Summary:
 - At rest: shows "C" (logo). On hover: shows PanelLeftOpen icon. On mouse-leave: restores "C". On click: expands the sidebar (toggleSidebar unchanged).
 - The expanded-state logo has NO hover replacement (structurally guaranteed — LogoMark is a plain div with no group-hover classes).
 - The fix works on any real desktop/laptop browser (where `(hover: hover)` matches). The headless Playwright verification required a one-off non-gated style injection to PROVE the CSS structure is correct, because headless Chromium reports `(hover: hover): false` — this is a verification-env limitation, not a code bug. The injected style was removed after verification.
+
+---
+Task ID: 11
+Agent: main (orchestrator)
+Task: Remove ONLY the black background (bg-primary) from the collapsed-rail Expand logo button. Keep the icon glyph, size, position, hover swap behavior, and onClick functionality unchanged. Do not modify the expanded site logo (LogoMark) or any other sidebar/header elements.
+
+Work Log:
+- Re-read CollapsedLogoButton (sidebar.tsx ~L314-344) — confirmed current className: "group flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-primary font-bold text-sm text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring select-none". The bg-primary class is the black/dark box; text-primary-foreground (white) is the "C"/icon color that relies on the dark bg for contrast.
+- Minimal change via MultiEdit (ONLY the className + the inline comment that referenced text-primary-foreground):
+  * Removed `bg-primary` from the className → button background becomes transparent.
+  * Changed `text-primary-foreground` → `text-muted-foreground` — NECESSARY so the "C" (at rest) and the PanelLeftOpen icon (on hover) remain visible against the now-transparent/page background. Without this color change, the white text-primary-foreground would be invisible on the light page bg in light mode. text-muted-foreground matches the other collapsed-rail ghost buttons (ThemeToggle / Bell / Avatar), which all use transparent bg + muted-foreground icon.
+  * Kept EVERYTHING else: group, flex, h-8 w-8 (size), shrink-0, cursor-pointer, items-center, justify-center, rounded-lg, font-bold, text-sm, outline-none, transition-opacity, hover:opacity-90 (hover behavior), focus-visible:ring-2, focus-visible:ring-ring, select-none.
+  * Kept the group-hover swap structure unchanged (C span + PanelLeftOpen svg), onClick={toggleSidebar} unchanged, Tooltip unchanged, sr-only span unchanged.
+  * Updated the inline comment to reflect the new transparent bg + text-muted-foreground.
+- Verified the expanded LogoMark component (sidebar.tsx ~L279-288) was NOT touched — it's a separate `<div>` with className="... bg-primary text-primary-foreground ..." that still has its dark box.
+- Ran `bun run lint` — 0 sidebar.tsx errors. Dev.log: "✓ Compiled in 0ms", no runtime errors.
+- agent-browser verification (viewport 1440x900, logged in as admin):
+  * DOM ground-truth check: button computed style backgroundColor = "rgba(0, 0, 0, 0)" (fully transparent) in BOTH light and dark mode. The bg-primary class is gone.
+  * Ancestor chain check: ALL ancestors are either transparent or the light sidebar bg (lab 98.26 in light mode) — no parent contributes a dark box behind the button.
+  * Pixel analysis (definitive, since VLM misperceived): sampled button corners + edges + center on the at-rest + hover screenshots.
+    - LIGHT at-rest: button corners (8,13)/(38,13)/(8,43)/(38,43) all = (250,250,250) = IDENTICAL to sidebar bg (250,250,250) → no separate box, button blends into sidebar. ✓
+    - DARK at-rest: button corners all = (23,23,23) = IDENTICAL to sidebar-below-button (23,23,23) → no separate box. ✓
+    - LIGHT hover (with non-gated group-hover rules injected to bypass headless hover:none): button center = (250,250,250) = sidebar bg → no box around the icon. svgDisplay=block (icon visible). ✓
+    - DARK hover: btnBg=rgba(0,0,0,0), svgDisplay=block → icon visible, transparent bg. ✓
+  * VLM misperception: in light-hover the VLM claimed a "solid black box behind the icon" — DISPROVEN by pixel analysis (button area = sidebar bg, no separate dark layer). The VLM conflated the nearby dark Radix Tooltip bubble ("Expand" text appears to the right) with the button background. Pixel data is ground truth.
+  * REGRESSION — expanded LogoMark unchanged: DOM query found "7 elements with bg-primary" (was 8 before this task — the 8th was the CollapsedLogoButton's bg-primary, now removed). The LogoMark (expanded site logo) retains its bg-primary. Pixel check in light mode: LogoMark center (24,28) = (23,23,23) = dark box. VLM confirmed: "Yes. There is a dark/black rounded square box containing the white letter 'C' at the top-left of the expanded sidebar header, which serves as the site logo." ✓
+  * Click-to-expand: clicked the collapsed logo (e2), sidebar expanded (snapshot showed "Collapse sidebar" button return). onClick toggleSidebar functionality unchanged. ✓
+- Cleaned up the injected test style (removed #test-group-hover) after verification.
+- Screenshots in /home/z/my-project/tool-results/: collapsed-logo-transparent-rest.png (light, C on transparent), collapsed-logo-transparent-hover.png (light, icon on transparent), collapsed-logo-transparent-rest-dark.png (dark, C on transparent), collapsed-logo-transparent-hover-dark.png (dark, icon on transparent), expanded-header-light-final.png (regression — LogoMark still has dark box).
+
+Stage Summary:
+- ONLY the CollapsedLogoButton className was modified (sidebar.tsx ~L327): removed `bg-primary`, changed `text-primary-foreground` → `text-muted-foreground`. The color change is a necessary consequence of removing the dark background (otherwise the white text/icon would be invisible on the light page bg in light mode). text-muted-foreground matches the other collapsed-rail ghost buttons for visual consistency.
+- The collapsed-rail Expand logo button now has a TRANSPARENT background — only the icon/"C" glyph is visible. Works in both Light and Dark mode (pixels prove the button area matches the surrounding sidebar bg, no separate box).
+- Icon glyph (PanelLeftOpen): unchanged. Size (h-8 w-8): unchanged. Position (collapsed-rail cluster, top): unchanged. Hover behavior (group-hover swap C↔icon): unchanged. onClick (toggleSidebar → expands sidebar): unchanged.
+- The expanded site logo (LogoMark) is UNCHANGED — still has its bg-primary dark box with white "C" (DOM + pixel + VLM confirmed).
+- No other sidebar/header elements were modified.
