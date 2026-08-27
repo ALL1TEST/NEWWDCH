@@ -11,6 +11,11 @@ import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { ConfirmDialog } from '@/components/patterns';
 import { getApi, postApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
@@ -47,6 +52,7 @@ export function NotificationBell({
   sideOffset,
   alignOffset,
   collisionPadding,
+  withTooltip = false,
 }: {
   /** Optional Radix side override (e.g. 'top' to open upward from a
       bottom-anchored trigger like the sidebar footer). When omitted the
@@ -62,6 +68,16 @@ export function NotificationBell({
   alignOffset?: number;
   /** Viewport collision padding (px). */
   collisionPadding?: number;
+  /** When true, wraps the bell trigger in a HOVER Tooltip showing the
+      "Notifications" label to the right of the collapsed sidebar rail
+      (positioned identically to every other collapsed-rail tooltip — see
+      COLLAPSED_TOOLTIP_PROPS in sidebar.tsx). The Tooltip is suppressed
+      while the dropdown is open so the two never visually conflict. The
+      TooltipTrigger asChild + DropdownMenuTrigger asChild composition
+      (Radix Slot chaining) lets the same Button serve BOTH triggers:
+      hover → Tooltip, click → Dropdown. NO clicking required to see
+      the label. Used ONLY by the collapsed-rail usage in sidebar.tsx. */
+  withTooltip?: boolean;
 } = {}) {
   const queryClient = useQueryClient();
   const navigate = useNavigationStore((s) => s.navigate);
@@ -141,17 +157,62 @@ export function NotificationBell({
   return (
     <>
       <DropdownMenu open={open} onOpenChange={setOpen}>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="relative h-8 w-8">
-            <Bell className="h-4 w-4" />
-            <span className="sr-only">Notifications</span>
-            {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </Button>
-        </DropdownMenuTrigger>
+        {withTooltip ? (
+          /* HOVER Tooltip wraps the bell trigger so the "Notifications"
+             label appears on plain mouse hover (no click required) —
+             positioned identically to every other collapsed-rail tooltip
+             (side=right, align=center, sideOffset=8, collisionPadding=12
+             — the SAME four values as COLLAPSED_TOOLTIP_PROPS in
+             sidebar.tsx, inlined here because notification-bell.tsx is a
+             leaf component with no other sidebar coupling). The values
+             are inlined (not imported) to keep the file self-contained;
+             if you change them here, change them in sidebar.tsx +
+             theme-toggle.tsx too.
+
+             Slot chaining: TooltipTrigger asChild → DropdownMenuTrigger
+             asChild → Button. Both Slots clone the Button and merge
+             their props, so the same Button element serves BOTH
+             triggers — hover fires the Tooltip, click fires the
+             Dropdown. hidden={open} forces the Tooltip content
+             display:none while the dropdown is open so the label never
+             visually conflicts with the open panel. */
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative h-8 w-8">
+                  <Bell className="h-4 w-4" />
+                  <span className="sr-only">Notifications</span>
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent
+              side="right"
+              align="center"
+              sideOffset={8}
+              collisionPadding={12}
+              hidden={open}
+            >
+              Notifications
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="relative h-8 w-8">
+              <Bell className="h-4 w-4" />
+              <span className="sr-only">Notifications</span>
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+        )}
         <DropdownMenuContent
           align={align}
           side={side}

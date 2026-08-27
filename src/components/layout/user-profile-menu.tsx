@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useTheme } from 'next-themes';
 import {
   User,
@@ -28,6 +28,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { PlanBadge } from '@/components/layout/plan-badge';
 import { toast } from 'sonner';
 
@@ -42,6 +47,19 @@ import { toast } from 'sonner';
  * Positioning defaults match the original topbar usage (side bottom +
  * align end); callers may override via props without touching the menu
  * contents.
+ *
+ * HOVER TOOLTIP (withTooltip=true, used ONLY by the collapsed-rail
+ * avatar): wraps the trigger children in a HOVER Tooltip showing the
+ * "Profile" label to the right of the collapsed sidebar rail (positioned
+ * identically to every other collapsed-rail tooltip — see
+ * COLLAPSED_TOOLTIP_PROPS in sidebar.tsx). The Tooltip is suppressed
+ * while the dropdown is open so the two never visually conflict. The
+ * TooltipTrigger asChild + DropdownMenuTrigger asChild composition
+ * (Radix Slot chaining) lets the same Button serve BOTH triggers:
+ * hover → Tooltip, click → Dropdown. NO clicking required to see the
+ * label. The Dropdown's open state is tracked internally via useState
+ * (instead of leaving it uncontrolled) so the Tooltip's `hidden={open}`
+ * suppression works.
  */
 export function UserProfileMenu({
   children,
@@ -50,6 +68,8 @@ export function UserProfileMenu({
   sideOffset = 8,
   alignOffset = 0,
   collisionPadding = 8,
+  withTooltip = false,
+  tooltipLabel = 'Profile',
 }: {
   /** The dropdown trigger element (must accept refs / event props). */
   children: React.ReactNode;
@@ -65,7 +85,17 @@ export function UserProfileMenu({
   alignOffset?: number;
   /** Optional viewport collision padding (corner-anchored triggers). */
   collisionPadding?: number;
+  /** When true, wraps the trigger children in a HOVER Tooltip showing
+      the label (default "Profile"). See component JSDoc above. */
+  withTooltip?: boolean;
+  /** Label text for the hover Tooltip (default "Profile"). */
+  tooltipLabel?: string;
 }) {
+  // Track the Dropdown's open state so the hover Tooltip can be
+  // suppressed (hidden={open}) while the dropdown is open — without
+  // this, the Tooltip bubble would visually conflict with the open
+  // dropdown panel.
+  const [open, setOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const closeMobile = useSidebarStore((s) => s.closeMobile);
@@ -88,8 +118,47 @@ export function UserProfileMenu({
   };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      {withTooltip ? (
+        /* HOVER Tooltip wraps the trigger children (the avatar Button
+           passed by the caller) so the label appears on plain mouse
+           hover (no click required) — positioned identically to every
+           other collapsed-rail tooltip (side=right, align=center,
+           sideOffset=8, collisionPadding=12 — the SAME four values as
+           COLLAPSED_TOOLTIP_PROPS in sidebar.tsx, inlined here because
+           user-profile-menu.tsx is a leaf component). The values are
+           inlined (not imported) to keep the file self-contained; if
+           you change them here, change them in sidebar.tsx +
+           theme-toggle.tsx + notification-bell.tsx too.
+
+           Slot chaining: TooltipTrigger asChild → DropdownMenuTrigger
+           asChild → children (the avatar Button). Both Slots clone the
+           Button and merge their props, so the same Button element
+           serves BOTH triggers — hover fires the Tooltip, click fires
+           the Dropdown. hidden={open} forces the Tooltip content
+           display:none while the dropdown is open so the label never
+           visually conflicts with the open profile menu panel. */
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              {children}
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent
+            side="right"
+            align="center"
+            sideOffset={8}
+            collisionPadding={12}
+            hidden={open}
+          >
+            {tooltipLabel}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <DropdownMenuTrigger asChild>
+          {children}
+        </DropdownMenuTrigger>
+      )}
       {/* z-[60]: floats above sidebar (z-10) and sticky headers (z-40/50)
           so the menu is never hidden behind any layer. Compact 224px
           popover: header → Profile → Language → Manage Subscription →

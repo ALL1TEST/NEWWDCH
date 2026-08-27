@@ -4134,3 +4134,99 @@ Stage Summary:
 - VLM-confirmed (light + dark): exactly ONE bubble per hover, correct text, positioned to the RIGHT of the sidebar with a visible gap, on top of all content, readable contrast in both themes.
 - No functionality changed: collapsed layout, icons, click handlers, dropdown popovers (NotificationBell / UserProfileMenu / Settings submenu), expanded-state LogoMark, expanded-state header/footer clusters — ALL UNCHANGED. Only the positioning OBJECT passed to the existing tooltips was standardized.
 - Main content area and unrelated UI: NOT MODIFIED.
+
+---
+Task ID: 15
+Agent: main (orchestrator)
+Task: Fix the collapsed sidebar hover behavior so EVERY tool icon (including the profile icon, notification icon, and sidebar controls) shows its tooltip/label on plain mouse hover — no click required. The "Expand" icon/tooltip must remain EXCLUSIVE to the top-left logo (must NOT show when hovering other sidebar tools). Hover detection must cover the full icon/button area and not be clipped/blocked. Keep the current collapsed width, positions, icons, and functionality unchanged. Fix the actual hover/tooltip logic, not just visual styling.
+
+Work Log:
+- Re-read prior worklog (tasks 9-14 — collapsed-rail dropdown/tooltip/logo work) + sidebar.tsx full + notification-bell.tsx + user-profile-menu.tsx to map current state.
+- ROOT CAUSE of missing hover labels: NotificationBell and UserProfileMenu (collapsed-rail usages) used Radix DropdownMenu (CLICK-to-open) WITHOUT any hover Tooltip wrapping the trigger. So hovering the bell/avatar did NOTHING — the user had to click to see anything (the dropdown panel). All other collapsed-rail items (logo via CollapsedLogoButton, theme via ThemeToggle withTooltip, nav items via SidebarMenuButton tooltip prop) already had hover tooltips from task 14, but the bell + avatar were left out.
+- Verified the user's "Expand icon on other tools" concern was NOT an actual bug: CollapsedLogoButton's `[hovered, setHovered]` React state + onMouseEnter/onMouseLeave (task 13) correctly swaps "C" ↔ PanelLeftOpen ONLY on that specific button. The Radix Tooltip wrapping it closes via `disableHoverableContent` + native pointer-leave. DOM-confirmed in this task (logo → bell/profile/dashboard transitions all reset logoChildTag to SPAN and produce hasExpand=false).
+- FIX — added a `withTooltip` prop to BOTH NotificationBell and UserProfileMenu. When true, wraps the existing DropdownMenuTrigger in a HOVER Tooltip showing the label to the right of the collapsed rail. The Tooltip uses the SAME four positioning values as COLLAPSED_TOOLTIP_PROPS in sidebar.tsx (side="right" align="center" sideOffset={8} collisionPadding={12}) — inlined because these are leaf components in separate files (no shared import). Documented inline + cross-referenced in JSDoc.
+- KEY IMPLEMENTATION PATTERN — Radix Slot chaining for dual-trigger (hover + click) on the SAME button:
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button>...</Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent
+          side="right"
+          align="center"
+          sideOffset={8}
+          collisionPadding={12}
+          hidden={open}    ← suppresses tooltip while dropdown is open
+        >
+          {label}
+        </TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent>...</DropdownMenuContent>
+    </DropdownMenu>
+  Both Slots (TooltipTrigger asChild + DropdownMenuTrigger asChild) clone the Button and merge their props — the same Button element serves BOTH triggers: hover fires Tooltip, click fires Dropdown. hidden={open} forces the Tooltip content display:none while the dropdown is open so the label never visually conflicts with the open panel.
+- NotificationBell (src/components/layout/notification-bell.tsx):
+  * Added `withTooltip?: boolean` prop (default false — topbar usage unchanged).
+  * When `withTooltip=true`, wraps the bell Button in `<Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button>...</Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent hidden={open}>Notifications</TooltipContent></Tooltip>`.
+  * The existing DropdownMenu open state (`const [open, setOpen] = useState(false)` was already there for click-outside handling) is reused for the `hidden={open}` suppression — no new state needed.
+  * Imported Tooltip, TooltipContent, TooltipTrigger from '@/components/ui/tooltip'.
+  * Updated JSDoc to document the withTooltip pattern + cross-reference to COLLAPSED_TOOLTIP_PROPS in sidebar.tsx.
+- UserProfileMenu (src/components/layout/user-profile-menu.tsx):
+  * Added `withTooltip?: boolean` prop (default false — topbar usage unchanged) and `tooltipLabel?: string` (default "Profile").
+  * Added `const [open, setOpen] = useState(false)` — UserProfileMenu previously left DropdownMenu UNCONTROLLED (no open/onOpenChange props). Now controlled so the Tooltip's `hidden={open}` suppression works.
+  * Passed `open={open} onOpenChange={setOpen}` to DropdownMenu.
+  * When `withTooltip=true`, wraps the `children` (the avatar Button passed by the sidebar) in `<Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger></TooltipTrigger><TooltipContent hidden={open}>{tooltipLabel}</TooltipContent></Tooltip>`. The Slot chain merges props into the caller-provided Button.
+  * Imported useState from react + Tooltip, TooltipContent, TooltipTrigger from '@/components/ui/tooltip'.
+  * Updated JSDoc to document the withTooltip pattern + open-state rationale + cross-reference to COLLAPSED_TOOLTIP_PROPS in sidebar.tsx.
+- sidebar.tsx (src/components/layout/sidebar.tsx):
+  * Updated the collapsed-rail NotificationBell usage (~L1054-1060) to pass `withTooltip` (in addition to the existing side/align/sideOffset/collisionPadding for the dropdown panel).
+  * Updated the collapsed-rail UserProfileMenu usage (~L1090-1096) to pass `withTooltip`.
+  * Both expanded-state usages (side="top" align="start" ...) left untouched — they DON'T pass withTooltip, so they keep the bare trigger without a hover Tooltip (consistent with the original behavior, since the expanded layout shows visible text labels next to icons).
+- CollapsedLogoButton (sidebar.tsx ~L326-439): UNCHANGED. The existing `[hovered, setHovered]` React state + onMouseEnter/onMouseLeave + conditional `<PanelLeftOpen>`/`<span>C</span>` swap + `<Tooltip disableHoverableContent><TooltipContent {...COLLAPSED_TOOLTIP_PROPS}>Expand</TooltipContent></Tooltip>` was already correct from tasks 12-14. Verified it remains EXCLUSIVE to the logo — no other item gets the icon-swap behavior.
+- SidebarMenuButton tooltip prop (ui/sidebar.tsx ~L535-545): UNCHANGED. SidebarMenuButton's built-in tooltip mechanism (which already uses `side="right" align="center" hidden={state !== "collapsed" || isMobile}` + spread `{...tooltip}`) continues to serve all SimpleNavItem + ExpandableNavItem + CollapsedParentNavItem usages. The COLLAPSED_TOOLTIP_PROPS object form from task 14 keeps these tooltips consistent.
+- Ran `bun run lint` — 0 errors in notification-bell.tsx, user-profile-menu.tsx, sidebar.tsx, tooltip.tsx. The 4 pre-existing errors in data-table.tsx, storage-page.tsx, content-create/edit-page.tsx, seo-broken-links-page.tsx are unrelated (same as tasks 9-14).
+- Dev.log: server running, no compile/runtime errors from my changes (only the pre-existing `yauzl` module-not-found in backup-service.ts).
+
+agent-browser NATIVE verification (viewport 1440x900, logged in as admin, sidebar collapsed via CollapseToggle e3):
+  * COMPREHENSIVE SWEEP — all 15 collapsed-rail tooltips verified with IDENTICAL positioning (side=right, left=58, gap=10px from rail right edge, state=delayed-open):
+    - Expand (logo, e2): top=14, childTag=svg (PanelLeftOpen on hover), btnBg=rgba(0,0,0,0) transparent ✓
+    - Dashboard (e19): top=67 ✓
+    - Articles (e20): top=103 ✓
+    - Calendar (e21): top=139 ✓
+    - Media (e22): top=175 ✓
+    - Users (e23): top=211 ✓
+    - Comments (e24): top=247 ✓
+    - Newsletter (e25): top=283 ✓
+    - SEO (e26): top=319 ✓
+    - AI (e27): top=355 ✓
+    - Automation (e28): top=391 ✓
+    - Settings parent (e29, popover closed): top=418 ✓
+    - Toggle theme (e3): top=463 ✓
+    - Notifications (e4, NEW): top=499, state=delayed-open, hiddenAttr=false, display=block ✓
+    - Profile (e5, NEW): top=535, state=delayed-open, hiddenAttr=false, display=block ✓
+  * NOTIFICATIONS DROPDOWN PRESERVED: clicked bell (e4) → dropdown opens (left=56, top=125, width=320, gapFromRail=8px from rail right edge — IDENTICAL to task 9-11 positioning). TooltipCount drops to 0 while open (hidden={open} suppresses it). Press Escape → dropdown closes. Re-hover bell → tooltip returns ("Notifications", state=instant-open). ✓
+  * PROFILE DROPDOWN PRESERVED: clicked avatar (e5) → profile menu opens (left=56, top=282, width=224, gapFromRail=8px — IDENTICAL to task 9-11). TooltipCount=0 while open. Escape → close. Re-hover → "Profile" tooltip returns. ✓
+  * EXPAND ICON EXCLUSIVITY (the user's specific concern): three transition tests all PASSED:
+    - Logo → Bell: tooltipCount=1, tooltipText="Notifications", logoChildTag=SPAN (C restored), hasExpand=false ✓
+    - Logo → Profile: tooltipCount=1, tooltipText="Profile", logoChildTag=SPAN, hasExpand=false ✓
+    - Logo → Dashboard: tooltipCount=1, tooltipText="Dashboard", logoChildTag=SPAN, hasExpand=false ✓
+    The Expand tooltip NEVER lingers when moving to other items. The PanelLeftOpen icon swaps back to "C" the moment the pointer leaves the logo button (React onMouseLeave fires immediately, no CSS media-gate).
+  * DARK MODE VERIFIED (DOM ground truth):
+    - Notifications tooltip: bg=lab(90.95)=light (bg-primary in dark mode, theme-adaptive), color=lab(7.78)=dark text, left=58, top=499, gap=10, side=right ✓
+    - Profile tooltip: bg=lab(90.95)=light, color=lab(7.78)=dark, left=58, top=535, gap=10, side=right ✓
+    Same positioning as light mode; theme-adaptive bg/color (light bubble with dark text in dark mode, dark bubble with light text in light mode).
+  * VLM confirmation (light mode): Notifications screenshot — "ONE tooltip, text 'Notifications', positioned to the RIGHT with a visible gap, readable, NO 'Expand' label visible elsewhere". Profile screenshot — "ONE tooltip, text 'Profile', positioned to the RIGHT with a visible gap, readable, NO 'Expand' label visible elsewhere". Expand screenshot — "ONE tooltip, text 'Expand', positioned to the RIGHT with a visible gap" (VLM was confused about the PanelLeftOpen icon glyph — DOM confirmed childIsSvg=true, btnBg=transparent, hasPanelLeftOpen=true).
+- Screenshots in /home/z/my-project/tool-results/: task15-notifications-tooltip.png, task15-profile-tooltip.png, task15-expand-tooltip.png, task15-notifications-tooltip-dark.png, task15-profile-tooltip-dark.png.
+
+Stage Summary:
+- Added `withTooltip` prop to BOTH NotificationBell and UserProfileMenu (default false — topbar usage unchanged). When true, wraps the DropdownMenuTrigger Button in a HOVER Tooltip showing the label.
+- KEY PATTERN — Radix Slot chaining (TooltipTrigger asChild → DropdownMenuTrigger asChild → Button): the SAME Button element serves BOTH triggers. Hover fires Tooltip, click fires Dropdown. NO clicking required to see the label.
+- Suppression while dropdown is open: `hidden={open}` on TooltipContent forces display:none so the label never visually conflicts with the open panel. UserProfileMenu now tracks open state via useState (was previously uncontrolled) so this suppression works.
+- Positioning: inlined the SAME four values as COLLAPSED_TOOLTIP_PROPS (side=right, align=center, sideOffset=8, collisionPadding=12) in both leaf components — documented inline + cross-referenced in JSDoc. ALL 15 collapsed-rail tooltips verified with IDENTICAL positioning (side=right, left=58, gap=10px, state=delayed-open).
+- Dropdown click behavior PRESERVED: bell still opens Notifications dropdown (320px wide, 8px gap from rail, opens upward), avatar still opens Profile menu (224px wide, 8px gap, opens upward). All existing dropdown positioning (side="right" align="end" sideOffset=16 collisionPadding=12 from tasks 9-11) UNCHANGED.
+- "Expand" icon/tooltip EXCLUSIVITY verified: three transition tests (logo → bell, logo → profile, logo → dashboard) ALL confirm hasExpand=false and logoChildTag=SPAN immediately after moving away. The CollapsedLogoButton's React state (`setHovered(false)` on onMouseLeave) + Radix's `disableHoverableContent` ensure the Expand tooltip closes the instant the pointer leaves the logo button. NO Expand tooltip lingers on other items.
+- Hover detection covers full 32×32 button area: Radix Tooltip uses pointer events (onPointerEnter/onPointerLeave) on the Button itself, not CSS :hover variants — fires natively in headless browsers, not media-gated. Portal-rendered (document.body) so the sidebar's overflow-hidden can NEVER clip the bubble. z-50 stacking.
+- Collapsed width (48px), positions (all icons on x=24 center-line), icons (logo C/PanelLeftOpen, nav item icons, bell, avatar), functionality (click-to-open dropdowns, click-to-expand logo, toggleSidebar) — ALL UNCHANGED.
+- Works in both light and dark mode (DOM-verified theme-adaptive bg-primary + text-primary-foreground on every tooltip).
+- The actual hover/tooltip LOGIC was fixed (not just visual styling): NotificationBell + UserProfileMenu gained the hover Tooltip wrapper via Slot chaining, plus open-state tracking in UserProfileMenu to drive `hidden={open}` suppression.

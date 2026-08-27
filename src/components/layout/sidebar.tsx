@@ -1056,6 +1056,7 @@ export function AppSidebar() {
             align="end"
             sideOffset={16}
             collisionPadding={12}
+            withTooltip
           />
 
           {/* Collapsed-rail avatar — tapping it opens the shared profile
@@ -1091,6 +1092,7 @@ export function AppSidebar() {
             align="end"
             sideOffset={16}
             collisionPadding={12}
+            withTooltip
           >
             <Button
               type="button"
