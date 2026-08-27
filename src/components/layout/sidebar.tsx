@@ -806,14 +806,30 @@ export function AppSidebar() {
       <SidebarSeparator className="mx-0" />
 
       <SidebarFooter className="shrink-0">
-        {/* Expanded: unchanged row layout [avatar][name/role][logout] */}
+        {/* Expanded: [profile-menu avatar][name/role][logout].
+            The avatar opens the SAME shared UserProfileMenu as the
+            collapsed rail and the topbar (single source — identical
+            content/styling), so the profile dropdown works consistently
+            in BOTH sidebar states. side="top" grows upward from the
+            bottom-anchored trigger; Radix collision handling keeps it
+            inside the viewport at any height. */}
         <div className="flex items-center gap-3 px-2 py-2 group-data-[collapsible=icon]:hidden">
-          <Avatar className="h-8 w-8 shrink-0">
-            <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} />
-            <AvatarFallback className="text-xs">
-              {getInitials(user.name)}
-            </AvatarFallback>
-          </Avatar>
+          <UserProfileMenu side="top" align="start" collisionPadding={8}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-8 w-8 shrink-0 rounded-full"
+              aria-label={`${user.name} — open profile menu`}
+              aria-haspopup="menu"
+            >
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} />
+                <AvatarFallback className="text-xs">
+                  {getInitials(user.name)}
+                </AvatarFallback>
+              </Avatar>
+            </Button>
+          </UserProfileMenu>
           <div className="flex flex-1 flex-col overflow-hidden">
             <span className="truncate text-sm font-medium leading-tight">
               {user.name}

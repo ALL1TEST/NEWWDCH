@@ -436,11 +436,10 @@ export function Topbar() {
 
       <Separator orientation="vertical" className="mr-1 h-4 sm:hidden" />
 
-      {/* NOTE: no Search icon next to "All Sites" — Search lives in the
-          sidebar header (next to the Collapse toggle) when expanded; the
-          topbar must not duplicate it. */}
-
-      <Separator orientation="vertical" className="mx-1 h-4 shrink-0" />
+      {/* NOTE: no Search icon and no extra separator between the sidebar
+          (CMS logo) and "All Sites" — Search lives in the sidebar header
+          (next to the Collapse toggle); the selector starts the header
+          cluster directly. */}
 
       {/* Site Selector — separate control, unchanged functionality */}
       <SiteSelector />

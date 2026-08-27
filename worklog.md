@@ -3580,3 +3580,18 @@ Work Log:
 Stage Summary:
 - Exactly one Search surface per instruction: ONLY the sidebar-header Search (next to the Collapse toggle) exists on desktop; the duplicate next to "All Sites" is gone in both rail states; mobile keeps its single right-cluster search.
 - Screenshots: .verify/v9-collapsed-light.png, v9-collapsed-dark.png.
+
+---
+Task ID: UI-PROFILE-MENU-BOTH-STATES
+Agent: Z.ai Code (main)
+Task: (1) Bottom-left Admin User profile must open the profile dropdown in BOTH sidebar states (it only worked collapsed — the expanded footer avatar had NO menu attached). (2) Remove the extra icon between the CMS logo and the All Sites selector (a stray always-visible vertical Separator at the topbar start). Nothing else may change.
+
+Work Log:
+- sidebar.tsx expanded footer: replaced the bare <Avatar> with the SHARED UserProfileMenu trigger (Button + Avatar, aria-label "Admin User — open profile menu"), side="top" align="start" collisionPadding={8} → dropdown grows upward from the bottom-anchored trigger, Radix collision handling keeps it in-viewport at any height. Name/role badge and the separate logout button untouched. Collapsed rail avatar (side="right" align="end") and topbar avatar untouched — one shared menu implementation across all three surfaces.
+- topbar.tsx: removed the always-visible leading <Separator> that rendered between the sidebar edge (CMS logo) and the All Sites pill — desktop header now starts directly with All Sites (x=272 = 256 sidebar + 16 padding). Mobile keeps [hamburger][separator][All Sites] unchanged (functional drawer toggle).
+- Trusted-pointer verification @1440×900: expanded → avatar click opens menu upward (y=622..846 above trigger at y=850, fully in-viewport, identical content: Admin User/email → Profile → Language EN/FR → Manage Subscription → Log out); collapse → rail avatar opens side=right menu; expand-back → expanded avatar works after the cycle; topbar avatar OK; All Sites dropdown opens with real pointer (Radix ignores JS clicks); sidebar-header Search untouched @x=179; mobile 375 → drawer footer avatar opens the same menu upward, in-viewport; dark + light renders clean; console/pageerrors zero; lint clean on touched files (remaining project lint errors are the pre-existing unrelated ones logged previously).
+
+Stage Summary:
+- Profile dropdown now works consistently in EVERY sidebar state (expanded footer, collapsed rail, topbar, mobile drawer) via the single shared UserProfileMenu — same content, same styling.
+- Extra separator between the CMS logo and All Sites removed, nothing replaced; header starts cleanly at the selector.
+- Screenshots: .verify/v10-expanded-menu.png (dark), v10-expanded-light-menu.png (light), v10-mobile-drawer-menu.png.
