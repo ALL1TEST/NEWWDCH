@@ -129,12 +129,18 @@ export function CommandPalette() {
   const navigate = useNavigationStore((s) => s.navigate);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Global keyboard listener for Cmd/Ctrl+K
+  // Global keyboard listener for Cmd/Ctrl+K and Escape.
+  // Escape MUST close the palette: without it the z-50 backdrop stays up
+  // and blocks every interaction on the page until an outside click.
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      const { isOpen } = useCommandPaletteStore.getState();
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         useCommandPaletteStore.getState().toggle();
+      } else if (e.key === 'Escape' && isOpen) {
+        e.preventDefault();
+        useCommandPaletteStore.getState().close();
       }
     }
     document.addEventListener('keydown', handleKeyDown);

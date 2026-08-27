@@ -320,7 +320,8 @@ function CollapsedLogoButton() {
 
 /**
  * Collapse/expand control that lives INSIDE the sidebar header (original
- * position, restored) — at the far right of the [logo][title][Search] row.
+ * position, restored) — at the far right of the [logo][title] row, with
+ * the Search icon directly to its LEFT (per instruction).
  * The C logo (collapsed rail) and the invisible SidebarRail edge strip
  * keep their existing toggle behavior too.
  */
@@ -745,31 +746,31 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       {/* ---- Header: one 32px icon cell per row, all centered at x=24px ---- */}
       <SidebarHeader className="px-2 py-3 shrink-0">
-        {/* Expanded: [logo][title][Search][…spacer…][Collapse toggle].
-            The Search icon sits directly next to the "CMS Admin" name per
-            reference; the collapse toggle keeps its original spot at the
-            far right of the sidebar header. */}
+        {/* Expanded: [logo][title][…spacer…][Search][Collapse toggle].
+            Per instruction the Search icon sits directly NEXT TO the
+            Collapse toggle at the far right — NOT next to the "CMS Admin"
+            name (the old position was removed, never duplicated). */}
         <div className="flex h-8 items-center gap-2 group-data-[collapsible=icon]:hidden">
           <LogoMark />
           <span className="truncate font-semibold text-sm tracking-tight whitespace-nowrap text-text-primary">
             CMS Admin
           </span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 ml-1 rounded-md"
-                onClick={openCommandPalette}
-                aria-label="Search"
-              >
-                <Search className="h-4 w-4" />
-                <span className="sr-only">Search</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Search</TooltipContent>
-          </Tooltip>
-          <div className="ml-auto shrink-0">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 rounded-md"
+                  onClick={openCommandPalette}
+                  aria-label="Search"
+                >
+                  <Search className="h-4 w-4" />
+                  <span className="sr-only">Search</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Search</TooltipContent>
+            </Tooltip>
             <CollapseToggle side="bottom" />
           </div>
         </div>

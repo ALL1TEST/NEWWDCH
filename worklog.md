@@ -3547,3 +3547,21 @@ Work Log:
 Stage Summary:
 - Collapse icon back in its original sidebar-header position; Search icon now sits directly next to the "CMS Admin" name (expanded), with state-appropriate fallbacks (collapsed desktop / mobile) so it is always exactly one click away and never duplicated.
 - Screenshots: .verify/v7-expanded.png, v7-collapsed.png.
+
+---
+Task ID: UI-SEARCH-NEXT-TO-COLLAPSE-ICON
+Agent: Z.ai Code (main)
+Task: Move the Search icon to sit directly NEXT TO the Collapse toggle (sidebar header, far right) — NOT next to the "CMS Admin" title — and remove the copy previously beside the title.
+
+Work Log:
+- sidebar.tsx header row rebuilt as [C logo][CMS Admin][…ml-auto spacer…][🔍 Search][⬒ CollapseToggle] inside a shared right cluster (gap-1, 4px); the old title-adjacent Search (previously with ml-1) was MOVED, not duplicated.
+- Measured geometry @1440 expanded: CMS Admin title right edge x=134, Search x=179 (w32), Collapse x=215 (w32), gap=4px, same row y=12 — Search immediately left of the Collapse icon at the far right, clearly detached from the title.
+- Exactly ONE visible Search per surface/state (DOM-counted): desktop expanded → sidebar header (topbar's sm:hidden mobile copy display:none); desktop collapsed → topbar fallback (rail 48px, header row hidden); mobile 375 → topbar right (drawer closed) / drawer header row shows the same [🔍][⬒] group.
+- BUG FOUND & FIXED during verification (command-palette.tsx): the custom palette had NO Escape handling — pressing Esc left its fixed z-50 bg-black/50 backdrop + wrapper mounted, silently blocking ALL page interactions (this is what earlier sessions noted as "Escape 不响应"). Added Esc handling to the global keydown effect (closes only when open, preventDefault). Verified: trusted pointer click opens palette, Esc unmounts both overlay layers (2 → 0).
+- Real-interaction test loop (trusted mouse clicks/hovers): header Search click → palette opens; Esc → clean close; Collapse click → 48px rail; C-logo real hover → "Expand" tooltip appears (failed before the Esc fix purely due to the stuck backdrop); logo click → expands back with identical group geometry (no layout jump); dark + light themes in both states; 1024 sanity → same x=179/215; console + pageerrors zero; dev.log clean; single dev instance.
+- Hygiene: pre-existing committed bug fixed — seo-social-preview-page.tsx used <Search> without importing it (would crash its empty-state at runtime); added Search to lucide imports. Remaining lint issues (storage-page refs, data-table/content warnings, seo-broken-links memoization) are pre-existing in unrelated modules — untouched.
+
+Stage Summary:
+- Expanded sidebar header now reads [C][CMS Admin] …spacer… [🔍][⬒] exactly as instructed; collapsed/mobile keep exactly one reachable Search; sidebar collapse behavior, tooltips, palette, and theme switching all verified end-to-end.
+- Bonus: command palette Escape-to-close restored (page no longer lockable behind an invisible backdrop).
+- Screenshots: .verify/v8-expanded-light.png, v8-collapsed-light.png, v8-expanded-dark.png, v8-collapsed-dark.png.
