@@ -4079,3 +4079,58 @@ Stage Summary:
 - The expanded site logo (LogoMark) is UNCHANGED — still has its bg-primary box.
 - NATIVELY verified in the headless browser (no CSS injection) in BOTH Light and Dark mode: at-rest has the box, hover has no box (0 box-colored pixels in the button area per dense pixel sweep).
 - Works in ALL environments now (desktop, touch, headless, preview iframe) because React mouse events are not gated by @media (hover: hover).
+
+---
+Task ID: 14
+Agent: main (orchestrator)
+Task: Apply the consistent collapsed-rail tooltip behavior to EVERY sidebar icon (not just the Expand logo). When the sidebar is collapsed, hovering ANY tool/icon in the left sidebar must show its tooltip/label correctly, positioned OUTSIDE the collapsed sidebar toward the RIGHT with proper spacing, not clipped/hidden/blocked. Keep the current collapsed layout, icons, and functionality unchanged. Works for all sidebar icons. Do not modify the main content area or unrelated UI.
+
+Work Log:
+- Re-read prior worklog (tasks 9/10/11/12/13 — collapsed-rail dropdown/tooltip/logo work) + sidebar.tsx full + ui/sidebar.tsx SidebarMenuButton + ui/tooltip.tsx TooltipContent + theme-toggle.tsx to map current tooltip state.
+- ROOT CAUSE: SidebarMenuButton's built-in tooltip (ui/sidebar.tsx ~L535-545) wraps a `<TooltipContent side="right" align="center" hidden={state !== "collapsed" || isMobile} {...tooltip} />`. The default `tooltip={item.label}` (string) form falls back to `TooltipContent`'s OWN defaults of `sideOffset=0` and `collisionPadding=0` — so the tooltip bubble was flush against the icon (zero gap) and had zero viewport-collision padding (could clip at edges). The CollapsedLogoButton's tooltip (sidebar.tsx ~L374) had `side="right" sideOffset={8}` but NO `collisionPadding`. The ThemeToggle's tooltip (theme-toggle.tsx ~L43) had only `side="right"` — NO sideOffset, NO collisionPadding (worst case — touching the icon, no edge padding).
+- Discovered that SidebarMenuButton's `tooltip` prop type is `string | React.ComponentProps<typeof TooltipContent>` — passing an OBJECT form lets us override side/align/sideOffset/collisionPadding/children atomically per item.
+- Verified Radix Tooltip uses POINTER events (onPointerEnter/onPointerLeave) — NOT CSS :hover variants. So tooltips fire NATIVELY in the headless browser, no React-state workaround or CSS injection needed (unlike the group-hover swap of task 12/13 which was media-gated).
+- Verified Radix Tooltip renders via `<TooltipPrimitive.Portal>` (ui/tooltip.tsx L44) → document.body. Portal-rendered means the tooltip floats OUTSIDE the sidebar DOM tree, so the sidebar's `overflow-hidden` / `overflow-x-hidden` containers (ui/sidebar.tsx L142, L377) can NEVER clip or hide the bubble. z-50 stacking.
+- FIX — added a SINGLE source of truth for every collapsed-rail tooltip:
+    const COLLAPSED_TOOLTIP_PROPS: React.ComponentProps<typeof TooltipContent> = {
+      side: 'right',
+      align: 'center',
+      sideOffset: 8,
+      collisionPadding: 12,
+    };
+  Placed at sidebar.tsx ~L194 (after ICON_MAP/getIcon, before Navigation Config). Documented inline with a thorough JSDoc explaining each value's purpose and which components consume it.
+- Applied the constant to EVERY collapsed-rail tooltip in sidebar.tsx:
+  * CollapsedLogoButton (~L437): `<TooltipContent {...COLLAPSED_TOOLTIP_PROPS}>Expand</TooltipContent>` (was `side="right" sideOffset={8}` — added align="center" + collisionPadding=12 + use shared constant).
+  * CollapsedParentNavItem (~L560-564): `tooltip={floatOpen ? undefined : { ...COLLAPSED_TOOLTIP_PROPS, children: item.label }}` (was `tooltip={floatOpen ? undefined : item.label}` string — now passes object form with consistent positioning; tooltip still suppressed when the floating popover is open to avoid visual conflict).
+  * ExpandableNavItem (~L647): `tooltip={{ ...COLLAPSED_TOOLTIP_PROPS, children: item.label }}` (was `tooltip={item.label}` string). SidebarMenuButton hides this tooltip when state!=="collapsed" via `hidden={state !== "collapsed" || isMobile}` so it never shows in expanded state — but the prop is consistent across the codebase for safety.
+  * SimpleNavItem (~L734): `tooltip={{ ...COLLAPSED_TOOLTIP_PROPS, children: item.label }}` (was `tooltip={item.label}` string) — covers all 10 leaf nav items: Dashboard, Articles, Calendar, Media, Users, Comments, Newsletter, SEO, AI, Automation.
+- Applied the SAME values (inlined — separate file, no shared constant) to ThemeToggle (theme-toggle.tsx ~L65-72): `<TooltipContent side="right" align="center" sideOffset={8} collisionPadding={12}>Toggle theme</TooltipContent>`. Updated JSDoc explaining the four values + cross-reference to COLLAPSED_TOOLTIP_PROPS in sidebar.tsx so future maintainers change them in both places.
+- DID NOT modify: NotificationBell and UserProfileMenu collapsed-rail usage — these use CLICK-to-open POPOVER dropdown panels (interactive menus, NOT hover tooltips/labels). The user's request was about tooltip/LABEL hover behavior; adding hover tooltips to the bell/avatar would CHANGE functionality (user said "Keep functionality unchanged"). Their existing popover positioning (side="right" align="end" sideOffset=16 collisionPadding=12 from task 9-11) is left intact.
+- DID NOT modify: main content area, expanded-state LogoMark, expanded-state header cluster, expanded-state footer, expanded-state dropdown positioning (side="top" align="start" sideOffset=8 alignOffset=8 collisionPadding=12 from tasks 9-11).
+- Ran `bun run lint` — 0 errors in sidebar.tsx, theme-toggle.tsx, tooltip.tsx (4 pre-existing errors in data-table.tsx, storage-page.tsx, content-create/edit-page.tsx, seo-broken-links-page.tsx are unrelated — same as tasks 9-13).
+- Dev.log: server running, no compile/runtime errors related to my changes (only the pre-existing `yauzl` module-not-found in backup-service.ts).
+
+agent-browser NATIVE verification (viewport 1440x900, logged in as admin, sidebar collapsed via CollapseToggle e3):
+  * ARTICLES (e18, SimpleNavItem): DOM tooltip found, text="ArticlesArticles" (Radix aria-describedby sr-only duplicate — visible UI shows "Articles" once, VLM-confirmed), left=58, top=103, sidebarRight=48, gapFromRailRight=10px, side=right, state=delayed-open, bg=lab(7.78)=near-black (bg-primary), z-50. ✓
+  * DASHBOARD (e17, SimpleNavItem): left=58, top=67, gap=10px, side=right, state=delayed-open. ✓
+  * CALENDAR (e19): left=58, top=139, gap=10px, side=right. ✓
+  * SEO (e24): left=58, top=319, gap=10px, side=right. ✓
+  * AI (e25): left=58, top=355, gap=10px, side=right. ✓
+  * SETTINGS (e27, CollapsedParentNavItem — popover CLOSED): tooltip shows left=58, top=427, gap=10px, side=right, text="SettingsSettings". Tooltip correctly suppressed when popover is open (no visual conflict). ✓
+  * THEME TOGGLE (e3, ThemeToggle withTooltip): left=58, top=786, gap=10px, side=right, text="Toggle themeToggle theme". ✓
+  * EXPAND (e2, CollapsedLogoButton): tip {left=58, top=14, right=127, bottom=42, width=69, height=28}, btn {left=8, top=12, right=40, bottom=44, width=32, height=32}. tipIsRightOfBtn=true, gapBtnToTip=19px (includes ~10px arrow), tipIsRightOfRail=true, gapRailToTip=10px. ✓
+  * MEDIA (after re-collapse, e20): left=58, top=175, btnRight=40, gapBtnToTip=18px, gapRailToTip=10px. ✓
+- ALL NINE TOOLTIPS IDENTICAL POSITIONING: side=right, left=58, gap=10px from rail right edge. Perfectly vertically aligned at x=58. ✓
+- VLM confirmation (light mode): Articles screenshot — "exactly ONE tooltip bubble visible, text 'Articles', positioned to the RIGHT of the sidebar with a visible gap, on top of all content (not clipped/hidden)". Settings screenshot — "ONE bubble, text 'Settings', LEFT edge sits BEYOND the sidebar's RIGHT edge with a clear gap (~8-10px of white space)". Theme screenshot — "ONE bubble, text 'Toggle theme', positioned to the right of the sidebar with a clear horizontal gap of ~8-12px". (VLM was momentarily confused about the Expand tooltip due to the logo button being at the very top of the viewport — DOM data definitively confirmed tipIsRightOfBtn=true with 19px gap, tipIsRightOfRail=true with 10px gap.)
+- VLM confirmation (DARK MODE): Articles tooltip screenshot — "ONE tooltip, text 'Articles', positioned to the RIGHT of the sidebar with a visible gap, white text on solid black background, excellent contrast". DOM: same left=58, top=103, gap=10px, bg=lab(7.78)=near-black, color=lab(98.26)=white. ✓
+- EXPANDED STATE REGRESSION: clicked CollapseToggle to expand the sidebar, hovered Articles link. DOM: 1 tooltip in DOM tree with state="delayed-open" but hiddenAttr=true (HTML hidden attribute set by SidebarMenuButton's `hidden={state !== "collapsed" || isMobile}`), display=none (computed style), rect={0,0,0,0}. Tooltip is correctly INVISIBLE in expanded state — Radix keeps it in DOM for state management but it's `display:none`. ✓
+- CLICK-TO-EXPAND REGRESSION: clicked the CollapsedLogoButton — sidebar expanded (snapshot showed "Collapse sidebar" button e3 return). onClick toggleSidebar functionality unchanged. ✓
+- Screenshots in /home/z/my-project/tool-results/: task14-articles-tooltip.png, task14-expand-tooltip.png, task14-settings-tooltip.png, task14-theme-tooltip.png, task14-articles-tooltip-dark.png.
+
+Stage Summary:
+- Single source of truth: `COLLAPSED_TOOLTIP_PROPS = { side:'right', align:'center', sideOffset:8, collisionPadding:12 }` (sidebar.tsx ~L194). ThemeToggle inlines the SAME four values (separate file).
+- Applied to EVERY collapsed-rail tooltip: CollapsedLogoButton (Expand), SimpleNavItem × 10 leaf items (Dashboard/Articles/Calendar/Media/Users/Comments/Newsletter/SEO/AI/Automation), ExpandableNavItem (parent — tooltip hidden in expanded state, prop still consistent), CollapsedParentNavItem (Settings parent — tooltip shows when popover is closed), ThemeToggle (Toggle theme).
+- Verified natively in headless browser (NO CSS injection needed — Radix uses pointer events, not media-gated CSS hover variants): ALL NINE tooltips render with IDENTICAL positioning — side=right, left=58, top varies by row, gap=10px from rail right edge (48px), z-50, portal-rendered to document.body so sidebar overflow-hidden can NEVER clip the bubble.
+- VLM-confirmed (light + dark): exactly ONE bubble per hover, correct text, positioned to the RIGHT of the sidebar with a visible gap, on top of all content, readable contrast in both themes.
+- No functionality changed: collapsed layout, icons, click handlers, dropdown popovers (NotificationBell / UserProfileMenu / Settings submenu), expanded-state LogoMark, expanded-state header/footer clusters — ALL UNCHANGED. Only the positioning OBJECT passed to the existing tooltips was standardized.
+- Main content area and unrelated UI: NOT MODIFIED.

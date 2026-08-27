@@ -142,6 +142,62 @@ function getIcon(iconName?: string): LucideIcon {
   return ICON_MAP[iconName] ?? FileText;
 }
 
+// -------------------- Collapsed-Rail Tooltip Positioning -------------------
+/*
+ * SINGLE source of truth for the positioning of every tooltip/label that
+ * appears when the sidebar is collapsed into the 48px icon rail.
+ *
+ *   side="right"         → opens to the RIGHT of the 48px collapsed rail,
+ *                          fully inside the main viewport (never overlaps
+ *                          the rail, never opens to the left/outside).
+ *   align="center"       → vertically centers the bubble on the icon's
+ *                          32×32 hover target so labels line up across
+ *                          every row of the rail (logo, theme, nav items,
+ *                          parent items with submenu).
+ *   sideOffset=8         → ~8px visible gap from the trigger button's right
+ *                          edge (button right edge ~x=40 inside the 48px
+ *                          rail, tooltip left edge ~x=48 = the rail's
+ *                          right edge — flush with the RAIL, NOT with the
+ *                          icon, so the bubble never touches the glyph).
+ *   collisionPadding=12 → 12px viewport-edge collision padding so the
+ *                          bubble can never be clipped at any viewport
+ *                          edge or scroll past the visible area.
+ *
+ * Portal-based rendering (Radix TooltipPrimitive.Portal → document.body,
+ * wired inside src/components/ui/tooltip.tsx) means every tooltip is
+ * rendered OUTSIDE the sidebar DOM tree — so the sidebar's
+ * overflow-hidden / overflow-x-hidden on the rail container can NEVER
+ * clip or hide the bubble. The tooltip floats above every other
+ * element at z-50.
+ *
+ * Used by:
+ *   • CollapsedLogoButton         (header "Expand" tooltip)
+ *   • SimpleNavItem              (leaf nav items: Dashboard, Articles,
+ *                                  Calendar, Media, Users, Comments,
+ *                                  Newsletter, SEO, AI, Automation)
+ *   • ExpandableNavItem          (parent nav items in EXPANDED state —
+ *                                  tooltip is hidden by SidebarMenuButton
+ *                                  when state!=="collapsed", but the
+ *                                  positioning object is still applied
+ *                                  so the prop stays consistent across
+ *                                  every nav item renderer)
+ *   • CollapsedParentNavItem     (parent nav items in COLLAPSED state —
+ *                                  label tooltip shows when the floating
+ *                                  popover is CLOSED; when the popover is
+ *                                  open, no tooltip shows to avoid visual
+ *                                  conflict)
+ *
+ * The ThemeToggle component (src/components/layout/theme-toggle.tsx) lives
+ * in a separate file and inlines the SAME four values — see the comment
+ * there for the rationale.
+ */
+const COLLAPSED_TOOLTIP_PROPS: React.ComponentProps<typeof TooltipContent> = {
+  side: 'right',
+  align: 'center',
+  sideOffset: 8,
+  collisionPadding: 12,
+};
+
 // -------------------- Navigation Config --------------------
 
 const NAV_ITEMS: NavItem[] = [
@@ -371,7 +427,14 @@ function CollapsedLogoButton() {
           <span className="sr-only">Expand sidebar</span>
         </button>
       </TooltipTrigger>
-      <TooltipContent side="right" sideOffset={8}>Expand</TooltipContent>
+      {/* Collapsed-rail tooltip — uses the SHARED COLLAPSED_TOOLTIP_PROPS
+          constant so the "Expand" label has IDENTICAL positioning (side,
+          align, sideOffset, collisionPadding) to every other collapsed-
+          rail tooltip (ThemeToggle, SimpleNavItem, ExpandableNavItem,
+          CollapsedParentNavItem). Portal-based rendering means the bubble
+          floats outside the sidebar DOM at z-50 — never clipped by the
+          rail's overflow-hidden. */}
+      <TooltipContent {...COLLAPSED_TOOLTIP_PROPS}>Expand</TooltipContent>
     </Tooltip>
   );
 }
@@ -485,7 +548,20 @@ function CollapsedParentNavItem({
             isActive={isActive || floatOpen}
             aria-expanded={floatOpen}
             aria-haspopup="menu"
-            tooltip={floatOpen ? undefined : item.label}
+            // Collapsed-rail tooltip — uses the SHARED COLLAPSED_TOOLTIP_PROPS
+            // so the parent item's label has IDENTICAL positioning (side,
+            // align, sideOffset, collisionPadding) to every other collapsed-
+            // rail tooltip (CollapsedLogoButton, ThemeToggle, SimpleNavItem,
+            // ExpandableNavItem). Suppressed when the popover is open so the
+            // floating submenu never visually conflicts with a lingering
+            // label bubble. Portal-based rendering means the bubble floats
+            // outside the sidebar DOM at z-50 — never clipped by the rail's
+            // overflow-hidden.
+            tooltip={
+              floatOpen
+                ? undefined
+                : { ...COLLAPSED_TOOLTIP_PROPS, children: item.label }
+            }
             onClick={(e: React.MouseEvent) => {
               e.preventDefault();
               setFloatOpen((o) => !o);
@@ -560,7 +636,15 @@ function ExpandableNavItem({
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
-        tooltip={item.label}
+        // Expandable parent item rendered in EXPANDED state. SidebarMenuButton
+        // hides its tooltip whenever state!=="collapsed" (see ui/sidebar.tsx),
+        // so this label never shows while expanded — but passing the SAME
+        // COLLAPSED_TOOLTIP_PROPS object as every other nav-item renderer
+        // keeps the prop consistent across the codebase. If the sidebar
+        // toggles between expanded and collapsed while this row stays
+        // mounted, the tooltip that appears is identical in positioning to
+        // SimpleNavItem / CollapsedParentNavItem / CollapsedLogoButton.
+        tooltip={{ ...COLLAPSED_TOOLTIP_PROPS, children: item.label }}
         isActive={isActive}
         onClick={(e: React.MouseEvent) => {
           e.preventDefault();
@@ -638,7 +722,16 @@ function SimpleNavItem({
       <SidebarMenuButton
         asChild
         isActive={isActive}
-        tooltip={item.label}
+        // Collapsed-rail tooltip — uses the SHARED COLLAPSED_TOOLTIP_PROPS
+        // so every leaf nav item (Dashboard, Articles, Calendar, Media,
+        // Users, Comments, Newsletter, SEO, AI, Automation) shows its label
+        // to the RIGHT of the 48px collapsed rail with IDENTICAL positioning
+        // (side, align, sideOffset, collisionPadding) to every other
+        // collapsed-rail tooltip (CollapsedLogoButton, ThemeToggle,
+        // ExpandableNavItem, CollapsedParentNavItem). Portal-based rendering
+        // means the bubble floats outside the sidebar DOM at z-50 — never
+        // clipped by the rail's overflow-hidden.
+        tooltip={{ ...COLLAPSED_TOOLTIP_PROPS, children: item.label }}
       >
         <a
           href={item.href}

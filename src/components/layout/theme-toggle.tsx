@@ -18,6 +18,28 @@ import {
  *
  * No second theme state is introduced; clicking only flips the global
  * theme exactly like the original inline topbar button did.
+ *
+ * TOOLTIP POSITIONING (collapsed-rail only — the topbar usage returns
+ * the bare button, so this only fires when withTooltip=true):
+ *   side="right"          → opens to the RIGHT of the 48px collapsed
+ *                            rail, fully inside the main viewport.
+ *   align="center"        → vertically centers the bubble on the icon's
+ *                            32×32 hover target.
+ *   sideOffset=8          → ~8px visible gap from the trigger button's
+ *                            right edge (tooltip left edge flush with
+ *                            the rail's right edge — never touches the
+ *                            icon glyph).
+ *   collisionPadding=12  → 12px viewport-edge collision padding so the
+ *                            bubble is never clipped at any viewport
+ *                            edge.
+ * These four values are the SAME ones defined as COLLAPSED_TOOLTIP_PROPS
+ * in src/components/layout/sidebar.tsx and applied to every other
+ * collapsed-rail tooltip (CollapsedLogoButton, SimpleNavItem,
+ * ExpandableNavItem, CollapsedParentNavItem). The values are inlined
+ * here (instead of importing the constant) because theme-toggle.tsx is
+ * a leaf component with no other sidebar coupling — keeping the values
+ * local keeps the file self-contained while still guaranteeing identical
+ * positioning. If you change them here, change them in sidebar.tsx too.
  */
 export function ThemeToggle({ withTooltip = false }: { withTooltip?: boolean }) {
   const { theme, setTheme } = useTheme();
@@ -40,7 +62,14 @@ export function ThemeToggle({ withTooltip = false }: { withTooltip?: boolean }) 
   return (
     <Tooltip>
       <TooltipTrigger asChild>{button}</TooltipTrigger>
-      <TooltipContent side="right">Toggle theme</TooltipContent>
+      <TooltipContent
+        side="right"
+        align="center"
+        sideOffset={8}
+        collisionPadding={12}
+      >
+        Toggle theme
+      </TooltipContent>
     </Tooltip>
   );
 }
