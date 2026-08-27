@@ -297,19 +297,28 @@ function LogoMark() {
  *
  * HOVER BEHAVIOR (collapsed state only — this button is rendered ONLY
  * inside the collapsed-rail cluster, so the expanded logo is untouched):
- *   • at rest ............ shows the "C" logo mark (normal state)
- *   • on mouse-enter ..... the "C" is replaced by a PanelLeftOpen icon —
- *                           the visual opposite of the PanelLeftClose icon
- *                           used by the CollapseToggle in the expanded header,
- *                           so the collapsed logo doubles as a discoverable
- *                           "click to expand" affordance
- *   • on mouse-leave ..... restores the "C" logo mark
+ *   • at rest ............ shows the "C" logo mark on its bg-primary black
+ *                           box (normal logo — background UNCHANGED, same
+ *                           as the expanded LogoMark)
+ *   • on mouse-enter ..... the "C" is replaced by a PanelLeftOpen icon AND
+ *                           the button's background becomes transparent
+ *                           (hover:bg-transparent) so ONLY the Expand icon
+ *                           is visible with no box behind it. The icon color
+ *                           also switches to muted-foreground (gray) so it
+ *                           stays visible against the transparent/page bg in
+ *                           both Light and Dark mode.
+ *   • on mouse-leave ..... restores the "C" logo mark AND its bg-primary box
  *   • click ............. calls toggleSidebar (existing functionality, unchanged)
+ *
+ * Background is removed ONLY from the temporary Expand-icon state; the
+ * normal logo (at rest) keeps its bg-primary background exactly as-is.
  *
  * Implementation: pure-CSS group-hover swap — no React state, no re-render.
  * The button gets `group`; the "C" span gets `group-hover:hidden`; the icon
  * gets `hidden group-hover:block`. Tailwind specificity guarantees the
- * hovered `group-hover:*` rules win over the at-rest `hidden` rule.
+ * hovered `group-hover:*` rules win over the at-rest `hidden` rule. The
+ * `hover:bg-transparent` / `hover:text-muted-foreground` overrides likewise
+ * win over the at-rest `bg-primary` / `text-primary-foreground` on `:hover`.
  */
 function CollapsedLogoButton() {
   const { toggleSidebar } = useSidebar();
@@ -324,7 +333,7 @@ function CollapsedLogoButton() {
           type="button"
           onClick={toggleSidebar}
           aria-label="Expand sidebar"
-          className="group flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg font-bold text-sm text-muted-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring select-none"
+          className="group flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-primary font-bold text-sm text-primary-foreground hover:bg-transparent hover:text-muted-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring select-none"
         >
           {/* "C" logo mark — visible at rest, hidden on hover. */}
           <span className="group-hover:hidden">C</span>
@@ -332,13 +341,21 @@ function CollapsedLogoButton() {
               visual opposite of the CollapseToggle's PanelLeftClose icon
               (expanded header), so the collapsed logo reads as a clear
               "expand" affordance when the pointer is over it. h-4 w-4
-              matches the CollapseToggle icon size. The button's
-              background is transparent (bg-primary removed) so only the
-              icon glyph is visible — text-muted-foreground inherited
-              from the button keeps the icon (and the at-rest "C")
-              visible against the transparent/page background in both
-              Light and Dark mode, matching the other collapsed-rail
-              ghost buttons (ThemeToggle / Bell / Avatar). */}
+              matches the CollapseToggle icon size.
+
+              BACKGROUND LOGIC (per state):
+              • at rest ........ button has bg-primary + text-primary-foreground
+                                 → the "C" is white on the black box (NORMAL
+                                 LOGO keeps its background, UNCHANGED).
+              • on hover ....... hover:bg-transparent + hover:text-muted-foreground
+                                 override the at-rest bg/color → the Expand icon
+                                 is gray on a TRANSPARENT background (ONLY the
+                                 temporary Expand-icon state has no background).
+              The "C" span is hidden via group-hover:hidden on hover so it
+              never shows during the icon state; the icon is hidden via
+              `hidden` at rest so it never shows during the logo state. Both
+              children inherit the button's current color (white at rest,
+              gray on hover). Works in both Light and Dark mode. */}
           <PanelLeftOpen className="hidden h-4 w-4 group-hover:block" />
           <span className="sr-only">Expand sidebar</span>
         </button>

@@ -3999,3 +3999,41 @@ Stage Summary:
 - Icon glyph (PanelLeftOpen): unchanged. Size (h-8 w-8): unchanged. Position (collapsed-rail cluster, top): unchanged. Hover behavior (group-hover swap C↔icon): unchanged. onClick (toggleSidebar → expands sidebar): unchanged.
 - The expanded site logo (LogoMark) is UNCHANGED — still has its bg-primary dark box with white "C" (DOM + pixel + VLM confirmed).
 - No other sidebar/header elements were modified.
+
+---
+Task ID: 12
+Agent: main (orchestrator)
+Task: Remove the background ONLY from the "Expand" state icon (hover state) of the collapsed-rail logo button. The normal at-rest "C" logo must KEEP its bg-primary background exactly as-is. Only the temporary hover Expand-icon state should have a transparent background. Keep icon glyph, size, position, hover swap behavior, and onClick unchanged. Do not modify the expanded site logo (LogoMark).
+
+Work Log:
+- Re-read CollapsedLogoButton (sidebar.tsx ~L323-362) — current state from task 11: className had bg-primary REMOVED and text-muted-foreground (so BOTH at-rest "C" AND hover icon had no background). This was task 11's interpretation, but task 12 clarifies: only the HOVER Expand-icon state should lose the bg; the at-rest "C" must keep it.
+- Root cause of task 11 over-reach: removing bg-primary from the button className affected both states (the className is shared). Needed a per-state bg override.
+- Fix via MultiEdit (3 edits — JSDoc, className, inline comment):
+  * RESTORED `bg-primary` to the className (at-rest "C" keeps its black box — normal logo background UNCHANGED, same as the expanded LogoMark).
+  * RESTORED `text-primary-foreground` (at-rest "C" is white-on-black, same as before task 11).
+  * ADDED `hover:bg-transparent` — on :hover the button bg becomes transparent so ONLY the Expand icon state has no background.
+  * ADDED `hover:text-muted-foreground` — on :hover the color switches to muted-foreground (gray) so the icon stays visible against the transparent/page bg in both Light and Dark mode (white-on-transparent would be invisible in light mode). The "C" span is hidden via group-hover:hidden on hover so only the icon gets the gray color.
+  * Kept EVERYTHING else unchanged: group, flex, h-8 w-8 (size), shrink-0, cursor-pointer, items-center, justify-center, rounded-lg, font-bold, text-sm, outline-none, transition-opacity, hover:opacity-90 (hover behavior), focus-visible:ring-2, focus-visible:ring-ring, select-none.
+  * Kept the group-hover swap structure (C span + PanelLeftOpen svg), onClick={toggleSidebar}, Tooltip, sr-only span — all unchanged.
+  * Updated JSDoc + inline comment to document the per-state background logic (at-rest = bg-primary box; hover = transparent).
+- Final className: "group flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-primary font-bold text-sm text-primary-foreground hover:bg-transparent hover:text-muted-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring select-none"
+- Verified the expanded LogoMark component (sidebar.tsx ~L279-288) was NOT touched — still has its own bg-primary + text-primary-foreground.
+- Ran `bun run lint` — 0 sidebar.tsx errors. Dev.log: server running, no compile/runtime errors.
+- agent-browser verification (viewport 1440x900, logged in as admin):
+  * LIGHT MODE — AT REST: DOM bgColor=lab(7.78) = near-black (bg-primary box RESTORED ✓), color=lab(98.26)=white ("C"), hasBgPrimary=true, hasHoverBgTransparent=true. Pixel (24,28)=(23,23,23)=black box. The "C" has its black box back. ✓
+  * LIGHT MODE — HOVER (injected non-gated group-hover + hover:bg-transparent + hover:text-muted-foreground rules to bypass headless hover:none media gate): DOM bgColor=rgba(0,0,0,0)=TRANSPARENT ✓, color=lab(48.496)=muted-foreground gray ✓, svgDisplay=block (icon visible) ✓. Dense pixel sweep: icon strokes at x=22,x=26 = gray (160,147); surrounding = white (250,250,250) = sidebar bg showing through. ZERO dark box pixels. VLM confirmed: "icon sitting directly on the white/light sidebar background with NO dark/black box behind it." ✓
+  * DARK MODE — AT REST: DOM bgColor=lab(90.95)=light (bg-primary in dark mode, theme-adaptive — the normal logo keeps its background, which renders light-in-dark/dark-in-light as designed ✓), color=lab(7.78)=dark "C". Pixel (24,28)=(229,229,229)=light box present. ✓
+  * DARK MODE — HOVER (injected rules): DOM bgColor=rgba(0,0,0,0)=transparent ✓, color=lab(66.128)=muted-foreground gray (slightly lighter in dark mode) ✓, svgDisplay=block ✓. Pixel (24,28)=(23,23,23)=dark sidebar showing through (no light box). Dense pixel sweep of button area (8-40,13-44): 0 light pixels (>200 avg), 226 dark pixels (sidebar bg), 30 gray pixels (icon strokes). DEFINITIVE: no light box behind the icon in dark hover. (VLM misperceived the nearby light Radix Tooltip bubble as a "box" — pixel sweep disproved this.) ✓
+  * REGRESSION — expanded LogoMark unchanged: DOM query found totalBgPrimary=8 (was 7 in task 11 — the 8th is the CollapsedLogoButton's bg-primary now restored). headerLogoFound=true, headerLogoClasses includes "bg-primary text-primary-foreground" — the expanded site logo is UNCHANGED. Pixel LogoMark center=(229,229,229)=light box (bg-primary in dark mode). ✓
+  * Click-to-expand: clicked the collapsed logo, sidebar expanded (snapshot showed "Collapse sidebar" button return). onClick toggleSidebar functionality unchanged. ✓
+- Cleaned up all injected test styles after verification.
+- Screenshots in /home/z/my-project/tool-results/: task12-rest-has-box.png (light at-rest, black box present), task12-hover-complete.png (light hover, icon on transparent), task12-dark-rest.png (dark at-rest, light box present), task12-dark-hover.png (dark hover, icon on transparent), task12-expanded-regression.png (expanded LogoMark still has box).
+
+Stage Summary:
+- Partial revert of task 11: restored bg-primary + text-primary-foreground for the AT-REST "C" state (normal logo keeps its background), but added hover:bg-transparent + hover:text-muted-foreground so ONLY the HOVER Expand-icon state loses the background.
+- At rest: "C" on its bg-primary box (black-in-light, light-in-dark — theme-adaptive, exactly as the normal logo was before task 11). UNCHANGED.
+- On hover: "C" hidden (group-hover:hidden), PanelLeftOpen icon visible (group-hover:block), button bg transparent (hover:bg-transparent), icon gray (hover:text-muted-foreground). ONLY the Expand-icon state has no background.
+- Icon glyph (PanelLeftOpen): unchanged. Size (h-8 w-8): unchanged. Position: unchanged. Hover swap behavior (group-hover C↔icon): unchanged. onClick (toggleSidebar): unchanged.
+- The expanded site logo (LogoMark) is UNCHANGED — DOM + pixel confirmed it still has its bg-primary box.
+- Works in both Light and Dark mode (DOM + dense pixel sweeps confirm: 0 light/dark box pixels in the hover-state button area; at-rest has the bg-primary box in both themes).
+- The headless browser's (hover: hover):false media-gate limitation required injecting non-gated hover rules to verify the hover state. On a real browser, hover:bg-transparent + hover:text-muted-foreground + the group-hover swap all activate natively. The injected styles were removed after verification.
