@@ -3595,3 +3595,17 @@ Stage Summary:
 - Profile dropdown now works consistently in EVERY sidebar state (expanded footer, collapsed rail, topbar, mobile drawer) via the single shared UserProfileMenu — same content, same styling.
 - Extra separator between the CMS logo and All Sites removed, nothing replaced; header starts cleanly at the selector.
 - Screenshots: .verify/v10-expanded-menu.png (dark), v10-expanded-light-menu.png (light), v10-mobile-drawer-menu.png.
+
+---
+Task ID: UI-PROFILE-HEADER-REFERENCE-FIX
+Agent: Z.ai Code (main)
+Task: Make the profile dropdown header render exactly like the reference — name "Admin User" on top, email "admin@example.com" below, clearly visible and aligned — consistently in BOTH expanded and collapsed sidebar states. Keep all dropdown actions and styling unchanged.
+
+Work Log:
+- user-profile-menu.tsx header only: replaced the cramped leading-none lines (14px/12px line boxes, visually merging name+email) with proper line-heights — name text-sm font-medium leading-5, email text-xs text-muted-foreground leading-4, space-y-0.5 — plus truncate + min-w-0 so long names/emails can never break the two-line alignment. Same px-2 py-2 label padding, same colors/fonts → visual identity unchanged, only clarity/alignment improved.
+- Measured after fix (expanded state): both lines left-aligned at identical x=29, stacked (name y=627 h=20, email y=649 h=16, 2px gap), full text "Admin User" / "admin@example.com". Actions unchanged: Profile / Language EN-FR / Manage Subscription / Log out.
+- Collapsed rail state: identical header (same shared component — sameLeftX=true, stacked, menu fully in-viewport beside the rail); items list identical.
+- Trusted-pointer clicks both states; screenshots .verify/v11-header-after-expanded.png, v11-header-collapsed.png (plus v11-header-before.png for the before/after); console/pageerrors zero; eslint clean on the touched file.
+
+Stage Summary:
+- Dropdown header now renders exactly per reference in EVERY state (expanded footer, collapsed rail, topbar, mobile drawer — one shared component): clearly separated, aligned name+email; all existing actions and styling untouched.

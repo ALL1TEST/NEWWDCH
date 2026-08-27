@@ -72,11 +72,17 @@ export function UserProfileMenu({
         align={align}
         collisionPadding={collisionPadding}
       >
-        {/* 1 — Profile header (name + email, compact) */}
+        {/* 1 — Profile header (name + email, stacked exactly like the
+            reference: name on top, email below, both left-aligned and
+            clearly separated). leading-5/leading-4 give the lines real
+            breathing room (leading-none cramped them together); truncate
+            keeps long names/emails from breaking the alignment. */}
         <DropdownMenuLabel className="font-normal px-2 py-2">
-          <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{user?.name ?? 'User'}</p>
-            <p className="text-xs leading-none text-muted-foreground">
+          <div className="flex min-w-0 flex-col space-y-0.5">
+            <p className="truncate text-sm font-medium leading-5">
+              {user?.name ?? 'User'}
+            </p>
+            <p className="truncate text-xs leading-4 text-muted-foreground">
               {user?.email ?? ''}
             </p>
           </div>
