@@ -39,12 +39,15 @@ export function UserProfileMenu({
   children,
   side,
   align = 'end',
+  collisionPadding,
 }: {
   /** The dropdown trigger element (must accept refs / event props). */
   children: React.ReactNode;
   /** Optional Radix side override (e.g. right for the collapsed rail). */
   side?: 'top' | 'right' | 'bottom' | 'left';
   align?: 'start' | 'center' | 'end';
+  /** Optional viewport collision padding (corner-anchored triggers). */
+  collisionPadding?: number;
 }) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
@@ -60,7 +63,14 @@ export function UserProfileMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56" side={side} align={align}>
+      {/* z-[60]: floats above sidebar (z-10) and sticky headers (z-40/50)
+          so the menu is never hidden behind any layer. */}
+      <DropdownMenuContent
+        className="w-56 z-[60]"
+        side={side}
+        align={align}
+        collisionPadding={collisionPadding}
+      >
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">{user?.name ?? 'User'}</p>

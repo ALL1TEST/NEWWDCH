@@ -3471,3 +3471,19 @@ Stage Summary:
 - Collapsed rail bottom = Theme → Notifications → Profile exactly per reference; header shows these only when sidebar expanded (desktop) or on mobile; collapse icon before All Sites fully removed (desktop) with collapse functionality preserved via sidebar CollapseToggle / C-logo / rail edge / mobile hamburger.
 - Reused single components everywhere: ThemeToggle, NotificationBell, UserProfileMenu — no second theme state, no duplicated notification/profile systems, no fake controls.
 - Screenshots: .verify/v2-*.png (expanded, collapsed, dark rail/bell/settings/avatar, 1024, mobile, final expanded). Dev server running on :3000.
+
+---
+Task ID: UI-COLLAPSED-RAIL-UTILITIES-V3
+Agent: Z.ai Code (main)
+Task: Fix 3 collapsed-sidebar issues — (1) avatar popover reliability/positioning, (2) hover-only "Expand" tooltip on C logo, (3) Search icon grouped next to the expand control in the header when collapsed.
+
+Work Log:
+- Reproduced avatar flow in browser first: menu DOES open via element-click AND raw coordinate click at 1440x900 → concluded the reported failure is viewport/positioning related; hardened accordingly.
+- Avatar popover (rail): side="right" align="end" + collisionPadding=8 → menu now grows UPWARD from the bottom-corner avatar; trigger Button gets type="button" + aria-haspopup; UserProfileMenu accepts collisionPadding and renders content with z-[60] (above sidebar z-10 / header z-40) — verified fully in viewport at 900px AND 700px heights, outside-click closes, rail stays 48px.
+- C-logo tooltip: existing Radix tooltip confirmed working; hardened with disableHoverableContent + sideOffset=8 (provider delayDuration=0 already). Browser: mouse-enter → dark "Expand" tooltip right of logo, vertically centered; mouse-leave → unmounts (hover-only verified via DOM). Duplicate-text scare was Radix's 1x1 sr-only announcer — benign.
+- Topbar collapsed header: railCollapsed now renders icon-only Search at header LEFT (immediately after the 48px rail, aligned with C logo row, before All Sites); the wide "Search..." pill + mobile icon moved INSIDE the !railCollapsed fragment → zero duplicates; expanded/mobile header layout unchanged.
+- Full acceptance pass (agent-browser, light+dark, 1440/1280x700/1024/375): collapsed = [C][Search][All Sites][breadcrumbs] header + rail bottom ☀/☾ → 🔔4 → AU; tooltip hover on/off; logo click expands (256px); header Search opens command palette; avatar popover (Admin User/email/Profile/Language EN-FR/Manage Subscription/Log out) upward, in-viewport, outside-click closes, no sidebar expansion; expanded state restores Admin User + ADMIN + logout + right-side Search pill + Theme/Bell/Profile; Settings inline submenu (expanded) and floating popover (collapsed) both fine; mobile keeps hamburger + drawer; console/page errors none; eslint clean.
+
+Stage Summary:
+- All three reported issues fixed without touching nav/routing/theme/notification/profile logic; single-source components preserved (UserProfileMenu, NotificationBell, ThemeToggle, Radix tooltip).
+- Screenshots: .verify/v3-*.png (collapsed header grouping, tooltip, avatar popover @900px & @700vh, dark collapsed, expanded settings).

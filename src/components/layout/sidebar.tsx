@@ -297,7 +297,11 @@ function LogoMark() {
 function CollapsedLogoButton() {
   const { toggleSidebar } = useSidebar();
   return (
-    <Tooltip>
+    /* Hover-only "Expand" tooltip: instant (provider delayDuration=0),
+       appears on mouse-enter, disappears on mouse-leave. Radix closes it
+       on any pointer exit — disableHoverableContent guarantees it can
+       never linger or trap the pointer. */
+    <Tooltip disableHoverableContent>
       <TooltipTrigger asChild>
         <button
           type="button"
@@ -309,7 +313,7 @@ function CollapsedLogoButton() {
           <span className="sr-only">Expand sidebar</span>
         </button>
       </TooltipTrigger>
-      <TooltipContent side="right">Expand</TooltipContent>
+      <TooltipContent side="right" sideOffset={8}>Expand</TooltipContent>
     </Tooltip>
   );
 }
@@ -831,13 +835,18 @@ export function AppSidebar() {
           {/* Existing notification bell — icon-only trigger, live badge */}
           <NotificationBell />
 
-          {/* Avatar ONLY — tapping it opens the shared profile menu that
-              floats beside the rail; the sidebar itself never expands. */}
-          <UserProfileMenu side="right" align="start">
+          {/* Avatar ONLY — tapping it opens the shared profile menu.
+              side="right" + align="end" makes the menu grow UPWARD from
+              the bottom-corner avatar, so it is always fully inside the
+              viewport beside the collapsed rail. The sidebar itself never
+              expands; outside click / Esc close it (Radix portal, z-50). */}
+          <UserProfileMenu side="right" align="end" collisionPadding={8}>
             <Button
+              type="button"
               variant="ghost"
               className="h-8 w-8 shrink-0 rounded-full"
               aria-label={`${user.name} — open profile menu`}
+              aria-haspopup="menu"
             >
               <Avatar className="h-8 w-8">
                 <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} />

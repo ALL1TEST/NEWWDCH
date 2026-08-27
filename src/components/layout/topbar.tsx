@@ -437,6 +437,22 @@ export function Topbar() {
 
       <Separator orientation="vertical" className="mr-1 h-4 sm:hidden" />
 
+      {/* COLLAPSED rail: Search icon grouped directly with the expand
+          control (the "C" logo) — the single search entry point in this
+          state, so no duplicate lives on the right side of the header. */}
+      {railCollapsed && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={openCommandPalette}
+          aria-label="Search"
+        >
+          <Search className="h-4 w-4" />
+          <span className="sr-only">Search</span>
+        </Button>
+      )}
+
       {/* Site Selector */}
       <SiteSelector />
 
@@ -447,32 +463,33 @@ export function Topbar() {
         <Breadcrumbs />
       </div>
 
-      {/* Right side actions */}
+      {/* Right side actions — while the rail is collapsed, Search has
+          moved next to the expand control on the left and Theme /
+          Notifications / Profile live in the rail, so this area stays
+          empty (no duplicates). */}
       <div className="flex items-center gap-1">
-        {/* Search button */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="hidden sm:flex h-8 w-48 justify-start gap-2 text-muted-foreground font-normal"
-          onClick={openCommandPalette}
-        >
-          <Search className="h-4 w-4" />
-          <span className="text-xs">Search...</span>
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 sm:hidden"
-          onClick={openCommandPalette}
-        >
-          <Search className="h-4 w-4" />
-          <span className="sr-only">Search</span>
-        </Button>
-
-        {/* Theme / Notifications / Profile — hidden while the collapsed
-            rail shows them (single source, no duplicates). */}
         {!railCollapsed && (
           <>
+            {/* Search button (wide pill on desktop, icon on mobile) */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hidden sm:flex h-8 w-48 justify-start gap-2 text-muted-foreground font-normal"
+              onClick={openCommandPalette}
+            >
+              <Search className="h-4 w-4" />
+              <span className="text-xs">Search...</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 sm:hidden"
+              onClick={openCommandPalette}
+            >
+              <Search className="h-4 w-4" />
+              <span className="sr-only">Search</span>
+            </Button>
+
             {/* Theme toggle (shared component, same next-themes state) */}
             <ThemeToggle />
 
