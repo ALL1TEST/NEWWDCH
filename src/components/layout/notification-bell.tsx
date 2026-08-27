@@ -176,7 +176,7 @@ export function NotificationBell({
              Dropdown. hidden={open} forces the Tooltip content
              display:none while the dropdown is open so the label never
              visually conflicts with the open panel. */
-          <Tooltip>
+          <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative h-8 w-8">

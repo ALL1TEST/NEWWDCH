@@ -60,7 +60,7 @@ export function ThemeToggle({ withTooltip = false }: { withTooltip?: boolean }) 
   if (!withTooltip) return button;
 
   return (
-    <Tooltip>
+    <Tooltip disableHoverableContent>
       <TooltipTrigger asChild>{button}</TooltipTrigger>
       <TooltipContent
         side="right"

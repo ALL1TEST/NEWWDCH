@@ -138,7 +138,7 @@ export function UserProfileMenu({
            the Dropdown. hidden={open} forces the Tooltip content
            display:none while the dropdown is open so the label never
            visually conflicts with the open profile menu panel. */
-        <Tooltip>
+        <Tooltip disableHoverableContent>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
               {children}
