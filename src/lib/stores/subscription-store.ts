@@ -11,7 +11,24 @@ export interface Plan {
   currency: string;
   interval: string;
   features: string[];
-  badgeVariant: 'beta' | 'pro' | 'max';
+  /** Open key — new plans just set their own id; no union to extend. */
+  badgeVariant: string;
+  /** Per-plan badge styling — the SINGLE source of truth for every badge
+      render site (topbar avatar, profile dropdown, billing, profile).
+      Adding a plan = adding an entry with its own colors; zero component
+      changes. Plans without explicit styling get the neutral fallback. */
+  badgeStyle: PlanBadgeStyle;
+}
+
+export interface PlanBadgeStyle {
+  /** Solid pill rendered on the avatar (topbar) — bold, own text color. */
+  avatar: string;
+  /** Soft/tinted badge (profile dropdown header, billing card, profile page). */
+  soft: string;
+  /** Avatar ring accent (topbar avatar). */
+  ring: string;
+  /** Billing plan-card border accent. */
+  cardBorder: string;
 }
 
 export interface SubscriptionState {
@@ -47,6 +64,12 @@ const PLANS: Plan[] = [
       '1 GB storage',
     ],
     badgeVariant: 'beta',
+    badgeStyle: {
+      avatar: 'bg-amber-500 text-white',
+      soft: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+      ring: 'ring-amber-500',
+      cardBorder: 'border-amber-200 dark:border-amber-800',
+    },
   },
   {
     id: 'pro',
@@ -63,6 +86,12 @@ const PLANS: Plan[] = [
       'Custom domains',
     ],
     badgeVariant: 'pro',
+    badgeStyle: {
+      avatar: 'bg-violet-500 text-white',
+      soft: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300 border-violet-200 dark:border-violet-800',
+      ring: 'ring-violet-500',
+      cardBorder: 'border-violet-200 dark:border-violet-800',
+    },
   },
   {
     id: 'max',
@@ -82,6 +111,12 @@ const PLANS: Plan[] = [
       'Audit log',
     ],
     badgeVariant: 'max',
+    badgeStyle: {
+      avatar: 'bg-emerald-500 text-white',
+      soft: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+      ring: 'ring-emerald-500',
+      cardBorder: 'border-emerald-200 dark:border-emerald-800',
+    },
   },
 ];
 
@@ -176,37 +211,38 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => {
 
 // -------------------- Badge Styles --------------------
 
+/** Fallback for any plan that ships without explicit badge styling —
+    guarantees a future plan still renders a sensible, theme-aware badge
+    instead of an invisible/unstyled one. */
+const NEUTRAL_PLAN_BADGE: PlanBadgeStyle = {
+  avatar: 'bg-primary text-primary-foreground',
+  soft: 'bg-muted text-muted-foreground border border-border',
+  ring: 'ring-border',
+  cardBorder: 'border-border',
+};
+
+/** Resolve the badge style for a plan object (never returns undefined). */
+export function getPlanBadgeStyle(plan: Plan | null | undefined): PlanBadgeStyle {
+  return plan?.badgeStyle ?? NEUTRAL_PLAN_BADGE;
+}
+
+/** Soft badge classes by plan id/variant — config-driven, no switch.
+    Used by the billing and profile pages. Unknown variants get the
+    neutral fallback so future plans render correctly by default. */
 export function getPlanBadgeClasses(variant: Plan['badgeVariant']): string {
-  switch (variant) {
-    case 'beta':
-      return 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200 dark:border-amber-800';
-    case 'pro':
-      return 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300 border-violet-200 dark:border-violet-800';
-    case 'max':
-      return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
-    default:
-      return '';
-  }
+  const plan = PLANS.find((p) => p.id === variant || p.badgeVariant === variant);
+  return getPlanBadgeStyle(plan).soft;
 }
 
+/** Billing plan-card border accent by plan id/variant. */
 export function getPlanCardBorderClasses(variant: Plan['badgeVariant']): string {
-  switch (variant) {
-    case 'beta':
-      return 'border-amber-200 dark:border-amber-800';
-    case 'pro':
-      return 'border-violet-200 dark:border-violet-800';
-    case 'max':
-      return 'border-emerald-200 dark:border-emerald-800';
-    default:
-      return '';
-  }
+  const plan = PLANS.find((p) => p.id === variant || p.badgeVariant === variant);
+  return getPlanBadgeStyle(plan).cardBorder;
 }
 
+/** Display label by plan id/variant — always resolves to the plan's own
+    configured name (falls back to the raw variant string). */
 export function getPlanLabel(variant: Plan['badgeVariant']): string {
-  switch (variant) {
-    case 'beta': return 'Beta';
-    case 'pro': return 'Pro';
-    case 'max': return 'Max';
-    default: return variant;
-  }
+  const plan = PLANS.find((p) => p.id === variant || p.badgeVariant === variant);
+  return plan?.name ?? variant;
 }

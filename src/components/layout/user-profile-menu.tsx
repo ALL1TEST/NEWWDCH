@@ -10,6 +10,7 @@ import {
 import { cn, getInitials } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useSubscriptionStore, getPlanBadgeStyle } from '@/lib/stores/subscription-store';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useSidebarStore } from '@/lib/stores/sidebar-store';
 import { useLocaleStore } from '@/lib/i18n';
@@ -54,6 +55,10 @@ export function UserProfileMenu({
   const closeMobile = useSidebarStore((s) => s.closeMobile);
   const locale = useLocaleStore((s) => s.locale);
   const setLocale = useLocaleStore((s) => s.setLocale);
+  // Live subscription state — the plan badge below re-renders automatically
+  // whenever the active plan changes (changePlan / setSubscription), in sync
+  // with the topbar avatar badge and every other plan surface.
+  const currentPlan = useSubscriptionStore((s) => s.currentPlan);
 
   const handleNavigate = (targetMod: string) => {
     useNavigationStore.getState().navigate(targetMod);
@@ -91,9 +96,22 @@ export function UserProfileMenu({
               </AvatarFallback>
             </Avatar>
             <div className="flex min-w-0 flex-col space-y-0.5">
-              <p className="truncate text-sm font-medium leading-5">
-                {user?.name ?? 'User'}
-              </p>
+              {/* Name + subscription badge — the chip's text and colors come
+                  from the ACTIVE plan's own config (badgeStyle + name), never
+                  hardcoded, so any current/future plan renders correctly. */}
+              <div className="flex min-w-0 items-center gap-1.5">
+                <p className="truncate text-sm font-medium leading-5">
+                  {user?.name ?? 'User'}
+                </p>
+                <span
+                  className={cn(
+                    'shrink-0 rounded border px-1.5 py-px text-[9px] font-semibold uppercase leading-4 tracking-wide',
+                    getPlanBadgeStyle(currentPlan).soft,
+                  )}
+                >
+                  {currentPlan.name}
+                </span>
+              </div>
               <p className="truncate text-xs leading-4 text-muted-foreground">
                 {user?.email ?? ''}
               </p>

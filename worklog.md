@@ -3631,3 +3631,22 @@ Stage Summary:
 - Profile menu works in BOTH sidebar states at ALL viewport heights including the previously broken 450px case (sidebar overflow root cause eliminated in admin-shell.tsx)
 - Frozen items untouched: All Sites, Search buttons, sidebar navigation, dashboard layout, dropdown item set/design
 - New asset: public/avatar-admin.png wired to admin account; initials fallback (getInitials) remains for users without an avatar
+
+---
+Task ID: SUB-PLAN-BADGE-DYNAMIC
+Agent: main (orchestrator)
+Task: Fix profile badge logic — badge must be dynamically derived from the user's ACTIVE subscription plan (name + color + style from the plan's own config), synchronized across topbar avatar, profile dropdown, billing, profile; no hardcoded per-plan values; future plans work automatically; avatar/menu/layout otherwise unchanged.
+
+Work Log:
+- Removed hardcoded per-plan ternaries in topbar.tsx (badgeVariant==='beta'?'ring-amber-500':… and the solid bg-amber/violet/emerald-500 pill switch) — replaced with getPlanBadgeStyle(currentPlan).ring / .avatar + {currentPlan.name}
+- subscription-store.ts refactor: Plan.badgeVariant opened from union to string; new required per-plan badgeStyle config (avatar / soft / ring / cardBorder strings) embedded in each PLANS entry (Beta=amber, Pro=violet, Max=emerald — same visual identity as before); helpers getPlanBadgeClasses / getPlanCardBorderClasses / getPlanLabel converted from switch statements to config lookups (by id OR badgeVariant); added getPlanBadgeStyle(plan) resolver + NEUTRAL_PLAN_BADGE fallback (bg-primary/bg-muted theme-aware) so any future plan — even one missing explicit styling — renders a correct badge with zero component changes
+- user-profile-menu.tsx: header name row now renders a subscription-synced plan chip (uppercase, rounded, soft style from getPlanBadgeStyle(currentPlan).soft, label=currentPlan.name); component subscribes via useSubscriptionStore((s)=>s.currentPlan) so it re-renders on changePlan/setSubscription
+- Compatibility: billing-page.tsx / profile-page.tsx call sites (getPlanBadgeClasses(variant), getPlanCardBorderClasses(variant)) unchanged — signatures preserved, now config-driven; unrelated media badgeVariant untouched
+- Browser verification (fresh login): Beta → topbar pill "Beta" amber-500 + amber ring, dropdown chip "Beta" amber-100/amber-800; live Upgrade to Pro (billing UI, no reload) → topbar pill+ring violet-500 instantly, dropdown chip "Pro" violet-100/violet-800; Upgrade to Max → emerald-500 pill + emerald-100 "Max" chip; profile page (#profile) renders amber Beta badges via shared helper; resilience: bogus currentPlanId 'enterprise-x' in cms_subscription storage + reload → store falls back to Beta display, no crash/unstyled badge; restored beta afterwards
+- Screenshots: .verify/v11-badge-beta-dropdown.png, v11-badge-pro-dropdown.png, v11-badge-max-dropdown.png, v11-badge-beta-restored.png
+- Health: zero console errors, zero pageerrors, zero dev.log errors; targeted eslint on all touched files clean
+
+Stage Summary:
+- Badge is now 100% subscription-driven: one source of truth (per-plan badgeStyle + name in PLANS config), consumed by topbar avatar (ring+solid pill), profile dropdown header (soft chip), billing cards, profile page
+- Plan changes propagate live (zustand) to every surface without reload; labels/colors/styles come solely from plan config — adding a 4th plan requires only a new PLANS entry
+- Avatar structure, profile menu items, and layout untouched (frozen per instructions)

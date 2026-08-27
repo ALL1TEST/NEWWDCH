@@ -15,7 +15,7 @@ import { getInitials, cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useSiteStore, type Site } from '@/lib/stores/site-store';
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
-import { useSubscriptionStore, getPlanLabel } from '@/lib/stores/subscription-store';
+import { useSubscriptionStore, getPlanBadgeStyle } from '@/lib/stores/subscription-store';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -481,27 +481,28 @@ export function Topbar() {
                 Same trigger markup as before; menu lives in UserProfileMenu. */}
             <UserProfileMenu align="end">
               <Button variant="ghost" className="relative h-8 w-8 rounded-full ml-2">
+                {/* Subscription-aware styling: ring + badge colors come from
+                    the ACTIVE plan's own badgeStyle config — no per-plan
+                    branching here. Switching plan re-renders this trigger
+                    via the zustand selector automatically. */}
                 <Avatar className={cn(
                   'h-8 w-8 rounded-full ring-2 ring-offset-2 ring-offset-background',
-                  currentPlan.badgeVariant === 'beta' && 'ring-amber-500',
-                  currentPlan.badgeVariant === 'pro' && 'ring-violet-500',
-                  currentPlan.badgeVariant === 'max' && 'ring-emerald-500',
+                  getPlanBadgeStyle(currentPlan).ring,
                 )}>
                   <AvatarImage src={user?.avatarUrl ?? undefined} alt={user?.name ?? 'User'} />
                   <AvatarFallback className="text-xs">
                     {user ? getInitials(user.name) : 'U'}
                   </AvatarFallback>
                 </Avatar>
-                {/* Plan badge centered at the bottom of the avatar */}
+                {/* Plan badge centered at the bottom of the avatar —
+                    label = the plan's own configured name. */}
                 <span
                   className={cn(
                     'absolute -bottom-1.5 left-1/2 -translate-x-1/2 flex items-center rounded-md px-1.5 py-0.5 text-[8px] font-bold leading-none whitespace-nowrap ring-2 ring-background',
-                    currentPlan.badgeVariant === 'beta' && 'bg-amber-500 text-white',
-                    currentPlan.badgeVariant === 'pro' && 'bg-violet-500 text-white',
-                    currentPlan.badgeVariant === 'max' && 'bg-emerald-500 text-white',
+                    getPlanBadgeStyle(currentPlan).avatar,
                   )}
                 >
-                  {getPlanLabel(currentPlan.badgeVariant)}
+                  {currentPlan.name}
                 </span>
               </Button>
             </UserProfileMenu>
