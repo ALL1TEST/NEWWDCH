@@ -136,6 +136,7 @@ export function RestorePage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        breadcrumbs={false}
         title="Restore"
         description="Restore your system from a previous backup"
       />

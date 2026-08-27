@@ -414,6 +414,7 @@ export function BackupsListPage() {
   return (
     <div className="space-y-4">
       <PageHeader
+        breadcrumbs={false}
         title="Backups"
         description="View and manage all backup operations"
         action={

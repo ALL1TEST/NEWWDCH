@@ -5,18 +5,17 @@ import { Database, Clock, RotateCcw, HardDrive, ScrollText, LayoutDashboard } fr
 import { cn } from '@/lib/utils';
 
 // -------------------- Backups Internal Navigation --------------------
-// Rendered in the topbar (next to the "All Sites" selector) when
-// currentModule === 'backups' — see src/components/layout/topbar.tsx.
-// The Backups section is the only module whose internal sub-pages/tabs
-// (Overview, Backups, Schedules, Restore, Storage, Logs) live in the
-// topbar; other modules use the sidebar + topbar breadcrumb pattern.
+// Rendered IN THE PAGE content (above the active sub-page) by
+// src/modules/backups/index.tsx — the tab bar with Overview, Backups,
+// Schedules, Restore, Storage, Logs. The topbar shows ONLY the breadcrumb
+// path "Overview > Backups" (see src/components/layout/breadcrumbs.tsx);
+// the tabs are NOT in the topbar.
 //
 // The tab buttons (labels, icons, active/inactive styling, click handlers)
-// are IDENTICAL to the previous in-page BackupsSubNav — only the position
-// changed (moved from above the page content into the top header). The
-// outer wrapper classes were trimmed (`mb-6 -mx-1 px-1 pb-1` removed —
-// those were in-page layout offsets; the topbar provides vertical centering
-// via its `flex items-center` and the parent's `flex-1 overflow-hidden`).
+// are unchanged. The outer wrapper provides the in-page layout offsets
+// (bottom margin to separate from the page content, horizontal
+// negative-margin + matching padding so tab focus rings align with the
+// content edge, horizontal scroll when the row overflows).
 
 const BACKUPS_TABS = [
   { key: null, label: 'Overview', icon: LayoutDashboard },
@@ -32,7 +31,7 @@ export function BackupsSubNav() {
   const navigate = useNavigationStore((s) => s.navigate);
 
   return (
-    <nav aria-label="Backups sections" className="overflow-x-auto min-w-0 h-full flex items-center">
+    <nav aria-label="Backups sections" className="mb-6 -mx-1 px-1 pb-1 overflow-x-auto">
       <div className="flex items-center gap-1 min-w-max">
         {BACKUPS_TABS.map((tab) => {
           const isActive = tab.key === null

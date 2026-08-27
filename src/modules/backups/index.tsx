@@ -8,22 +8,24 @@ import { SchedulesPage } from './schedules-page';
 import { RestorePage } from './restore-page';
 import { StoragePage } from './storage-page';
 import { LogsPage } from './logs-page';
+import { BackupsSubNav } from './backups-sub-nav';
 
 // -------------------- Module Router --------------------
 // The Backups internal navigation tabs (Overview, Backups, Schedules,
-// Restore, Storage, Logs) have been MOVED to the topbar — see
-// src/components/layout/topbar.tsx (rendered when currentModule ===
-// 'backups', next to the "All Sites" selector) and the BackupsSubNav
-// component in ./backups-sub-nav. This module now renders ONLY the
-// active sub-page content (no in-page tab bar, no inline breadcrumb
-// above the title) — the page title + description start directly below
-// the topbar.
+// Restore, Storage, Logs) live IN THE PAGE content — rendered here above
+// the active sub-page (see ./backups-sub-nav). The topbar shows ONLY the
+// breadcrumb path "Overview > Backups" (see src/components/layout/
+// breadcrumbs.tsx + topbar.tsx) next to the "All Sites" selector; the
+// tabs are NOT in the topbar. Each sub-page renders its own title +
+// content directly below the tab bar (no inline breadcrumb above the
+// title — the breadcrumb is in the topbar).
 
 export function BackupsModule() {
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
 
   return (
     <>
+      <BackupsSubNav />
       {currentSubPage === 'backups' && <BackupsListPage />}
       {currentSubPage === 'schedules' && <SchedulesPage />}
       {currentSubPage === 'restore' && <RestorePage />}

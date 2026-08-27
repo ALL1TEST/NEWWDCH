@@ -493,6 +493,7 @@ export function LogsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
+        breadcrumbs={false}
         title="Backup Logs"
         description="View activity logs for all backup operations"
         action={

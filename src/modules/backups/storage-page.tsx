@@ -1275,6 +1275,7 @@ export function StoragePage() {
   return (
     <div className="space-y-4">
       <PageHeader
+        breadcrumbs={false}
         title="Storage"
         description="Configure backup storage destinations"
         action={

@@ -455,6 +455,7 @@ export function SchedulesPage() {
   return (
     <div className="space-y-4">
       <PageHeader
+        breadcrumbs={false}
         title="Backup Schedules"
         description="Configure automated backup schedules"
         action={

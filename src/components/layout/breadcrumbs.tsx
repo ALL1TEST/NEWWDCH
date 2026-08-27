@@ -213,15 +213,47 @@ export function Breadcrumbs() {
     return null;
   }
 
+  // Backups module — render a dedicated "Overview > Backups" breadcrumb path
+  // in the topbar (right after the "All Sites" site selector). The Backups
+  // section keeps its internal sub-page tabs (Overview, Backups, Schedules,
+  // Restore, Storage, Logs) IN THE PAGE content (see
+  // src/modules/backups/index.tsx) — they are NOT moved into the topbar.
+  // The topbar shows ONLY the breadcrumb path so every module shares the
+  // same header pattern: [ All Sites ] + breadcrumb path.
+  //
+  // The breadcrumb text is always "Overview > Backups" (no site-context
+  // prefix) regardless of which site is selected or which Backups sub-page
+  // is active — the active sub-page is indicated by the in-page tab bar
+  // (BackupsSubNav) + the page h1, not by the topbar breadcrumb. "Overview"
+  // mirrors the styling of the site-context prefix used elsewhere
+  // (text-xs muted label); "Backups" is the current page (Database icon +
+  // BreadcrumbPage), identical to the rest of the app's module crumbs.
+  if (currentModule === 'backups') {
+    return (
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <span className="text-xs text-muted-foreground font-medium">Overview</span>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <span className="flex items-center gap-1">
+              <Database className="h-3.5 w-3.5" />
+              <BreadcrumbPage>Backups</BreadcrumbPage>
+            </span>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+    );
+  }
+
   // Settings and its sub-pages — sidebar is the only navigation, hide breadcrumb.
-  // This includes modules now grouped under Settings: Backups, Email Templates, Notifications.
-  // The Backups Overview page renders its OWN inline breadcrumb (BackupsBreadcrumb
-  // in src/modules/backups/dashboard-page.tsx) directly below the BackupsSubNav
-  // tabs — "All Sites > Backups" — because the Backups section has nested
-  // sub-pages/tabs (Overview, Backups, Schedules, Restore, Storage, Logs).
-  // Standalone pages without sub-pages (Dashboard, Calendar, Users, Comments,
-  // SMTP Settings) keep ONLY the topbar breadcrumb (no internal one).
-  const SETTINGS_CHILDREN = new Set(['settings', 'backups', 'email-templates', 'notifications']);
+  // This includes modules now grouped under Settings: Email Templates,
+  // Notifications. (Backups renders its own "Overview > Backups" breadcrumb
+  // above, so it is excluded here.) Standalone pages without sub-pages
+  // (Dashboard, Calendar, Users, Comments, SMTP Settings) keep ONLY the
+  // topbar breadcrumb (no internal one).
+  const SETTINGS_CHILDREN = new Set(['settings', 'email-templates', 'notifications']);
   if (SETTINGS_CHILDREN.has(currentModule)) {
     return null;
   }
