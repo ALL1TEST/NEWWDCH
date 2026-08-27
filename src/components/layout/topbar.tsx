@@ -11,13 +11,9 @@ import {
   Loader2,
   Trash2,
 } from 'lucide-react';
-import { getInitials, cn } from '@/lib/utils';
-import { useAuthStore } from '@/lib/stores/auth-store';
 import { useSiteStore, type Site } from '@/lib/stores/site-store';
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
-import { useSubscriptionStore, getPlanBadgeStyle } from '@/lib/stores/subscription-store';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,11 +23,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Breadcrumbs } from '@/components/layout/breadcrumbs';
-import { NotificationBell } from '@/components/layout/notification-bell';
-import { UserProfileMenu } from '@/components/layout/user-profile-menu';
-import { PlanBadge } from '@/components/layout/plan-badge';
-import { ThemeToggle } from '@/components/layout/theme-toggle';
-import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 import {
   Dialog,
@@ -417,17 +409,7 @@ function SiteSelector() {
 // -------------------- Topbar --------------------
 
 export function Topbar() {
-  const user = useAuthStore((s) => s.user);
   const openCommandPalette = useCommandPaletteStore((s) => s.open);
-
-  // When the DESKTOP rail is collapsed, Theme / Notifications / Profile
-  // live in the sidebar's bottom utility cluster — the header must not
-  // duplicate them. Mobile (drawer mode) always keeps the header controls.
-  const { state: sidebarState, isMobile: isSidebarMobile } = useSidebar();
-  const railCollapsed = !isSidebarMobile && sidebarState === 'collapsed';
-
-  // Current plan for the avatar badge
-  const { currentPlan } = useSubscriptionStore();
 
   return (
     <header className="h-14 shrink-0 border-b bg-background flex items-center gap-2 px-3 sm:px-4">
@@ -452,59 +434,26 @@ export function Topbar() {
         <Breadcrumbs />
       </div>
 
-      {/* Right side actions — Theme / Notifications / Profile live in the
-          collapsed rail when the desktop sidebar is collapsed (hidden here
-          then). Mobile gets its Search icon back on the right (the sidebar
-          header search only exists on the expanded desktop sidebar). */}
+      {/* Right side actions — the standalone Theme / Notifications /
+          Profile-avatar controls have been consolidated: Theme now lives
+          INSIDE the profile dropdown (see user-profile-menu.tsx), and
+          Notifications + the profile avatar live in the sidebar footer
+          (expanded) / collapsed rail. The topbar no longer duplicates
+          them. Only the mobile-only Search icon remains here (desktop
+          search lives in the sidebar header). */}
       <div className="flex items-center gap-1">
-        {!railCollapsed && (
-          <>
-            {/* Search icon (mobile only — desktop keeps it next to the
-                CMS Admin title in the sidebar header) */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 sm:hidden"
-              onClick={openCommandPalette}
-              aria-label="Search"
-            >
-              <Search className="h-4 w-4" />
-              <span className="sr-only">Search</span>
-            </Button>
-
-            {/* Theme toggle (shared component, same next-themes state) */}
-            <ThemeToggle />
-
-            {/* Notifications */}
-            <NotificationBell />
-
-            {/* User profile dropdown — single shared implementation.
-                Same trigger markup as before; menu lives in UserProfileMenu. */}
-            <UserProfileMenu align="end">
-              <Button variant="ghost" className="relative h-8 w-8 rounded-full ml-2">
-                {/* Subscription-aware styling: ring color comes from the
-                    ACTIVE plan's own badgeStyle config — no per-plan
-                    branching here. Switching plan re-renders this trigger
-                    via the zustand selector automatically. The plan's text
-                    badge (PlanBadge) is shared with the profile dropdown
-                    header so the two always render identically. */}
-                <Avatar className={cn(
-                  'h-8 w-8 rounded-full ring-2 ring-offset-2 ring-offset-background',
-                  getPlanBadgeStyle(currentPlan).ring,
-                )}>
-                  <AvatarImage src={user?.avatarUrl ?? undefined} alt={user?.name ?? 'User'} />
-                  <AvatarFallback className="text-xs">
-                    {user ? getInitials(user.name) : 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                {/* Plan badge centered at the bottom of the avatar —
-                    same PlanBadge component used in the dropdown header,
-                    anchored to the avatar via absolute positioning. */}
-                <PlanBadge className="absolute -bottom-1.5 left-1/2 -translate-x-1/2" />
-              </Button>
-            </UserProfileMenu>
-          </>
-        )}
+        {/* Search icon (mobile only — desktop keeps it next to the
+            CMS Admin title in the sidebar header) */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 sm:hidden"
+          onClick={openCommandPalette}
+          aria-label="Search"
+        >
+          <Search className="h-4 w-4" />
+          <span className="sr-only">Search</span>
+        </Button>
       </div>
     </header>
   );

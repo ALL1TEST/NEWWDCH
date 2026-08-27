@@ -3818,3 +3818,37 @@ Stage Summary:
 - Task 2 (sidebar footer): "ADMIN" role badge → "Beta" plan badge (same dimensions h-4/text-[10px]/px-1.5/rounded-md/mt-0.5, amber accent bg-amber-500 text-white); Logout button → NotificationBell (shared component, unread badge + dropdown); avatar + "Admin User" unchanged; LogOut import + logout selector removed (no longer used)
 - No lint regressions: sidebar.tsx and user-profile-menu.tsx lint clean (7 pre-existing errors in storage-page.tsx/seo-broken-links-page.tsx are unrelated)
 - Artifacts: tool-results/sidebar-footer-after.png + sidebar-footer-dark.png (sidebar), dropdown-darkmode.png + dropdown-dark-final.png + final-light-dropdown.png (dropdown), final-light-sidebar.png
+
+---
+Task ID: theme-in-dropdown-and-topbar-dedup
+Agent: main
+Task: (1) Add a "Theme" option (Light/Dark) inside the profile dropdown reusing existing next-themes logic. (2) Remove the duplicate Profile, Notification, and Theme controls from the topbar so the profile dropdown is the single place for the Theme control.
+
+Work Log:
+- Read worklog.md, theme-toggle.tsx (reuse pattern: useTheme from next-themes), topbar.tsx, user-profile-menu.tsx
+- Edited src/components/layout/user-profile-menu.tsx for Task 1:
+  - Added imports: useTheme from 'next-themes'; Sun, Moon from 'lucide-react'
+  - Added `const { theme, setTheme } = useTheme();` selector
+  - Added a Theme row AFTER Language and BEFORE Manage Subscription, mirroring the Language selector's exact layout (icon + muted label on the left, two segmented h-6 px-2.5 rounded-md buttons on the right). Active button uses `bg-primary text-primary-foreground`; inactive uses `text-muted-foreground hover:bg-muted`. Icon switches Sun→Moon based on theme. setTheme persists via next-themes (localStorage + html.dark class). toast.success feedback on switch.
+  - Updated docstring ("Profile / Language / Theme / Manage Subscription / Log out") and comment numbering (Manage Subscription = 5, Log out = 6)
+  - Kept header (avatar, name, Beta badge, email), Profile, Language, Manage Subscription, Log out unchanged
+- Edited src/components/layout/topbar.tsx for Task 2:
+  - Removed the entire right-side cluster's Theme/Notification/Profile block: <ThemeToggle/>, <NotificationBell/>, <UserProfileMenu>avatar+PlanBadge</UserProfileMenu>
+  - Kept ONLY the mobile-only Search button (sm:hidden) in the topbar right side
+  - Removed the now-unused `!railCollapsed` wrapper + useSidebar hook + railCollapsed logic (no longer needed — nothing to hide)
+  - Removed the `user` (useAuthStore) and `currentPlan` (useSubscriptionStore) selectors (only used by the removed avatar)
+  - Cleaned imports: removed getInitials, cn, useAuthStore, useSubscriptionStore, getPlanBadgeStyle, Avatar/AvatarFallback/AvatarImage, NotificationBell, UserProfileMenu, PlanBadge, ThemeToggle, useSidebar. Kept SidebarTrigger + the SiteSelector/Breadcrumbs/Search/Separator/Dialog imports still in use.
+- Verified compilation: dev.log shows successful recompile, GET /api/content 200, no errors from my changes (only pre-existing backup-service module-not-found warning)
+- Browser-verified via agent-browser + VLM:
+  - Topbar (light): no theme toggle, no notification bell, no profile avatar in top-right — only breadcrumbs. Profile avatar + notification bell now live ONLY in sidebar footer ✓
+  - Dropdown (light): Theme row present after Language, before Manage Subscription. Sun icon shows. "Light" button active (dark bg/white text), "Dark" plain. All items present and readable ✓
+  - Theme switching works: clicked "Dark" → html.dark class applied → full app switched to dark mode ✓
+  - Dropdown (dark): dropdown bg dark, "Dark" button now active, Moon icon shows, all items readable, header unchanged ✓
+  - Theme switching back: clicked "Light" → html.dark removed → light mode, Sun icon, "Light" active ✓
+- Lint: zero errors in topbar.tsx and user-profile-menu.tsx (7 pre-existing errors in storage-page.tsx/seo-broken-links-page.tsx are unrelated)
+
+Stage Summary:
+- Task 1: Theme selector (Light/Dark) added to profile dropdown, reusing next-themes useTheme — same theme state as the rest of the app, no second source of truth. Layout mirrors the existing Language selector for consistency. Works in both light and dark mode.
+- Task 2: Topbar de-duplicated — removed Theme toggle, Notification bell, and Profile avatar from the topbar. The sidebar footer (expanded) + sidebar collapsed rail remain the access points for Notifications + Profile avatar. The profile dropdown is now the single in-header place to switch Theme. Topbar right side keeps only the mobile Search button.
+- No unrelated components modified; header (avatar/name/Beta/email) + Profile + Language + Manage Subscription + Log out all unchanged.
+- Artifacts: tool-results/topbar-after-removal.png, dropdown-with-theme.png, app-dark-after-theme.png, dropdown-dark-theme-active.png, dropdown-light-active-final.png

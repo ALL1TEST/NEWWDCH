@@ -1,11 +1,14 @@
 'use client';
 
 import React from 'react';
+import { useTheme } from 'next-themes';
 import {
   User,
   LogOut,
   CreditCard,
   Languages,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -29,8 +32,8 @@ import { PlanBadge } from '@/components/layout/plan-badge';
 import { toast } from 'sonner';
 
 /**
- * SINGLE-SOURCE profile menu (Profile / Language / Manage Subscription /
- * Log out).
+ * SINGLE-SOURCE profile menu (Profile / Language / Theme /
+ * Manage Subscription / Log out).
  *
  * Used by BOTH the topbar avatar and the collapsed-sidebar avatar so there
  * is exactly one implementation of the menu itself. The caller provides the
@@ -63,6 +66,12 @@ export function UserProfileMenu({
   // dropdown header's avatar matches the top-right topbar avatar trigger
   // exactly (same ring color/thickness/offset).
   const { currentPlan } = useSubscriptionStore();
+  // Theme — same next-themes state the old topbar ThemeToggle used. The
+  // dropdown is now the single in-header access point for the theme
+  // control (the standalone topbar toggle was removed to avoid a
+  // duplicate). setTheme persists via next-themes (localStorage +
+  // html.dark class), so the whole app re-renders consistently.
+  const { theme, setTheme } = useTheme();
 
   const handleNavigate = (targetMod: string) => {
     useNavigationStore.getState().navigate(targetMod);
@@ -176,7 +185,52 @@ export function UserProfileMenu({
         </div>
         <DropdownMenuSeparator />
 
-        {/* 4 — Manage Subscription → existing billing module */}
+        {/* 4 — Theme with Light / Dark selector. Reuses the SAME
+            next-themes state the rest of the app uses (no second source
+            of truth). The dropdown is now the single in-header place to
+            switch theme — the old standalone topbar ThemeToggle was
+            removed to avoid a duplicate. Layout mirrors the Language
+            selector above (icon + label on the left, two segmented
+            buttons on the right) for visual consistency. */}
+        <div className="flex items-center justify-between px-2 py-1.5 text-sm">
+          <div className="flex items-center gap-2">
+            {theme === 'dark' ? (
+              <Moon className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <Sun className="h-4 w-4 text-muted-foreground" />
+            )}
+            <span className="text-muted-foreground">Theme</span>
+          </div>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              className={cn(
+                'h-6 px-2.5 text-xs font-medium rounded-md transition-colors',
+                theme === 'light'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted',
+              )}
+              onClick={() => { setTheme('light'); toast.success('Theme set to Light'); }}
+            >
+              Light
+            </button>
+            <button
+              type="button"
+              className={cn(
+                'h-6 px-2.5 text-xs font-medium rounded-md transition-colors',
+                theme === 'dark'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted',
+              )}
+              onClick={() => { setTheme('dark'); toast.success('Theme set to Dark'); }}
+            >
+              Dark
+            </button>
+          </div>
+        </div>
+        <DropdownMenuSeparator />
+
+        {/* 5 — Manage Subscription → existing billing module */}
         <DropdownMenuItem
           className="cursor-pointer"
           onClick={() => handleNavigate('billing')}
@@ -186,7 +240,7 @@ export function UserProfileMenu({
         </DropdownMenuItem>
         <DropdownMenuSeparator />
 
-        {/* 5 — Log out (destructive, existing auth-store handler) */}
+        {/* 6 — Log out (destructive, existing auth-store handler) */}
         <DropdownMenuItem
           className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
           onClick={() => void logout()}
