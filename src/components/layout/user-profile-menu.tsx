@@ -7,7 +7,8 @@ import {
   CreditCard,
   Languages,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, getInitials } from '@/lib/utils';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useSidebarStore } from '@/lib/stores/sidebar-store';
@@ -72,19 +73,31 @@ export function UserProfileMenu({
         align={align}
         collisionPadding={collisionPadding}
       >
-        {/* 1 — Profile header (name + email, stacked exactly like the
-            reference: name on top, email below, both left-aligned and
-            clearly separated). leading-5/leading-4 give the lines real
-            breathing room (leading-none cramped them together); truncate
-            keeps long names/emails from breaking the alignment. */}
+        {/* 1 — Profile header: circular avatar on the LEFT, vertically
+            centered; name on the first line and email directly below in
+            smaller gray text, both aligned to the right of the avatar.
+            Same image source as the sidebar/topbar triggers (avatarUrl →
+            initials fallback). truncate keeps long names/emails from
+            breaking the two-line alignment. */}
         <DropdownMenuLabel className="font-normal px-2 py-2">
-          <div className="flex min-w-0 flex-col space-y-0.5">
-            <p className="truncate text-sm font-medium leading-5">
-              {user?.name ?? 'User'}
-            </p>
-            <p className="truncate text-xs leading-4 text-muted-foreground">
-              {user?.email ?? ''}
-            </p>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Avatar className="h-9 w-9 shrink-0 ring-1 ring-border">
+              <AvatarImage
+                src={user?.avatarUrl ?? undefined}
+                alt={user?.name ?? 'User'}
+              />
+              <AvatarFallback className="text-xs font-medium">
+                {user ? getInitials(user.name) : 'U'}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex min-w-0 flex-col space-y-0.5">
+              <p className="truncate text-sm font-medium leading-5">
+                {user?.name ?? 'User'}
+              </p>
+              <p className="truncate text-xs leading-4 text-muted-foreground">
+                {user?.email ?? ''}
+              </p>
+            </div>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />

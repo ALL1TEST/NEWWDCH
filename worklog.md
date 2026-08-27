@@ -3609,3 +3609,25 @@ Work Log:
 
 Stage Summary:
 - Dropdown header now renders exactly per reference in EVERY state (expanded footer, collapsed rail, topbar, mobile drawer — one shared component): clearly separated, aligned name+email; all existing actions and styling untouched.
+
+---
+Task ID: UI-PROFILE-MENU-AVATAR-HEADER
+Agent: main (orchestrator)
+Task: Fix Admin User profile dropdown header to match reference — circular avatar on the LEFT, "Admin User" line 1, "admin@example.com" line 2 in smaller gray text, all right of the avatar; both sidebar states; keep all dropdown items unchanged.
+
+Work Log:
+- Located shared menu at src/components/layout/user-profile-menu.tsx (used by topbar trigger, expanded-sidebar footer trigger, collapsed-rail trigger)
+- Header rewrite: DropdownMenuLabel now flex row (items-center, gap-2.5) → 36px circular Avatar (h-9 w-9 shrink-0, ring-1 ring-border) using user.avatarUrl + getInitials fallback, stacked name (text-sm font-medium) + email (text-xs text-muted-foreground) to the right with truncate
+- Generated professional headshot public/avatar-admin.png via z-ai image CLI (1024x1024 photoreal corporate portrait)
+- Seeded admin@example.com.avatar = '/avatar-admin.png' via one-off Prisma script (db/custom.db updated)
+- Continued V10 leftovers: (1) topbar left cluster already clean — no icon/separator between sidebar edge and All Sites selector, no code change needed; (2) root-caused short-viewport click-hijack: admin-shell.tsx had SidebarProvider className="h-auto min-h-svh overflow-visible" overriding shadcn's h-svh overflow-hidden contract, stretching wrapper + in-flow [data-slot=sidebar] peer to full content height (measured 1824px at 450px viewport); restored canonical <SidebarProvider> (no override) + inner row h-full overflow-hidden + main flex-1 min-h-0 overflow-y-auto so main is the internal scroll container
+- Agent-browser verification (trusted mouse down/up clicks): expanded × {1440x900, 1440x600, 1440x450} × light+dark, collapsed × same set, mobile 375x812 topbar trigger — all open the menu with header [img 36x36 rounded-full] + Admin User / admin@example.com; menu collision-fits viewport in every case (Radix side=top/right + collisionPadding)
+- Regression checks: dropdown items unchanged (Profile → #profile nav works; Language EN pill → toast; Manage Subscription; Log out), Esc closes everywhere, 0 console errors, 0 pageerrors, 0 stuck overlays, [data-slot=sidebar] height now exactly viewport (450px), main scrollTop 0→400 internal scroll OK, body scroll pinned at 0
+- Screenshots: .verify/v10-900-expanded-light.png, v10-900-collapsed-light.png, v10-450-expanded-menu.png, v10-450-expanded-dark.png, v10-450-collapsed-dark.png, v10-375-mobile-menu.png
+- Lint: 7 pre-existing problems in unrelated files (storage-page refs, data-table/RHF compiler warnings); zero issues in touched files
+
+Stage Summary:
+- Dropdown header now matches the reference: circular profile photo left, name + gray email right, vertically centered, professional spacing — identical in expanded sidebar, collapsed rail, and mobile topbar usage
+- Profile menu works in BOTH sidebar states at ALL viewport heights including the previously broken 450px case (sidebar overflow root cause eliminated in admin-shell.tsx)
+- Frozen items untouched: All Sites, Search buttons, sidebar navigation, dashboard layout, dropdown item set/design
+- New asset: public/avatar-admin.png wired to admin account; initials fallback (getInitials) remains for users without an avatar
