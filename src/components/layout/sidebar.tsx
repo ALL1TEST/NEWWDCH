@@ -1,7 +1,6 @@
 'use client';
 
 import React, { createElement, useState, useMemo, useCallback } from 'react';
-import { motion } from 'framer-motion';
 import {
   LayoutDashboard,
   FileText,
@@ -48,6 +47,8 @@ import {
   Gauge,
   Zap,
   Server,
+  PanelLeftClose,
+  PanelLeftOpen,
   type LucideIcon,
 } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
@@ -71,6 +72,7 @@ import {
   SidebarMenuSubItem,
   SidebarRail,
   SidebarSeparator,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -80,6 +82,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 
 // -------------------- Icon Mapping --------------------
@@ -256,7 +259,54 @@ function NavIcon({ name }: { name?: string }) {
   return createElement(Icon);
 }
 
-// -------------------- Collapsible Submenu (NO Radix) --------------------
+// -------------------- Shared Icon Grid -------------------
+/*
+ * ONE icon grid governs every sidebar row:
+ *
+ *   collapsed rail width ......... var(--sidebar-width-icon) = 48px
+ *   cell width (every icon/logo).. 32px × 32px   (h-8 w-8)
+ *   horizontal padding ............ 8px each side
+ *   ⇒ horizontal center-line ..... x = 24px for LOGO, NAV ICONS,
+ *     SETTINGS POPOVER ANCHOR, AVATAR and LOGOUT alike.
+ *
+ * No ad-hoc margins: anything square in the sidebar is exactly this
+ * geometry, so the "C" logo, the collapse control, nav icons (including
+ * the AI star/sparkle) and footer controls share one visual axis.
+ */
+function LogoMark() {
+  return (
+    <div
+      aria-hidden="true"
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm select-none"
+    >
+      C
+    </div>
+  );
+}
+
+/** Collapse/expand control that lives INSIDE the sidebar header. */
+function CollapseToggle({ side = 'right' }: { side?: 'left' | 'right' }) {
+  const { state, toggleSidebar, isMobile } = useSidebar();
+  const collapsed = !isMobile && state === 'collapsed';
+  const Icon = collapsed ? PanelLeftOpen : PanelLeftClose;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0 rounded-md"
+          onClick={toggleSidebar}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          <span className="sr-only">Toggle sidebar</span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side={side}>{collapsed ? 'Expand' : 'Collapse'}</TooltipContent>
+    </Tooltip>
+  );
+}
 // This custom component uses CSS grid for smooth open/close animation.
 // It conditionally renders children so closed sections occupy ZERO layout space.
 
@@ -283,6 +333,115 @@ function AccordionSubmenu({
 }
 
 // -------------------- Nav Item Renderers --------------------
+
+/*
+ * STATE RULE (decoupled by design):
+ *   • Inline submenu visibility  → controlled ONLY by openSection/onToggle
+ *     in AppSidebar (route-derived or user-toggled while expanded).
+ *   • Floating popover           → local state per item, ONLY used when the
+ *     rail is collapsed. It never expands the rail and is fully independent.
+ * Nothing here maps settingsExpanded ⇒ sidebarCollapsed (forbidden coupling).
+ */
+function useCollapsedRail(): boolean {
+  const { state, isMobile } = useSidebar();
+  return !isMobile && state === 'collapsed';
+}
+
+/**
+ * Settings parent item rendered on the COLLAPSED 48px rail.
+ * Clicking it opens a portal-based popover to the RIGHT of the icon —
+ * the sidebar itself NEVER expands, and the popover anchors to this
+ * exact button so the "star/sparkle alignment" grid stays intact.
+ */
+function CollapsedParentNavItem({
+  item,
+  currentModule,
+  currentSubPage,
+}: {
+  item: NavItem;
+  currentModule: string;
+  currentSubPage: string | null;
+}) {
+  const [floatOpen, setFloatOpen] = useState(false);
+  const mod = hrefToModule(item.href);
+  const isActive = currentModule === mod;
+
+  const handleChildNavigate = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    child: NavItem,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFloatOpen(false); // close the floating submenu after navigation…
+    // …but do NOT touch sidebar expansion state (rule #7).
+    const hash = child.href.replace(/^#/, '');
+    const parts = hash.split('/');
+    const childSubPage = parts[1] || null;
+    useNavigationStore.getState().navigate(parts[0], null, childSubPage);
+  };
+
+  return (
+    <SidebarMenuItem>
+      <Popover open={floatOpen} onOpenChange={setFloatOpen}>
+        <PopoverTrigger asChild>
+          <SidebarMenuButton
+            isActive={isActive || floatOpen}
+            aria-expanded={floatOpen}
+            aria-haspopup="menu"
+            tooltip={floatOpen ? undefined : item.label}
+            onClick={(e: React.MouseEvent) => {
+              e.preventDefault();
+              setFloatOpen((o) => !o);
+            }}
+          >
+            <NavIcon name={item.icon} />
+            <span>{item.label}</span>
+          </SidebarMenuButton>
+        </PopoverTrigger>
+        {/* Portal → document.body: immune to sidebar overflow clipping.
+            Radix handles Esc + outside-click closing and re-anchors at any
+            viewport size/zoom via avoidCollisions. */}
+        <PopoverContent
+          side="right"
+          align="start"
+          sideOffset={6}
+          collisionPadding={12}
+          className="w-56 rounded-md border bg-popover p-1.5 shadow-md"
+          onEscapeKeyDown={() => setFloatOpen(false)}
+        >
+          <ul
+            role="menu"
+            aria-label={`${item.label} submenu`}
+            className="flex min-w-0 list-none flex-col gap-0.5 p-0 m-0"
+          >
+            {item.children!.map((child) => {
+              const hash = child.href.replace(/^#/, '');
+              const parts = hash.split('/');
+              const childSubPage = parts[1] || null;
+              const isChildActive =
+                currentModule === parts[0] &&
+                (!childSubPage || currentSubPage === childSubPage);
+              return (
+                <SidebarMenuSubItem key={child.label} className="list-none p-0">
+                  <SidebarMenuSubButton asChild isActive={isChildActive}>
+                    <a
+                      href={child.href}
+                      role="menuitem"
+                      onClick={(e) => handleChildNavigate(e, child)}
+                    >
+                      <NavIcon name={child.icon} />
+                      <span>{child.label}</span>
+                    </a>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              );
+            })}
+          </ul>
+        </PopoverContent>
+      </Popover>
+    </SidebarMenuItem>
+  );
+}
 
 function ExpandableNavItem({
   item,
@@ -420,12 +579,28 @@ function NavGroupSection({
   openSection: string | null;
   onToggleSection: (label: string) => void;
 }) {
+  const isCollapsedRail = useCollapsedRail();
+
   return (
     <SidebarGroup>
       <SidebarGroupContent>
         <SidebarMenu>
           {group.items.map((item) => {
             const hasChildren = item.children && item.children.length > 0;
+
+            if (hasChildren && isCollapsedRail) {
+              /* Collapsed rail → parents with children become floating
+                 popovers anchored to their own icon. The rail NEVER
+                 auto-expands (#4/#5/#6). */
+              return (
+                <CollapsedParentNavItem
+                  key={item.label}
+                  item={item}
+                  currentModule={currentModule}
+                  currentSubPage={currentSubPage}
+                />
+              );
+            }
 
             if (hasChildren) {
               return (
@@ -461,6 +636,8 @@ export function AppSidebar() {
   const logout = useAuthStore((s) => s.logout);
   const currentModule = useNavigationStore((s) => s.currentModule);
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
+  // Sidebar context hook — MUST run before any early return.
+  const sidebarCtx = useSidebar();
 
   const userRole = user?.role;
   const pagePermissions = user?.pagePermissions ?? null;
@@ -527,18 +704,23 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="px-4 py-4 shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-            C
-          </div>
-          <motion.span
-            className="font-semibold text-sm tracking-tight whitespace-nowrap group-data-[collapsible=icon]:hidden"
-            initial={{ opacity: 1, width: 'auto' }}
-            animate={{ opacity: 1 }}
-          >
+      {/* ---- Header: one 32px icon cell per row, all centered at x=24px ---- */}
+      <SidebarHeader className="px-2 py-3 shrink-0">
+        {/* Expanded: [logo][title][collapse control] single row */}
+        <div className="flex h-8 items-center gap-2 group-data-[collapsible=icon]:hidden">
+          <LogoMark />
+          <span className="truncate font-semibold text-sm tracking-tight whitespace-nowrap text-text-primary">
             CMS Admin
-          </motion.span>
+          </span>
+          <div className="ml-auto shrink-0">
+            <CollapseToggle side="bottom" />
+          </div>
+        </div>
+        {/* Collapsed rail: logo cell stacked above its collapse control —
+            identical geometry to every nav icon below it (rule #2). */}
+        <div className="hidden flex-col items-center gap-1 group-data-[collapsible=icon]:flex">
+          <LogoMark />
+          <CollapseToggle />
         </div>
       </SidebarHeader>
 
@@ -560,14 +742,15 @@ export function AppSidebar() {
       <SidebarSeparator className="mx-0" />
 
       <SidebarFooter className="shrink-0">
-        <div className="flex items-center gap-3 px-2 py-2">
+        {/* Expanded: unchanged row layout [avatar][name/role][logout] */}
+        <div className="flex items-center gap-3 px-2 py-2 group-data-[collapsible=icon]:hidden">
           <Avatar className="h-8 w-8 shrink-0">
             <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} />
             <AvatarFallback className="text-xs">
               {getInitials(user.name)}
             </AvatarFallback>
           </Avatar>
-          <div className="flex flex-1 flex-col overflow-hidden group-data-[collapsible=icon]:hidden">
+          <div className="flex flex-1 flex-col overflow-hidden">
             <span className="truncate text-sm font-medium leading-tight">
               {user.name}
             </span>
@@ -580,8 +763,48 @@ export function AppSidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 shrink-0"
+                className="h-8 w-8 shrink-0 rounded-md"
                 onClick={() => void logout()}
+                aria-label="Log out"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="sr-only">Log out</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Log out</TooltipContent>
+          </Tooltip>
+        </div>
+
+        {/* Collapsed rail: avatar + logout as stacked 32px cells sharing the
+            exact center-line of every other sidebar icon (no overflow). */}
+        <div className="hidden flex-col items-center gap-1 py-2 group-data-[collapsible=icon]:flex">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                aria-label={user.name}
+                className="flex h-8 w-8 cursor-default select-none items-center justify-center"
+              >
+                <Avatar className="h-6 w-6">
+                  <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} />
+                  <AvatarFallback className="text-[10px]">
+                    {getInitials(user.name)}
+                  </AvatarFallback>
+                </Avatar>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <span className="block font-medium">{user.name}</span>
+              <span className="block text-muted-foreground">{user.role.replace(/_/g, ' ')}</span>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-md"
+                onClick={() => void logout()}
+                aria-label="Log out"
               >
                 <LogOut className="h-4 w-4" />
                 <span className="sr-only">Log out</span>

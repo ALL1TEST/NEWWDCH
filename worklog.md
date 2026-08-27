@@ -3388,3 +3388,29 @@ Stage Summary:
 - The intermediate/incorrect Robots.txt screen is eliminated on ALL paths (legacy URL, canonical URL, in-app navigation, history). Loading now uses the existing skeleton only.
 - Zero functional or design changes to the correct Robots.txt page; validation, Save, Restore Default, editor, tabs all preserved.
 - Files changed: src/modules/seo/seo-robots-page.tsx, src/modules/seo/seo-settings-page.tsx, src/lib/stores/navigation-store.ts, src/modules/seo/index.tsx.
+
+---
+Task ID: UIUX-GLOBAL-1
+Agent: Z.ai Code (main)
+Task: System-wide CMS UI/UX fixes — (1) dark-mode text visibility audit, (2) collapsed-sidebar logo/tool icon alignment on one grid, (3) star/AI icon alignment, (4-5) Settings submenu must open as floating popover when sidebar is collapsed, (6) decouple sidebarCollapsed/settingsExpanded, (7) navigation must not auto-expand sidebar, (8) responsive/positioning incl. portal to avoid overflow clipping, (9) design consistency with existing tokens, (10) global quality check.
+
+Work Log:
+- Audited globals.css theme system (oklch tokens, .dark overrides) and confirmed next-themes ThemeProvider in src/app/page.tsx works (attribute="class").
+- src/app/globals.css: added centralized text tokens --text-primary/--text-secondary/--text-muted/--text-disabled (+ chip-bg/chip-fg) for :root and .dark, mapped into @theme inline (utilities text-text-primary etc.), plus a .dark safety-net rule lifting literal inline color:#000/black to the primary token.
+- src/components/editor/editor-styles.css: fixed 17 invalid `oklch(var(--token))` double-wraps → direct var()/color-mix() so editor code blocks, blockquotes, placeholder, kbd, tables, context menus are theme-aware again.
+- Dark-pair sweep (no dark: variant → added): ai/providers-page (9 provider chips + fallback + icon), ai/prompts-page (10 category chips + 2 fallbacks + 2 active badges + 2 prompt paragraphs), ai/jobs-page (6 status + 6 type chips + icon tile), ai/logs-page (status badge ternary), ai/playground-page (avatar + message bubbles), ai/usage-page (5 KPI tiles), ai/marketplace-page (description), content/content-list-page (4 fallback chips), media/media-list-page (filter pill). Intentional black-on-amber (media/content gold buttons, check marks) kept per semantic hierarchy.
+- src/components/layout/sidebar.tsx rework:
+  • ONE icon grid documented: 48px rail, 32×32 cells, 8px gutters ⇒ shared x=24 center-line for logo, collapse control, all nav icons (incl. AI Sparkles), avatar, logout.
+  • Header: replaced misaligned px-4 header (logo centered at x=32 + overflow) with px-2 grid; expanded row [logo][title][collapse toggle]; collapsed column [logo][toggle] — both using the same geometry as nav buttons. Removed dead framer-motion span.
+  • Footer: old row (avatar 32 + gap 12 + logout 32 = 76px) overflowed the 48px rail; collapsed mode now stacks centered 32px avatar cell + logout button with tooltips.
+  • New CollapseToggle (PanelLeftClose/Open) inside the sidebar header per required structure TOP logo → control → NAV.
+  • CollapsedParentNavItem: when rail is collapsed, parents with children (Settings) render a controlled Radix Popover — PopoverContent portals to document.body (never clipped by sidebar overflow), side="right" anchored to the icon, reuses SidebarMenuSubButton rows (same radius/shadow/typography/hover/active tokens), aria-haspopup/expanded, valid ul/li list markup (list-none), Esc + outside-pointerdown close, tooltip suppressed while open.
+  • State decoupling: inline accordion (openSection/manualOverride) untouched for expanded mode; popover state is local per-item; nothing expands the rail; navigating from the popover closes it and keeps rail collapsed (verified rail stays 48px, hash changes, popover closes).
+  • Route-derived active child highlight works inside the popover (e.g. Backups highlighted when on #backups).
+- Verification via agent-browser: expanded light, collapsed light (all icons on one centerline), popover open/close (Esc, outside click, re-click), navigation from popover (#email-templates) keeping rail 48px, expanded inline Settings submenu open → SMTP navigate keeps sidebar expanded + submenu open, dark mode across Dashboard/Email Templates(+editor)/Prompt Library/Articles/Media/AI Settings/SEO/Backups, light mode popover + Backups, viewports 1280×800 / 1100×700 / 1025×600 (popover fitsX/fitsY true via getBoundingClientRect). bun lint: 0 issues in touched files (5 pre-existing errors remain in untouched seo-broken-links/storage/seo-social-preview files). dev.log: only pre-existing optional yauzl warning; GET / 200.
+
+Stage Summary:
+- Dark mode now has a centralized, documented text-token system + every hardcoded light-only chip/text in reachable modules got semantic dark pairs; invalid editor CSS colors fixed.
+- Collapsed sidebar is a single 32px-cell icon column: logo, collapse control, nav icons (incl. AI star), avatar and logout all share one center-line; no overflow.
+- Settings submenu works in BOTH sidebar states with fully decoupled state: inline accordion when expanded, portal floating popover when collapsed; sidebar never auto-expands; navigation keeps the current collapse state; popover closes on Esc/outside/item-click and matches existing design tokens in both themes.
+- No page-specific CSS hacks introduced; fixes live in shared tokens + reusable components.

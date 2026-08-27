@@ -231,7 +231,7 @@ function IdeaCard({
                 {idea.primaryKeyword}
               </span>
             )}
-            <span className={cn('inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full', COMPETITION_COLORS[idea.competition] || 'bg-gray-100 text-gray-600')}>
+            <span className={cn('inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full', COMPETITION_COLORS[idea.competition] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400')}>
               {idea.competition} comp.
             </span>
           </div>
@@ -257,7 +257,7 @@ function IdeaCard({
             {/* Search Intent */}
             <div className="flex items-center gap-1.5 text-xs">
               <span className="text-muted-foreground">Intent:</span>
-              <span className={cn('font-medium px-1.5 py-0.5 rounded text-[10px]', INTENT_COLORS[idea.searchIntent] || 'bg-gray-100 text-gray-600')}>
+              <span className={cn('font-medium px-1.5 py-0.5 rounded text-[10px]', INTENT_COLORS[idea.searchIntent] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400')}>
                 {idea.searchIntent}
               </span>
             </div>
@@ -272,7 +272,7 @@ function IdeaCard({
           {/* Content Potential */}
           <div className="flex items-center gap-1.5 text-xs">
             <span className="text-muted-foreground">Content potential:</span>
-            <span className={cn('font-medium px-1.5 py-0.5 rounded text-[10px]', CONTENT_POTENTIAL_COLORS[idea.contentPotential] || 'bg-gray-100 text-gray-600')}>
+            <span className={cn('font-medium px-1.5 py-0.5 rounded text-[10px]', CONTENT_POTENTIAL_COLORS[idea.contentPotential] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400')}>
               {idea.contentPotential}
             </span>
           </div>
@@ -990,7 +990,7 @@ export function ContentListPage() {
                               <span
                                 className={cn(
                                   'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
-                                  STATUS_BADGE_STYLES[item.status] ?? 'bg-gray-100 text-gray-700',
+                                  STATUS_BADGE_STYLES[item.status] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400',
                                 )}
                               >
                                 {STATUS_LABELS[item.status] ?? item.status}

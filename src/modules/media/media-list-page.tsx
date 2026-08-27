@@ -800,7 +800,7 @@ export function MediaListPage() {
                 <DropdownMenuItem
                   key={opt.value}
                   onClick={() => handleFilterChange(opt.value)}
-                  className={cn(activeFilter === opt.value && 'bg-amber-50 text-amber-700 font-medium')}
+                  className={cn(activeFilter === opt.value && 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 font-medium')}
                 >
                   {activeFilter === opt.value && <Check className="mr-2 h-4 w-4" />}
                   {opt.label}

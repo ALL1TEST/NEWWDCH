@@ -6,6 +6,16 @@
 
 @theme inline {
   --color-background: var(--background);
+  /* Centralized CMS text-color tokens → utilities:
+     text-text-primary / text-text-secondary / text-text-muted / text-text-disabled
+     Always theme-aware; never hardcode #000 or palette colors for body copy. */
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-disabled: var(--text-disabled);
+  /* Semantic surface aliases for chips/labels (theme-aware pairs) */
+  --color-chip-bg: var(--chip-bg);
+  --color-chip-fg: var(--chip-fg);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -42,6 +52,47 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+}
+
+/*
+ * ==============================
+ * CENTRALIZED TEXT COLOR TOKENS
+ * ==============================
+ * One source of truth for every text color in the CMS, in BOTH themes.
+ *
+ *   --text-primary    Headings & primary copy  (max contrast)
+ *   --text-secondary  Supporting copy           
+ *   --text-muted      Helper/meta/empty states (= muted-foreground)
+ *   --text-disabled   Disabled UI text          (lowest contrast)
+ *
+ * Components must use these (or existing semantic Tailwind vars) —
+ * NEVER `text-black` / `color:#000` on a themed background.
+ */
+:root {
+  --text-primary: oklch(0.145 0 0);      /* near-black on white   */
+  --text-secondary: oklch(0.371 0 0);    /* dark gray             */
+  --text-muted: oklch(0.556 0 0);        /* matches muted-fg      */
+  --text-disabled: oklch(0.65 0 0);      /* low contrast          */
+  --chip-bg: oklch(0.97 0 0);
+  --chip-fg: oklch(0.371 0 0);
+}
+
+.dark {
+  --text-primary: oklch(0.985 0 0);      /* near-white on black   */
+  --text-secondary: oklch(0.82 0 0);     /* light gray            */
+  --text-muted: oklch(0.708 0 0);        /* matches muted-fg      */
+  --text-disabled: oklch(0.52 0 0);      /* low contrast          */
+  --chip-bg: oklch(0.269 0 0);
+  --chip-fg: oklch(0.82 0 0);
+}
+
+/* Legacy safety net: if any third-party style or inline rule still sets a
+   plain #000 on normal text while the DARK theme is active inside the admin
+   shell, lift it to the primary token. Only targets the literal black keyword,
+   not colored accents/badges that keep their own (fixed) backgrounds. */
+.dark [style*="color: #000"], .dark [style*="color:#000"],
+.dark [style*="color: black"], .dark [style*="color:black"] {
+  color: var(--text-primary);
 }
 
 :root {

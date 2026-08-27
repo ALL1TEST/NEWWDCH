@@ -123,20 +123,20 @@ const PROVIDER_KINDS: AiProviderKind[] = [
 // legacy kinds (OPENROUTER, OLLAMA, AZURE_OPENAI) are kept here for display of
 // existing rows but are no longer part of the `AiProviderKind` union.
 const PROVIDER_CONFIGS: Record<string, { label: string; defaultUrl: string; color: string }> = {
-  OPENAI: { label: 'OpenAI', defaultUrl: 'https://api.openai.com/v1', color: 'bg-emerald-100 text-emerald-700' },
-  ANTHROPIC: { label: 'Anthropic', defaultUrl: 'https://api.anthropic.com/v1', color: 'bg-orange-100 text-orange-700' },
-  GEMINI: { label: 'Gemini', defaultUrl: 'https://generativelanguage.googleapis.com/v1', color: 'bg-sky-100 text-sky-700' },
-  OPENROUTER: { label: 'OpenRouter', defaultUrl: 'https://openrouter.ai/api/v1', color: 'bg-violet-100 text-violet-700' },
-  GROQ: { label: 'Groq', defaultUrl: 'https://api.groq.com/openai/v1', color: 'bg-rose-100 text-rose-700' },
-  DEEPSEEK: { label: 'DeepSeek', defaultUrl: 'https://api.deepseek.com/v1', color: 'bg-cyan-100 text-cyan-700' },
-  OLLAMA: { label: 'Ollama', defaultUrl: 'http://localhost:11434/v1', color: 'bg-zinc-100 text-zinc-700' },
-  AZURE_OPENAI: { label: 'Azure OpenAI', defaultUrl: '', color: 'bg-teal-100 text-teal-700' },
-  CUSTOM: { label: 'Custom', defaultUrl: '', color: 'bg-stone-100 text-stone-700' },
+  OPENAI: { label: 'OpenAI', defaultUrl: 'https://api.openai.com/v1', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  ANTHROPIC: { label: 'Anthropic', defaultUrl: 'https://api.anthropic.com/v1', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+  GEMINI: { label: 'Gemini', defaultUrl: 'https://generativelanguage.googleapis.com/v1', color: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
+  OPENROUTER: { label: 'OpenRouter', defaultUrl: 'https://openrouter.ai/api/v1', color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
+  GROQ: { label: 'Groq', defaultUrl: 'https://api.groq.com/openai/v1', color: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' },
+  DEEPSEEK: { label: 'DeepSeek', defaultUrl: 'https://api.deepseek.com/v1', color: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400' },
+  OLLAMA: { label: 'Ollama', defaultUrl: 'http://localhost:11434/v1', color: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300' },
+  AZURE_OPENAI: { label: 'Azure OpenAI', defaultUrl: '', color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400' },
+  CUSTOM: { label: 'Custom', defaultUrl: '', color: 'bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300' },
 };
 
 function kindConfig(kind: string): { label: string; color: string } {
   const cfg = PROVIDER_CONFIGS[kind];
-  return cfg ?? { label: kind, color: 'bg-zinc-100 text-zinc-700' };
+  return cfg ?? { label: kind, color: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300' };
 }
 
 // -------------------- Error Diagnostic Parser --------------------
@@ -488,7 +488,7 @@ export function ProvidersPage() {
         <Card>
           <CardContent className="p-4 flex items-center gap-4">
             <div className="p-2 rounded-lg bg-zinc-100">
-              <Server className="h-5 w-5 text-zinc-600" />
+              <Server className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
             </div>
             <div>
               <p className="text-sm text-zinc-500">Total Providers</p>

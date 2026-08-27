@@ -260,7 +260,7 @@ export function LogsPage() {
           {expandedLog && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div><p className="text-xs text-zinc-500">Status</p><Badge variant="secondary" className={expandedLog.status === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>{expandedLog.status}</Badge></div>
+                <div><p className="text-xs text-zinc-500">Status</p><Badge variant="secondary" className={expandedLog.status === 'success' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}>{expandedLog.status}</Badge></div>
                 <div><p className="text-xs text-zinc-500">Provider</p><p className="text-sm font-medium">{expandedLog.provider}</p></div>
                 <div><p className="text-xs text-zinc-500">Model</p><p className="text-sm font-medium">{expandedLog.model}</p></div>
                 <div><p className="text-xs text-zinc-500">Cost</p><p className="text-sm font-medium">{expandedLog.cost != null ? `$${expandedLog.cost.toFixed(4)}` : '—'}</p></div>

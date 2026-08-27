@@ -50,12 +50,12 @@ interface AiJob {
 // -------------------- Constants --------------------
 
 const JOB_STATUS_CONFIG: Record<AiJobStatus, { color: string; icon: React.ElementType }> = {
-  PENDING: { color: 'bg-zinc-100 text-zinc-700', icon: Clock },
-  RUNNING: { color: 'bg-sky-100 text-sky-700', icon: Loader2 },
-  COMPLETED: { color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
-  FAILED: { color: 'bg-red-100 text-red-700', icon: XCircle },
-  RETRYING: { color: 'bg-amber-100 text-amber-700', icon: RefreshCw },
-  CANCELLED: { color: 'bg-zinc-200 text-zinc-500', icon: XIcon },
+  PENDING: { color: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300', icon: Clock },
+  RUNNING: { color: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400', icon: Loader2 },
+  COMPLETED: { color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: CheckCircle2 },
+  FAILED: { color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', icon: XCircle },
+  RETRYING: { color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', icon: RefreshCw },
+  CANCELLED: { color: 'bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400', icon: XIcon },
 };
 
 const JOB_TYPE_LABELS: Record<AiJobType, string> = {
@@ -68,12 +68,12 @@ const JOB_TYPE_LABELS: Record<AiJobType, string> = {
 };
 
 const JOB_TYPE_COLORS: Record<AiJobType, string> = {
-  GENERATE_ARTICLE: 'bg-emerald-100 text-emerald-700',
-  REWRITE_CONTENT: 'bg-violet-100 text-violet-700',
-  SEO_OPTIMIZATION: 'bg-orange-100 text-orange-700',
-  GENERATE_IMAGES: 'bg-pink-100 text-pink-700',
-  TRANSLATE_ARTICLE: 'bg-sky-100 text-sky-700',
-  CUSTOM: 'bg-zinc-100 text-zinc-700',
+  GENERATE_ARTICLE: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  REWRITE_CONTENT: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+  SEO_OPTIMIZATION: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  GENERATE_IMAGES: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
+  TRANSLATE_ARTICLE: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+  CUSTOM: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
 };
 
 const STATUS_FILTERS: Array<{ value: string; label: string }> = [
@@ -170,7 +170,7 @@ export function JobsPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-zinc-100"><Clock className="h-4 w-4 text-zinc-600" /></div>
+            <div className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800"><Clock className="h-4 w-4 text-zinc-600 dark:text-zinc-400" /></div>
             <div>
               <p className="text-xs text-zinc-500">Total Jobs</p>
               <p className="text-xl font-bold">{isLoading ? <Skeleton className="h-6 w-10 inline-block" /> : totalCount}</p>

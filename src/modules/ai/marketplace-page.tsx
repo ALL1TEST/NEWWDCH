@@ -191,7 +191,7 @@ export function MarketplacePage() {
           </DialogHeader>
           {detailPack && (
             <div className="space-y-4">
-              <p className="text-sm text-zinc-600">{detailPack.description}</p>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">{detailPack.description}</p>
               <div className="flex items-center gap-3 text-sm text-zinc-500">
                 <span>{detailPack.promptCount} prompts</span>
                 <span>·</span>

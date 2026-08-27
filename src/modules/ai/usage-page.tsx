@@ -61,11 +61,11 @@ export function UsagePage() {
   const summary = data;
 
   const kpiCards = [
-    { label: 'Total Requests', value: summary?.totalRequests?.toLocaleString() ?? '0', icon: Zap, color: 'bg-emerald-100 text-emerald-600' },
-    { label: 'Total Tokens', value: summary ? (((summary.totalInputTokens ?? 0) + (summary.totalOutputTokens ?? 0)) / 1000).toFixed(1) + 'K' : '0', icon: Activity, color: 'bg-sky-100 text-sky-600' },
-    { label: 'Total Cost', value: summary ? `$${(summary.totalCost ?? 0).toFixed(2)}` : '$0.00', icon: DollarSign, color: 'bg-amber-100 text-amber-600' },
-    { label: 'Avg Response Time', value: summary ? `${(summary.avgResponseTimeMs ?? 0).toFixed(0)}ms` : '0ms', icon: Clock, color: 'bg-violet-100 text-violet-600' },
-    { label: 'Error Rate', value: summary ? `${((summary.errorRate ?? 0) * 100).toFixed(1)}%` : '0%', icon: AlertTriangle, color: 'bg-red-100 text-red-600' },
+    { label: 'Total Requests', value: summary?.totalRequests?.toLocaleString() ?? '0', icon: Zap, color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' },
+    { label: 'Total Tokens', value: summary ? (((summary.totalInputTokens ?? 0) + (summary.totalOutputTokens ?? 0)) / 1000).toFixed(1) + 'K' : '0', icon: Activity, color: 'bg-sky-100 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400' },
+    { label: 'Total Cost', value: summary ? `$${(summary.totalCost ?? 0).toFixed(2)}` : '$0.00', icon: DollarSign, color: 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' },
+    { label: 'Avg Response Time', value: summary ? `${(summary.avgResponseTimeMs ?? 0).toFixed(0)}ms` : '0ms', icon: Clock, color: 'bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400' },
+    { label: 'Error Rate', value: summary ? `${((summary.errorRate ?? 0) * 100).toFixed(1)}%` : '0%', icon: AlertTriangle, color: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' },
   ];
 
   return (

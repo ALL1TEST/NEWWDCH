@@ -116,16 +116,16 @@ const CATEGORY_LABELS: Record<PromptCategoryNew, string> = {
 };
 
 const CATEGORY_COLORS: Record<PromptCategoryNew, string> = {
-  CONTENT_GENERATION: 'bg-emerald-100 text-emerald-700',
-  IMAGE_GENERATION: 'bg-violet-100 text-violet-700',
-  SEO: 'bg-orange-100 text-orange-700',
-  TRANSLATION: 'bg-sky-100 text-sky-700',
-  SUMMARIZATION: 'bg-cyan-100 text-cyan-700',
-  MARKETING: 'bg-rose-100 text-rose-700',
-  SOCIAL_MEDIA: 'bg-pink-100 text-pink-700',
-  EMAIL: 'bg-amber-100 text-amber-700',
-  CODING: 'bg-teal-100 text-teal-700',
-  ANALYSIS: 'bg-zinc-100 text-zinc-700',
+  CONTENT_GENERATION: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  IMAGE_GENERATION: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+  SEO: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  TRANSLATION: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+  SUMMARIZATION: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
+  MARKETING: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
+  SOCIAL_MEDIA: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
+  EMAIL: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  CODING: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
+  ANALYSIS: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
 };
 
 const emptyForm: PromptFormData = {
@@ -420,7 +420,7 @@ export function PromptsPage() {
                     <TableRow key={prompt.id}>
                       <TableCell className="font-medium">{prompt.name}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className={CATEGORY_COLORS[prompt.category] ?? 'bg-zinc-100 text-zinc-700'}>
+                        <Badge variant="secondary" className={CATEGORY_COLORS[prompt.category] ?? 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'}>
                           {CATEGORY_LABELS[prompt.category] ?? prompt.category}
                         </Badge>
                       </TableCell>
@@ -444,7 +444,7 @@ export function PromptsPage() {
                         </Button>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={prompt.isActive ? 'default' : 'secondary'} className={prompt.isActive ? 'bg-green-100 text-green-700' : ''}>
+                        <Badge variant={prompt.isActive ? 'default' : 'secondary'} className={prompt.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : ''}>
                           {prompt.isActive ? 'Active' : 'Inactive'}
                         </Badge>
                       </TableCell>
@@ -503,7 +503,7 @@ export function PromptsPage() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold truncate">{prompt.name}</h3>
-                    <Badge variant="secondary" className={`${CATEGORY_COLORS[prompt.category] ?? 'bg-zinc-100 text-zinc-700'} mt-1`}>
+                    <Badge variant="secondary" className={`${CATEGORY_COLORS[prompt.category] ?? 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'} mt-1`}>
                       {CATEGORY_LABELS[prompt.category] ?? prompt.category}
                     </Badge>
                   </div>
@@ -519,7 +519,7 @@ export function PromptsPage() {
                 </div>
                 <div className="flex items-center justify-between text-xs text-zinc-500">
                   <span>{prompt.usageCount} uses</span>
-                  <Badge variant={prompt.isActive ? 'default' : 'secondary'} className={prompt.isActive ? 'bg-green-100 text-green-700' : ''}>
+                  <Badge variant={prompt.isActive ? 'default' : 'secondary'} className={prompt.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : ''}>
                     {prompt.isActive ? 'Active' : 'Inactive'}
                   </Badge>
                 </div>
@@ -675,13 +675,13 @@ export function PromptsPage() {
                       {v.systemPrompt && (
                         <div>
                           <p className="text-xs font-medium text-zinc-500">System:</p>
-                          <p className="text-sm text-zinc-700 line-clamp-2">{v.systemPrompt}</p>
+                          <p className="text-sm text-zinc-700 dark:text-zinc-300 line-clamp-2">{v.systemPrompt}</p>
                         </div>
                       )}
                       {v.userPrompt && (
                         <div>
                           <p className="text-xs font-medium text-zinc-500">User:</p>
-                          <p className="text-sm text-zinc-700 line-clamp-2">{v.userPrompt}</p>
+                          <p className="text-sm text-zinc-700 dark:text-zinc-300 line-clamp-2">{v.userPrompt}</p>
                         </div>
                       )}
                     </CardContent>

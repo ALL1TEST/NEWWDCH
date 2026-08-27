@@ -983,7 +983,7 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
 
         {/* Editor + Line Numbers */}
         <div className="flex flex-1 overflow-hidden">
-          <div className="overflow-hidden bg-zinc-950 dark:bg-zinc-950 light:bg-zinc-50">
+          <div className="overflow-hidden bg-zinc-50 dark:bg-zinc-950">
             <LineNumbers text={htmlBody} scrollTop={editorScrollTop} />
           </div>
           <textarea
@@ -993,7 +993,7 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
             onKeyDown={handleEditorKeyDown}
             onScroll={(e) => setEditorScrollTop(e.currentTarget.scrollTop)}
             spellCheck={false}
-            className="flex-1 resize-none bg-zinc-950 p-4 font-mono text-sm leading-6 text-zinc-100 placeholder:text-zinc-600 focus:outline-none dark:bg-zinc-950 light:bg-zinc-50 light:text-zinc-900"
+            className="flex-1 resize-none bg-zinc-100 dark:bg-zinc-950 p-4 font-mono text-sm leading-6 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-500 dark:placeholder:text-zinc-600 focus:outline-none"
             style={{ minHeight: 500 }}
             placeholder="<!DOCTYPE html>\n<html>\n  <head>...</head>\n  <body>...</body>\n</html>"
           />
