@@ -437,23 +437,24 @@ export function Topbar() {
 
       <Separator orientation="vertical" className="mr-1 h-4 sm:hidden" />
 
-      {/* COLLAPSED rail: Search icon grouped directly with the expand
-          control (the "C" logo) — the single search entry point in this
-          state, so no duplicate lives on the right side of the header. */}
-      {railCollapsed && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={openCommandPalette}
-          aria-label="Search"
-        >
-          <Search className="h-4 w-4" />
-          <span className="sr-only">Search</span>
-        </Button>
-      )}
+      {/* Standalone global Search — ALWAYS visible in BOTH sidebar states,
+          directly after the sidebar's collapse/expand control. Fully
+          independent from the All Sites selector (separator in between,
+          never visually attached). */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 shrink-0"
+        onClick={openCommandPalette}
+        aria-label="Search"
+      >
+        <Search className="h-4 w-4" />
+        <span className="sr-only">Search</span>
+      </Button>
 
-      {/* Site Selector */}
+      <Separator orientation="vertical" className="mx-1 h-4 shrink-0" />
+
+      {/* Site Selector — separate control, unchanged functionality */}
       <SiteSelector />
 
       <Separator orientation="vertical" className="mx-1 h-4" />
@@ -463,33 +464,14 @@ export function Topbar() {
         <Breadcrumbs />
       </div>
 
-      {/* Right side actions — while the rail is collapsed, Search has
-          moved next to the expand control on the left and Theme /
-          Notifications / Profile live in the rail, so this area stays
-          empty (no duplicates). */}
+      {/* Right side actions — Theme / Notifications / Profile. They live in
+          the collapsed rail when the desktop sidebar is collapsed, so they
+          are hidden here in that state (single source, no duplicates).
+          NOTE: no Search here anymore — it is the standalone header-left
+          button above, visible in every sidebar state. */}
       <div className="flex items-center gap-1">
         {!railCollapsed && (
           <>
-            {/* Search button (wide pill on desktop, icon on mobile) */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="hidden sm:flex h-8 w-48 justify-start gap-2 text-muted-foreground font-normal"
-              onClick={openCommandPalette}
-            >
-              <Search className="h-4 w-4" />
-              <span className="text-xs">Search...</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 sm:hidden"
-              onClick={openCommandPalette}
-            >
-              <Search className="h-4 w-4" />
-              <span className="sr-only">Search</span>
-            </Button>
-
             {/* Theme toggle (shared component, same next-themes state) */}
             <ThemeToggle />
 

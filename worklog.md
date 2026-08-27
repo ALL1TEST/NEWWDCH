@@ -3501,3 +3501,18 @@ Work Log:
 Stage Summary:
 - Profile dropdown now professional SaaS style per reference in BOTH themes and BOTH trigger locations (topbar avatar + collapsed rail avatar), with zero duplicated logic — all actions wired to existing modules/stores.
 - Screenshots: .verify/v4-*.png (light menu, hover, FR pill, dark menu, collapsed dark).
+
+---
+Task ID: UI-HEADER-STANDALONE-SEARCH
+Agent: Z.ai Code (main)
+Task: Make the header Search a standalone always-visible control next to the sidebar collapse/expand button in BOTH sidebar states; remove right-side search entirely; keep All Sites fully separate.
+
+Work Log:
+- Topbar: Search icon button now rendered UNCONDITIONALLY as the first header control (directly after the sidebar edge / collapse-expand control), followed by a vertical Separator then the untouched All Sites selector — independent controls with clear spacing, never attached.
+- Removed BOTH right-side search variants (wide "Search..." pill + mobile icon) → exactly one Search in the header in every state (DOM-counted).
+- railCollapsed conditional now governs ONLY Theme/Notifications/Profile visibility (unchanged behavior).
+- Browser-verified: expanded 1440 → Search x=272 right of the sidebar Collapse toggle; collapsed → Search x=64 right of the C-logo Expand control; identical header structure both states ([Search][|][All Sites][|][breadcrumbs] ... right: Theme/Bell/Profile when expanded, rail utilities when collapsed); palette opens from the button; logo-hover "Expand" tooltip shows WITHOUT moving Search (x stays 64); All Sites dropdown opens/closes normally; exactly 1 Search at 1440/1024/375; console/page errors none; eslint clean.
+
+Stage Summary:
+- Header left cluster is now stable across states: [Sidebar: Collapse↔Expand] [Search — always] [All Sites ▼ — always separate]. No appearing/disappearing Search, no duplicates, All Sites functionality untouched.
+- Screenshots: .verify/v5-expanded.png, v5-collapsed.png, v5-tooltip.png.
