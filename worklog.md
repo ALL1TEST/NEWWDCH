@@ -3531,3 +3531,19 @@ Work Log:
 Stage Summary:
 - Header left cluster in BOTH sidebar states: [Search][Collapse/Expand] | [All Sites ▼] | breadcrumbs — matching the provided reference crop; single-purpose controls, no duplicates, no layout jump.
 - Screenshots: .verify/v6-expanded.png, v6-collapsed.png, v6-dark.png.
+
+---
+Task ID: UI-SEARCH-NEXT-TO-CMS-ADMIN
+Agent: Z.ai Code (main)
+Task: Correction — keep the Collapse toggle in its ORIGINAL spot (sidebar header, far right); place the SEARCH icon next to the "CMS Admin" title instead (the icon to relocate was Search, not Collapse).
+
+Work Log:
+- Reverted the v6 topbar group: removed [Search][panel-toggle] from the topbar; re-added CollapseToggle (PanelLeftClose, bottom tooltip "Collapse") at the far right of the expanded sidebar header row.
+- Sidebar expanded header is now [C logo][CMS Admin][🔍 Search][…spacer…][⬒ Collapse] — Search immediately after the title (x=146), opening the existing command palette.
+- Collapsed rail (header row hidden): topbar carries the Search icon again ({railCollapsed && …}, x=64) so search stays available; C logo (hover "Expand" tooltip) + rail edge expand as before.
+- Mobile (<sm): search icon on the header right inside the !railCollapsed fragment (aria-label added) — exactly one Search per viewport/state: expanded desktop → sidebar header; collapsed desktop → topbar-left; mobile → topbar-right.
+- Dev server restarted after it died mid-session (fresh login via Admin demo). Browser-verified at 1440: expanded → sidebarSearch=1@x146, topbarSearch=0; collapsed → rail 48, topbarSearch=1@x64, sidebarSearch=0, C-logo tooltip "Expand", expand restores header row; palette opens from both search buttons; mobile 375 → exactly 1 search; console/page errors none; eslint clean.
+
+Stage Summary:
+- Collapse icon back in its original sidebar-header position; Search icon now sits directly next to the "CMS Admin" name (expanded), with state-appropriate fallbacks (collapsed desktop / mobile) so it is always exactly one click away and never duplicated.
+- Screenshots: .verify/v7-expanded.png, v7-collapsed.png.
