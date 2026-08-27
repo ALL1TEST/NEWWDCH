@@ -15,7 +15,6 @@ import { useLocaleStore } from '@/lib/i18n';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -64,14 +63,17 @@ export function UserProfileMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
       {/* z-[60]: floats above sidebar (z-10) and sticky headers (z-40/50)
-          so the menu is never hidden behind any layer. */}
+          so the menu is never hidden behind any layer. Compact 224px
+          popover: header → Profile → Language → Manage Subscription →
+          Log out, with a subtle divider between every section. */}
       <DropdownMenuContent
         className="w-56 z-[60]"
         side={side}
         align={align}
         collisionPadding={collisionPadding}
       >
-        <DropdownMenuLabel className="font-normal">
+        {/* 1 — Profile header (name + email, compact) */}
+        <DropdownMenuLabel className="font-normal px-2 py-2">
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">{user?.name ?? 'User'}</p>
             <p className="text-xs leading-none text-muted-foreground">
@@ -80,54 +82,68 @@ export function UserProfileMenu({
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => handleNavigate('profile')}>
-            <User className="mr-2 h-4 w-4" />
-            Profile
-          </DropdownMenuItem>
-          <div className="flex items-center justify-between px-2 py-1.5">
-            <div className="flex items-center gap-2 text-sm">
-              <Languages className="mr-2 h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">Language</span>
-            </div>
-            <div className="flex gap-1">
-              <button
-                type="button"
-                className={cn(
-                  'h-6 px-2.5 text-xs font-medium rounded-md transition-colors',
-                  locale === 'en'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-muted',
-                )}
-                onClick={() => { setLocale('en'); toast.success('Language set to EN'); }}
-              >
-                EN
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  'h-6 px-2.5 text-xs font-medium rounded-md transition-colors',
-                  locale === 'fr'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-muted',
-                )}
-                onClick={() => { setLocale('fr'); toast.success('Langue définie sur FR'); }}
-              >
-                FR
-              </button>
-            </div>
-          </div>
-          <DropdownMenuItem onClick={() => handleNavigate('billing')}>
-            <CreditCard className="mr-2 h-4 w-4" />
-            Manage Subscription
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
+
+        {/* 2 — Profile → existing profile page */}
         <DropdownMenuItem
-          className="text-destructive focus:text-destructive"
+          className="cursor-pointer"
+          onClick={() => handleNavigate('profile')}
+        >
+          <User className="h-4 w-4" />
+          Profile
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+
+        {/* 3 — Language with EN / FR selector (existing locale state) */}
+        <div className="flex items-center justify-between px-2 py-1.5 text-sm">
+          <div className="flex items-center gap-2">
+            <Languages className="h-4 w-4 text-muted-foreground" />
+            <span className="text-muted-foreground">Language</span>
+          </div>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              className={cn(
+                'h-6 px-2.5 text-xs font-medium rounded-md transition-colors',
+                locale === 'en'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted',
+              )}
+              onClick={() => { setLocale('en'); toast.success('Language set to EN'); }}
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              className={cn(
+                'h-6 px-2.5 text-xs font-medium rounded-md transition-colors',
+                locale === 'fr'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted',
+              )}
+              onClick={() => { setLocale('fr'); toast.success('Langue définie sur FR'); }}
+            >
+              FR
+            </button>
+          </div>
+        </div>
+        <DropdownMenuSeparator />
+
+        {/* 4 — Manage Subscription → existing billing module */}
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onClick={() => handleNavigate('billing')}
+        >
+          <CreditCard className="h-4 w-4" />
+          Manage Subscription
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+
+        {/* 5 — Log out (destructive, existing auth-store handler) */}
+        <DropdownMenuItem
+          className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
           onClick={() => void logout()}
         >
-          <LogOut className="mr-2 h-4 w-4" />
+          <LogOut className="h-4 w-4" />
           Log out
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -3487,3 +3487,17 @@ Work Log:
 Stage Summary:
 - All three reported issues fixed without touching nav/routing/theme/notification/profile logic; single-source components preserved (UserProfileMenu, NotificationBell, ThemeToggle, Radix tooltip).
 - Screenshots: .verify/v3-*.png (collapsed header grouping, tooltip, avatar popover @900px & @700vh, dark collapsed, expanded settings).
+
+---
+Task ID: UI-PROFILE-DROPDOWN-REFINEMENT
+Agent: Z.ai Code (main)
+Task: Refine the shared Admin User profile dropdown (content order, dividers, hover, dark contrast) — reuse only, no duplication.
+
+Work Log:
+- Codebase inspection first: 'billing' IS a registered module (module-registry.tsx → BillingModule; navigate('billing') → #billing "Billing & Subscription" page) — Manage Subscription already a real action, reused as-is; Profile → #profile ProfileModule; logout/language = existing stores/handlers. No new pages/logic created.
+- Refined UserProfileMenu (single source used by topbar + collapsed rail): explicit section flow header → Profile → Language → Manage Subscription → Log out with DropdownMenuSeparator between EVERY section (per reference); removed DropdownMenuGroup; unified icon alignment (dropped mr-2, rely on item gap-2 → icons/text share one vertical rhythm incl. Language row); cursor-pointer + focus:bg-destructive/10 hover on logout; kept w-56 (224px), z-[60], side/align/collisionPadding props.
+- Browser-verified: light header menu matches reference (224px, dividers, EN active pill); hover bg = accent (lab 96.5); FR pill click moves active state and keeps menu open; EN restored; Manage Subscription → #billing renders Billing & Subscription; Profile → #profile renders profile page; dark mode contrast computed = surface lab(7.8) dark, name lab(98) white, email lab(66) gray, separators white/10 — all readable; collapsed rail avatar opens the SAME menu (9 rows, fully in viewport, rail stays 48px, no expansion); back to light; console/page errors zero; eslint clean.
+
+Stage Summary:
+- Profile dropdown now professional SaaS style per reference in BOTH themes and BOTH trigger locations (topbar avatar + collapsed rail avatar), with zero duplicated logic — all actions wired to existing modules/stores.
+- Screenshots: .verify/v4-*.png (light menu, hover, FR pill, dark menu, collapsed dark).
