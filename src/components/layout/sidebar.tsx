@@ -84,6 +84,9 @@ import {
 } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
+import { NotificationBell } from '@/components/layout/notification-bell';
+import { UserProfileMenu } from '@/components/layout/user-profile-menu';
 
 // -------------------- Icon Mapping --------------------
 
@@ -663,6 +666,7 @@ export function AppSidebar() {
   const logout = useAuthStore((s) => s.logout);
   const currentModule = useNavigationStore((s) => s.currentModule);
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
+  const openCommandPalette = useCommandPaletteStore((s) => s.open);
   // Sidebar context hook — MUST run before any early return.
   const sidebarCtx = useSidebar();
 
@@ -769,12 +773,12 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
 
-      {/* Hide the bottom separator while collapsed — with the footer
-          intentionally empty in that state there is nothing to separate,
-          so the rail bottom stays clean (no orphan hairline). */}
-      <SidebarSeparator className="mx-0 group-data-[collapsible=icon]:hidden" />
+      {/* Bottom separator shows in BOTH states: the collapsed footer now
+          carries the Search / Bell / avatar utility cluster, so there is
+          real content to separate below it in both modes. */}
+      <SidebarSeparator className="mx-0" />
 
-      <SidebarFooter className="shrink-0 group-data-[collapsible=icon]:p-0">
+      <SidebarFooter className="shrink-0">
         {/* Expanded: unchanged row layout [avatar][name/role][logout] */}
         <div className="flex items-center gap-3 px-2 py-2 group-data-[collapsible=icon]:hidden">
           <Avatar className="h-8 w-8 shrink-0">
@@ -808,10 +812,55 @@ export function AppSidebar() {
           </Tooltip>
         </div>
 
-        {/* Collapsed rail: NO admin profile block is rendered here BY DESIGN.
-            Avatar / name / role tooltip and the logout icon only exist in
-            the expanded layout above; expanding the sidebar restores them.
-            This keeps the bottom of the 48px rail clean per spec. */}
+        {/* Collapsed rail: icon-only utility cluster + bare avatar.
+            · Search   → same global command palette as the topbar control
+            · Bell     → the SAME NotificationBell component (unread badge,
+                         dropdown panel and polling all reused verbatim)
+            · Avatar   → opens the SAME UserProfileMenu used by the topbar
+                         (Profile / Language / Manage Subscription / Log out)
+            One 32px cell per row on the shared x=24 center-line. NO name,
+            NO email, NO "ADMIN" badge, NO visible logout icon. None of
+            these controls expand the sidebar — they render popovers via
+            Radix portals instead (#7: independent of sidebarCollapsed). */}
+        <div className="hidden flex-col items-center gap-1 py-1 group-data-[collapsible=icon]:flex">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-md"
+                onClick={openCommandPalette}
+                aria-label="Search"
+              >
+                <Search className="h-4 w-4" />
+                <span className="sr-only">Search</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Search</TooltipContent>
+          </Tooltip>
+
+          {/* Existing notification bell — icon-only trigger, live badge */}
+          <NotificationBell />
+
+          <div aria-hidden="true" className="my-1 h-px w-6 bg-sidebar-border" />
+
+          {/* Avatar ONLY — tapping it opens the shared profile menu that
+              floats beside the rail; the sidebar itself never expands. */}
+          <UserProfileMenu side="right" align="start">
+            <Button
+              variant="ghost"
+              className="h-8 w-8 shrink-0 rounded-full"
+              aria-label={`${user.name} — open profile menu`}
+            >
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} />
+                <AvatarFallback className="text-xs">
+                  {getInitials(user.name)}
+                </AvatarFallback>
+              </Avatar>
+            </Button>
+          </UserProfileMenu>
+        </div>
       </SidebarFooter>
 
       <SidebarRail />

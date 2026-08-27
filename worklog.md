@@ -3437,3 +3437,21 @@ Stage Summary:
 - Expanded sidebar unchanged incl. Admin User + logout; Settings popover decoupled from collapse state (regression-verified).
 - NOTE: verified computed colors report as `lab(...)` because browsers normalize oklch→lab; values match tokens exactly.
 - Dev-only seeder lives at scripts/seed-demo-charts.ts (rerun if demo data removed).
+
+---
+Task ID: UI-COLLAPSED-RAIL-UTILITIES
+Agent: Z.ai Code (main)
+Task: Collapsed sidebar — avatar-only profile + Search/Notifications utility cluster (reference-image spec); reuse existing profile menu; no auto-expand; zero redesign elsewhere.
+
+Work Log:
+- Explored src/components/layout/{sidebar,topbar,notification-bell}.tsx: collapsed footer was intentionally empty; topbar owned the only profile DropdownMenu, command-palette Search, and NotificationBell.
+- Created src/components/layout/user-profile-menu.tsx: extracted the topbar profile dropdown VERBATIM (Profile / Language EN-FR / Manage Subscription / Log out) into shared <UserProfileMenu side align> with trigger as children — single implementation, zero duplication.
+- Topbar: swapped inline dropdown for <UserProfileMenu align="end"> + identical trigger markup (plan ring + plan badge kept); removed now-unused imports (User/LogOut/CreditCard/Languages/DropdownMenuGroup/locale store/handleNavigate).
+- Sidebar footer: added collapsed-only cluster (hidden group-data-[collapsible=icon]:flex, same 32px cell grid, x=24 center-line): [Search → openCommandPalette] [existing NotificationBell w/ live badge] [w-6 hairline bg-sidebar-border] [bare AU Avatar]. Avatar opens UserProfileMenu side="right" align="start" (Radix portal — rail never expands). No name/email/ADMIN badge/logout icon in rail. Bottom SidebarSeparator restored for both states (footer has content again); removed group-data p-0.
+- next.config.ts: devIndicators.position="bottom-right" — dev-only badge previously overlapped the rail avatar corner (no CSS hacks, no prod effect).
+- Browser-verified (agent-browser, admin login): collapsed rail = C logo + 11 nav icons + Search/Bell(4)/AU; avatar popover lists full menu, Profile item navigates, railWidth stays 48px through popover/search/bell; command palette opens from rail Search; bell dropdown renders live list w/ View All/Clear All; expand restores original footer (AU + Admin User + ADMIN + logout icon); dark mode rail + popover readable (proper tokens); light mode regression-free; mobile 375px drawer = expanded layout w/ cluster correctly hidden; logout via rail menu returns to login screen; re-login OK. Console/page errors: none. Lint clean on all touched files.
+
+Stage Summary:
+- Single-source UserProfileMenu now shared by topbar + collapsed rail; rail bottom = Search / Bell(badge) / avatar on one axis; sidebar never auto-expands from utility clicks; Settings popover behavior untouched.
+- Artifact: dev-only Next badge moved to bottom-right (config, not hack).
+- Dev server restarted with new config, running on :3000; screenshots in .verify/ (collapsed-rail-v2, profile-popover, dark-profile-popover, command-palette, rail-bell-panel, expanded-footer, light-expanded-regression, mobile-drawer, after-logout).
