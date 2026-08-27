@@ -213,35 +213,63 @@ export function Breadcrumbs() {
     return null;
   }
 
-  // Backups module — render a dedicated "Overview > Backups" breadcrumb path
-  // in the topbar (right after the "All Sites" site selector). The Backups
-  // section keeps its internal sub-page tabs (Overview, Backups, Schedules,
-  // Restore, Storage, Logs) IN THE PAGE content (see
-  // src/modules/backups/index.tsx) — they are NOT moved into the topbar.
-  // The topbar shows ONLY the breadcrumb path so every module shares the
-  // same header pattern: [ All Sites ] + breadcrumb path.
+  // Backups module — DYNAMIC cumulative breadcrumb trail in the topbar
+  // (right after the "All Sites" selector). The trail follows the Backups
+  // sub-page/tab order (Overview, Backups, Schedules, Restore, Storage,
+  // Logs) and shows every tab from Overview THROUGH the current sub-page,
+  // joined by ">" separators — text-only, NO icons.
   //
-  // The breadcrumb text is always "Overview > Backups" (no site-context
-  // prefix) regardless of which site is selected or which Backups sub-page
-  // is active — the active sub-page is indicated by the in-page tab bar
-  // (BackupsSubNav) + the page h1, not by the topbar breadcrumb. "Overview"
-  // mirrors the styling of the site-context prefix used elsewhere
-  // (text-xs muted label); "Backups" is the current page (Database icon +
-  // BreadcrumbPage), identical to the rest of the app's module crumbs.
+  //   Overview tab  → NO breadcrumb (root of the trail; topbar keeps just
+  //                   the "All Sites" selector)
+  //   Backups tab   → Overview > Backups
+  //   Schedules tab → Overview > Backups > Schedules
+  //   Restore tab   → Overview > Backups > Schedules > Restore
+  //   Storage tab   → Overview > Backups > Schedules > Restore > Storage
+  //   Logs tab      → Overview > Backups > Schedules > Restore > Storage > Logs
+  //
+  // The breadcrumb is a PATH display — text-only items (no icons), ">"
+  // separators, non-clickable parents (muted) + current/last item
+  // (foreground via BreadcrumbPage). The Backups internal tab navigation
+  // (BackupsSubNav) stays in the PAGE content (src/modules/backups/
+  // index.tsx) — it is NOT rendered here and is NOT duplicated inside the
+  // breadcrumb. The trail updates automatically when navigating between
+  // Backups sub-pages because it reads `currentSubPage` from the
+  // navigation store.
   if (currentModule === 'backups') {
+    const BACKUPS_TRAIL: { key: string | null; label: string }[] = [
+      { key: null, label: 'Overview' },
+      { key: 'backups', label: 'Backups' },
+      { key: 'schedules', label: 'Schedules' },
+      { key: 'restore', label: 'Restore' },
+      { key: 'storage', label: 'Storage' },
+      { key: 'logs', label: 'Logs' },
+    ];
+    const currentIndex = BACKUPS_TRAIL.findIndex(
+      (t) => (t.key === null ? !currentSubPage : t.key === currentSubPage),
+    );
+    // Overview tab (index 0) → no breadcrumb. Unknown state → no breadcrumb.
+    if (currentIndex <= 0) {
+      return null;
+    }
+    const trail = BACKUPS_TRAIL.slice(0, currentIndex + 1);
     return (
       <Breadcrumb>
         <BreadcrumbList>
-          <BreadcrumbItem>
-            <span className="text-xs text-muted-foreground font-medium">Overview</span>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <span className="flex items-center gap-1">
-              <Database className="h-3.5 w-3.5" />
-              <BreadcrumbPage>Backups</BreadcrumbPage>
-            </span>
-          </BreadcrumbItem>
+          {trail.map((item, idx) => {
+            const isLast = idx === trail.length - 1;
+            return (
+              <React.Fragment key={item.key ?? 'overview'}>
+                {idx > 0 && <BreadcrumbSeparator>{'>'}</BreadcrumbSeparator>}
+                <BreadcrumbItem>
+                  {isLast ? (
+                    <BreadcrumbPage>{item.label}</BreadcrumbPage>
+                  ) : (
+                    <span>{item.label}</span>
+                  )}
+                </BreadcrumbItem>
+              </React.Fragment>
+            );
+          })}
         </BreadcrumbList>
       </Breadcrumb>
     );
@@ -249,8 +277,8 @@ export function Breadcrumbs() {
 
   // Settings and its sub-pages — sidebar is the only navigation, hide breadcrumb.
   // This includes modules now grouped under Settings: Email Templates,
-  // Notifications. (Backups renders its own "Overview > Backups" breadcrumb
-  // above, so it is excluded here.) Standalone pages without sub-pages
+  // Notifications. (Backups renders its own dynamic trail breadcrumb above,
+  // so it is excluded here.) Standalone pages without sub-pages
   // (Dashboard, Calendar, Users, Comments, SMTP Settings) keep ONLY the
   // topbar breadcrumb (no internal one).
   const SETTINGS_CHILDREN = new Set(['settings', 'email-templates', 'notifications']);
