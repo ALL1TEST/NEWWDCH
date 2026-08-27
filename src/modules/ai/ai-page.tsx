@@ -59,7 +59,7 @@ export function AiPage() {
   }, [currentSubPage, navigate]);
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6">
       <Tabs value={effectiveTab} onValueChange={handleTabChange}>
         <div className="overflow-x-auto">
           <TabsList className="w-full justify-start">

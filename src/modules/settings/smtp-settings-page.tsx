@@ -289,7 +289,7 @@ export function SmtpSettingsPage() {
   // ---------- Loading skeleton ----------
   if (isLoading) {
     return (
-      <div className="space-y-6 p-6">
+      <div className="space-y-6">
         <div className="h-8 w-48 animate-pulse bg-muted rounded" />
         {Array.from({ length: 3 }).map((_, i) => (
           <Card key={i}>
@@ -309,7 +309,7 @@ export function SmtpSettingsPage() {
   );
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       {/* Page Header */}
       <div>
         <h1 className="text-xl font-bold tracking-tight text-foreground">

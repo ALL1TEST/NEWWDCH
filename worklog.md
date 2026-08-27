@@ -5033,3 +5033,37 @@ Stage Summary:
 - "Executive Dashboard" reduced from 24px→20px — slightly smaller and better proportioned with the 14px logo (ratio 1.71×→1.43×); flush top alignment from Task 32 preserved (gap=0).
 - All other admin page titles (Articles, Comments, Calendar, Automation, SEO, Tags, Categories, Backups, SMTP Settings, Billing, Newsletter, Users, Jobs, Analytics, Audit, Notifications, etc.) now share the identical sizing/alignment style.
 - Article preview titles and editor title bars intentionally left at their existing sizes (they are content elements, not page headers).
+
+---
+Task ID: 34
+Agent: main (orchestrator)
+Task: Fix the vertical spacing of the page header across the entire dashboard. The page title (e.g. "Executive Dashboard") was too close to the top / felt stuck to the top edge. Add comfortable, subtle, CONSISTENT top spacing globally via the shared layout (not per-page). Keep title/subtitle/logo/sidebar aligned. Do not change font sizes, colors, card sizes, or overall layout. Apply to all pages (Dashboard, Calendar, SEO, Automation, etc.).
+
+Work Log:
+- Audited the previous state: admin-shell main was `px-6 pb-6 pt-0` (Task 32 removed the 24px top padding to kill the "blank space" above Executive Dashboard). Result: pages WITHOUT their own padding wrapper sat the title at gap=0 (stuck to top — the new complaint). But pages WITH their own `p-6` page-root wrapper (Backups dashboard, Automation list/details, SMTP Settings, AI) still sat at 24px (the old "blank space"). So spacing was INCONSISTENT page-to-page: 0px on Dashboard/Calendar/SEO-subpages/Comments/Tags/Categories/Articles/Billing/Newsletter/Users/Jobs, but 24px on Backups/Automation/SMTP/AI.
+- Chose the global fix the user mandated: make admin-shell's main padding the SOLE source of top spacing, at a comfortable-subtle value between 0 (stuck) and 24 (blank space) → `pt-4` (16px). 16px is a standard comfortable header top inset: clearly > 0 (not stuck), clearly < 24 (not "blank space"), subtle.
+- Edited src/components/layout/admin-shell.tsx line 54: `pt-0` → `pt-4`. (`<main className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4">`)
+- Normalized away the redundant per-page `p-6` page-root wrappers so they don't double up to 24px and instead use admin-shell's uniform 16px. Confirmed via grep that the ONLY page-root `p-6` wrappers in the modules were:
+  • src/modules/backups/dashboard-page.tsx — line 129 (loading skeleton `space-y-6 p-6`) and line 160 (main `space-y-8 p-6`) → removed `p-6` from both
+  • src/modules/automation/automation-list-page.tsx:73 — `space-y-6 p-6` → `space-y-6`
+  • src/modules/automation/automation-details-page.tsx — line 65 (loading skeleton `space-y-4 p-6`) and line 79 (main `space-y-6 p-6 max-w-4xl`) → removed `p-6` from both (kept `max-w-4xl` on the main)
+  • src/modules/settings/smtp-settings-page.tsx — line 292 (loading skeleton) and line 312 (main) both `space-y-6 p-6` → removed `p-6` from both (replace_all on the indented form, then a targeted edit for the 4-space-indented main)
+  • src/modules/ai/ai-page.tsx:62 — `flex flex-col gap-6 p-6` → `flex flex-col gap-6`
+  All other `p-6` hits in modules were NESTED elements (Card/CardContent/SheetHeader/prose containers) — left untouched.
+- Did NOT touch sub-navigation tab bars (SeoSubNav / AutomationSubNav / BackupsSubNav, each `mb-6`) or PageHeader breadcrumbs — those are legitimate per-module chrome the user said not to change ("do not change the overall layout"). They now also benefit from the 16px top spacing (previously stuck at 0).
+- Lint: clean for all edited files (the 4 errors + 3 warnings are pre-existing in content-create/edit-page & seo-broken-links-page, unrelated). Dev log: no compile errors (only pre-existing yauzl warning + 401 on /api/auth/me cold start).
+
+Verification (agent-browser, logged in as admin):
+- Dashboard: "Executive Dashboard" h1 top = 16px, headerBottom = 0 → gap = 16 (was 0 before; comfortable, not stuck, not blank space).
+- Pages WITHOUT sub-nav/breadcrumb (h1 directly at content top): Dashboard, Calendar, SMTP Settings, Newsletter, Users, Tags, Categories, Comments — ALL gap = 16px. ✓
+- Pages WITH sub-nav (h1 sits below the tab bar): SEO (gap 72 = 16 base + sub-nav), Automation (72), Backups (72). Measured the TOP of the page content area (the sub-nav element) = 16px on SEO and Backups → confirms the BASE spacing is uniformly 16px; the larger h1 gap is purely the sub-nav height, not a spacing inconsistency.
+- Pages WITH breadcrumb (PageHeader default, e.g. Jobs): gap = 48 (16 base + ~32 breadcrumb row).
+- AI page: no h1 (uses Tabs as nav) — expected.
+- VLM (z-ai vision) on Dashboard screenshot: comfortable standard gap between top toolbar and "Executive Dashboard" title; clearly separated, not stuck to edge; clean, balanced, professional; title properly aligned with the sidebar nav items.
+- VLM on SEO screenshot: comfortable distinct gap (~16-24px) between top toolbar and sub-nav tabs (not stuck); clean and consistent with standard admin layouts; vertical rhythm between header, tabs, page title, and content cards follows conventional patterns.
+
+Stage Summary:
+- Global page-header top spacing is now a uniform 16px (admin-shell main `pt-4`), applied to EVERY admin page via the shared layout — no per-page margin/padding added.
+- Fixed the "stuck to top edge" problem on Dashboard, Calendar, Comments, Tags, Categories, Articles, Billing, Newsletter, Users, Jobs (base) AND on the sub-navs of SEO, Automation, Backups (which were also stuck at 0 before).
+- Eliminated the previous inconsistency where Backups/Automation/SMTP/AI sat at 24px while the rest sat at 0 — all now at 16px base.
+- No font/color/card-size/overall-layout changes; sub-navs and breadcrumbs preserved; title/subtitle/logo/sidebar alignment preserved; Task 33's text-xl title sizing preserved.

@@ -62,7 +62,7 @@ export function AutomationDetailsPage({ automationId }: { automationId: string }
 
   if (isLoading || !automation) {
     return (
-      <div className="space-y-4 p-6">
+      <div className="space-y-4">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-64 w-full" />
@@ -76,7 +76,7 @@ export function AutomationDetailsPage({ automationId }: { automationId: string }
   const avgDuration = automation.runs.length > 0 ? Math.round(automation.runs.reduce((sum, r) => sum + (r.durationMs || 0), 0) / automation.runs.length / 1000) : '—';
 
   return (
-    <div className="space-y-6 p-6 max-w-4xl">
+    <div className="space-y-6 max-w-4xl">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate('automation')}><ArrowLeft className="h-4 w-4" /></Button>

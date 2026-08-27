@@ -126,7 +126,7 @@ export function DashboardPage() {
 
   if (isLoading || !stats) {
     return (
-      <div className="space-y-6 p-6">
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <Skeleton className="h-8 w-32 mb-2" />
@@ -157,7 +157,7 @@ export function DashboardPage() {
     : 'No backups yet';
 
   return (
-    <div className="space-y-8 p-6">
+    <div className="space-y-8">
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div>
