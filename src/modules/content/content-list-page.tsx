@@ -801,7 +801,7 @@ export function ContentListPage() {
         {/* Page Header */}
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Articles</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Articles</h1>
             <p className="mt-1 truncate text-sm text-muted-foreground">
               Manage your blog articles for The Efficient You
             </p>

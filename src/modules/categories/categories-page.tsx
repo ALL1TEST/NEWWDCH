@@ -831,7 +831,7 @@ export function CategoriesPage() {
         {/* Page Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Categories</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Categories</h1>
             <p className="text-sm text-muted-foreground mt-1">
               Organize your content with a structured category hierarchy
             </p>

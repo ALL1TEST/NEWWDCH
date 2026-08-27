@@ -28,7 +28,7 @@ export function PageHeader({
       {breadcrumbs && <Breadcrumbs />}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-xl font-bold tracking-tight text-foreground">
             {title}
           </h1>
           {description && (

@@ -50,7 +50,7 @@ export function BillingPage() {
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-xl font-semibold">{t('billing.title')}</h1>
+        <h1 className="text-xl font-bold tracking-tight text-foreground">{t('billing.title')}</h1>
         <p className="text-sm text-muted-foreground mt-1">{t('billing.description')}</p>
       </div>
 

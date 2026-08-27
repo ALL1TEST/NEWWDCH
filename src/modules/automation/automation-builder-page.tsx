@@ -278,7 +278,7 @@ export function AutomationBuilderPage({ mode }: { mode?: 'generate' }) {
           <ArrowLeft className="h-3.5 w-3.5" />
           {isGenerateMode ? 'Back to Articles' : 'Back to Automations'}
         </button>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{isGenerateMode ? 'Generate Article' : 'New Automation'}</h1>
+        <h1 className="text-xl font-bold tracking-tight text-foreground">{isGenerateMode ? 'Generate Article' : 'New Automation'}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {isGenerateMode ? 'Configure your AI article generation and create a draft instantly.' : 'Set up your automated publishing workflow in 4 simple steps.'}
         </p>

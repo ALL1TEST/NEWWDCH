@@ -55,7 +55,7 @@ export function SeoSettingsPage({ initialTab = 'sitemap' }: { initialTab?: Setti
     <div className="space-y-6">
       {/* Single dynamic page title — no duplicate "SEO Settings" heading */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{meta.title}</h1>
+        <h1 className="text-xl font-bold tracking-tight text-foreground">{meta.title}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{meta.description}</p>
       </div>
 

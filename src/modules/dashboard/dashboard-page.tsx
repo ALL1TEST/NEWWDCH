@@ -334,7 +334,7 @@ export function DashboardPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{pageTitle}</h1>
+        <h1 className="text-xl font-bold tracking-tight text-foreground">{pageTitle}</h1>
         <p className="text-sm text-muted-foreground mt-1">
           {isAllSites
             ? 'Monitor all sites, manage operations, and track performance across your network.'

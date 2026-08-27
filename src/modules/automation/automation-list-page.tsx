@@ -74,7 +74,7 @@ export function AutomationListPage({ showRunsOnly = false }: { showRunsOnly?: bo
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Automation</h1>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">Automation</h1>
           <p className="mt-1 text-sm text-muted-foreground">Create and manage automated workflows for your content.</p>
         </div>
         <Button onClick={() => navigate('automation', null, 'create')} className="gap-2">

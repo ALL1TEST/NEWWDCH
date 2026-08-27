@@ -4988,3 +4988,48 @@ Stage Summary:
 - `src/components/layout/breadcrumbs.tsx`: extracted `NO_BREADCRUMB_MODULES` to module scope + exported new `hasBreadcrumb(currentModule)` helper. `Breadcrumbs` now uses the helper (same behavior).
 - `src/components/layout/topbar.tsx`: imports `useNavigationStore` + `hasBreadcrumb` + `cn`; computes `showBreadcrumb`; conditionally applies `sm:hidden` to the `<header>` when the current module has no breadcrumb → on desktop the topbar (and its 56px empty strip) is `display:none` for Dashboard / Calendar / Users / Comments / Media / Settings / Email-Templates / Notifications / Backups / Articles / SEO / AI / Automation / Newsletter. On mobile the topbar stays visible (for the SidebarTrigger drawer toggle). Modules WITH breadcrumbs (Profile, Billing) keep the topbar visible on desktop with the breadcrumb path.
 - Net effect: the empty blank white strip above "Executive Dashboard" (and above the title on every other no-breadcrumb module) is GONE on desktop. The title sits flush at the top of the viewport, vertically aligned with the sidebar's top. Mobile layout is preserved (topbar still there for the hamburger). Pages with breadcrumbs are unchanged. No duplication, no missing controls.
+
+---
+Task ID: 33
+Agent: main (orchestrator)
+Task: Make the "Executive Dashboard" page title slightly smaller so it is better proportioned with the CMS Admin logo, and apply the same sizing/alignment style to all other admin pages for consistency.
+
+Work Log:
+- Audited every <h1> across src/modules + src/components/patterns/page-header.tsx. Identified two groups of page-title H1s: (a) the shared PageHeader component (used by ~26 pages: jobs, analytics, backups×6, seo×11, newsletter, content-detail, email-templates×2, audit, notifications, users×2) titled `text-2xl font-bold tracking-tight text-foreground`; (b) inline page-title H1s in dashboard, backups/dashboard, seo-settings, comments, content-list (Articles), tags, categories, automation×3, settings/smtp-settings, calendar, billing — mix of `text-2xl`/`text-3xl ... font-bold tracking-tight` (some with `sm:text-3xl` responsive bumps).
+- Confirmed the CMS Admin logo renders at 14px / font-weight 600 (text-sm font-semibold tracking-tight), so the previous 24px bold title sat at a 1.71× size ratio — visibly oversized next to the logo.
+- Chose canonical page-title style: `text-xl font-bold tracking-tight text-foreground` (20px / 700) — a modest ~17% reduction from 24px, bringing the title-to-logo ratio to 1.43× (better proportioned while still clearly the page heading). Kept font-bold to preserve heading hierarchy; tracking-tight + text-foreground match the existing dashboard/PageHeader treatment.
+- Edited 14 files (1 shared component + 13 inline H1s):
+  • src/components/patterns/page-header.tsx (line 31) — covers ~26 pages
+  • src/modules/dashboard/dashboard-page.tsx:337 — "Executive Dashboard" (the title the user named)
+  • src/modules/backups/dashboard-page.tsx:164 — "Backups"
+  • src/modules/seo/seo-settings-page.tsx:58 — SEO subpage titles
+  • src/modules/comments/comments-page.tsx:1052 — "Comments"
+  • src/modules/content/content-list-page.tsx:804 — "Articles"
+  • src/modules/tags/tags-page.tsx:408 — "Tags"
+  • src/modules/categories/categories-page.tsx:834 — "Categories"
+  • src/modules/automation/automation-builder-page.tsx:281
+  • src/modules/automation/automation-list-page.tsx:77 — "Automation"
+  • src/modules/automation/automation-details-page.tsx:85
+  • src/modules/settings/smtp-settings-page.tsx:315 — "SMTP Settings"
+  • src/modules/calendar/calendar-page.tsx:436 — "Calendar"
+  • src/modules/billing/billing-page.tsx:53 — "Billing & Subscription" (was text-xl font-semibold → now matches canonical style)
+- Deliberately LEFT UNTOUCHED (not page titles — content/editor elements):
+  • content-create-page.tsx:147 & content-edit-page.tsx:170 — `text-3xl ... sm:text-4xl` article PREVIEW rendered H1 inside the preview pane
+  • content-create-page.tsx:782 & content-edit-page.tsx:788 — `text-xl font-semibold` editor document-title input bars
+  • dashboard-page.tsx:170 — KPI card value <p>
+  • AI subpage <h2 className="text-lg font-semibold"> section headers (AI page uses Tabs, no H1 page title)
+  • profile-page.tsx user name h2, media-list-page custom full-bleed browser header
+- Lint: clean for all edited files (the 4 errors + 3 warnings are pre-existing in content-create/edit-page & seo-broken-links-page, unrelated).
+- Dev log: no compile errors from edits (only pre-existing yauzl module-not-found warning + 401 on /api/auth/me cold start).
+
+Verification (agent-browser, logged in as admin):
+- Dashboard: "Executive Dashboard" → fontSize 20px, fontWeight 700, className text-xl font-bold tracking-tight text-foreground, top=0, headerBottom=0, gap=0 (Task 32 flush alignment preserved).
+- Logo "CMS Admin" measured: 14px / weight 600 → title-to-logo size ratio now 1.43× (down from 1.71×).
+- Cross-page consistency confirmed via hash nav (#dashboard, #tags, #categories, #backups, #settings, #billing, #newsletter, #users) + sidebar clicks (Articles, Comments, Calendar, Automation, SEO Overview): EVERY page renders its H1 at 20px / 700 / text-xl font-bold tracking-tight text-foreground.
+- VLM (z-ai vision) on dashboard screenshot: (1) title sits flush below top toolbar with no blank gap; (2) clearly the page heading, reasonably proportioned relative to the CMS Admin logo — larger but not oversized; (3) no visible layout problems, alignment/spacing/proportions correct and professional.
+
+Stage Summary:
+- Canonical admin page-title H1 style is now `text-xl font-bold tracking-tight text-foreground` (20px/700), applied uniformly across 14 files (~39 page instances via PageHeader + inline).
+- "Executive Dashboard" reduced from 24px→20px — slightly smaller and better proportioned with the 14px logo (ratio 1.71×→1.43×); flush top alignment from Task 32 preserved (gap=0).
+- All other admin page titles (Articles, Comments, Calendar, Automation, SEO, Tags, Categories, Backups, SMTP Settings, Billing, Newsletter, Users, Jobs, Analytics, Audit, Notifications, etc.) now share the identical sizing/alignment style.
+- Article preview titles and editor title bars intentionally left at their existing sizes (they are content elements, not page headers).

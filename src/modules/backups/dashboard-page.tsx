@@ -161,7 +161,7 @@ export function DashboardPage() {
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Backups</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Backups</h1>
             <p className="mt-1 text-sm text-muted-foreground">Monitor and manage your system backups.</p>
           </div>
           <Button onClick={goToBackups} className="gap-2">

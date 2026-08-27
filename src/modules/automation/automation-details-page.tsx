@@ -82,7 +82,7 @@ export function AutomationDetailsPage({ automationId }: { automationId: string }
         <Button variant="ghost" size="icon" onClick={() => navigate('automation')}><ArrowLeft className="h-4 w-4" /></Button>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">{automation.name}</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{automation.name}</h1>
             <Badge variant="outline" className={cn('border-transparent', automation.status === 'ACTIVE' ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400' : automation.status === 'PAUSED' ? 'bg-zinc-50 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300' : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400')}>{automation.status}</Badge>
           </div>
           {automation.description && <p className="text-sm text-muted-foreground mt-1">{automation.description}</p>}

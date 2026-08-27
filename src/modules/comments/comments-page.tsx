@@ -1049,7 +1049,7 @@ export function CommentsPage() {
         {/* Page Header */}
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Comments</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Comments</h1>
             <p className="text-muted-foreground mt-1">
               Moderate and manage user comments across your content
             </p>

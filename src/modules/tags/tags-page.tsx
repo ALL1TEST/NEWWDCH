@@ -405,7 +405,7 @@ export function TagsPage() {
       {/* Page Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Tags</h1>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">Tags</h1>
           <p className="text-muted-foreground text-sm">
             Manage tags for content organization and discovery
           </p>

@@ -433,7 +433,7 @@ function CalendarHeader({
     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       {/* Title block */}
       <div className="min-w-0">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+        <h1 className="text-xl font-bold tracking-tight text-foreground">
           Calendar
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
