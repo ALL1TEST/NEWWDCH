@@ -1,22 +1,30 @@
 'use client';
 
 // ============================================================
-// PLATFORM PLANS & PRICING — editable single source of truth.
+// PLATFORM PLANS & PRICING — simplified admin UI.
 // ============================================================
-// Owner edits plan name / price / currency / interval / features /
-// entitlements / limits / active / sort here. Every change writes to
-// the PlanConfig table via PUT /api/platform/admin/plans/[planId] and
-// refreshes the shared plan-config cache — so the Client Billing page
-// and MRR reflect the new values on the next read. The same cache the
-// client reads. Pricing edits are OWNER-ONLY (enforced server-side);
-// PLATFORM_ADMIN can view but the PUT returns 403.
+// Owner sees compact plan cards (Beta / Pro / Max) with a quick
+// Active toggle, a compact price + features + limits summary,
+// and an "Edit Plan" button. The Edit Plan button opens a Dialog
+// with three compact sections: Basic Information, Feature Access,
+// Usage Limits. An optional collapsed "Client Display" section
+// holds the marketing feature list shown to clients on the
+// Client Billing page.
+//
+// All writes go through PUT /api/platform/admin/plans/[planId]
+// (owner-only) — the same shared plan-config cache the Client
+// Billing page and MRR read. Server-side entitlement enforcement
+// (hasFeature) and usage-limit checks (checkLimit) consume the
+// same data, so toggling a feature off here denies it for clients
+// on the next request. The Client Billing page is NOT modified
+// and continues to read from /api/platform/billing/me.
 // ============================================================
 
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApi, putApi } from '@/lib/api-client';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,27 +32,251 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Save, RotateCcw, ShieldAlert } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+  ChevronDown,
+  Loader2,
+  Pencil,
+  RotateCcw,
+  Save,
+  ShieldAlert,
+} from 'lucide-react';
 import {
   PlatformPageHeader,
   ErrorState,
+  PlanBadge,
+  formatBytes,
   formatCurrency,
 } from '@/modules/platform/shared';
 import {
   ENTITLEMENT_KEYS,
   ENTITLEMENT_LABELS,
-  ENTITLEMENT_DESCRIPTIONS,
   LIMIT_KEYS,
   LIMIT_LABELS,
   UNLIMITED,
+  type EntitlementKey,
+  type LimitKey,
 } from '@/lib/platform/feature-config';
-import type { PlanConfigData } from '@/lib/platform/plan-config';
+import type { PlanConfigData, PlanLimits } from '@/lib/platform/plan-config';
 import { useAuthStore } from '@/lib/stores/auth-store';
 
 type PlanPatch = Partial<PlanConfigData>;
 
-function EditablePlanCard({ plan }: { plan: PlanConfigData }) {
+// -------------------- helpers --------------------
+
+/** Resolve the badge id for the shared PlanBadge component. Falls
+ *  back to 'beta' for any unknown plan id so future plans still
+ *  render with a sensible neutral badge. */
+function getPlanBadgeId(planId: string): 'beta' | 'pro' | 'max' {
+  if (planId === 'beta' || planId === 'pro' || planId === 'max') return planId;
+  return 'beta';
+}
+
+/** Format a single limit value for the compact card summary. -1 →
+ *  "Unlimited"; storageBytes → human-readable (1 GB); other limits
+ *  use locale-formatted numbers. */
+function formatLimitValue(key: LimitKey, value: number): string {
+  if (value === UNLIMITED) return 'Unlimited';
+  if (key === 'storageBytes') return formatBytes(value);
+  return value.toLocaleString();
+}
+
+/** One-line compact limits summary used on the plan card. */
+function summarizeLimits(limits: PlanLimits): string {
+  return [
+    `${formatLimitValue('maxSites', limits.maxSites)} sites`,
+    formatLimitValue('storageBytes', limits.storageBytes),
+    `${formatLimitValue('aiWords', limits.aiWords)} AI words`,
+    `${formatLimitValue('aiArticles', limits.aiArticles)} AI articles`,
+    `${formatLimitValue('automationRuns', limits.automationRuns)} automation runs`,
+  ].join(' · ');
+}
+
+/** One-line compact entitlement summary used on the plan card. */
+function summarizeEntitlements(entitlements: string[]): string {
+  if (entitlements.length === 0) return 'No advanced features';
+  return entitlements
+    .map((key) => ENTITLEMENT_LABELS[key as EntitlementKey] ?? key)
+    .join(' · ');
+}
+
+// -------------------- Plan summary tile --------------------
+
+function PlanSummaryTile({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 flex items-center gap-2">
+      <span className="text-lg font-bold tracking-tight tabular-nums">{value}</span>
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+// -------------------- Plan Card (compact) --------------------
+
+function PlanSummaryCard({
+  plan,
+  canEdit,
+}: {
+  plan: PlanConfigData;
+  canEdit: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+
+  // Quick active toggle — auto-saves immediately (owner-only).
+  // Reuses the same PUT endpoint and the same invalidation chain
+  // as the full Edit modal so clients see the new status on the
+  // next read.
+  const activeMutation = useMutation({
+    mutationFn: (active: boolean) =>
+      putApi<PlanConfigData>(`/api/platform/admin/plans/${plan.planId}`, { active }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['platform-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-billing-me'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-overview'] });
+      toast.success(
+        `${data.name} ${data.active ? 'activated' : 'deactivated'} — changes are live for clients.`,
+      );
+    },
+    onError: (err: unknown) => {
+      const e = err as { error?: { message?: string }; message?: string };
+      toast.error(
+        e?.error?.message ?? e?.message ?? 'Unable to change plan status. OWNER access required.',
+      );
+    },
+  });
+
+  return (
+    <>
+      <Card className={plan.active ? '' : 'opacity-70'}>
+        <CardContent className="p-4 space-y-4">
+          {/* Header: name + badge + quick active toggle */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <h3 className="text-base font-semibold tracking-tight truncate">{plan.name}</h3>
+              <PlanBadge planId={getPlanBadgeId(plan.planId)} />
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Label
+                htmlFor={`active-${plan.planId}`}
+                className="text-xs text-muted-foreground cursor-pointer"
+              >
+                {plan.active ? 'Active' : 'Inactive'}
+              </Label>
+              <Switch
+                id={`active-${plan.planId}`}
+                checked={plan.active}
+                disabled={!canEdit || activeMutation.isPending}
+                onCheckedChange={(v) => activeMutation.mutate(v)}
+              />
+            </div>
+          </div>
+
+          {/* Price */}
+          <div className="space-y-0.5">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+              Price
+            </p>
+            {plan.isFree ? (
+              <p className="text-2xl font-bold tracking-tight">Free</p>
+            ) : (
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold tracking-tight">
+                  {formatCurrency(plan.priceMonthly, plan.currency)}
+                </span>
+                <span className="text-xs text-muted-foreground">/ month</span>
+              </div>
+            )}
+            {!plan.isFree && plan.priceYearly > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {formatCurrency(plan.priceYearly, plan.currency)} / year
+              </p>
+            )}
+          </div>
+
+          {/* Billing interval */}
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Billing</span>
+            <span className="font-medium capitalize">{plan.interval}</span>
+          </div>
+
+          {/* Features */}
+          <div className="space-y-1">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+              Features
+            </p>
+            <p className="text-sm leading-snug">{summarizeEntitlements(plan.entitlements)}</p>
+          </div>
+
+          {/* Limits */}
+          <div className="space-y-1">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+              Limits
+            </p>
+            <p className="text-sm leading-snug text-foreground/90">
+              {summarizeLimits(plan.limits)}
+            </p>
+          </div>
+
+          <Separator />
+
+          {/* Edit button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            disabled={!canEdit}
+            onClick={() => setEditing(true)}
+          >
+            <Pencil className="h-4 w-4 mr-2" />
+            Edit Plan
+          </Button>
+          {!canEdit && (
+            <p className="text-[10px] text-muted-foreground text-center -mt-2">
+              Editing is restricted to the OWNER role.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {editing && (
+        <EditPlanDialog plan={plan} open={editing} onOpenChange={setEditing} />
+      )}
+    </>
+  );
+}
+
+// -------------------- Edit Plan Dialog --------------------
+
+function EditPlanDialog({
+  plan,
+  open,
+  onOpenChange,
+}: {
+  plan: PlanConfigData;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(plan.name);
   const [priceMonthly, setPriceMonthly] = useState(String(plan.priceMonthly));
@@ -54,7 +286,14 @@ function EditablePlanCard({ plan }: { plan: PlanConfigData }) {
   const [active, setActive] = useState(plan.active);
   const [features, setFeatures] = useState(plan.features.join('\n'));
   const [entitlements, setEntitlements] = useState<string[]>(plan.entitlements);
-  const [limits, setLimits] = useState(plan.limits);
+  const [limits, setLimits] = useState<PlanLimits>(plan.limits);
+  const [clientDisplayOpen, setClientDisplayOpen] = useState(false);
+
+  // EditPlanDialog is conditionally rendered by the parent (mounted
+  // fresh each time the user opens it), so the useState initializers
+  // above already seed local state from the latest server snapshot.
+  // No useEffect sync is needed — that would just trigger cascading
+  // renders (and the React Compiler correctly flags it).
 
   const reset = () => {
     setName(plan.name);
@@ -69,26 +308,20 @@ function EditablePlanCard({ plan }: { plan: PlanConfigData }) {
   };
 
   const saveMutation = useMutation({
-    mutationFn: (patch: PlanPatch) => putApi<PlanConfigData>(`/api/platform/admin/plans/${plan.planId}`, patch),
+    mutationFn: (patch: PlanPatch) =>
+      putApi<PlanConfigData>(`/api/platform/admin/plans/${plan.planId}`, patch),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['platform-plans'] });
       queryClient.invalidateQueries({ queryKey: ['platform-billing-me'] });
       queryClient.invalidateQueries({ queryKey: ['platform-overview'] });
-      // Sync local state to the saved server value.
-      setName(data.name);
-      setPriceMonthly(String(data.priceMonthly));
-      setPriceYearly(String(data.priceYearly));
-      setCurrency(data.currency);
-      setInterval(data.interval);
-      setActive(data.active);
-      setFeatures(data.features.join('\n'));
-      setEntitlements(data.entitlements);
-      setLimits(data.limits);
       toast.success(`${data.name} updated — changes are now live for clients.`);
+      onOpenChange(false);
     },
     onError: (err: unknown) => {
       const e = err as { error?: { message?: string }; message?: string };
-      toast.error(e?.error?.message ?? e?.message ?? 'Unable to save plan. You may need OWNER access.');
+      toast.error(
+        e?.error?.message ?? e?.message ?? 'Unable to save plan. You may need OWNER access.',
+      );
     },
   });
 
@@ -99,138 +332,237 @@ function EditablePlanCard({ plan }: { plan: PlanConfigData }) {
     currency,
     interval,
     active,
-    features: features.split('\n').map((f) => f.trim()).filter(Boolean),
+    features: features
+      .split('\n')
+      .map((f) => f.trim())
+      .filter(Boolean),
     entitlements,
     limits: { ...limits, storageBytes: Number(limits.storageBytes) || 0 },
   });
 
   return (
-    <Card className={active ? '' : 'opacity-70'}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
           <div className="flex items-center gap-2">
-            <CardTitle className="text-base">{plan.name}</CardTitle>
-            <Badge variant="outline" className="text-[10px] font-mono">{plan.planId}</Badge>
+            <DialogTitle className="text-base">Edit {plan.name}</DialogTitle>
+            <PlanBadge planId={getPlanBadgeId(plan.planId)} />
           </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground">Active</Label>
-            <Switch checked={active} onCheckedChange={setActive} />
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        {/* Pricing */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-9" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Monthly Price</Label>
-            <Input type="number" value={priceMonthly} onChange={(e) => setPriceMonthly(e.target.value)} className="h-9" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Yearly Price</Label>
-            <Input type="number" value={priceYearly} onChange={(e) => setPriceYearly(e.target.value)} className="h-9" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Currency</Label>
-            <Input value={currency} onChange={(e) => setCurrency(e.target.value)} className="h-9" />
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Billing Interval</Label>
-            <Select value={interval} onValueChange={(v) => setInterval(v as 'monthly' | 'yearly')}>
-              <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="monthly">monthly</SelectItem>
-                <SelectItem value="yearly">yearly</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="ml-auto text-right">
-            <p className="text-xs text-muted-foreground">Effective monthly</p>
-            <p className="text-sm font-semibold">
-              {formatCurrency(interval === 'yearly' ? Math.round((Number(priceYearly) || 0) / 12) : Number(priceMonthly) || 0, currency)}
-            </p>
-          </div>
-        </div>
+          <DialogDescription className="text-xs">
+            Single source of truth — changes propagate to the Client Billing page, MRR and
+            server-side entitlement enforcement.
+          </DialogDescription>
+        </DialogHeader>
 
-        {/* Features (marketing copy) */}
-        <div className="space-y-1">
-          <Label className="text-xs">Features (one per line — marketing copy shown to clients)</Label>
-          <Textarea value={features} onChange={(e) => setFeatures(e.target.value)} rows={4} className="text-sm" />
-        </div>
-
-        {/* Entitlements */}
-        <div className="space-y-2">
-          <Label className="text-xs">Entitlements (server-side enforced via hasFeature)</Label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {ENTITLEMENT_KEYS.map((key) => {
-              const on = entitlements.includes(key);
-              return (
-                <label
-                  key={key}
-                  className="flex items-start gap-2 rounded-md border p-2 cursor-pointer hover:bg-accent/40 transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={on}
-                    onChange={() =>
-                      setEntitlements((cur) =>
-                        on ? cur.filter((k) => k !== key) : [...cur, key],
-                      )
-                    }
-                  />
-                  <span className="text-xs">
-                    <span className="font-medium">{ENTITLEMENT_LABELS[key]}</span>
-                    <span className="block text-muted-foreground">{ENTITLEMENT_DESCRIPTIONS[key]}</span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Limits */}
-        <div className="space-y-2">
-          <Label className="text-xs">Usage Limits (-1 = unlimited)</Label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            {LIMIT_KEYS.map((k) => (
-              <div key={k} className="space-y-1">
-                <Label className="text-xs">{LIMIT_LABELS[k]}</Label>
+        <div className="space-y-5">
+          {/* -------------------- Basic Information -------------------- */}
+          <section className="space-y-3">
+            <h4 className="text-sm font-semibold">Basic Information</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Name</Label>
                 <Input
-                  type="number"
-                  value={String(limits[k])}
-                  onChange={(e) =>
-                    setLimits((cur) => ({ ...cur, [k]: Number(e.target.value) }))
-                  }
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   className="h-9"
                 />
-                {limits[k] === UNLIMITED && (
-                  <p className="text-[10px] text-emerald-600">unlimited</p>
-                )}
               </div>
-            ))}
-          </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Monthly Price</Label>
+                <Input
+                  type="number"
+                  value={priceMonthly}
+                  onChange={(e) => setPriceMonthly(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Yearly Price</Label>
+                <Input
+                  type="number"
+                  value={priceYearly}
+                  onChange={(e) => setPriceYearly(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Currency</Label>
+                <Input
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Billing Interval</Label>
+                <Select
+                  value={interval}
+                  onValueChange={(v) => setInterval(v as 'monthly' | 'yearly')}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">monthly</SelectItem>
+                    <SelectItem value="yearly">yearly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center justify-between rounded-md border px-3 h-9 sm:mt-5">
+                <Label
+                  htmlFor="dialog-active"
+                  className="text-xs text-muted-foreground cursor-pointer"
+                >
+                  Active
+                </Label>
+                <Switch
+                  id="dialog-active"
+                  checked={active}
+                  onCheckedChange={setActive}
+                />
+              </div>
+            </div>
+          </section>
+
+          <Separator />
+
+          {/* -------------------- Feature Access -------------------- */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-semibold">Feature Access</h4>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Server-side enforced. Disabled features return 403 to clients.
+                </p>
+              </div>
+              <Badge variant="outline" className="text-[10px] font-mono shrink-0">
+                {entitlements.length} / {ENTITLEMENT_KEYS.length}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {ENTITLEMENT_KEYS.map((key) => {
+                const on = entitlements.includes(key);
+                return (
+                  <label
+                    key={key}
+                    className="flex items-center gap-2 rounded-md border p-2 cursor-pointer hover:bg-accent/40 transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() =>
+                        setEntitlements((cur) =>
+                          on ? cur.filter((k) => k !== key) : [...cur, key],
+                        )
+                      }
+                    />
+                    <span className="text-xs font-medium">{ENTITLEMENT_LABELS[key]}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </section>
+
+          <Separator />
+
+          {/* -------------------- Usage Limits -------------------- */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold">Usage Limits</h4>
+              <span className="text-[10px] text-muted-foreground">
+                Use <code className="font-mono px-1 py-0.5 rounded bg-muted">-1</code> for unlimited
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {LIMIT_KEYS.map((k) => (
+                <div key={k} className="space-y-1">
+                  <Label className="text-xs">{LIMIT_LABELS[k]}</Label>
+                  <Input
+                    type="number"
+                    value={String(limits[k])}
+                    onChange={(e) =>
+                      setLimits((cur) => ({ ...cur, [k]: Number(e.target.value) }))
+                    }
+                    className="h-9"
+                  />
+                  {limits[k] === UNLIMITED && (
+                    <p className="text-[10px] text-emerald-600 font-medium">Unlimited</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <Separator />
+
+          {/* -------------------- Optional Client Display -------------------- */}
+          <Collapsible open={clientDisplayOpen} onOpenChange={setClientDisplayOpen}>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center justify-between w-full rounded-md hover:bg-accent/30 px-2 py-1.5 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">Client Display</span>
+                  <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                    optional
+                  </Badge>
+                </div>
+                <ChevronDown
+                  className={`h-4 w-4 text-muted-foreground transition-transform ${
+                    clientDisplayOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-2 pt-2">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Marketing copy shown to clients on the Client Billing page (one feature per line).
+                The structured entitlements above are enforced server-side regardless of this list —
+                keep them aligned to avoid confusing clients.
+              </p>
+              <Textarea
+                value={features}
+                onChange={(e) => setFeatures(e.target.value)}
+                rows={4}
+                className="text-sm"
+                placeholder="Up to 3 sites&#10;Basic analytics&#10;Email support"
+              />
+            </CollapsibleContent>
+          </Collapsible>
         </div>
 
-        {/* Actions */}
-        <div className="flex justify-end gap-2 pt-1">
-          <Button variant="outline" size="sm" onClick={reset} disabled={saveMutation.isPending}>
-            <RotateCcw className="h-4 w-4 mr-2" /> Reset
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={reset}
+            disabled={saveMutation.isPending}
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Reset
           </Button>
-          <Button size="sm" onClick={() => saveMutation.mutate(buildPatch())} disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+          <Button
+            size="sm"
+            onClick={() => saveMutation.mutate(buildPatch())}
+            disabled={saveMutation.isPending}
+          >
+            {saveMutation.isPending ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
             Save Plan
           </Button>
-        </div>
-      </CardContent>
-    </Card>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
+
+// -------------------- Main module --------------------
 
 export function PlatformPlansModule() {
   const user = useAuthStore((s) => s.user);
@@ -241,11 +573,20 @@ export function PlatformPlansModule() {
     queryFn: () => getApi<PlanConfigData[]>('/api/platform/admin/plans'),
   });
 
+  const summary = useMemo(() => {
+    const plans = plansQuery.data ?? [];
+    return {
+      total: plans.length,
+      paid: plans.filter((p) => !p.isFree).length,
+      free: plans.filter((p) => p.isFree).length,
+    };
+  }, [plansQuery.data]);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PlatformPageHeader
         title="Plans & Pricing"
-        subtitle="The single source of truth for plans, pricing, entitlements and usage limits. Edits propagate to the Client Billing page and to MRR."
+        subtitle="Manage plans, pricing, features and usage limits. Changes are shared with the Client Billing page."
       />
 
       {!isOwner && (
@@ -254,24 +595,51 @@ export function PlatformPlansModule() {
             <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
             <div className="text-sm">
               <p className="font-medium text-amber-800 dark:text-amber-400">View-only</p>
-              <p className="text-muted-foreground">Editing plan pricing, entitlements and limits is restricted to the OWNER role. Your changes would be rejected server-side.</p>
+              <p className="text-muted-foreground">
+                Editing plan pricing, entitlements and limits is restricted to the OWNER role.
+              </p>
             </div>
           </CardContent>
         </Card>
       )}
 
+      {/* Compact plan summary */}
+      <div className="flex flex-wrap items-center gap-2">
+        <PlanSummaryTile label="Plans" value={summary.total} />
+        <PlanSummaryTile label="Paid Plans" value={summary.paid} />
+        <PlanSummaryTile label="Free Plan" value={summary.free} />
+      </div>
+
       {plansQuery.isLoading ? (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[0, 1, 2].map((i) => (
-            <Card key={i}><CardContent className="p-4 space-y-3"><Skeleton className="h-6 w-40" /><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></CardContent></Card>
+            <Card key={i}>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-5 w-20" />
+                  <Skeleton className="h-5 w-16" />
+                </div>
+                <Skeleton className="h-8 w-24" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-9 w-full" />
+              </CardContent>
+            </Card>
           ))}
         </div>
       ) : plansQuery.isError || !plansQuery.data ? (
-        <Card><CardContent className="p-4"><ErrorState message="Unable to load plan configuration." onRetry={() => plansQuery.refetch()} /></CardContent></Card>
+        <Card>
+          <CardContent className="p-4">
+            <ErrorState
+              message="Unable to load plan configuration."
+              onRetry={() => plansQuery.refetch()}
+            />
+          </CardContent>
+        </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {plansQuery.data.map((plan) => (
-            <EditablePlanCard key={plan.planId} plan={plan} />
+            <PlanSummaryCard key={plan.planId} plan={plan} canEdit={isOwner} />
           ))}
         </div>
       )}
