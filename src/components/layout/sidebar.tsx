@@ -297,11 +297,6 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     icon: 'Users',
   },
   {
-    label: 'Subscriptions',
-    href: '#platform-subscriptions',
-    icon: 'CreditCard',
-  },
-  {
     label: 'Payments',
     href: '#platform-payments',
     icon: 'Receipt',

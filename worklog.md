@@ -5901,3 +5901,72 @@ Stage Summary:
 - Files deleted (1): `src/modules/platform/platform-sites.tsx` (the standalone Sites list page component — 147 lines; no longer referenced anywhere; the underlying `/api/platform/admin/sites` route + `PlatformSite` type are KEPT).
 - Results: the "Sites" page is removed completely from the Platform Admin sidebar — no nav item, no module, no route component. The underlying sites API route + PlatformSite type are preserved (not broken). Overview's "Total Sites" KPI (64) is unchanged (comes from the overview API which embeds the count). Customer Detail's per-customer SITES count (William Davis = 1) + sites table are unchanged (come from the customer-detail API). No broken routes, no console errors, auth + permissions preserved. The Platform Admin sidebar now has 15 items (was 16).
 - Verification: lint clean (0 new errors); agent-browser confirms sidebar (15 items, no Sites), Overview Total Sites=64 (unchanged), customer-detail William Davis SITES=1 (unchanged), dead #platform-sites hash renders fallback with no crash/console errors, no errors across 5 platform pages, Platform Admin auth preserved.
+
+---
+Task ID: 48
+Agent: main (Z.ai Code)
+Task: Remove the redundant "Subscriptions" page from the Platform Admin sidebar (the Customers page already shows Plan + Sub. Status + Account + Sites for every customer, so the separate Subscriptions page is redundant). Keep all subscription data/calculations/APIs intact (Customer Detail subscription card, Overview Active Subscriptions + MRR + plan distribution + status distribution, Payments, Plans & Pricing, billing logic). Same safe-removal pattern as Tasks 46 (Usage/Analytics) and 47 (Sites).
+
+NOTE ON THE SIDEBAR LIST IN THE REQUEST: The user's stated target sidebar list in this task INCLUDES "Sites", but Task 47 (immediately prior) explicitly removed the Sites page per the user's direct request. I flagged this discrepancy to the user rather than silently re-adding Sites (which would undo an explicit prior instruction). I proceeded with the unambiguous primary ask — removing Subscriptions — and left Sites in its Task-47-removed state. The user can decide separately whether to restore Sites.
+
+Work Log:
+- Read worklog Tasks 46–47 to confirm the removal pattern (delete nav item + PLATFORM_PAGES entry + module registry entry + component file; keep the underlying API route + data types so nothing else breaks).
+- Searched the codebase for all references to `platform-subscriptions` / `PlatformSubscriptionsModule` / `/api/platform/admin/subscriptions`:
+  • `sidebar.tsx` line 301 — the nav item href `#platform-subscriptions`.
+  • `index.tsx` line 17 — the `subscriptions` dynamic import; line 35 — the `'platform-subscriptions': subscriptions` registry entry.
+  • `platform-subscriptions.tsx` line 28 — the `PlatformSubscriptionsModule` export; line 36 — the query key (internal).
+  • `permissions.ts` line 41 — the `PLATFORM_PAGES` entry.
+  • `platform-data.ts` line 680 — an INBOUND reference: the Overview "Past-due subscriptions" alert action `{ label: 'View Subscriptions', module: 'platform-subscriptions' }`. This needed repointing to avoid a dead link.
+  • The `/api/platform/admin/subscriptions` route is fetched ONLY by `platform-subscriptions.tsx` itself — no other UI calls it.
+  • No page calls `navigate('platform-subscriptions')` other than the alert action above.
+- Confirmed removing the Subscriptions page does NOT affect: (a) Overview's "Active Subscriptions" / "MRR" / plan distribution / status distribution — those come from `/api/platform/admin/overview` which embeds them (NOT from the subscriptions list API); (b) Customer Detail's Subscription card — comes from `/api/platform/admin/customers/[id]` which returns the subscription fields; (c) the Customers table "Plan" + "Sub. Status" columns — come from `/api/platform/admin/customers` list response; (d) Payments + Plans & Pricing — independent APIs. All four are independent of the removed Subscriptions page.
+
+CHANGES (mirroring the Task 46/47 removal pattern + 1 inbound-link repoint):
+
+1. `src/components/layout/sidebar.tsx` — removed the "Subscriptions" nav item from `PLATFORM_NAV_ITEMS`:
+   - Deleted `{ label: 'Subscriptions', href: '#platform-subscriptions', icon: 'CreditCard' }`.
+   - The `CreditCard` import + the `'CreditCard': CreditCard` icon-registry entry are left in place (the registry is a generic string→icon map; `CreditCard` is still "used" by the map object so no unused-import lint error; harmless).
+   - Resulting sidebar order: Overview → Customers → Payments → Plans & Pricing → Coupons → Notifications → Email Templates → SMTP Settings → Backups → System Health → Activity / Audit Log → Platform Settings → Feature Flags → Admin Users. No "Subscriptions" (and still no "Sites" from Task 47).
+
+2. `src/lib/permissions.ts` — removed `platform-subscriptions` from `PLATFORM_PAGES`:
+   - Deleted `{ key: 'platform-subscriptions', label: 'Subscriptions', icon: 'CreditCard' }` and added an 8-line explanatory comment noting the removal is intentional (redundant with Customers), that the Customers table still shows Plan + Sub. Status + Account + Sites and the Customer Detail page still shows the full subscription card, and that the underlying `/api/platform/admin/subscriptions` route + subscription calculations are KEPT (not broken) — Overview still surfaces Active Subscriptions, MRR, plan distribution and status distribution from the same centralized subscription dataset.
+   - `isPlatformPage()` is a generic `startsWith('platform-')` prefix check — unaffected. `canAccessPage()` for PLATFORM_ADMIN still uses `isPlatformPage() || pageKey === 'profile'`, so the dead `#platform-subscriptions` hash is still "allowed" by the prefix but renders nothing (module no longer in registry). No permissions regression.
+
+3. `src/modules/platform/index.tsx` — removed the `subscriptions` dynamic import + the `'platform-subscriptions': subscriptions` registry entry. The route is now dead (module won't load).
+
+4. Deleted `src/modules/platform/platform-subscriptions.tsx` entirely (the standalone Subscriptions list page component). Verified beforehand that no other file imports `PlatformSubscriptionsModule` or the module — only the file itself + the registry referenced it. Safe to delete.
+
+5. `src/lib/platform/platform-data.ts` line 680 — REPOINTED the Overview "Past-due subscriptions" alert action:
+   - Before: `action: { label: 'View Subscriptions', module: 'platform-subscriptions' }` (would navigate to the now-removed page → dead link).
+   - After: `action: { label: 'View Customers', module: 'platform-customers' }` (navigates to the Customers page, which is now the customer-level subscription view per the user's instruction #3 — it shows Plan + Sub. Status + Account + Sites for every customer). Added a 4-line comment explaining the repoint. This matches the existing pattern used by the "Storage limit" alert (line 697, also `{ label: 'View Customers', module: 'platform-customers' }`). The alert itself (title "Past-due subscriptions", severity warning, message) is UNCHANGED — only its action target is repointed so the button stays useful.
+
+KEPT (per the user's explicit instruction "Do NOT break: Customer subscription data, Customer detail pages, Plans & Pricing, Payments, Platform Overview, ... Subscription calculations, Billing logic" + "If the subscription backend/API is shared with other pages, KEEP the backend/API"):
+- The `/api/platform/admin/subscriptions` route — still exists, just no longer fetched by any UI. Underlying subscription data/calculations preserved.
+- The `PlatformSubscription` type in `platform-data.ts` — still used by the overview API (embeds plan distribution + status counts) and the customer-detail API (returns subscription fields).
+- Overview's "Active Subscriptions" KPI (15), "Monthly Recurring Revenue" (CHF 674), plan distribution, status distribution — all unchanged, come from the overview API.
+- Customer Detail's Subscription card — unchanged, comes from the customer-detail API.
+- Customers table Plan + Sub. Status + Account + Sites columns — unchanged.
+- Payments + Plans & Pricing — unchanged.
+
+VERIFICATION (agent-browser, Platform Admin = platform@example.com/platform123, desktop 1280x800):
+
+- Sidebar nav (post-reload snapshot, 14 links): Overview, Customers, Payments, Plans & Pricing, Coupons, Notifications, Email Templates, SMTP Settings, Backups, System Health, Activity / Audit Log, Platform Settings, Feature Flags, Admin Users. NO "Subscriptions" (and still no "Sites" from Task 47). ✓ (was 15 links after Task 47, now 14)
+- Customers page (#platform-customers): h1="Customers"; table columns = ["Customer","Company","Plan","Sub. Status","Account","Sites","Country","Created","Actions"] (ALL subscription-related fields preserved per the user's instruction #3); rowCount=19. ✓
+- Customer detail (#platform-customer-detail/cus_012 — William Davis): h1="William Davis"; Subscription card STILL present (cardTitles include "Subscription"); also "Account", "Sites (1)", "Recent Payments (0)". ✓ (subscription card not broken)
+- Overview (#platform-overview): KPIs = Total Customers:19, Active Subscriptions:15, Monthly Recurring Revenue:CHF 674, Total Sites:64 (all subscription metrics UNCHANGED — come from the overview API, independent of the removed page). Alert actions = ["View Payments","View Customers","View Customers","View Customers"] — NO "View Subscriptions" (the "Past-due subscriptions" alert was repointed to "View Customers"). ✓
+- Functional test of the repointed alert: on Overview, found the "View Customers" button (the repointed past-due alert), clicked it → navigated to `#platform-customers`, h1="Customers". ✓ (the alert action now lands on the Customers page, the new customer-level subscription view, instead of the dead Subscriptions page)
+- Payments (#platform-payments): h1="Payments". ✓ (still works)
+- Plans & Pricing (#platform-plans): h1="Plans & Pricing". ✓ (still works)
+- Dead #platform-subscriptions hash: opened `http://localhost:3000/#platform-subscriptions` directly — no page errors (`agent-browser errors` = empty), no console errors, no crash. Renders a fallback (same behavior as the dead #platform-usage and #platform-sites hashes from Tasks 46/47). No nav link points to it. ✓
+- No console errors across 5 platform pages (overview, customers, payments, plans, coupons): `agent-browser errors` = empty; console error grep (excluding Fast Refresh/HMR/DevTools/incompatible noise) = empty. ✓
+- Auth preserved: logged in as Platform Admin (platform@example.com/platform123) throughout; full Platform Admin access unchanged; sidebar + profile menu + all remaining platform pages accessible. ✓
+
+- Lint: `bun run lint` — ZERO new errors in any of the 4 touched files (sidebar.tsx, permissions.ts, platform/index.tsx, platform-data.ts). The 4 pre-existing errors + 3 warnings are all in unrelated files (content-edit-page.tsx, seo-broken-links-page.tsx) — same baseline as Tasks 45–47.
+- Dev server: HTTP 200 on `/`. The EADDRINUSE message in dev.log is the pre-existing redundant dev-runner restart (unrelated).
+
+Stage Summary:
+- Files touched (4): `src/components/layout/sidebar.tsx` (removed the Subscriptions nav item from PLATFORM_NAV_ITEMS — net −5 lines), `src/lib/permissions.ts` (removed the platform-subscriptions entry from PLATFORM_PAGES + added an 8-line explanatory comment — net +7/−1), `src/modules/platform/index.tsx` (removed the `subscriptions` dynamic import + the `'platform-subscriptions': subscriptions` registry entry — net −2 lines), `src/lib/platform/platform-data.ts` (repointed the "Past-due subscriptions" alert action from `{label:'View Subscriptions', module:'platform-subscriptions'}` to `{label:'View Customers', module:'platform-customers'}` + 4-line comment — net +5/−1).
+- Files deleted (1): `src/modules/platform/platform-subscriptions.tsx` (the standalone Subscriptions list page component; no longer referenced anywhere; the underlying `/api/platform/admin/subscriptions` route + PlatformSubscription type are KEPT).
+- Results: the "Subscriptions" page is removed completely from the Platform Admin sidebar — no nav item, no module, no route component. The Customers page is now the customer-level subscription view (still shows Plan + Sub. Status + Account + Sites + Company + Country + Created + Actions for all 19 customers). The Customer Detail page still shows the full Subscription card. Platform Overview still surfaces Active Subscriptions (15), MRR (CHF 674), plan distribution and status distribution — all from the same centralized subscription dataset (no duplicate/parallel calculations). The "Past-due subscriptions" Overview alert was repointed to "View Customers" so its action button still works (navigates to the Customers page instead of the dead Subscriptions page). Payments + Plans & Pricing + billing logic all unchanged. No broken routes, no console errors, auth + permissions preserved. The Platform Admin sidebar now has 14 items (was 15 after Task 47).
+- Verification: lint clean (0 new errors); agent-browser confirms sidebar (14 items, no Subscriptions), Customers columns (9, all subscription fields preserved), customer-detail Subscription card (present), Overview subscription metrics (Active Subscriptions:15, MRR:CHF 674 — unchanged), repointed alert functional (click "View Customers" → lands on #platform-customers), Payments + Plans work, dead #platform-subscriptions hash renders fallback with no crash/console errors, no errors across 5 platform pages, Platform Admin auth preserved.
+- OPEN ITEM (flagged to user, not silently acted on): the user's stated target sidebar list in this task includes "Sites", which contradicts Task 47 where they explicitly removed Sites. Sites remains removed (per Task 47) unless the user confirms they want it restored.

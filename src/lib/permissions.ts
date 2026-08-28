@@ -38,7 +38,14 @@ export const PLATFORM_PAGES = [
   // sites table), and the platform-wide Total Sites count is still shown
   // on the Platform Overview page. The underlying /api/platform/admin/sites
   // route + PlatformSite type are kept (not broken).
-  { key: 'platform-subscriptions', label: 'Subscriptions', icon: 'CreditCard' },
+  // NOTE: 'platform-subscriptions' (Subscriptions page) was intentionally
+  // removed — it was redundant with the Customers page, which already
+  // shows Plan + Sub. Status + Account + Sites for every customer (and the
+  // Customer Detail page shows the full subscription card). The underlying
+  // /api/platform/admin/subscriptions route + subscription calculations are
+  // KEPT (not broken) — Platform Overview still surfaces Active
+  // Subscriptions, MRR, plan distribution and status distribution from the
+  // same centralized subscription dataset.
   { key: 'platform-payments', label: 'Payments', icon: 'Receipt' },
   { key: 'platform-plans', label: 'Plans & Pricing', icon: 'Tags' },
   { key: 'platform-coupons', label: 'Coupons', icon: 'Ticket' },

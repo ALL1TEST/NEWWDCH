@@ -677,7 +677,11 @@ export function getAlerts(): PlatformAlert[] {
       severity: 'warning',
       title: 'Past-due subscriptions',
       message: `${pastDue.length} subscription${pastDue.length === 1 ? '' : 's'} past due`,
-      action: { label: 'View Subscriptions', module: 'platform-subscriptions' },
+      // The standalone Subscriptions page was removed (redundant with the
+      // Customers page, which now is the customer-level subscription view —
+      // it shows Plan + Sub. Status + Account + Sites for every customer).
+      // Repoint this alert to the Customers page so the action stays useful.
+      action: { label: 'View Customers', module: 'platform-customers' },
       time: 'recent',
     });
   }

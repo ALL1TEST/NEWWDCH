@@ -14,7 +14,6 @@ function ModuleFallback() {
 const overview = dynamic(() => import('./platform-overview').then(m => ({ default: m.PlatformOverviewModule as ComponentType })), { loading: ModuleFallback });
 const customers = dynamic(() => import('./platform-customers').then(m => ({ default: m.PlatformCustomersModule as ComponentType })), { loading: ModuleFallback });
 const customerDetail = dynamic(() => import('./platform-customer-detail').then(m => ({ default: m.PlatformCustomerDetailModule as ComponentType })), { loading: ModuleFallback });
-const subscriptions = dynamic(() => import('./platform-subscriptions').then(m => ({ default: m.PlatformSubscriptionsModule as ComponentType })), { loading: ModuleFallback });
 const payments = dynamic(() => import('./platform-payments').then(m => ({ default: m.PlatformPaymentsModule as ComponentType })), { loading: ModuleFallback });
 const systemHealth = dynamic(() => import('./platform-system-health').then(m => ({ default: m.PlatformSystemHealthModule as ComponentType })), { loading: ModuleFallback });
 const audit = dynamic(() => import('./platform-audit').then(m => ({ default: m.PlatformAuditModule as ComponentType })), { loading: ModuleFallback });
@@ -32,7 +31,6 @@ export const platformModuleRegistry: Record<string, ComponentType> = {
   'platform-overview': overview,
   'platform-customers': customers,
   'platform-customer-detail': customerDetail,
-  'platform-subscriptions': subscriptions,
   'platform-payments': payments,
   'platform-system-health': systemHealth,
   'platform-audit': audit,
