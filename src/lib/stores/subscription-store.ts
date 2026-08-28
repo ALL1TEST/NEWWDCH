@@ -50,7 +50,7 @@ export interface SubscriptionState {
 
 // -------------------- Plan Definitions --------------------
 
-const PLANS: Plan[] = [
+export const PLANS: Plan[] = [
   {
     id: 'beta',
     name: 'Beta',
