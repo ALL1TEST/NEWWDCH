@@ -5846,3 +5846,58 @@ Stage Summary:
 - Files deleted (1): `src/modules/platform/platform-usage.tsx` (the standalone Usage/Analytics page component — 183 lines; no longer referenced anywhere; the underlying `/api/platform/admin/usage` route + `PlatformUsage` type are KEPT because Overview embeds the usage numbers).
 - Results: (1) Sites page unchanged — still 8 columns (Site/Domain/Status/Customer/Articles/Media/Storage/Created), 64 rows, NO customer site-count column (the count stays on Customer Detail where it belongs — William Davis = 1). (2) Usage / Analytics page REMOVED completely from the Platform Admin sidebar — no nav item, no module, no route component; the underlying usage data/APIs/metrics are preserved because Overview still surfaces them. (3) Overview is now the single source of truth for platform usage — keeps the "Platform Usage" section with all 6 tiles (Total Sites, Articles, AI Articles, AI Words, Media Storage Used, Automation Runs). (4) Overview Refresh button now WORKS: re-fetches /api/platform/admin/overview (HTTP 200 confirmed), updates every metric/chart/list/alert on the page (all derive from the single `data` object), shows a Loader2 spinner + "Refreshing…" text + disabled button while refreshing, prevents duplicate refreshes (guard + disabled), restores normal state after success, and shows a success/error toast — no browser page reload. (5) Data consistency preserved: Overview Total Sites (64) == Sites page rows (64) == per-customer slices (William Davis = 1 site on Customer Detail) — all from the same centralized dataset, no parallel/fake usage calculations introduced. (6) Existing design unchanged. (7) Final sidebar nav matches the required list (no Usage / Analytics). (8) No broken routes, no console errors, auth + permissions preserved.
 - Verification: lint clean (0 new errors); agent-browser confirms sidebar nav (16 items, no Usage/Analytics), Sites page columns (8, no site-count column), customer-detail SITES=1, Overview Total Sites=64 + all 6 usage tiles, Refresh button loading state captured at t=32–85ms with disabled=true + "Refreshing…", success toast "Overview data refreshed." captured at t=87ms, no page/console errors on the dead #platform-usage hash, no errors across 8 platform pages, Platform Admin auth preserved.
+
+---
+Task ID: 47
+Agent: main (Z.ai Code)
+Task: Remove the "Sites" page from the Platform Admin dashboard (same treatment as the Usage / Analytics removal in Task 46). The user changed their mind from Task 46 where Sites was explicitly kept — now they want the Sites page removed entirely from the Platform Admin sidebar/navigation.
+
+Work Log:
+- Read worklog Task 46 to understand the precedent (Usage / Analytics removal pattern: delete nav item + PLATFORM_PAGES entry + module registry entry + component file; keep the underlying API route + data type so nothing breaks).
+- Searched the codebase for all references to `platform-sites` / `PlatformSitesModule` / `/api/platform/admin/sites`:
+  • `sidebar.tsx` line 301 — the nav item href `#platform-sites`.
+  • `index.tsx` line 17 — the `sites` dynamic import; line 36 — the `'platform-sites': sites` registry entry.
+  • `platform-sites.tsx` line 39 — the `PlatformSitesModule` export; line 43 — the query key (internal to the component).
+  • `permissions.ts` line 35 — the `PLATFORM_PAGES` entry.
+  • The `/api/platform/admin/sites` route is fetched ONLY by `platform-sites.tsx` itself — no other component calls it.
+  • NO inbound links: no page calls `navigate('platform-sites')`. The breadcrumbs `MODULE_LABELS` does not reference it (and platform-* modules don't render breadcrumbs anyway per Task 43).
+- Confirmed removing the Sites page does NOT affect: (a) Overview's "Total Sites" KPI — that count comes from `/api/platform/admin/overview` which embeds `totalSites` as a number (NOT from the sites list API); (b) Customer Detail's per-customer sites list — that comes from `/api/platform/admin/customers/[id]` which returns the `sites` array for that customer; (c) the Recent Customers table's "Sites" column on Overview — that comes from `c.siteCount` in the overview API response. All three are independent of the removed Sites page.
+
+CHANGES (mirroring the Task 46 Usage/Analytics removal pattern):
+
+1. `src/components/layout/sidebar.tsx` — removed the "Sites" nav item from `PLATFORM_NAV_ITEMS`:
+   - Deleted `{ label: 'Sites', href: '#platform-sites', icon: 'Globe' }`.
+   - The `Globe` import + the `'Globe': Globe` icon-registry entry are left in place (the registry is a generic string→icon map; `Globe` is still "used" by the map object so no unused-import lint error; harmless).
+   - Resulting sidebar order: Overview → Customers → Subscriptions → Payments → Plans & Pricing → Coupons → Notifications → Email Templates → SMTP Settings → Backups → System Health → Activity / Audit Log → Platform Settings → Feature Flags → Admin Users. No "Sites".
+
+2. `src/lib/permissions.ts` — removed `platform-sites` from `PLATFORM_PAGES`:
+   - Deleted `{ key: 'platform-sites', label: 'Sites', icon: 'Globe' }` and added a 6-line explanatory comment noting the removal is intentional, that per-customer site counts are still on Customer Detail and the platform-wide Total Sites is still on Overview, and that the underlying `/api/platform/admin/sites` route + `PlatformSite` type are kept (not broken).
+   - `isPlatformPage()` is a generic `startsWith('platform-')` prefix check — unaffected. `canAccessPage()` for PLATFORM_ADMIN still uses `isPlatformPage() || pageKey === 'profile'`, so the dead `#platform-sites` hash is still "allowed" by the prefix but renders nothing (module no longer in registry). No permissions regression.
+
+3. `src/modules/platform/index.tsx` — removed the `sites` dynamic import + the `'platform-sites': sites` registry entry. The route is now dead (module won't load).
+
+4. Deleted `src/modules/platform/platform-sites.tsx` entirely (147 lines — the standalone Sites list page component). Verified beforehand that no other file imports `PlatformSitesModule` or the module — only the file itself + the registry referenced it. Safe to delete.
+
+KEPT (per the Task 46 principle "do NOT remove or break underlying data/APIs"):
+- The `/api/platform/admin/sites` route — still exists, just no longer fetched by any UI. Platform-wide site data is preserved.
+- The `PlatformSite` type in `platform-data.ts` — still used by the customer-detail API response shape (`CustomerDetail.sites`).
+- Overview's "Total Sites" KPI (64) — unchanged, comes from the overview API.
+- Customer Detail's per-customer SITES count + sites table — unchanged, comes from the customer-detail API.
+
+VERIFICATION (agent-browser, Platform Admin = platform@example.com/platform123, desktop 1280x800):
+
+- Sidebar nav (post-reload snapshot, 15 links): Overview, Customers, Subscriptions, Payments, Plans & Pricing, Coupons, Notifications, Email Templates, SMTP Settings, Backups, System Health, Activity / Audit Log, Platform Settings, Feature Flags, Admin Users. NO "Sites". ✓ (was 16 links in Task 46, now 15)
+- Overview (#platform-overview): h1="Platform Overview"; "Total Sites" KPI = 64 (UNCHANGED — the count still comes from /api/platform/admin/overview which embeds it; removing the Sites page did NOT affect this). ✓
+- Dead #platform-sites hash: opened `http://localhost:3000/#platform-sites` directly — no page errors (`agent-browser errors` = empty), no console errors, no crash. Renders a fallback (same behavior as the dead #platform-usage hash from Task 46). No nav link points to it. ✓
+- Customer detail (#platform-customer-detail/cus_012 — William Davis): h1="William Davis"; "Sites" KPI = 1 (per-customer count STILL correct — comes from /api/platform/admin/customers/[id], independent of the removed Sites page). ✓
+- No console errors across 5 platform pages (overview, customers, subscriptions, payments, coupons): navigated each, captured h1 for each (all correct: "Platform Overview", "Customers", "Subscriptions", "Payments", "Coupons"), `agent-browser errors` = empty, console error grep (excluding Fast Refresh/HMR/DevTools/incompatible noise) = empty. ✓
+- Auth preserved: logged in as Platform Admin (platform@example.com/platform123) throughout; full Platform Admin access unchanged; sidebar + profile menu + all remaining platform pages accessible. ✓
+
+- Lint: `bun run lint` — ZERO new errors in any of the 3 touched files (sidebar.tsx, permissions.ts, platform/index.tsx). The 4 pre-existing errors + 3 warnings are all in unrelated files (content-edit-page.tsx, seo-broken-links-page.tsx) — same baseline as Tasks 45 & 46.
+- Dev server: HTTP 200 on `/`. The EADDRINUSE message in dev.log is the pre-existing redundant dev-runner restart (unrelated).
+
+Stage Summary:
+- Files touched (3): `src/components/layout/sidebar.tsx` (removed the Sites nav item from PLATFORM_NAV_ITEMS — net −5 lines), `src/lib/permissions.ts` (removed the platform-sites entry from PLATFORM_PAGES + added a 6-line explanatory comment — net +5/−1), `src/modules/platform/index.tsx` (removed the `sites` dynamic import + the `'platform-sites': sites` registry entry — net −2 lines).
+- Files deleted (1): `src/modules/platform/platform-sites.tsx` (the standalone Sites list page component — 147 lines; no longer referenced anywhere; the underlying `/api/platform/admin/sites` route + `PlatformSite` type are KEPT).
+- Results: the "Sites" page is removed completely from the Platform Admin sidebar — no nav item, no module, no route component. The underlying sites API route + PlatformSite type are preserved (not broken). Overview's "Total Sites" KPI (64) is unchanged (comes from the overview API which embeds the count). Customer Detail's per-customer SITES count (William Davis = 1) + sites table are unchanged (come from the customer-detail API). No broken routes, no console errors, auth + permissions preserved. The Platform Admin sidebar now has 15 items (was 16).
+- Verification: lint clean (0 new errors); agent-browser confirms sidebar (15 items, no Sites), Overview Total Sites=64 (unchanged), customer-detail William Davis SITES=1 (unchanged), dead #platform-sites hash renders fallback with no crash/console errors, no errors across 5 platform pages, Platform Admin auth preserved.

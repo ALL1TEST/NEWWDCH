@@ -297,11 +297,6 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     icon: 'Users',
   },
   {
-    label: 'Sites',
-    href: '#platform-sites',
-    icon: 'Globe',
-  },
-  {
     label: 'Subscriptions',
     href: '#platform-subscriptions',
     icon: 'CreditCard',

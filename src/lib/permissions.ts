@@ -32,7 +32,12 @@ export const BUILTIN_PAGES = [
 export const PLATFORM_PAGES = [
   { key: 'platform-overview', label: 'Overview', icon: 'LayoutDashboard' },
   { key: 'platform-customers', label: 'Customers', icon: 'Users' },
-  { key: 'platform-sites', label: 'Sites', icon: 'Globe' },
+  // NOTE: 'platform-sites' (Sites page) was intentionally removed from the
+  // Platform Admin navigation per the latest request. Per-customer site
+  // counts are still shown on each Customer Detail page (SITES KPI +
+  // sites table), and the platform-wide Total Sites count is still shown
+  // on the Platform Overview page. The underlying /api/platform/admin/sites
+  // route + PlatformSite type are kept (not broken).
   { key: 'platform-subscriptions', label: 'Subscriptions', icon: 'CreditCard' },
   { key: 'platform-payments', label: 'Payments', icon: 'Receipt' },
   { key: 'platform-plans', label: 'Plans & Pricing', icon: 'Tags' },
