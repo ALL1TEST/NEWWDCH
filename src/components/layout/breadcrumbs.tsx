@@ -155,6 +155,9 @@ const NO_BREADCRUMB_MODULES = new Set([
   'dashboard', 'calendar', 'users', 'comments', 'settings', 'media',
   'email-templates', 'notifications',
   'backups', 'content', 'seo', 'ai', 'automation', 'newsletter',
+  // Client account pages — no breadcrumb, topbar hidden on desktop so the
+  // page content sits flush against the top (same as the modules above).
+  'profile', 'billing',
 ]);
 
 // Returns `true` if the given module should render a topbar breadcrumb,
