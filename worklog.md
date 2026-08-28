@@ -6284,3 +6284,66 @@ Stage Summary:
 - NOT touched (preserved verbatim): `checkApi`/`checkDatabase`/`checkStorage`/`checkJobs`/`checkEmail`, `recordHistorySnapshot`/`loadHistory`/`valueToStatus`/`statusToValue`/`rollUpOverall`/`time`/`formatBytes`/`formatDuration`, the API routes, `getSystemHealthSummary`, `requirePlatformAdmin` auth, react-query fetching/mutations, OverallSummaryCard, Recent Incidents Card/IncidentRow, Health Check History Card/Table/StatusGlyph, PageSkeleton, ErrorState, EmptyState, formatRelative, formatDurationLocal, SERVICE_ICON, STATUS_BORDER, OVERALL_CONFIG, type-only imports. No new packages, no DB schema changes, no new API endpoints.
 - Result: System Health is now a real monitoring dashboard — every status, latency, metric, and incident on the page comes from the same `runHealthChecks()` source. The AI Service card shows a concise human-readable error summary by default with a Read more/Read less toggle for the full raw error inside the card. Email and Background Jobs cards use their natural content height. The Recent Incidents feed derives live incidents from the current health-check snapshot (AI critical + Email info) and shows the empty state ONLY when there are genuinely no incidents. The Health Check History table consistently records AI down + Email unknown per snapshot. The Overall status reflects the real current state (Major outage — 4/6 healthy). The Refresh checks button still runs the real checks, updates all four sections in place, shows loading state, prevents duplicate requests, and surfaces success/error via toast. No console errors, no horizontal overflow on mobile, lint clean.
 - Verification: lint clean (0 new errors); agent-browser confirms AI message concise ("Provider health check failed (HTTP 403)"), Read more/less toggles work (aria-expanded flips between true/false, expanded container shows full 163-char raw error with max-h-48 scroll, collapsed view shows truncated line-clamp-2), Email=229px & Jobs=284px natural heights vs AI=399px (items-start working), Recent Incidents shows 2 live incidents (AI critical "HTTP 403 — Country, region, or territory not supported" + Email info "No default SMTP configuration found..."), empty state gone, history 9 rows consistent (AI ✕ rose + Email ? zinc + others ✓ emerald in every snapshot), Refresh button works (success toast + incidents persist after refresh), mobile 375x812 no horizontal overflow, no page/console errors, auth preserved.
+
+---
+Task ID: 52
+Agent: main (Z.ai Code)
+Task: Remove the System Health page from the Platform Admin dashboard. Follow the established page-removal pattern (Tasks 46–48): remove the sidebar nav item + the PLATFORM_PAGES allow-list entry + the module registry entry + delete the component file; PRESERVE the underlying API routes + types + the Overview summary tile's data source so platform admins still see real-time infrastructure health on Overview without leaving it.
+
+Work Log:
+- Audited inbound references to `platform-system-health` / `PlatformSystemHealthModule` across `/home/z/my-project/src`. Found 9 files referencing the page or its underlying checker:
+  - `src/components/layout/sidebar.tsx` — `PLATFORM_NAV_ITEMS` entry (lines 334–338) → REMOVE.
+  - `src/lib/permissions.ts` — `PLATFORM_PAGES` entry (line 62) → REMOVE.
+  - `src/modules/platform/index.tsx` — `const systemHealth = dynamic(...)` import (line 18) + `'platform-system-health': systemHealth` registry entry (line 35) → REMOVE.
+  - `src/modules/platform/platform-system-health.tsx` — the page component itself → DELETE.
+  - `src/modules/platform/platform-overview.tsx` — Overview's System Health summary tile's "Details →" button (lines 372–374) that navigates to the now-deleted page → REMOVE the button (keep the summary tile content).
+  - `src/lib/platform/system-health.ts` — the real per-service checker (KEPT — Overview's summary tile consumes it via the Overview API overlay).
+  - `src/app/api/platform/admin/system-health/route.ts` — the GET + POST route (KEPT — still works for any future client that wants the full snapshot, though no client currently uses it now that the page is gone).
+  - `src/app/api/platform/admin/overview/route.ts` — overlays `getSystemHealthSummary()` from `system-health.ts` onto the Overview response (KEPT — Overview's summary tile continues to read it).
+  - `src/lib/platform/platform-data.ts` — contains a comment about the checker living in `./system-health.ts` (KEPT — comment-only reference, no code change needed).
+
+- Plan: 5 edits + 1 file deletion, following exactly the same pattern as Tasks 46 (Usage), 47 (Sites), 48 (Subscriptions).
+
+1. `src/components/layout/sidebar.tsx`: removed the `{ label: 'System Health', href: '#platform-system-health', icon: 'HeartPulse' }` entry from `PLATFORM_NAV_ITEMS`. Net −5 lines.
+
+2. `src/lib/permissions.ts`: removed the `{ key: 'platform-system-health', label: 'System Health', icon: 'HeartPulse' }` entry from `PLATFORM_PAGES`. Added an 8-line explanatory comment block above the previous line — explains that the standalone admin page was removed in Task 52, that the Overview summary tile still surfaces live per-service statuses via the overview API route's overlay of `getSystemHealthSummary()`, and that the underlying `/api/platform/admin/system-health` route + HealthSnapshot types + `src/lib/platform/system-health.ts` checker are KEPT so Overview's summary continues to work. Net +8/−1.
+
+3. `src/modules/platform/index.tsx`: removed the `const systemHealth = dynamic(() => import('./platform-system-health').then(m => ({ default: m.PlatformSystemHealthModule as ComponentType })), { loading: ModuleFallback });` line and the `'platform-system-health': systemHealth,` registry entry. Net −2 lines.
+
+4. `src/modules/platform/platform-system-health.tsx`: deleted the entire file (~575 lines). No remaining importers (verified by grep — `PlatformSystemHealthModule` and `platform-system-health` no longer appear in any code under `src` except the explanatory comment in permissions.ts).
+
+5. `src/modules/platform/platform-overview.tsx`: removed the `<Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => navigate('platform-system-health')}>Details <ArrowRight className="h-3 w-3 ml-1" /></Button>` button from the System Health summary tile's header. Simplified the header wrapper from `<div className="flex items-center justify-between">` (which had title block on the left + Details button on the right) to just `<div>` containing only the `CardTitle` + `CardDescription`. Kept the summary grid content (the 6 service tiles with HealthBadge + label + latency) verbatim — it continues to read from `data.systemHealth` which the Overview API overlays with live `getSystemHealthSummary()` values. The `navigate` and `ArrowRight` imports are KEPT — both are still used elsewhere in the file (Recent Customers "View all" → platform-customers, Recent Payments "View all" → platform-payments, AlertRow action → various modules).
+
+- PRESERVED (per "do not break the backend"): `/api/platform/admin/system-health` route (GET + POST → runHealthChecks), `/api/platform/admin/overview` route (overlays getSystemHealthSummary), `src/lib/platform/system-health.ts` (6 real per-service checkers + summarizeProviderError + loadIncidents + loadHistory + recordHistorySnapshot + getSystemHealthSummary), `src/lib/platform/platform-data.ts` (SystemHealthItem type), `getSystemHealthSummary`, `runHealthChecks`, all per-service checkers (checkApi / checkDatabase / checkStorage / checkJobs / checkEmail / checkAi), the HealthSnapshot / ServiceHealthCheck / ServiceStatus / ServiceHealthKey / HealthIncident / HealthHistoryRow types, `requirePlatformAdmin` auth. No new packages, no DB schema changes, no API endpoint additions or removals.
+
+- `isPlatformPage()` is the generic `startsWith('platform-')` prefix check (per the summary note from Tasks 46–48), so removing the entry from `PLATFORM_PAGES` does not break the guard. The dead hash `#platform-system-health` is caught by the router and falls back to `#platform-overview` (verified below).
+
+VERIFICATION (agent-browser, Platform Admin = platform@example.com/platform123, desktop 1280x800 + mobile 375x812):
+
+1. Sidebar: 13 nav links (was 14). Order = Overview → Customers → Payments → Plans & Pricing → Coupons → Notifications → Email Templates → SMTP Settings → Backups → Activity / Audit Log → Platform Settings → Feature Flags → Admin Users. "System Health" is GONE. The two former neighbors (Backups, Activity / Audit Log) are now adjacent with no gap. ✓
+
+2. Overview page (default landing after Platform Admin login): h1="Platform Overview", renders without errors. ✓
+
+3. Overview System Health summary tile (kept): renders 6 service tiles with REAL live statuses — API=Operational/8ms, Database=Operational/8ms, Storage=Operational/0ms, Background Jobs=Operational/37ms, Email Service=Unknown/0ms, AI Service=Down/108ms. Real data via the Overview API's `getSystemHealthSummary()` overlay (unchanged backend). ✓
+
+4. Overview "Details →" button on the System Health tile: REMOVED (`buttons=[]`, `hasDetailsButton=false`). The summary tile is now a static info panel with no broken navigation target. ✓
+
+5. Overview Refresh button: clicked → re-runs the live health checks via the overview API → latencies change in place (API 8ms→2ms, Database 8ms→2ms, Background Jobs 37ms→45ms — confirming real-time re-probe of the DB / filesystem / persisted provider state) → cached snapshot updated in place via `queryClient.setQueryData`. ✓
+
+6. Dead hash fallback: set `location.hash='#platform-system-health'` directly → the router caught the now-unknown hash and reverted to `#platform-overview` (the default). No crash, no blank screen, no error. ✓
+
+7. Neighboring pages: clicked `#platform-backups` (was right before System Health) → h1="Backups" renders. Clicked `#platform-audit` (was right after System Health) → h1="Activity / Audit Log" renders. No regression in neighboring pages. ✓
+
+8. No page errors (`agent-browser errors` empty); no real console errors (only Fast Refresh / HMR / React DevTools info noise — same baseline as Tasks 45–51). ✓
+
+9. Mobile 375x812: scrollWidth=375=innerWidth (NO horizontal overflow), h1="Platform Overview", sidebar toggle button present. Responsive layout holds. ✓
+
+10. Lint: `bun run lint` — ZERO new errors in any of the 4 touched files (sidebar.tsx, permissions.ts, platform/index.tsx, platform-overview.tsx). The 4 pre-existing errors + 3 warnings are all in unrelated files (content-edit-page.tsx, seo-broken-links-page.tsx) — same baseline as Tasks 45–51.
+
+11. Dev server: HTTP 200 on `/`. The EADDRINUSE message in dev.log is the pre-existing redundant dev-runner restart noise (unrelated).
+
+Stage Summary:
+- Files touched (4): `src/components/layout/sidebar.tsx` (removed the System Health nav item from `PLATFORM_NAV_ITEMS` — net −5 lines), `src/lib/permissions.ts` (removed the platform-system-health entry from `PLATFORM_PAGES` + added an 8-line explanatory comment — net +8/−1), `src/modules/platform/index.tsx` (removed the `systemHealth` dynamic import + the `'platform-system-health': systemHealth` registry entry — net −2 lines), `src/modules/platform/platform-overview.tsx` (removed the System Health summary tile's "Details →" navigation button + simplified the header wrapper from `flex justify-between` to plain `div` — net −4 lines; kept the title + description + the 6-service summary grid intact).
+- Files deleted (1): `src/modules/platform/platform-system-health.tsx` (~575 lines — the standalone System Health page component; no longer referenced anywhere; the underlying `/api/platform/admin/system-health` route + HealthSnapshot types + `src/lib/platform/system-health.ts` real per-service checker are KEPT so Overview's summary tile continues to read live infrastructure status).
+- Results: the System Health page is removed completely from the Platform Admin sidebar — no nav item, no module, no route component, no Overview "Details →" navigation. Platform admins still see real-time infrastructure health (API / Database / Storage / Jobs / Email / AI statuses + latencies) directly on Overview's summary tile via the unchanged `getSystemHealthSummary()` overlay on the Overview API response. No broken routes, no console errors, auth + permissions preserved (the guard's `startsWith('platform-')` check still covers all remaining pages; the dead `#platform-system-health` hash gracefully falls back to Overview). The Platform Admin sidebar now has 13 items (was 14).
+- Verification: lint clean (0 new errors); agent-browser confirms sidebar has 13 items (no System Health), Overview System Health summary tile still renders 6 real services with live latencies (Operational/Unknown/Down statuses match the backend), the "Details →" button is gone, the Refresh button still works (latencies update in place), dead hash falls back to Overview (no crash), both neighboring pages (Backups, Activity / Audit Log) still work, mobile 375x812 no horizontal overflow, no page/console errors, auth preserved.

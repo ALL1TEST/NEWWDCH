@@ -59,7 +59,15 @@ export const PLATFORM_PAGES = [
   { key: 'platform-email-templates', label: 'Email Templates', icon: 'Mail' },
   { key: 'platform-smtp', label: 'SMTP Settings', icon: 'Server' },
   { key: 'platform-backups', label: 'Backups', icon: 'Database' },
-  { key: 'platform-system-health', label: 'System Health', icon: 'HeartPulse' },
+  // 'platform-system-health' was removed as a standalone admin page in
+  // Task 52. The Overview page's System Health summary tile still surfaces
+  // the live per-service statuses (API / Database / Storage / Jobs / Email
+  // / AI) by reading the SAME checker via the overview API route's overlay
+  // of getSystemHealthSummary() — so platform admins still see real-time
+  // infrastructure health without leaving Overview. The underlying
+  // /api/platform/admin/system-health route, the HealthSnapshot types, and
+  // src/lib/platform/system-health.ts (the real per-service checker) are
+  // KEPT so Overview's summary continues to work.
   { key: 'platform-audit', label: 'Activity / Audit Log', icon: 'ScrollText' },
   { key: 'platform-settings', label: 'Platform Settings', icon: 'Settings' },
   { key: 'platform-feature-flags', label: 'Feature Flags', icon: 'Flag' },

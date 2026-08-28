@@ -364,14 +364,9 @@ export function PlatformOverviewModule() {
       {/* System Health */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">System Health</CardTitle>
-              <CardDescription className="text-xs mt-0.5">Platform infrastructure status</CardDescription>
-            </div>
-            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => navigate('platform-system-health')}>
-              Details <ArrowRight className="h-3 w-3 ml-1" />
-            </Button>
+          <div>
+            <CardTitle className="text-base">System Health</CardTitle>
+            <CardDescription className="text-xs mt-0.5">Platform infrastructure status</CardDescription>
           </div>
         </CardHeader>
         <CardContent>

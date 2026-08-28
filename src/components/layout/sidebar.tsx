@@ -332,11 +332,6 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     icon: 'Database',
   },
   {
-    label: 'System Health',
-    href: '#platform-system-health',
-    icon: 'HeartPulse',
-  },
-  {
     label: 'Activity / Audit Log',
     href: '#platform-audit',
     icon: 'ScrollText',
