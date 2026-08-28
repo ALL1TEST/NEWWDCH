@@ -166,6 +166,23 @@ export function LoginScreen() {
                   Author
                 </Button>
               </div>
+              {/* Platform Admin — a separate SaaS-owner experience with its
+                  own dashboard, sidebar, and role. Kept visually distinct
+                  (full-width, primary-tinted) so it is not confused with
+                  the client demo accounts above. */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 w-full text-[11px] mt-1.5 border-primary/40 text-primary hover:bg-primary/5"
+                onClick={() => {
+                  setEmail('platform@example.com');
+                  setPassword('platform123');
+                  clearError();
+                }}
+              >
+                Platform Admin (SaaS Owner)
+              </Button>
             </div>
           </CardContent>
 

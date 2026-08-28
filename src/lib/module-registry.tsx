@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import type { ComponentType } from 'react';
+import { platformModuleRegistry } from '@/modules/platform';
 
 function ModuleFallback() {
   return (
@@ -32,5 +33,6 @@ const profile = dynamic(() => import('@/modules/profile').then(m => ({ default: 
 const billing = dynamic(() => import('@/modules/billing').then(m => ({ default: m.BillingModule as ComponentType })), { loading: ModuleFallback });
 
 export const moduleRegistry: Record<string, ComponentType> = {
+  ...platformModuleRegistry,
   dashboard, content, calendar, media, users, categories, tags, comments, newsletter, 'email-templates': emailTemplates, seo, notifications, settings, ai, audit, backups, automation, jobs, profile, billing,
 };

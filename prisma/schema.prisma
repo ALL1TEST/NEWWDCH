@@ -23,6 +23,7 @@ enum PostStatus {
 enum UserRole {
   ADMIN
   EDITOR
+  PLATFORM_ADMIN
 }
 
 enum UserStatus {

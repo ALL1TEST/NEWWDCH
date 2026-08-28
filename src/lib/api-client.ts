@@ -85,10 +85,11 @@ const GLOBAL_ROUTES = new Set([
   '/api/ai-providers',
   '/api/prompt-templates',
   '/api/notifications/unread-count',
+  '/api/platform',
 ]);
 
 function isGlobalRoute(path: string): boolean {
-  return GLOBAL_ROUTES.has(path) || path.startsWith('/api/sites/');
+  return GLOBAL_ROUTES.has(path) || path.startsWith('/api/sites/') || path.startsWith('/api/platform/');
 }
 
 class ApiClient {

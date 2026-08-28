@@ -48,6 +48,8 @@ import {
   Server,
   PanelLeftClose,
   PanelLeftOpen,
+  CreditCard,
+  Receipt,
   type LucideIcon,
 } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
@@ -136,6 +138,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'Gauge': Gauge,
   'Zap': Zap,
   'Server': Server,
+  'CreditCard': CreditCard,
+  'Receipt': Receipt,
 };
 
 function getIcon(iconName?: string): LucideIcon {
@@ -266,6 +270,58 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Notifications', href: '#notifications', icon: 'Bell' },
       { label: 'Backups', href: '#backups', icon: 'Database' },
     ],
+  },
+];
+
+// -------------------- Platform Admin Navigation --------------------
+// Shown only to PLATFORM_ADMIN users. Completely separate from the
+// client CMS navigation above.
+
+const PLATFORM_NAV_ITEMS: NavItem[] = [
+  {
+    label: 'Overview',
+    href: '#platform-overview',
+    icon: 'LayoutDashboard',
+  },
+  {
+    label: 'Customers',
+    href: '#platform-customers',
+    icon: 'Users',
+  },
+  {
+    label: 'Sites',
+    href: '#platform-sites',
+    icon: 'Globe',
+  },
+  {
+    label: 'Subscriptions',
+    href: '#platform-subscriptions',
+    icon: 'CreditCard',
+  },
+  {
+    label: 'Payments',
+    href: '#platform-payments',
+    icon: 'Receipt',
+  },
+  {
+    label: 'Usage / Analytics',
+    href: '#platform-usage',
+    icon: 'BarChart3',
+  },
+  {
+    label: 'System Health',
+    href: '#platform-system-health',
+    icon: 'HeartPulse',
+  },
+  {
+    label: 'Activity / Audit Log',
+    href: '#platform-audit',
+    icon: 'ScrollText',
+  },
+  {
+    label: 'Settings',
+    href: '#platform-settings',
+    icon: 'Settings',
   },
 ];
 
@@ -846,10 +902,13 @@ export function AppSidebar() {
 
   const userRole = user?.role;
   const pagePermissions = user?.pagePermissions ?? null;
+  const isPlatformAdmin = userRole === 'PLATFORM_ADMIN';
   const visibleItems = useMemo(() => {
     if (!userRole) return [];
-    return getVisibleNavItems(userRole, NAV_ITEMS, pagePermissions);
-  }, [userRole, pagePermissions]);
+    // Platform admins see the dedicated platform nav, not the client CMS nav.
+    const sourceItems = isPlatformAdmin ? PLATFORM_NAV_ITEMS : NAV_ITEMS;
+    return getVisibleNavItems(userRole, sourceItems, pagePermissions);
+  }, [userRole, pagePermissions, isPlatformAdmin]);
 
   /*
    * SINGLE SOURCE OF TRUTH for the expanded top-level section.
@@ -938,7 +997,7 @@ export function AppSidebar() {
         <div className="flex h-8 items-center gap-2 group-data-[collapsible=icon]:hidden">
           <LogoMark />
           <span className="truncate font-semibold text-sm tracking-tight whitespace-nowrap text-text-primary">
-            CMS Admin
+            {isPlatformAdmin ? 'Platform Admin' : 'CMS Admin'}
           </span>
           <div className="ml-auto flex shrink-0 items-center gap-1">
             <Tooltip>
@@ -959,27 +1018,15 @@ export function AppSidebar() {
             <CollapseToggle side="bottom" />
           </div>
         </div>
-        {/* Collapsed rail: ONLY the "C" logo. The previously stacked
-            collapse-toggle icon was removed on purpose — no extra icon may
-            appear under/next to the logo.
-            Expand affordance: the logo cell itself toggles the sidebar
-            (same 32px grid cell, same x=24 center-line), and the invisible
-            SidebarRail edge strip keeps its native toggle behavior too. */}
+        {/* Collapsed rail: ONLY the "C" logo. */}
         <div className="hidden flex-col items-center group-data-[collapsible=icon]:flex">
           <CollapsedLogoButton hovered={railHovered} />
         </div>
 
         {/* All Sites site selector — lives directly BELOW the CMS Admin logo
-            in BOTH sidebar states. Uses `SidebarMenuButton` (variant=
-            "outline") as its trigger so it inherits the sidebar's native
-            sizing/spacing/hover/active styling and auto-collapses to a 32px
-            icon cell on the rail (`group-data-[collapsible=icon]:size-8`).
-            Its built-in `tooltip` prop shows a right-side "Switch Site"
-            label ONLY when collapsed. The dropdown opens DOWN+left in
-            expanded mode and to the RIGHT in collapsed mode (portal-rendered
-            at z-50 → never clipped by the sidebar's overflow-hidden). See
-            src/components/layout/site-selector.tsx for the full impl. */}
-        <SiteSelector />
+            in BOTH sidebar states. Platform admins do not have "their" site
+            (they manage all customers), so the selector is hidden for them. */}
+        {!isPlatformAdmin && <SiteSelector />}
       </SidebarHeader>
 
       <SidebarSeparator className="mx-0" />
@@ -1037,12 +1084,19 @@ export function AppSidebar() {
                 accent (bg-amber-500 text-white) instead of the generic
                 secondary surface. Shows the plan NAME ("Beta") so it stays
                 in sync with the PlanBadge used in the topbar avatar trigger
-                and the profile dropdown header. */}
-            <Badge
-              className="mt-0.5 h-4 w-fit text-[10px] px-1.5 bg-amber-500 text-white border-transparent"
-            >
-              {currentPlan.name}
-            </Badge>
+                and the profile dropdown header. Platform admins do not have
+                a personal subscription, so a role badge is shown instead. */}
+            {isPlatformAdmin ? (
+              <Badge className="mt-0.5 h-4 w-fit text-[10px] px-1.5 bg-primary text-primary-foreground border-transparent">
+                PLATFORM
+              </Badge>
+            ) : (
+              <Badge
+                className="mt-0.5 h-4 w-fit text-[10px] px-1.5 bg-amber-500 text-white border-transparent"
+              >
+                {currentPlan.name}
+              </Badge>
+            )}
           </div>
           {/* Notifications bell — replaces the previous standalone Log out
               button. Uses the SAME NotificationBell component as the

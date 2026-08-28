@@ -7,7 +7,8 @@
 
 export type UserRole =
   | 'ADMIN'
-  | 'EDITOR';
+  | 'EDITOR'
+  | 'PLATFORM_ADMIN';
 
 export type PostStatus =
   | 'DRAFT'

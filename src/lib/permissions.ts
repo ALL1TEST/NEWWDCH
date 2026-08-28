@@ -25,6 +25,26 @@ export const BUILTIN_PAGES = [
   { key: 'settings', label: 'Settings', icon: 'Settings' },
 ] as const;
 
+// -------------------- Platform Admin Pages --------------------
+// The PLATFORM_ADMIN role sees these pages instead of the client
+// CMS pages. They are platform-level management screens.
+
+export const PLATFORM_PAGES = [
+  { key: 'platform-overview', label: 'Overview', icon: 'LayoutDashboard' },
+  { key: 'platform-customers', label: 'Customers', icon: 'Users' },
+  { key: 'platform-sites', label: 'Sites', icon: 'Globe' },
+  { key: 'platform-subscriptions', label: 'Subscriptions', icon: 'CreditCard' },
+  { key: 'platform-payments', label: 'Payments', icon: 'Receipt' },
+  { key: 'platform-usage', label: 'Usage / Analytics', icon: 'BarChart3' },
+  { key: 'platform-system-health', label: 'System Health', icon: 'HeartPulse' },
+  { key: 'platform-audit', label: 'Activity / Audit Log', icon: 'ScrollText' },
+  { key: 'platform-settings', label: 'Settings', icon: 'Settings' },
+] as const;
+
+export function isPlatformPage(pageKey: string): boolean {
+  return pageKey.startsWith('platform-');
+}
+
 // -------------------- Settings Sub-pages --------------------
 
 export const SETTINGS_SUBPAGES = [
@@ -50,13 +70,26 @@ export function customPermissionKeyFromName(name: string): string {
 /**
  * Check whether a user with the given role + pagePermissions array
  * is allowed to access the page identified by `pageKey`.
+ *
+ * PLATFORM_ADMIN: may access platform-* pages only.
+ * ADMIN: full access to all built-in CMS + settings pages; may NOT
+ *        access platform-* pages (that's a different experience).
+ * EDITOR: only pages in their pagePermissions array.
  */
 export function canAccessPage(
   role: string,
   pagePermissions: string[] | null | undefined,
   pageKey: string,
 ): boolean {
-  // ADMIN always has full access
+  // PLATFORM_ADMIN sees only the Platform Admin experience.
+  if (role === 'PLATFORM_ADMIN') {
+    return isPlatformPage(pageKey);
+  }
+
+  // Client roles must never reach platform pages.
+  if (isPlatformPage(pageKey)) return false;
+
+  // ADMIN always has full access to the client CMS.
   if (role === 'ADMIN') return true;
 
   // EDITOR: check pagePermissions
@@ -75,14 +108,14 @@ export function canAccessPage(
 
 /**
  * Return the full list of page keys a user can access.
- * For ADMIN: all built-in pages + all settings sub-pages.
- * For EDITOR: their pagePermissions, expanded to include all
- * settings sub-pages if 'settings' is included.
  */
 export function getAccessiblePages(
   role: string,
   pagePermissions: string[] | null | undefined,
 ): string[] {
+  if (role === 'PLATFORM_ADMIN') {
+    return PLATFORM_PAGES.map((p) => p.key);
+  }
   if (role === 'ADMIN') {
     return [
       ...BUILTIN_PAGES.map((p) => p.key),
@@ -152,6 +185,15 @@ export function getVisibleNavItems(
   allItems: NavItem[],
   pagePermissions: string[] | null | undefined = null,
 ): NavItem[] {
+  // PLATFORM_ADMIN sees everything passed in (the sidebar passes the
+  // platform nav array for this role).
+  if (userRole === 'PLATFORM_ADMIN') {
+    return allItems.map((item) => ({
+      ...item,
+      children: item.children ? [...item.children] : undefined,
+    }));
+  }
+
   // ADMIN sees everything
   if (userRole === 'ADMIN') {
     return allItems.map((item) => ({
