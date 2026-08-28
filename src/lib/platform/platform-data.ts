@@ -950,3 +950,166 @@ export function clientCancelSubscription(user: BillingUser): ClientBillingState 
   cancelSubscription(c.id, user.email);
   return getClientBilling(user);
 }
+
+// ============================================================
+// PLATFORM EVENTS — derived, unified platform-level feed
+// ============================================================
+// Aggregates platform-level events from the SAME centralized
+// dataset that powers Platform Overview / Customers / Payments /
+// Subscriptions / Audit / Alerts. PURE read-only function — no new
+// state, no persistence. The /api/platform/admin/notifications
+// endpoint paginates and filters this list; mark-as-read / delete
+// are documented no-ops on the API side because the feed is derived
+// fresh on every request (read-state would live in a separate
+// table in a real implementation).
+//
+// Event types follow the same NotificationType shape the Client
+// Notifications page uses: INFO | SUCCESS | WARNING | ERROR |
+// ACTION_REQUIRED. This lets the Platform Notifications UI reuse
+// the client page's NotificationCard / NOTIFICATION_TYPE_CONFIG
+// verbatim.
+// ============================================================
+
+export type PlatformEventType = 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR' | 'ACTION_REQUIRED';
+
+export interface PlatformEvent {
+  id: string;
+  type: PlatformEventType;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+function isoMinutesAgo(mins: number): string {
+  return new Date(Date.now() - mins * 60_000).toISOString();
+}
+
+/** Map alert id → a deterministic "recent" timestamp (no Math.random,
+ *  stable across renders for a given wall-clock minute). */
+function alertTimestamp(alertId: string): string {
+  switch (alertId) {
+    case 'alert-failed-payments': return isoMinutesAgo(30);
+    case 'alert-past-due': return isoMinutesAgo(120);
+    case 'alert-storage': return isoMinutesAgo(360);
+    case 'alert-new-customers': return isoMinutesAgo(60 * 24);
+    default: return isoMinutesAgo(60);
+  }
+}
+
+/** Derive the unified platform events feed. Reads from listCustomers,
+ *  listPayments, listSubscriptions, getAuditLog, getAlerts — all of
+ *  which already exist and power the rest of the Platform Admin. */
+export function getPlatformEvents(): PlatformEvent[] {
+  const events: PlatformEvent[] = [];
+
+  // 1. Customer registrations — INFO "New customer registered"
+  for (const c of listCustomers()) {
+    events.push({
+      id: `evt-cust-${c.id}`,
+      type: 'INFO',
+      title: 'New customer registered',
+      message: `${c.name} (${c.email}) signed up from ${c.country} on the ${c.planId.toUpperCase()} plan.`,
+      isRead: false,
+      createdAt: c.createdAt,
+    });
+  }
+
+  // 2. Payments — SUCCESS / ERROR / WARNING / INFO by status
+  for (const p of listPayments()) {
+    let type: PlatformEventType = 'INFO';
+    let title = 'Payment update';
+    if (p.status === 'paid') {
+      type = 'SUCCESS';
+      title = 'Successful payment';
+    } else if (p.status === 'failed') {
+      type = 'ERROR';
+      title = 'Failed payment';
+    } else if (p.status === 'refunded') {
+      type = 'WARNING';
+      title = 'Payment refunded';
+    } else if (p.status === 'pending') {
+      type = 'INFO';
+      title = 'Payment pending';
+    }
+    events.push({
+      id: `evt-pay-${p.id}`,
+      type,
+      title,
+      message: `${p.customerName} — ${p.currency} ${p.amount} via ${p.method}. Invoice ${p.invoiceNumber}. Status: ${p.status}.`,
+      isRead: false,
+      createdAt: p.date,
+    });
+  }
+
+  // 3. Subscriptions — INFO created, WARNING cancelled, ACTION_REQUIRED trial ending
+  for (const s of listSubscriptions()) {
+    const plan = getPlan(s.planId);
+    events.push({
+      id: `evt-sub-${s.id}`,
+      type: 'INFO',
+      title: 'Subscription created',
+      message: `${s.name} subscribed to the ${s.planName} plan (${s.billingInterval} billing, ${plan.currency} ${s.monthlyPrice}/mo).`,
+      isRead: false,
+      createdAt: s.subscriptionStart,
+    });
+
+    if (s.subscriptionStatus === 'cancelled') {
+      // Cancellation happened at some point after creation — there is no
+      // dedicated timestamp in the dataset, so use subscriptionStart as a
+      // stable proxy (still sorts in the past, like a historical event).
+      events.push({
+        id: `evt-sub-cancel-${s.id}`,
+        type: 'WARNING',
+        title: 'Subscription cancelled',
+        message: `${s.name} cancelled the ${s.planName} plan subscription. Access has been revoked at the end of the current period.`,
+        isRead: false,
+        createdAt: s.subscriptionStart,
+      });
+    }
+
+    if (s.subscriptionStatus === 'trial') {
+      const trialEnd = s.trialEnd ?? s.nextBillingAt ?? s.subscriptionStart;
+      events.push({
+        id: `evt-sub-trial-${s.id}`,
+        type: 'ACTION_REQUIRED',
+        title: 'Trial ending soon',
+        message: `${s.name}'s ${s.planName} plan trial ends on ${trialEnd}. Convert to a paid subscription before then to retain access.`,
+        isRead: false,
+        createdAt: trialEnd,
+      });
+    }
+  }
+
+  // 4. Audit log entries — INFO with action as title, detail as message
+  for (const a of getAuditLog(50)) {
+    events.push({
+      id: `evt-aud-${a.id}`,
+      type: 'INFO',
+      title: a.action,
+      message: a.detail && a.detail.length > 0 ? `${a.detail} — target: ${a.target}` : a.target,
+      isRead: false,
+      createdAt: a.timestamp,
+    });
+  }
+
+  // 5. Alerts — ERROR / WARNING / INFO by severity
+  for (const alert of getAlerts()) {
+    let type: PlatformEventType = 'INFO';
+    if (alert.severity === 'critical') type = 'ERROR';
+    else if (alert.severity === 'warning') type = 'WARNING';
+    events.push({
+      id: `evt-alert-${alert.id}`,
+      type,
+      title: alert.title,
+      message: alert.message,
+      isRead: false,
+      createdAt: alertTimestamp(alert.id),
+    });
+  }
+
+  // Newest first — consistent with the Client Notifications feed.
+  return events.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+}

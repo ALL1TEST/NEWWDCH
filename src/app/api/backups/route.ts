@@ -8,6 +8,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { getSiteWhere } from '@/lib/site-context';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
 import { createHash } from 'node:crypto';
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -96,11 +97,27 @@ export async function GET(request: NextRequest) {
     const provider = sp.get('storageProvider');
     const search = sp.get('search')?.trim();
 
-    const where: Record<string, unknown> = { ...(await getSiteWhere(request)) };
+    // -------- scope=platform: platform-admin-only view of ALL backups
+    // across all sites (no site filter). Falls through to the default
+    // client behavior (site-scoped via getSiteWhere) when the param is
+    // absent so existing callers keep working as before. Note: 'platform'
+    // is NOT a valid BackupScope enum value, so it must be intercepted
+    // here BEFORE the `where.scope = scope` filter line below.
+    let siteFilter: Record<string, unknown> = {};
+    if (scope === 'platform') {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+      // Platform scope: no site filter — return ALL backups across all sites.
+      siteFilter = {};
+    } else {
+      siteFilter = await getSiteWhere(request);
+    }
+
+    const where: Record<string, unknown> = { ...siteFilter };
 
     if (status) where.status = status;
     if (type) where.type = type;
-    if (scope) where.scope = scope;
+    if (scope && scope !== 'platform') where.scope = scope;
     if (provider) where.storageProvider = provider;
     if (search) {
       // Search across text fields (name, filename, note) AND enum-ish fields
@@ -185,7 +202,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const parsed = createSchema.safeParse(body);
+    // -------- scope=platform: platform admin can create platform-wide
+    // backups (siteId = null, createdById = authenticated admin). When
+    // scope is absent, behave EXACTLY as before — client-side backups
+    // pick up siteId from the query string / context. Note: 'platform'
+    // is NOT a valid BackupScope enum value (the zod schema below will
+    // reject it), so we peek at the raw body BEFORE zod validation and
+    // rewrite the scope field to the actual BackupScope (default FULL).
+    // The platform dialog sends `scope: 'platform'` as a marker AND
+    // `backupScope: <BackupScope>` for the real data-scope choice.
+    const isPlatformScope =
+      typeof body === 'object' && body !== null && (body as { scope?: unknown }).scope === 'platform';
+
+    let platformUser: { id: string } | null = null;
+    let preparedBody: unknown = body;
+    if (isPlatformScope) {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+      platformUser = { id: auth.user.id };
+
+      // Rewrite the body so zod sees a valid BackupScope. Default to
+      // FULL when the platform dialog did not supply a `backupScope`.
+      const rawBody = (body as Record<string, unknown>) ?? {};
+      const backupScope = rawBody.backupScope;
+      const validBackupScopes = ['FULL', 'DATABASE_ONLY', 'MEDIA_ONLY', 'FILES_ONLY', 'SETTINGS_ONLY'];
+      const resolvedScope =
+        typeof backupScope === 'string' && validBackupScopes.includes(backupScope) ? backupScope : 'FULL';
+      const { ...rest } = rawBody;
+      delete rest.scope;
+      delete rest.backupScope;
+      preparedBody = { ...rest, scope: resolvedScope };
+    }
+
+    const parsed = createSchema.safeParse(preparedBody);
     if (!parsed.success) {
       return NextResponse.json(
         {
@@ -202,6 +251,13 @@ export async function POST(request: NextRequest) {
 
     const d = parsed.data;
 
+    // Platform scope: force siteId = null (platform-wide) and use the
+    // authenticated admin's id as createdById. Client scope: leave
+    // siteId/createdById exactly as the caller provided — existing
+    // behavior preserved.
+    const siteId = isPlatformScope ? null : d.siteId;
+    const createdById = isPlatformScope && platformUser ? platformUser.id : d.createdById;
+
     // Use the backup service for real backup creation (archive → encrypt → upload → verify → log)
     try {
       const { createBackup } = await import('@/lib/backup/backup-service');
@@ -214,8 +270,8 @@ export async function POST(request: NextRequest) {
         storageProvider: d.storageProvider,
         encryptionEnabled: d.encryptionEnabled,
         verifyAfterUpload: d.verifyAfterUpload ?? true,
-        createdById: d.createdById,
-        siteId: d.siteId,
+        createdById,
+        siteId,
         scheduleId: d.scheduleId,
       });
 

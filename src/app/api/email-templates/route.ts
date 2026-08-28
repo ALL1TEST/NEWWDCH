@@ -8,6 +8,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { getSiteWhere } from '@/lib/site-context';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -73,8 +74,20 @@ export async function GET(request: NextRequest) {
     const category = sp.get('category') || undefined;
     const status = sp.get('status') || undefined;
     const search = sp.get('search') || undefined;
+    const scope = sp.get('scope');
 
-    const siteFilter = await getSiteWhere(request);
+    // -------- scope=platform: platform-admin-only view of system templates
+    // (siteId IS NULL). Falls through to the default client behavior when
+    // the param is absent so existing callers keep working as before.
+    let siteFilter: Record<string, unknown> = {};
+    if (scope === 'platform') {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+      siteFilter = { siteId: null };
+    } else {
+      siteFilter = await getSiteWhere(request);
+    }
+
     const where: Record<string, unknown> = { ...siteFilter };
     if (category && CATEGORIES.includes(category as typeof CATEGORIES[number])) where.category = category;
     if (status && STATUSES.includes(status as typeof STATUSES[number])) where.status = status;
@@ -127,6 +140,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // -------- scope=platform: platform admin can create system templates
+    // (siteId = null). When scope is absent, behave exactly as before —
+    // client-side templates pick up siteId from the query string / context.
+    const isPlatformScope =
+      typeof body === 'object' && body !== null && (body as { scope?: unknown }).scope === 'platform';
+
+    let platformUser: { id: string } | null = null;
+    if (isPlatformScope) {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+      platformUser = { id: auth.user.id };
+    }
+
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
@@ -143,12 +169,14 @@ export async function POST(request: NextRequest) {
     }
 
     const d = parsed.data;
-    const siteFilter = await getSiteWhere(request);
-    const siteId = request.nextUrl.searchParams.get('siteId');
     let slug = kebabCase(d.name);
 
-    // Resolve createdById — fallback to first user if not provided
+    // Resolve createdById — platform scope uses the authenticated admin;
+    // client scope falls back to ?siteId / first user as before.
     let createdById = d.createdById;
+    if (isPlatformScope && platformUser) {
+      createdById = platformUser.id;
+    }
     if (!createdById) {
       const firstUser = await db.user.findFirst({ select: { id: true }, orderBy: { createdAt: 'asc' } });
       createdById = firstUser?.id;
@@ -167,6 +195,10 @@ export async function POST(request: NextRequest) {
       slugCandidate = `${slug}-${counter++}`;
     }
     slug = slugCandidate;
+
+    // Platform-scope templates are always system-level (siteId = null).
+    // Client-scope templates use ?siteId from the query (existing behavior).
+    const siteId = isPlatformScope ? null : request.nextUrl.searchParams.get('siteId');
 
     const item = await db.emailTemplate.create({
       data: {
