@@ -68,7 +68,14 @@ export const PLATFORM_PAGES = [
   // /api/platform/admin/system-health route, the HealthSnapshot types, and
   // src/lib/platform/system-health.ts (the real per-service checker) are
   // KEPT so Overview's summary continues to work.
-  { key: 'platform-audit', label: 'Activity / Audit Log', icon: 'ScrollText' },
+  // 'platform-audit' (Activity / Audit Log) was removed as a standalone
+  // admin page in Task 53. The underlying /api/platform/admin/audit-log
+  // route, the AuditLog prisma model writes (via logAdminAction in
+  // src/lib/platform/audit.ts), and the AuditEntry types in
+  // src/lib/platform/platform-data.ts are KEPT — every sensitive admin
+  // action in the platform still records an audit row; only the dedicated
+  // reader page is gone. The Overview page does not embed a recent-activity
+  // feed that links here, so no inbound link needs patching.
   { key: 'platform-settings', label: 'Platform Settings', icon: 'Settings' },
   { key: 'platform-feature-flags', label: 'Feature Flags', icon: 'Flag' },
   { key: 'platform-admin-users', label: 'Admin Users', icon: 'ShieldCheck' },

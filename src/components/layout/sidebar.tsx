@@ -332,11 +332,6 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     icon: 'Database',
   },
   {
-    label: 'Activity / Audit Log',
-    href: '#platform-audit',
-    icon: 'ScrollText',
-  },
-  {
     label: 'Platform Settings',
     href: '#platform-settings',
     icon: 'Settings',
