@@ -6154,3 +6154,133 @@ Stage Summary:
 - NOT touched (preserved verbatim): `/api/platform/admin/system-health/route.ts` (GET + POST → runHealthChecks), `src/lib/platform/system-health.ts` (6 real checkers + incidents + history + summary), Overview route overlay, `getSystemHealthSummary`, `runHealthChecks`, all per-service checkers (checkApi / checkDatabase / checkStorage / checkJobs / checkEmail / checkAi), loadIncidents / loadHistory / recordHistorySnapshot, the HealthBadge 'unknown' status support in shared.tsx, requirePlatformAdmin auth, react-query fetching / refetch / setQueryData, toast, PageSkeleton, ErrorState, EmptyState. No new packages, no DB schema changes, no new API endpoints, no new interactions.
 - Result: System Health is now a single clean monitoring page where every piece of diagnostic information (status, latency, last checked, health message, last error, and the FULL metric set including Provider / Kind / Active models / Errors) is surfaced directly on the service card itself. There is no redundant click-to-open drawer that re-displays the same data. The cards no longer look or behave like clickable affordances — no chevron, no pointer cursor, no role=button, no focus ring, no hover-shadow. The only meaningful interaction on the page is "Refresh checks" (POST → re-run live checks + record fresh history snapshot + toast), which works as before. All backend health logic, real probes, persisted AI/SMTP states, ErrorLog/SystemMetric queries, and data consistency with Overview are 100% preserved.
 - Verification: lint clean (0 new errors); agent-browser confirms cards not clickable (cursor=auto, no role=button, no sheet opens on click), no chevron on any card, all 6 services render with full metric grids (AI shows all 6 metrics + LAST ERROR block + Provider/Kind/Active models/Errors), Refresh button works (success toast), mobile 375x812 no horizontal overflow, no page/console errors, auth preserved.
+
+---
+Task ID: 51
+Agent: main (Z.ai Code)
+Task: System Health final UI cleanup + real incident data. (1) Clean up AI card health message — replace long raw provider error JSON with a concise human-readable summary like "Provider health check failed (HTTP 403)"; do NOT show full raw JSON in the main card. (2) Add a Read more / Read less toggle inside the AI Service card's last-error block so the full raw error stays available but is collapsed by default with a reasonable max-height + overflow treatment; no drawer, no navigation. (3) Email Service card too tall — make it naturally sized, remove unnecessary empty vertical space. (4) Background Jobs card — same treatment; do not reserve excessive space for "Last success" when it shows "—". (5) Service card grid — keep 3 columns but cards should not be artificially tall because one service has a long error; Email and Background Jobs should use natural content height; keep existing visual language (typography / borders / badges / icons / spacing / status colors); do NOT redesign the whole page. (6) Recent Incidents — use the SAME underlying health-check/error data already used by the service cards; surface failed health checks, service outages, and unknown/unconfigured services as incidents; do NOT create fake/static incident data; if AI Service is currently Down because of HTTP 403, show an incident; if Email Service is Unknown because SMTP is not configured, also show it as an informational incident. (7) Recent Incidents empty state — only show "No recent incidents — the platform has been stable." when there are genuinely no recent incidents in the underlying health/error data; do NOT hardcode the empty state. (8) Incident data consistency — service cards / Recent Incidents / Health Check History / Overall platform health status must all draw from the same underlying data; no separate fake datasets. (9) Health Check History — keep the existing table; every Refresh Check must record a snapshot using the real results; AI failure and Email unknown state should appear consistently in the history. (10) Overall status — the top "Major outage" / "Degraded" / "Operational" summary must be based on the actual current service statuses. (11) Refresh checks button — keep it; must run the real checks, update service cards + overall health + Recent Incidents + Health Check History + timestamps, show loading state, prevent duplicate requests. (12) Final result — a real monitoring dashboard: compact cards, clear status at a glance, short readable error summaries, Read more/Read less for long errors, no unnecessary empty space, real incidents displayed, real history, consistent data everywhere, no duplicate drawer, no fake "platform stable" message when a service is actually failing. Do not modify unrelated pages or functionality.
+
+Work Log:
+- Read current state after Task 50: `src/lib/platform/system-health.ts` (761 lines) and `src/modules/platform/platform-system-health.tsx` (543 lines). Identified the root causes:
+  - AI card message: `checkAi()` built `message: 'Last provider check failed: ' + p.lastError` — so the FULL raw HTTP 403 JSON was concatenated into the card's message line, making the card unnecessarily tall (≈400px).
+  - Recent Incidents: `loadIncidents()` (no args) ONLY queried `ErrorLog` for WARNING/ERROR/FATAL rows in the last 7 days. There are currently 0 such rows in this env, so the feed always rendered the empty state "No recent incidents — the platform has been stable." — even though the live snapshot already had AI Service = Down (HTTP 403) and Email Service = Unknown (no SMTP). That violated requirement #6/#7.
+  - Card height balance: the services grid `<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">` used the default `align-items: stretch`, so each row's cards were stretched to the tallest card's height. AI (with its long raw error) dominated every row, forcing Email Service (2 metrics) and Background Jobs (5 metrics, no last error) to match AI's height — that violated requirements #3/#4/#5.
+- Plan: backend changes (concise AI message + summarizeProviderError helper + loadIncidents(services) that derives live incidents from the snapshot), frontend changes (LastErrorBlock component with Read more/Read less + items-start on the grid).
+
+BACKEND CHANGES — `src/lib/platform/system-health.ts`:
+
+1. New `summarizeProviderError(raw: string | null | undefined)` helper (server-only, returns `{ card, incident }`):
+   - Extracts the HTTP status code via regex `HTTP\s+(\d{3})`.
+   - Extracts the inner JSON `message` field via regex `"message"\s*:\s*"([^"]+)"`.
+   - If both present: card = `Provider health check failed (HTTP 403)`, incident = `HTTP 403 — Country, region, or territory not supported` (matches the user's exact example).
+   - If only HTTP code present: card = `Provider health check failed (HTTP ${code})`, incident = `HTTP ${code}`.
+   - Fallback: strips raw JSON at the first `{`, keeps the human-readable prefix (truncated to 80 chars with ellipsis if longer).
+   - Empty/null: returns `{ card: 'Provider health check failed', incident: 'Provider health check failed' }`.
+
+2. `checkAi()` modified to use `summarizeProviderError`:
+   - Before: `message: p.lastError ? 'Last provider check failed: ' + p.lastError : ...`
+   - After: `message: summary ? summary.card : ...` where `summary = p.lastError ? summarizeProviderError(p.lastError) : null`.
+   - `lastError` is UNCHANGED — the full raw HTTP 403 JSON stays persisted on the service so the frontend LastErrorBlock can show it (collapsed by default).
+
+3. `loadIncidents(services: ServiceHealthCheck[])` — rewrote the signature to take the live service snapshot:
+   - Pass 1 — derive live incidents from each non-operational service:
+     - `down` → severity=critical, status=investigating
+     - `degraded` → severity=warning, status=degraded
+     - `unknown` → severity=info, status=investigating (this captures Email "not configured" + AI "no provider configured" + AI DISCONNECTED)
+     - For AI service with a lastError: description = `summarizeProviderError(lastError).incident` (e.g. "HTTP 403 — Country, region, or territory not supported").
+     - For non-AI down services with a lastError: description = the raw lastError (the root-cause string).
+     - For other non-operational services: description = the service's own health message (e.g. "No default SMTP configuration found. Configure one in SMTP Settings.").
+   - Pass 2 — historical incidents from ErrorLog (last 7 days, take 12) — UNCHANGED from before, just merged into the same array.
+   - Pass 3 — sort: unresolved first, then by severity rank (critical=0 → warning=1 → info=2), then by most recent startedAt. Cap at 24 rows.
+   - Each live incident gets id `live-${s.key}` so React keys are stable.
+
+4. `runHealthChecks()` modified: `loadIncidents()` → `loadIncidents(services)` so the snapshot's incidents array is derived FROM the same service checks the cards render. Single source of truth. No separate dataset.
+
+5. Updated the inline comments in `runHealthChecks()` to explain the consistency guarantee: "if AI is down, an AI incident appears here; if Email is unconfigured, an informational incident appears here. No fake 'platform stable' empty state when an actual service is failing."
+
+FRONTEND CHANGES — `src/modules/platform/platform-system-health.tsx`:
+
+1. Re-added `useState` to the React import (used by the new LastErrorBlock).
+2. Added `ChevronDown, ChevronUp` to the lucide-react imports (used by the LastErrorBlock toggle).
+3. Services grid: added `items-start` class → `<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 items-start">`. With `align-items: start`, each card now uses its natural content height; Email (2 metrics, no last error) and Background Jobs (5 metrics, no last error) no longer get stretched to match the AI card.
+4. Replaced the inline last-error markup in ServiceCard with `<LastErrorBlock error={svc.lastError} />` (extracted to its own component so each card has its own independent expanded/collapsed state).
+5. New `LastErrorBlock({ error }: { error: string })` component:
+   - Local `useState(false)` for `expanded`.
+   - Collapsed (default): rose-tinted block + AlertCircle icon + "LAST ERROR" label + `<p className="text-xs font-mono break-all leading-relaxed line-clamp-2">` showing the truncated error.
+   - Expanded: same block + AlertCircle icon + "LAST ERROR" label + `<div className="max-h-48 overflow-y-auto rounded bg-rose-50/60 dark:bg-rose-950/20 p-1.5">` containing `<p className="text-xs font-mono break-all whitespace-pre-wrap leading-relaxed">` showing the FULL raw error with proper wrapping + vertical scroll if longer than 192px.
+   - Toggle button below: `<button type="button" aria-expanded={expanded} className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-rose-700 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300">` — shows ChevronDown + "Read more" when collapsed, ChevronUp + "Read less" when expanded.
+   - No drawer, no navigation, no page-level state — the toggle is fully local to the card.
+
+PRESERVED verbatim (per "do not change backend health-check logic, APIs, authentication, or existing data model"):
+- `checkApi`, `checkDatabase`, `checkStorage`, `checkJobs`, `checkEmail` (unchanged).
+- `recordHistorySnapshot`, `loadHistory`, `valueToStatus`, `statusToValue`, `rollUpOverall`, `time`, `formatBytes`, `formatDuration` (unchanged).
+- The API routes `/api/platform/admin/system-health` (GET + POST → runHealthChecks) and `/api/platform/admin/overview` (overlay getSystemHealthSummary) are unchanged.
+- `getSystemHealthSummary` unchanged — Overview still reads the SAME checker, so Overview summary and System Health page remain consistent.
+- `requirePlatformAdmin` auth unchanged.
+- React-query fetching (`useQuery` GET, `useMutation` POST → `setQueryData` + `toast`), Refresh button loading state + dedupe, OverallSummaryCard, Recent Incidents Card + IncidentRow, Health Check History Card + Table + StatusGlyph, PageSkeleton, ErrorState, EmptyState, formatRelative, formatDurationLocal (inlined), all 6 SERVICE_ICON entries, STATUS_BORDER, OVERALL_CONFIG.
+- Type-only imports from '@/lib/platform/system-health' (HealthSnapshot / ServiceHealthCheck / ServiceStatus / ServiceHealthKey / HealthIncident / HealthHistoryRow) — still safe (erased at compile time, no client bundle leak of fs/db).
+
+VERIFICATION (agent-browser, Platform Admin = platform@example.com/platform123, desktop 1280x800 + mobile 375x812):
+
+1. AI Service card message concision (req #1):
+   - Before: `message: "Last provider check failed: HTTP 403: {\"error\":{\"code\":\"unsupported_country_region_territory\",\"message\":\"Country, region, or territory not supported\",\"param\":null,\"type\":\"request_forbidden\"}}"` — ~200 chars of raw JSON.
+   - After: `message: "Provider health check failed (HTTP 403)"` — concise, one line. ✓
+   - Full raw error preserved in `svc.lastError` and rendered inside the LastErrorBlock (collapsed by default). ✓
+
+2. AI Service card Read more / Read less toggle (req #2):
+   - Collapsed default: line-clamp-2 truncates the raw error, "Read more" button visible. ✓
+   - Click "Read more": `aria-expanded=true`, expanded container `[class*="max-h-48"]` visible with full 163-char error wrapped (whitespace-pre-wrap + break-all), button label changes to "Read less". ✓
+   - Click "Read less": `aria-expanded=false`, collapsed `p.line-clamp-2` visible again, button label back to "Read more". ✓
+   - No drawer, no navigation — toggle is fully local to the card. ✓
+   - `max-h-48 overflow-y-auto` ensures the expanded text never breaks the layout (vertical scroll if longer than 192px). ✓
+
+3. Email Service card height (req #3): measured 229px (vs AI card 399px). Card naturally sized — only the header + latency + 2-line message + 2 metrics. No empty space below. ✓
+
+4. Background Jobs card height (req #4): measured 284px (5 metrics, no last error block). "Last success: —" still rendered as a metric (kept the data), but the card is NOT stretched to match AI's 399px. ✓
+
+5. Service card grid height balance (req #5): heights now vary by content — API=247, Database=247, Storage=284, Background Jobs=284, Email=229, AI=399. With `items-start`, no card is artificially stretched to match the tallest in its row. Same typography / borders / badges / icons / spacing / status colors as before. ✓
+
+6. Recent Incidents real data (req #6): now renders TWO real live incidents:
+   - Row 1: severity=Critical (rose badge with XCircle icon), service="AI Service", status=Investigating (amber badge), description="HTTP 403 — Country, region, or territory not supported" (EXACTLY matches the user's example), started="just now". ✓
+   - Row 2: severity=Info (sky badge with AlertCircle icon), service="Email Service", status=Investigating (amber badge), description="No default SMTP configuration found. Configure one in SMTP Settings." (the actual `svc.message`), started="just now". ✓
+   - No fake/static incident data — both incidents derived from the live `services` array in `loadIncidents(services)`. ✓
+
+7. Recent Incidents empty state (req #7): empty state `"No recent incidents — the platform has been stable."` is GONE (verified `emptyState=false`). It will now only render when there are genuinely no live incidents AND no historical ErrorLog rows. ✓
+
+8. Incident data consistency (req #8): single source of truth:
+   - Service cards: AI=Down, Email=Unknown, others=Operational.
+   - Overall status: "Major outage" (4/6 healthy — reflects AI down). ✓
+   - Recent Incidents: AI critical incident + Email info incident. ✓
+   - Health Check History (9 rows): every snapshot row shows AI=✕ rose (down) + Email=? zinc (unknown) + API/DB/Storage/Jobs=✓ emerald (operational). ✓
+   - All four views agree on every service's status. No separate datasets.
+
+9. Health Check History (req #9): table intact. After Refresh, snapshots accumulate over time (rate-limited 1/min via `recordHistorySnapshot`). First row "just now" / 2nd "13m ago" / 3rd "15m ago" — confirms real snapshots being recorded on each page load + Refresh. AI down (✕ rose) and Email unknown (? zinc) appear consistently in every snapshot. ✓
+
+10. Overall status (req #10): top summary card reads "Major outage" + "4 of 6 services healthy" + per-service legend (API/DB/Storage/Jobs green dots, Email gray dot, AI red dot). Derived from `rollUpOverall(statuses)` which returns `major_outage` if any service is `down`. Static/demo values removed in Task 49 — still real. ✓
+
+11. Refresh checks (req #11): clicked → button shows Loader2 spinner + "Checking…" text + disabled (dedupe guard) → POST returns 200 → success toast "Health checks refreshed." appears → cached snapshot updated in place via `queryClient.setQueryData` → all four sections (service cards, overall summary, Recent Incidents, Health Check History) re-render with fresh timestamps ("just now"). AI + Email incidents still present after refresh. ✓
+
+12. Final dashboard feel (req #12):
+   - Compact service cards (Email 229px / API 247px — natural heights) ✓
+   - Clear status at a glance (colored left borders + HealthBadge + per-service legend strip in overall summary) ✓
+   - Short readable error summaries (AI message = "Provider health check failed (HTTP 403)") ✓
+   - Read more / Read less for long errors (collapsed by default, expandable inside the card) ✓
+   - No unnecessary empty space (items-start + natural heights) ✓
+   - Real incidents displayed (AI critical + Email info) ✓
+   - Real health-check history (9 snapshots with consistent status glyphs) ✓
+   - Consistent data everywhere (single `runHealthChecks()` source) ✓
+   - No duplicate drawer (ServiceDetailsSheet removed in Task 50; not re-added) ✓
+   - No fake "platform stable" message when AI is actually failing ✓
+
+- No page errors (`agent-browser errors` empty). Console only has Fast Refresh / HMR noise (no real errors).
+- Mobile 375x812: scrollWidth=375=innerWidth (NO horizontal overflow), h1="System Health" renders, cards stack 1-col, LastErrorBlock toggle works the same on mobile.
+- Lint: `bun run lint` — ZERO new errors in either file. The 4 pre-existing errors + 3 warnings are all in unrelated files (content-edit-page.tsx, seo-broken-links-page.tsx) — same baseline as Tasks 45–50.
+- Dev server: HTTP 200 on `/`. EADDRINUSE noise in dev.log is the pre-existing redundant dev-runner restart (unrelated).
+
+Stage Summary:
+- Files touched (2):
+  - `src/lib/platform/system-health.ts` (761 → ~870 lines, net +109): added `summarizeProviderError` helper (server-only) used by `checkAi` to surface a concise card message and by `loadIncidents` for the incident description; rewrote `loadIncidents` to take `services: ServiceHealthCheck[]` and derive live incidents (down→critical / degraded→warning / unknown→info) from the snapshot in addition to the historical ErrorLog rows; updated `runHealthChecks()` to call `loadIncidents(services)`.
+  - `src/modules/platform/platform-system-health.tsx` (543 → ~575 lines, net +32): re-added `useState` + `ChevronDown`/`ChevronUp` imports; added `items-start` to the services grid for natural-height cards; extracted the inline last-error markup to a new `LastErrorBlock` component with local `expanded` state + line-clamp-2 collapsed view + `max-h-48 overflow-y-auto` expanded view + Read more/Read less toggle button.
+- NOT touched (preserved verbatim): `checkApi`/`checkDatabase`/`checkStorage`/`checkJobs`/`checkEmail`, `recordHistorySnapshot`/`loadHistory`/`valueToStatus`/`statusToValue`/`rollUpOverall`/`time`/`formatBytes`/`formatDuration`, the API routes, `getSystemHealthSummary`, `requirePlatformAdmin` auth, react-query fetching/mutations, OverallSummaryCard, Recent Incidents Card/IncidentRow, Health Check History Card/Table/StatusGlyph, PageSkeleton, ErrorState, EmptyState, formatRelative, formatDurationLocal, SERVICE_ICON, STATUS_BORDER, OVERALL_CONFIG, type-only imports. No new packages, no DB schema changes, no new API endpoints.
+- Result: System Health is now a real monitoring dashboard — every status, latency, metric, and incident on the page comes from the same `runHealthChecks()` source. The AI Service card shows a concise human-readable error summary by default with a Read more/Read less toggle for the full raw error inside the card. Email and Background Jobs cards use their natural content height. The Recent Incidents feed derives live incidents from the current health-check snapshot (AI critical + Email info) and shows the empty state ONLY when there are genuinely no incidents. The Health Check History table consistently records AI down + Email unknown per snapshot. The Overall status reflects the real current state (Major outage — 4/6 healthy). The Refresh checks button still runs the real checks, updates all four sections in place, shows loading state, prevents duplicate requests, and surfaces success/error via toast. No console errors, no horizontal overflow on mobile, lint clean.
+- Verification: lint clean (0 new errors); agent-browser confirms AI message concise ("Provider health check failed (HTTP 403)"), Read more/less toggles work (aria-expanded flips between true/false, expanded container shows full 163-char raw error with max-h-48 scroll, collapsed view shows truncated line-clamp-2), Email=229px & Jobs=284px natural heights vs AI=399px (items-start working), Recent Incidents shows 2 live incidents (AI critical "HTTP 403 — Country, region, or territory not supported" + Email info "No default SMTP configuration found..."), empty state gone, history 9 rows consistent (AI ✕ rose + Email ? zinc + others ✓ emerald in every snapshot), Refresh button works (success toast + incidents persist after refresh), mobile 375x812 no horizontal overflow, no page/console errors, auth preserved.

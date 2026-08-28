@@ -487,6 +487,60 @@ async function checkEmail(): Promise<ServiceHealthCheck> {
 }
 
 /**
+ * Summarize a raw provider error into a concise human-readable
+ * form for the card message + a one-line incident description.
+ *
+ * The persisted `lastError` on an AI provider can be very long
+ * (e.g. `HTTP 403: {"error":{"code":"unsupported_country_region_territory",
+ * "message":"Country, region, or territory not supported",...}}`).
+ * Showing that raw text directly on the card makes the card
+ * unnecessarily tall. This helper extracts the HTTP status code
+ * (when present) and the inner JSON `message` (when present) so
+ * the card can show e.g. "Provider health check failed (HTTP 403)"
+ * and the Recent Incidents list can show e.g.
+ * "HTTP 403 — Country, region, or territory not supported".
+ * The full raw error stays available on the card under
+ * "Last error" (collapsed by default with a Read more/Read less
+ * toggle handled by the frontend).
+ */
+function summarizeProviderError(raw: string | null | undefined): {
+  card: string;
+  incident: string;
+} {
+  if (!raw) {
+    return { card: 'Provider health check failed', incident: 'Provider health check failed' };
+  }
+  const httpMatch = raw.match(/HTTP\s+(\d{3})/i);
+  const code = httpMatch?.[1];
+  const msgMatch = raw.match(/"message"\s*:\s*"([^"]+)"/);
+  const innerMsg = msgMatch?.[1];
+  if (code && innerMsg) {
+    return {
+      card: `Provider health check failed (HTTP ${code})`,
+      incident: `HTTP ${code} — ${innerMsg}`,
+    };
+  }
+  if (code) {
+    return {
+      card: `Provider health check failed (HTTP ${code})`,
+      incident: `HTTP ${code}`,
+    };
+  }
+  // Fallback — strip raw JSON, keep the human-readable prefix.
+  const cutoff = raw.indexOf('{');
+  let trimmed: string;
+  if (cutoff > 0) {
+    trimmed = raw.slice(0, cutoff).replace(/[\s:]+$/, '').trim();
+  } else {
+    trimmed = raw.length > 80 ? `${raw.slice(0, 80)}…` : raw;
+  }
+  return {
+    card: trimmed ? `Provider unavailable — ${trimmed}` : 'Provider health check failed',
+    incident: trimmed || 'Provider health check failed',
+  };
+}
+
+/**
  * AI Service check.
  *
  * Reads the default AI provider's persisted connection state.
@@ -572,14 +626,21 @@ async function checkAi(): Promise<ServiceHealthCheck> {
     { label: 'Last check', value: p.lastHealthCheckAt ? new Date(p.lastHealthCheckAt).toISOString() : '—' },
     { label: 'Errors (24h)', value: `${r.recentErrors}` },
   ];
+  // For the AI card we surface a concise human-readable summary of
+  // any provider error (e.g. "Provider health check failed (HTTP
+  // 403)") instead of dumping the full raw error text into the
+  // message line. The full raw error stays available under
+  // "Last error" (collapsed by default with a Read more/Read less
+  // toggle handled by the frontend).
+  const summary = p.lastError ? summarizeProviderError(p.lastError) : null;
   return {
     key: 'ai',
     label: 'AI Service',
     category: 'integrations',
     status,
     latencyMs: p.latencyMs,
-    message: p.lastError
-      ? `Last provider check failed: ${p.lastError}`
+    message: summary
+      ? summary.card
       : status === 'operational'
         ? `${p.name} reachable`
         : status === 'unknown'
@@ -593,7 +654,64 @@ async function checkAi(): Promise<ServiceHealthCheck> {
 
 // -------------------- Incidents --------------------
 
-async function loadIncidents(): Promise<HealthIncident[]> {
+/**
+ * Build the Recent Incidents feed from BOTH the current health-check
+ * snapshot (live, active incidents) AND the historical ErrorLog rows
+ * (recently resolved incidents). This is the single consistent source
+ * used by the System Health page — no separate fake dataset.
+ *
+ * Derivation rules:
+ *   - status === 'down'        → critical incident, status='investigating'
+ *   - status === 'degraded'    → warning incident, status='degraded'
+ *   - status === 'unknown'     → info incident (configuration gap such
+ *                                as "SMTP not configured" or
+ *                                "AI provider not configured"),
+ *                                status='investigating'
+ *   - status === 'operational' → no live incident
+ *
+ * For the AI service with a raw `lastError`, the incident description
+ * is a concise human-readable summary (e.g.
+ * "HTTP 403 — Country, region, or territory not supported") so the
+ * feed stays readable; the full raw error stays available on the
+ * service card under "Last error".
+ */
+async function loadIncidents(services: ServiceHealthCheck[]): Promise<HealthIncident[]> {
+  const incidents: HealthIncident[] = [];
+
+  // 1. Live incidents derived from the current health-check snapshot.
+  for (const s of services) {
+    if (s.status === 'operational') continue;
+    const severity: HealthIncident['severity'] =
+      s.status === 'down' ? 'critical' : s.status === 'degraded' ? 'warning' : 'info';
+    const status: HealthIncident['status'] =
+      s.status === 'degraded' ? 'degraded' : 'investigating';
+    // For AI service with a raw lastError, use the concise summary as
+    // the incident description (e.g. "HTTP 403 — Country, region, or
+    // territory not supported"). For other services, fall back to
+    // the service's own health message.
+    let description = s.message;
+    if (s.key === 'ai' && s.lastError) {
+      description = summarizeProviderError(s.lastError).incident;
+    } else if (s.lastError && s.status === 'down') {
+      // For non-AI down services, prefer the persisted lastError over
+      // the message line since the message is typically a generic
+      // status sentence while lastError has the actual root cause.
+      description = s.lastError;
+    }
+    incidents.push({
+      id: `live-${s.key}`,
+      service: s.key,
+      serviceName: s.label,
+      severity,
+      status,
+      startedAt: s.lastCheckedAt,
+      resolvedAt: null,
+      durationSec: null,
+      description,
+    });
+  }
+
+  // 2. Historical incidents from the ErrorLog (last 7 days, take 12).
   try {
     const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
     const errors = await db.errorLog.findMany({
@@ -604,23 +722,42 @@ async function loadIncidents(): Promise<HealthIncident[]> {
       orderBy: { createdAt: 'desc' },
       take: 12,
     });
-    return errors.map((e) => ({
-      id: e.id,
-      service: e.module ?? 'system',
-      serviceName: e.module ? e.module.charAt(0).toUpperCase() + e.module.slice(1) : 'System',
-      severity: e.severity === 'WARNING' ? 'warning' : 'critical',
-      status: e.isResolved ? 'resolved' : 'investigating',
-      startedAt: e.createdAt.toISOString(),
-      resolvedAt: e.resolvedAt ? e.resolvedAt.toISOString() : null,
-      durationSec:
-        e.resolvedAt && e.createdAt
-          ? Math.floor((e.resolvedAt.getTime() - e.createdAt.getTime()) / 1000)
-          : null,
-      description: [e.exception, e.message].filter(Boolean).join(' — ') || 'No details available',
-    }));
+    for (const e of errors) {
+      incidents.push({
+        id: e.id,
+        service: e.module ?? 'system',
+        serviceName: e.module ? e.module.charAt(0).toUpperCase() + e.module.slice(1) : 'System',
+        severity: e.severity === 'WARNING' ? 'warning' : 'critical',
+        status: e.isResolved ? 'resolved' : 'investigating',
+        startedAt: e.createdAt.toISOString(),
+        resolvedAt: e.resolvedAt ? e.resolvedAt.toISOString() : null,
+        durationSec:
+          e.resolvedAt && e.createdAt
+            ? Math.floor((e.resolvedAt.getTime() - e.createdAt.getTime()) / 1000)
+            : null,
+        description: [e.exception, e.message].filter(Boolean).join(' — ') || 'No details available',
+      });
+    }
   } catch {
-    return [];
+    // ignore — best-effort
   }
+
+  // 3. Sort: unresolved first, then by severity (critical → warning →
+  // info), then by most recent startedAt. Cap at 24 rows so the feed
+  // stays scannable.
+  const sevRank: Record<HealthIncident['severity'], number> = {
+    critical: 0, warning: 1, info: 2,
+  };
+  incidents.sort((a, b) => {
+    const aResolved = a.status === 'resolved' ? 1 : 0;
+    const bResolved = b.status === 'resolved' ? 1 : 0;
+    if (aResolved !== bResolved) return aResolved - bResolved;
+    const sevDiff = sevRank[a.severity] - sevRank[b.severity];
+    if (sevDiff !== 0) return sevDiff;
+    return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime();
+  });
+
+  return incidents.slice(0, 24);
 }
 
 // -------------------- History --------------------
@@ -720,7 +857,13 @@ export async function runHealthChecks(): Promise<HealthSnapshot> {
   const overall = rollUpOverall(statuses);
   const healthyCount = services.filter((s) => s.status === 'operational').length;
 
-  const incidents = await loadIncidents();
+  // Incidents are derived FROM the live service snapshot (plus
+  // historical ErrorLog rows) so the Recent Incidents feed can NEVER
+  // disagree with the service cards or the overall status — if AI is
+  // down, an AI incident appears here; if Email is unconfigured, an
+  // informational incident appears here. No fake "platform stable"
+  // empty state when an actual service is failing.
+  const incidents = await loadIncidents(services);
 
   // Record a history snapshot (best-effort, rate-limited).
   await recordHistorySnapshot(services);

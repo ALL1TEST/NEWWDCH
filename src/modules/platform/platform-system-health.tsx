@@ -17,7 +17,7 @@
 // service's status.
 // ============================================================
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from '@/components/ui/card';
@@ -35,6 +35,7 @@ import {
   RefreshCw, Loader2, Server, Database, HardDrive, Briefcase,
   Mail, Sparkles, HeartPulse, AlertTriangle, CheckCircle2,
   XCircle, HelpCircle, Clock, AlertCircle, Activity,
+  ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -142,7 +143,8 @@ export function PlatformSystemHealthModule() {
           title="Services"
           description="Real-time status, latency, metrics, and recent errors for each platform service."
         />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {/* items-start so each card uses its natural content height — Email and Background Jobs cards no longer get stretched to match the AI card. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 items-start">
           {data.services.map((svc) => (
             <ServiceCard
               key={svc.key}
@@ -275,18 +277,11 @@ function ServiceCard({ svc }: { svc: ServiceHealthCheck }) {
 
         <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{svc.message}</p>
 
-        {/* Last error — surfaced directly on the card when present */}
-        {svc.lastError && (
-          <div className="rounded-md border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/30 p-2.5">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <p className="text-[10px] uppercase tracking-wider text-rose-600 dark:text-rose-400 mb-0.5">Last error</p>
-                <p className="text-xs font-mono break-all leading-relaxed line-clamp-4">{svc.lastError}</p>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Last error — surfaced directly on the card when present,
+            collapsed by default with a Read more / Read less toggle so
+            the long raw error (e.g. the AI HTTP 403 JSON) does not
+            break the card layout. */}
+        {svc.lastError && <LastErrorBlock error={svc.lastError} />}
 
         {/* All metrics — surfaced directly on the card (no truncation, no drawer) */}
         {svc.metrics.length > 0 && (
@@ -301,6 +296,47 @@ function ServiceCard({ svc }: { svc: ServiceHealthCheck }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// -------------------- Last error block (collapsible) --------------------
+
+function LastErrorBlock({ error }: { error: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="rounded-md border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/30 p-2.5">
+      <div className="flex items-start gap-2">
+        <AlertCircle className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] uppercase tracking-wider text-rose-600 dark:text-rose-400 mb-0.5">Last error</p>
+          {expanded ? (
+            <div className="max-h-48 overflow-y-auto rounded bg-rose-50/60 dark:bg-rose-950/20 p-1.5">
+              <p className="text-xs font-mono break-all whitespace-pre-wrap leading-relaxed">{error}</p>
+            </div>
+          ) : (
+            <p className="text-xs font-mono break-all leading-relaxed line-clamp-2">{error}</p>
+          )}
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-rose-700 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300"
+          >
+            {expanded ? (
+              <>
+                <ChevronUp className="h-3 w-3" />
+                Read less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3 w-3" />
+                Read more
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
