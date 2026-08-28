@@ -15,7 +15,6 @@ const overview = dynamic(() => import('./platform-overview').then(m => ({ defaul
 const customers = dynamic(() => import('./platform-customers').then(m => ({ default: m.PlatformCustomersModule as ComponentType })), { loading: ModuleFallback });
 const customerDetail = dynamic(() => import('./platform-customer-detail').then(m => ({ default: m.PlatformCustomerDetailModule as ComponentType })), { loading: ModuleFallback });
 const payments = dynamic(() => import('./platform-payments').then(m => ({ default: m.PlatformPaymentsModule as ComponentType })), { loading: ModuleFallback });
-const settings = dynamic(() => import('./platform-settings').then(m => ({ default: m.PlatformSettingsModule as ComponentType })), { loading: ModuleFallback });
 const plans = dynamic(() => import('./platform-plans').then(m => ({ default: m.PlatformPlansModule as ComponentType })), { loading: ModuleFallback });
 const coupons = dynamic(() => import('./platform-coupons').then(m => ({ default: m.PlatformCouponsModule as ComponentType })), { loading: ModuleFallback });
 const featureFlags = dynamic(() => import('./platform-feature-flags').then(m => ({ default: m.PlatformFeatureFlagsModule as ComponentType })), { loading: ModuleFallback });
@@ -30,7 +29,6 @@ export const platformModuleRegistry: Record<string, ComponentType> = {
   'platform-customers': customers,
   'platform-customer-detail': customerDetail,
   'platform-payments': payments,
-  'platform-settings': settings,
   'platform-plans': plans,
   'platform-coupons': coupons,
   'platform-feature-flags': featureFlags,

@@ -332,11 +332,6 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     icon: 'Database',
   },
   {
-    label: 'Platform Settings',
-    href: '#platform-settings',
-    icon: 'Settings',
-  },
-  {
     label: 'Feature Flags',
     href: '#platform-feature-flags',
     icon: 'Flag',

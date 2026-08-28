@@ -76,7 +76,15 @@ export const PLATFORM_PAGES = [
   // action in the platform still records an audit row; only the dedicated
   // reader page is gone. The Overview page does not embed a recent-activity
   // feed that links here, so no inbound link needs patching.
-  { key: 'platform-settings', label: 'Platform Settings', icon: 'Settings' },
+  // 'platform-settings' (Platform Settings) was removed as a standalone
+  // admin page in Task 54. The underlying `/api/platform/admin/maintenance`
+  // and `/api/platform/admin/countries` routes (plus the MaintenanceConfig
+  // + CountryPricingRow server logic) are KEPT — maintenance mode is still
+  // enforced server-side and toggleable via the API; country pricing CRUD
+  // is still available via the API. Only the dedicated reader/UI page is
+  // gone. (The user-facing SETTINGS_SUBPAGES allow-list below is a
+  // separate concept — client-side settings subpages like email-templates
+  // / smtp-settings — and is unaffected by this removal.)
   { key: 'platform-feature-flags', label: 'Feature Flags', icon: 'Flag' },
   { key: 'platform-admin-users', label: 'Admin Users', icon: 'ShieldCheck' },
 ] as const;
