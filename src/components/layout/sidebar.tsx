@@ -332,11 +332,6 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     icon: 'Database',
   },
   {
-    label: 'Feature Flags',
-    href: '#platform-feature-flags',
-    icon: 'Flag',
-  },
-  {
     label: 'Admin Users',
     href: '#platform-admin-users',
     icon: 'ShieldCheck',

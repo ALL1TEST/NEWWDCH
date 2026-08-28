@@ -85,7 +85,13 @@ export const PLATFORM_PAGES = [
   // gone. (The user-facing SETTINGS_SUBPAGES allow-list below is a
   // separate concept — client-side settings subpages like email-templates
   // / smtp-settings — and is unaffected by this removal.)
-  { key: 'platform-feature-flags', label: 'Feature Flags', icon: 'Flag' },
+  // 'platform-feature-flags' (Feature Flags) was removed as a standalone
+  // admin page in Task 55. The underlying `/api/platform/admin/feature-flags`
+  // and `/api/platform/admin/feature-flags/[key]` routes (plus the
+  // FeatureFlag prisma model + `isFlagEnabled(key)` authority in
+  // src/lib/platform/feature-flags.ts) are KEPT — every flag still has
+  // a server-side authoritative source that the rest of the app reads via
+  // isFlagEnabled(); only the dedicated toggle UI is gone.
   { key: 'platform-admin-users', label: 'Admin Users', icon: 'ShieldCheck' },
 ] as const;
 
