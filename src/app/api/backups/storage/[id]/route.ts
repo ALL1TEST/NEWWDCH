@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -215,7 +216,26 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const parsed = updateSchema.safeParse(body);
+    // -------- scope=platform: peek at the raw body BEFORE zod validation.
+    // When the platform admin UI marks the request with `scope: 'platform'`,
+    // gate with requirePlatformAdmin, then strip the marker so it does not
+    // interfere with downstream parsing. When scope is absent, behave
+    // EXACTLY as before.
+    const isPlatformScope =
+      typeof body === 'object' && body !== null && (body as { scope?: unknown }).scope === 'platform';
+
+    let preparedBody: unknown = body;
+    if (isPlatformScope) {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+
+      const rawBody = (body as Record<string, unknown>) ?? {};
+      const { scope: _omit, ...rest } = rawBody;
+      void _omit;
+      preparedBody = rest;
+    }
+
+    const parsed = updateSchema.safeParse(preparedBody);
     if (!parsed.success) {
       return NextResponse.json(
         {
@@ -317,11 +337,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 // DELETE — delete
 // =====================================================================
 
-export async function DELETE(_request: NextRequest, context: RouteContext) {
+export async function DELETE(request: NextRequest, context: RouteContext) {
   const id = reqId();
 
   try {
     const { id: storageId } = await context.params;
+
+    // -------- scope=platform: gate with requirePlatformAdmin. The
+    // platform admin UI passes `scope=platform` as a query param on the
+    // DELETE URL. When absent, behave EXACTLY as before (no body, no
+    // RBAC change).
+    const scopeParam = new URL(request.url).searchParams.get('scope');
+    if (scopeParam === 'platform') {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+    }
 
     const existing = await db.backupStorage.findUnique({ where: { id: storageId } });
     if (!existing) {
@@ -350,12 +380,32 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
 export async function POST(request: NextRequest, context: RouteContext) {
   const id = reqId();
 
-  // `request` is currently unused — the test runs against the persisted
-  // config. Keeping the signature so the route handler shape stays stable.
-  void request;
-
   try {
     const { id: storageId } = await context.params;
+
+    // -------- scope=platform: gate with requirePlatformAdmin. The
+    // platform admin UI passes `scope=platform` as a query param OR in
+    // the request body when testing a persisted platform-wide storage
+    // destination. When absent, behave EXACTLY as before (no RBAC
+    // change). The test itself does not write any sensitive data; it
+    // only updates lastTestAt / lastTestResult / isActive — but those
+    // are part of the storage row, so platform scope still requires
+    // platform-staff RBAC.
+    const scopeParam = new URL(request.url).searchParams.get('scope');
+    let bodyScope: unknown = undefined;
+    try {
+      const rawBody = await request.json();
+      if (typeof rawBody === 'object' && rawBody !== null) {
+        bodyScope = (rawBody as { scope?: unknown }).scope;
+      }
+    } catch {
+      // No body or invalid JSON — fall back to query-param check only.
+    }
+    const isPlatformScope = scopeParam === 'platform' || bodyScope === 'platform';
+    if (isPlatformScope) {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+    }
 
     const storage = await db.backupStorage.findUnique({ where: { id: storageId } });
     if (!storage) {

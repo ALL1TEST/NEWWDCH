@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { getSiteWhere } from '@/lib/site-context';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -77,8 +78,23 @@ export async function GET(request: NextRequest) {
     const startDate = sp.get('startDate');;
     const endDate = sp.get('endDate');
     const search = sp.get('search')?.trim();
+    const scope = sp.get('scope');
 
-    const where: Record<string, unknown> = { ...(await getSiteWhere(request)) };
+    // -------- scope=platform: platform-admin-only view of ALL logs
+    // across all sites (no site filter). Falls through to the default
+    // client behavior (site-scoped via getSiteWhere) when the param is
+    // absent so existing callers keep working as before.
+    let siteFilter: Record<string, unknown> = {};
+    if (scope === 'platform') {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+      // Platform scope: no site filter — return ALL logs across all sites.
+      siteFilter = {};
+    } else {
+      siteFilter = await getSiteWhere(request);
+    }
+
+    const where: Record<string, unknown> = { ...siteFilter };
 
     if (action) where.action = action;
     if (status) where.status = status;

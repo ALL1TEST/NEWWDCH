@@ -8,6 +8,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { getSiteWhere } from '@/lib/site-context';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -94,13 +95,31 @@ export async function GET(request: NextRequest) {
     const isActive = sp.get('isActive');
     const frequency = sp.get('frequency');
     const search = sp.get('search')?.trim();
+    const scope = sp.get('scope');
 
-    const where: Record<string, unknown> = { ...(await getSiteWhere(request)) };
+    // -------- scope=platform: platform-admin-only view of ALL schedules
+    // across all sites (no site filter). Falls through to the default
+    // client behavior (site-scoped via getSiteWhere) when the param is
+    // absent so existing callers keep working as before. Note: 'platform'
+    // is NOT a valid BackupScope enum value, so it must be intercepted
+    // here BEFORE the `where.scope = scope` filter line below.
+    let siteFilter: Record<string, unknown> = {};
+    if (scope === 'platform') {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+      // Platform scope: no site filter — return ALL schedules across all sites.
+      siteFilter = {};
+    } else {
+      siteFilter = await getSiteWhere(request);
+    }
+
+    const where: Record<string, unknown> = { ...siteFilter };
 
     if (isActive !== null && isActive !== undefined && isActive !== '') {
       where.isActive = isActive === 'true';
     }
     if (frequency) where.frequency = frequency;
+    if (scope && scope !== 'platform') where.scope = scope;
     if (search) {
       where.OR = [
         { name: { contains: search } },
@@ -155,7 +174,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const parsed = createSchema.safeParse(body);
+    // -------- scope=platform: platform admin can create platform-wide
+    // schedules (siteId = null, createdById = authenticated admin). When
+    // scope is absent, behave EXACTLY as before — client-side schedules
+    // pick up siteId from the query string / context. Note: 'platform'
+    // is NOT a valid BackupScope enum value (the zod schema below will
+    // reject it), so we peek at the raw body BEFORE zod validation and
+    // rewrite the scope field to the actual BackupScope (default FULL).
+    // The platform dialog sends `scope: 'platform'` as a marker AND
+    // `backupScope: <BackupScope>` for the real data-scope choice.
+    const isPlatformScope =
+      typeof body === 'object' && body !== null && (body as { scope?: unknown }).scope === 'platform';
+
+    let platformUser: { id: string } | null = null;
+    let preparedBody: unknown = body;
+    if (isPlatformScope) {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+      platformUser = { id: auth.user.id };
+
+      // Rewrite the body so zod sees a valid BackupScope. Default to
+      // FULL when the platform dialog did not supply a `backupScope`.
+      const rawBody = (body as Record<string, unknown>) ?? {};
+      const backupScope = rawBody.backupScope;
+      const validBackupScopes = ['FULL', 'DATABASE_ONLY', 'MEDIA_ONLY', 'FILES_ONLY', 'SETTINGS_ONLY'];
+      const resolvedScope =
+        typeof backupScope === 'string' && validBackupScopes.includes(backupScope) ? backupScope : 'FULL';
+      const { ...rest } = rawBody;
+      delete rest.scope;
+      delete rest.backupScope;
+      preparedBody = { ...rest, scope: resolvedScope };
+    }
+
+    const parsed = createSchema.safeParse(preparedBody);
     if (!parsed.success) {
       return NextResponse.json(
         {
@@ -174,18 +225,30 @@ export async function POST(request: NextRequest) {
     const resolvedCron = d.cronExpression ?? d.customCron ?? null;
     const nextRunAt = computeNextRunAt(d.frequency, resolvedCron);
 
-    // Resolve createdById — fallback to first user if not provided
-    let createdById = d.createdById;
-    if (!createdById) {
-      const firstUser = await db.user.findFirst({ select: { id: true } });
-      createdById = firstUser?.id;
+    // Resolve createdById — for platform scope, use the authenticated
+    // admin's id (override client-supplied). For client scope, fall
+    // back to first user if not provided (existing behavior preserved).
+    let createdById: string | undefined;
+    if (isPlatformScope && platformUser) {
+      createdById = platformUser.id;
+    } else {
+      createdById = d.createdById;
       if (!createdById) {
-        return NextResponse.json(
-          { error: { code: 'VALIDATION_ERROR', message: 'No users exist in the system. Create a user first.' }, meta: { requestId: id } },
-          { status: 400 },
-        );
+        const firstUser = await db.user.findFirst({ select: { id: true } });
+        createdById = firstUser?.id;
+        if (!createdById) {
+          return NextResponse.json(
+            { error: { code: 'VALIDATION_ERROR', message: 'No users exist in the system. Create a user first.' }, meta: { requestId: id } },
+            { status: 400 },
+          );
+        }
       }
     }
+
+    // Platform scope: force siteId = null (platform-wide). Client scope:
+    // leave siteId exactly as the caller provided (or null) — existing
+    // behavior preserved.
+    const siteId = isPlatformScope ? null : (d.siteId ?? null);
 
     const item = await db.backupSchedule.create({
       data: {
@@ -201,7 +264,7 @@ export async function POST(request: NextRequest) {
         isActive: d.isActive,
         nextRunAt,
         createdById,
-        siteId: d.siteId ?? null,
+        siteId,
       },
       include: listIncludes,
     });

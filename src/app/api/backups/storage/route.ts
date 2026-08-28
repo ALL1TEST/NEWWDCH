@@ -8,6 +8,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { getSiteWhere } from '@/lib/site-context';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -200,8 +201,23 @@ export async function GET(request: NextRequest) {
     const provider = sp.get('provider');
     const isActive = sp.get('isActive');
     const search = sp.get('search')?.trim();
+    const scope = sp.get('scope');
 
-    const where: Record<string, unknown> = { ...(await getSiteWhere(request)) };
+    // -------- scope=platform: platform-admin-only view of ALL storage
+    // destinations across all sites (no site filter). Falls through to
+    // the default client behavior (site-scoped via getSiteWhere) when
+    // the param is absent so existing callers keep working as before.
+    let siteFilter: Record<string, unknown> = {};
+    if (scope === 'platform') {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+      // Platform scope: no site filter — return ALL storage across all sites.
+      siteFilter = {};
+    } else {
+      siteFilter = await getSiteWhere(request);
+    }
+
+    const where: Record<string, unknown> = { ...siteFilter };
 
     if (provider) where.provider = provider;
     if (isActive !== null && isActive !== undefined && isActive !== '') {
@@ -296,7 +312,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const parsed = createSchema.safeParse(body);
+    // -------- scope=platform: platform admin can create / test platform-
+    // wide storage destinations (siteId = null, createdById =
+    // authenticated admin). When scope is absent, behave EXACTLY as
+    // before — client-side storage picks up siteId from the query
+    // string / context. The peek happens BEFORE zod so the createSchema
+    // never sees the `scope` field.
+    const isPlatformScope =
+      typeof body === 'object' && body !== null && (body as { scope?: unknown }).scope === 'platform';
+
+    let platformUser: { id: string } | null = null;
+    let preparedBody: unknown = body;
+    if (isPlatformScope) {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+      platformUser = { id: auth.user.id };
+
+      // Strip the scope marker so it does not interfere with downstream
+      // parsing. The test-connection branch and the create branch both
+      // receive the rewritten body.
+      const rawBody = (body as Record<string, unknown>) ?? {};
+      const { scope: _omit, ...rest } = rawBody;
+      void _omit;
+      preparedBody = rest;
+    }
+
+    const parsed = createSchema.safeParse(preparedBody);
     if (!parsed.success) {
       return NextResponse.json(
         {
@@ -349,16 +390,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ data: result, meta: { requestId: id } });
     }
 
-    // Resolve createdById — fallback to first user if not provided
-    let createdById = d.createdById;
-    if (!createdById) {
-      const firstUser = await db.user.findFirst({ select: { id: true } });
-      createdById = firstUser?.id;
+    // Resolve createdById — for platform scope, use the authenticated
+    // admin's id (override client-supplied). For client scope, fall back
+    // to first user if not provided (existing behavior preserved).
+    let createdById: string | undefined;
+    if (isPlatformScope && platformUser) {
+      createdById = platformUser.id;
+    } else {
+      createdById = d.createdById;
       if (!createdById) {
-        return NextResponse.json(
-          { error: { code: 'VALIDATION_ERROR', message: 'No users exist in the system. Create a user first.' }, meta: { requestId: id } },
-          { status: 400 },
-        );
+        const firstUser = await db.user.findFirst({ select: { id: true } });
+        createdById = firstUser?.id;
+        if (!createdById) {
+          return NextResponse.json(
+            { error: { code: 'VALIDATION_ERROR', message: 'No users exist in the system. Create a user first.' }, meta: { requestId: id } },
+            { status: 400 },
+          );
+        }
       }
     }
 
@@ -381,6 +429,11 @@ export async function POST(request: NextRequest) {
     const { encryptConfigForStorage } = await import('@/lib/backup/providers');
     const encryptedConfig = await encryptConfigForStorage(configObj);
 
+    // Platform scope: force siteId = null (platform-wide). Client scope:
+    // leave siteId exactly as the caller provided (or null) — existing
+    // behavior preserved.
+    const siteId = isPlatformScope ? null : (d.siteId ?? null);
+
     const item = await db.backupStorage.create({
       data: {
         name: d.name,
@@ -388,7 +441,7 @@ export async function POST(request: NextRequest) {
         config: encryptedConfig,
         isActive: d.isActive,
         createdById,
-        siteId: d.siteId ?? null,
+        siteId,
       },
       include: listIncludes,
     });

@@ -26,7 +26,7 @@ const BACKUPS_TABS = [
   { key: 'logs', label: 'Logs', icon: ScrollText },
 ] as const;
 
-export function BackupsSubNav() {
+export function BackupsSubNav({ module = 'backups' }: { module?: 'backups' | 'platform-backups' } = {}) {
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
 
@@ -41,7 +41,7 @@ export function BackupsSubNav() {
           return (
             <button
               key={tab.key ?? 'overview'}
-              onClick={() => navigate('backups', null, tab.key)}
+              onClick={() => navigate(module, null, tab.key)}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap',
                 isActive

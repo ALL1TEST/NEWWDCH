@@ -34,6 +34,7 @@ import { formatDurationMs } from '@/lib/backup-constants';
 import type { ApiResponse } from '@/shared/types';
 import { toast } from 'sonner';
 import type { ColumnDef } from '@tanstack/react-table';
+import { PlatformPageHeader } from '@/modules/platform/shared';
 
 // -------------------- Types --------------------
 
@@ -199,7 +200,8 @@ function ErrorCell({ value }: { value: string | null }) {
 
 // -------------------- Logs Page --------------------
 
-export function LogsPage() {
+export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' } = {}) {
+  const isPlatform = scope === 'platform';
   const [actionFilter, setActionFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');
@@ -218,8 +220,11 @@ export function LogsPage() {
       status: statusFilter !== 'all' ? statusFilter : undefined,
       from: fromDate || undefined,
       to: toDate || undefined,
+      // Include scope in the cache key so client and platform entries do
+      // not collide. The value here is opaque to TanStack Query.
+      ...(isPlatform ? { scope: 'platform' } : {}),
     }),
-    [table.currentPage, table.pageSize, table.sortField, table.sortOrder, table.searchValue, actionFilter, statusFilter, fromDate, toDate],
+    [table.currentPage, table.pageSize, table.sortField, table.sortOrder, table.searchValue, actionFilter, statusFilter, fromDate, toDate, isPlatform],
   );
 
   const { data, isLoading } = useQuery({
@@ -492,17 +497,30 @@ export function LogsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        breadcrumbs={false}
-        title="Backup Logs"
-        description="View activity logs for all backup operations"
-        action={
-          <Button size="sm" variant="outline" onClick={handleExport} disabled={logs.length === 0}>
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
-        }
-      />
+      {isPlatform ? (
+        <PlatformPageHeader
+          title="Backup Logs"
+          subtitle="Platform-wide audit trail of every backup operation across all customers and sites."
+          action={
+            <Button size="sm" variant="outline" onClick={handleExport} disabled={logs.length === 0}>
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </Button>
+          }
+        />
+      ) : (
+        <PageHeader
+          breadcrumbs={false}
+          title="Backup Logs"
+          description="View activity logs for all backup operations"
+          action={
+            <Button size="sm" variant="outline" onClick={handleExport} disabled={logs.length === 0}>
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </Button>
+          }
+        />
+      )}
 
       {isInitialEmpty ? (
         <EmptyState

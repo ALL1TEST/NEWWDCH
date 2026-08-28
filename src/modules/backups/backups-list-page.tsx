@@ -57,6 +57,8 @@ import { formatDurationMs, BACKUP_SCOPE_OPTIONS, BACKUP_STORAGE_OPTIONS, SCOPE_B
 import type { ApiResponse, BackupStatus, BackupType, BackupScope, BackupStorageProvider } from '@/shared/types';
 import { toast } from 'sonner';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useAuthStore } from '@/lib/stores/auth-store';
+import { PlatformPageHeader } from '@/modules/platform/shared';
 
 // -------------------- Types --------------------
 
@@ -157,8 +159,10 @@ const initialForm: CreateBackupForm = {
 
 // -------------------- Backups List Page --------------------
 
-export function BackupsListPage() {
+export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'platform' } = {}) {
   const queryClient = useQueryClient();
+  const currentUserId = useAuthStore((s) => s.user?.id ?? null);
+  const isPlatform = scope === 'platform';
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<CreateBackupForm>(initialForm);
   const [deleteTarget, setDeleteTarget] = useState<BackupRow | null>(null);
@@ -173,6 +177,9 @@ export function BackupsListPage() {
       sort: table.sortField,
       order: table.sortOrder,
       search: table.searchValue || undefined,
+      // Include scope in the cache key so client and platform entries do
+      // not collide. The value here is opaque to TanStack Query.
+      scope: isPlatform ? 'platform' : undefined,
     }),
     queryFn: () => getApi<ApiResponse<BackupRow[]>>('/api/backups', {
       page: table.currentPage,
@@ -180,14 +187,21 @@ export function BackupsListPage() {
       sort: table.sortField,
       order: table.sortOrder,
       search: table.searchValue || undefined,
+      ...(isPlatform ? { scope: 'platform' } : {}),
     }, { raw: true }),
     staleTime: 10_000,
   });
 
-  // Fetch configured storage destinations for the dropdown
+  // Fetch configured storage destinations for the dropdown. When the
+  // page is rendered in platform scope, fetch ALL destinations across
+  // all sites (the platform admin has no active site, so the endpoint
+  // returns platform-wide results when scope=platform is sent).
   const { data: storageDestinationsData } = useQuery({
-    queryKey: ['backup-storage-destinations'],
-    queryFn: () => getApi<{ id: string; name: string; provider: string; isActive: boolean }[]>('/api/backups/storage?pageSize=100'),
+    queryKey: ['backup-storage-destinations', isPlatform ? 'platform' : 'client'],
+    queryFn: () => getApi<{ id: string; name: string; provider: string; isActive: boolean }[]>(
+      '/api/backups/storage?pageSize=100',
+      isPlatform ? { scope: 'platform', pageSize: 100 } : { pageSize: 100 },
+    ),
     staleTime: 30_000,
   });
   const storageDestinations = (storageDestinationsData as unknown as { id: string; name: string; provider: string; isActive: boolean }[] | undefined)?.filter(s => s.isActive) ?? [];
@@ -199,7 +213,18 @@ export function BackupsListPage() {
   const isSearchEmpty = !isLoading && backups.length === 0 && hasSearch;
 
   const createMutation = useMutation({
-    mutationFn: (body: CreateBackupForm) => postApi('/api/backups', body),
+    // For platform scope, send `scope: 'platform'` as a marker AND
+    // `backupScope: <BackupScope>` for the real data-scope choice. The
+    // /api/backups POST route peeks at the raw body BEFORE zod and
+    // rewrites scope -> backupScope (default FULL) so the zod enum
+    // never sees the sentinel 'platform' value. For client scope, send
+    // the form as-is (existing behavior preserved).
+    mutationFn: (body: CreateBackupForm) => postApi(
+      '/api/backups',
+      isPlatform
+        ? { ...body, scope: 'platform', backupScope: body.scope }
+        : body,
+    ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStats.all });
@@ -210,8 +235,16 @@ export function BackupsListPage() {
     onError: (err: Error) => toast.error(err.message || 'Failed to create backup'),
   });
 
+  // Verify + restore per-id POSTs require `{ createdById }` in the
+  // zod body schema. We always pass it from the auth-store user id
+  // (fixing a latent bug where the client page sent no body). When
+  // isPlatform, also pass `scope: 'platform'` as a marker so the API
+  // gates the request with requirePlatformAdmin.
   const verifyMutation = useMutation({
-    mutationFn: (id: string) => postApi(`/api/backups/${id}/verify`),
+    mutationFn: (id: string) => postApi(`/api/backups/${id}/verify`, {
+      createdById: currentUserId,
+      ...(isPlatform ? { scope: 'platform' } : {}),
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       toast.success('Verification started');
@@ -220,7 +253,10 @@ export function BackupsListPage() {
   });
 
   const restoreMutation = useMutation({
-    mutationFn: (id: string) => postApi(`/api/backups/${id}/restore`),
+    mutationFn: (id: string) => postApi(`/api/backups/${id}/restore`, {
+      createdById: currentUserId,
+      ...(isPlatform ? { scope: 'platform' } : {}),
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       setRestoreTarget(null);
@@ -233,7 +269,9 @@ export function BackupsListPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteApi(`/api/backups/${id}`),
+    // For platform scope, pass `?scope=platform` query param so the API
+    // gates the DELETE with requirePlatformAdmin.
+    mutationFn: (id: string) => deleteApi(`/api/backups/${id}${isPlatform ? '?scope=platform' : ''}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStats.all });
@@ -413,17 +451,30 @@ export function BackupsListPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        breadcrumbs={false}
-        title="Backups"
-        description="View and manage all backup operations"
-        action={
-          <Button size="sm" onClick={() => setDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Backup
-          </Button>
-        }
-      />
+      {isPlatform ? (
+        <PlatformPageHeader
+          title="Backups"
+          subtitle="Platform-wide backup management. Restore, verify, and download backups across all customers and sites."
+          actions={
+            <Button size="sm" onClick={() => setDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Backup
+            </Button>
+          }
+        />
+      ) : (
+        <PageHeader
+          breadcrumbs={false}
+          title="Backups"
+          description="View and manage all backup operations"
+          action={
+            <Button size="sm" onClick={() => setDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Backup
+            </Button>
+          }
+        />
+      )}
 
       {isInitialEmpty ? (
         <EmptyState

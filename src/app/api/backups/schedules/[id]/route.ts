@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -130,7 +131,32 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const parsed = updateSchema.safeParse(body);
+    // -------- scope=platform: peek at the raw body BEFORE zod validation.
+    // 'platform' is NOT a valid BackupScope enum value, so if we let it
+    // reach zod the existing `scope` enum would reject it. When the
+    // platform admin UI marks the request with `scope: 'platform'`, gate
+    // with requirePlatformAdmin, then rewrite the body so zod sees the
+    // real BackupScope (default FULL) under the `scope` key.
+    const isPlatformScope =
+      typeof body === 'object' && body !== null && (body as { scope?: unknown }).scope === 'platform';
+
+    let preparedBody: unknown = body;
+    if (isPlatformScope) {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+
+      const rawBody = (body as Record<string, unknown>) ?? {};
+      const backupScope = rawBody.backupScope;
+      const validBackupScopes = ['FULL', 'DATABASE_ONLY', 'MEDIA_ONLY', 'FILES_ONLY', 'SETTINGS_ONLY'];
+      const resolvedScope =
+        typeof backupScope === 'string' && validBackupScopes.includes(backupScope) ? backupScope : 'FULL';
+      const { ...rest } = rawBody;
+      delete rest.scope;
+      delete rest.backupScope;
+      preparedBody = { ...rest, scope: resolvedScope };
+    }
+
+    const parsed = updateSchema.safeParse(preparedBody);
     if (!parsed.success) {
       return NextResponse.json(
         {
@@ -182,11 +208,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 // DELETE — delete
 // =====================================================================
 
-export async function DELETE(_request: NextRequest, context: RouteContext) {
+export async function DELETE(request: NextRequest, context: RouteContext) {
   const id = reqId();
 
   try {
     const { id: scheduleId } = await context.params;
+
+    // -------- scope=platform: gate with requirePlatformAdmin. The
+    // platform admin UI passes `scope=platform` as a query param on the
+    // DELETE URL. When absent, behave EXACTLY as before (no body, no
+    // RBAC change).
+    const scopeParam = new URL(request.url).searchParams.get('scope');
+    if (scopeParam === 'platform') {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+    }
 
     const existing = await db.backupSchedule.findUnique({
       where: { id: scheduleId },

@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { getSiteWhere } from '@/lib/site-context';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -21,7 +22,25 @@ export async function GET(request: NextRequest) {
   const id = reqId();
 
   try {
-    const siteWhere = await getSiteWhere(request);
+    const sp = new URL(request.url).searchParams;
+    const scope = sp.get('scope');
+
+    // -------- scope=platform: platform-admin-only stats across ALL
+    // sites (no site filter). Falls through to the default client
+    // behavior (site-scoped via getSiteWhere) when the param is absent
+    // so existing callers keep working as before. `siteWhere` is
+    // computed ONCE and spread into EVERY `where:` clause below so the
+    // platform scope applies uniformly across all stats queries.
+    let siteWhere: Record<string, unknown> = {};
+    if (scope === 'platform') {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+      // Platform scope: no site filter — stats reflect ALL backups
+      // across all sites.
+      siteWhere = {};
+    } else {
+      siteWhere = await getSiteWhere(request);
+    }
 
     const [
       totalCount,

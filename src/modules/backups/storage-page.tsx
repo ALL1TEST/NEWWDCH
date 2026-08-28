@@ -68,6 +68,7 @@ import {
   type FieldGroup,
   type ProviderCategory,
 } from '@/lib/backup/provider-registry';
+import { PlatformPageHeader } from '@/modules/platform/shared';
 
 // -------------------- Types --------------------
 
@@ -673,8 +674,9 @@ function buildConfigObject(form: StorageForm): Record<string, unknown> {
 
 // -------------------- Storage Page --------------------
 
-export function StoragePage() {
+export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform' } = {}) {
   const queryClient = useQueryClient();
+  const isPlatform = scope === 'platform';
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<StorageForm>(initialForm);
@@ -697,6 +699,9 @@ export function StoragePage() {
       sort: table.sortField,
       order: table.sortOrder,
       search: table.searchValue || undefined,
+      // Include scope in the cache key so client and platform entries do
+      // not collide. The value here is opaque to TanStack Query.
+      scope: isPlatform ? 'platform' : undefined,
     }),
     queryFn: () => getApi<ApiResponse<StorageRow[]>>('/api/backups/storage', {
       page: table.currentPage,
@@ -704,6 +709,7 @@ export function StoragePage() {
       sort: table.sortField,
       order: table.sortOrder,
       search: table.searchValue || undefined,
+      ...(isPlatform ? { scope: 'platform' } : {}),
     }, { raw: true }),
     staleTime: 10_000,
   });
@@ -716,8 +722,12 @@ export function StoragePage() {
   const isSearchEmpty = !isLoading && storages.length === 0 && hasSearch;
 
   const createMutation = useMutation({
+    // For platform scope, add `scope: 'platform'` to the body so the
+    // /api/backups/storage POST route gates with requirePlatformAdmin
+    // and forces siteId=null + uses the authenticated admin as
+    // createdById.
     mutationFn: (body: { name: string; provider: BackupStorageProvider; config: string; isActive: boolean }) =>
-      postApi('/api/backups/storage', body),
+      postApi('/api/backups/storage', isPlatform ? { ...body, scope: 'platform' } : body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all });
       toast.success('Storage configuration created');
@@ -727,8 +737,10 @@ export function StoragePage() {
   });
 
   const updateMutation = useMutation({
+    // For platform scope, add `scope: 'platform'` to the body so the
+    // PATCH route gates with requirePlatformAdmin.
     mutationFn: ({ id, body }: { id: string; body: { name: string; provider: BackupStorageProvider; config: string; isActive: boolean } }) =>
-      patchApi(`/api/backups/storage/${id}`, body),
+      patchApi(`/api/backups/storage/${id}`, isPlatform ? { ...body, scope: 'platform' } : body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all });
       toast.success('Storage configuration updated');
@@ -738,7 +750,9 @@ export function StoragePage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteApi(`/api/backups/storage/${id}`),
+    // For platform scope, pass `?scope=platform` query param so the API
+    // gates the DELETE with requirePlatformAdmin.
+    mutationFn: (id: string) => deleteApi(`/api/backups/storage/${id}${isPlatform ? '?scope=platform' : ''}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all });
       setDeleteTarget(null);
@@ -751,7 +765,9 @@ export function StoragePage() {
   });
 
   const testRowMutation = useMutation({
-    mutationFn: (id: string) => postApi(`/api/backups/storage/${id}/test-connection`),
+    // For platform scope, pass `?scope=platform` query param so the
+    // per-id test-connection route gates with requirePlatformAdmin.
+    mutationFn: (id: string) => postApi(`/api/backups/storage/${id}/test-connection${isPlatform ? '?scope=platform' : ''}`),
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.detail(id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all });
@@ -767,17 +783,28 @@ export function StoragePage() {
   // Google Drive/Dropbox/OneDrive perform a real OAuth refresh-token
   // exchange + API ping. No fake success. Used by both the Test Connection
   // and Connect buttons (they share the same real test mechanism).
+  // For platform scope, add `scope: 'platform'` to the body so the API
+  // gates with requirePlatformAdmin (the test itself doesn't write, but
+  // we still gate to confirm the caller is platform staff).
   const testFlowMutation = useMutation({
     mutationFn: async (f: StorageForm) => {
       const configObj = buildConfigObject(f);
       return postApi<{ data: { success: boolean; message: string } }>(
         '/api/backups/storage?action=test',
-        {
-          name: f.name,
-          provider: f.provider,
-          config: JSON.stringify(configObj),
-          isActive: true,
-        },
+        isPlatform
+          ? {
+              name: f.name,
+              provider: f.provider,
+              config: JSON.stringify(configObj),
+              isActive: true,
+              scope: 'platform',
+            }
+          : {
+              name: f.name,
+              provider: f.provider,
+              config: JSON.stringify(configObj),
+              isActive: true,
+            },
       );
     },
   });
@@ -1274,17 +1301,30 @@ export function StoragePage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        breadcrumbs={false}
-        title="Storage"
-        description="Configure backup storage destinations"
-        action={
-          <Button size="sm" onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Storage
-          </Button>
-        }
-      />
+      {isPlatform ? (
+        <PlatformPageHeader
+          title="Storage"
+          subtitle="Platform-wide backup storage destinations across all customers and sites."
+          actions={
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Storage
+            </Button>
+          }
+        />
+      ) : (
+        <PageHeader
+          breadcrumbs={false}
+          title="Storage"
+          description="Configure backup storage destinations"
+          action={
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Storage
+            </Button>
+          }
+        />
+      )}
 
       {isInitialEmpty ? (
         <EmptyState

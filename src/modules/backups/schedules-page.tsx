@@ -53,6 +53,7 @@ import { BACKUP_SCOPE_OPTIONS } from '@/lib/backup-constants';
 import type { ApiResponse, BackupScope, BackupStorageProvider, BackupScheduleFrequency } from '@/shared/types';
 import { toast } from 'sonner';
 import type { ColumnDef } from '@tanstack/react-table';
+import { PlatformPageHeader } from '@/modules/platform/shared';
 
 // -------------------- Types --------------------
 
@@ -135,8 +136,9 @@ function NoSchedulesSearchResultsEmpty({ onClear }: { onClear: () => void }) {
 
 // -------------------- Schedules Page --------------------
 
-export function SchedulesPage() {
+export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platform' } = {}) {
   const queryClient = useQueryClient();
+  const isPlatform = scope === 'platform';
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ScheduleForm>(initialForm);
@@ -151,6 +153,9 @@ export function SchedulesPage() {
       sort: table.sortField,
       order: table.sortOrder,
       search: table.searchValue || undefined,
+      // Include scope in the cache key so client and platform entries do
+      // not collide. The value here is opaque to TanStack Query.
+      scope: isPlatform ? 'platform' : undefined,
     }),
     queryFn: () => getApi<ApiResponse<ScheduleRow[]>>('/api/backups/schedules', {
       page: table.currentPage,
@@ -158,14 +163,18 @@ export function SchedulesPage() {
       sort: table.sortField,
       order: table.sortOrder,
       search: table.searchValue || undefined,
+      ...(isPlatform ? { scope: 'platform' } : {}),
     }, { raw: true }),
     staleTime: 10_000,
   });
 
   // Fetch configured storage destinations for the dropdown
   const { data: storageData } = useQuery({
-    queryKey: ['backup-storage-destinations'],
-    queryFn: () => getApi<{ id: string; name: string; provider: string; isActive: boolean }[]>('/api/backups/storage?pageSize=100'),
+    queryKey: ['backup-storage-destinations', isPlatform ? 'platform' : 'client'],
+    queryFn: () => getApi<{ id: string; name: string; provider: string; isActive: boolean }[]>(
+      '/api/backups/storage?pageSize=100',
+      isPlatform ? { scope: 'platform', pageSize: 100 } : { pageSize: 100 },
+    ),
     staleTime: 30_000,
   });
   const storageDestinations = (storageData as unknown as { id: string; name: string; provider: string; isActive: boolean }[] | undefined)?.filter(s => s.isActive) ?? [];
@@ -185,7 +194,16 @@ export function SchedulesPage() {
   const isSearchEmpty = !isLoading && schedules.length === 0 && hasSearch;
 
   const createMutation = useMutation({
-    mutationFn: (body: ScheduleForm) => postApi('/api/backups/schedules', body),
+    // For platform scope, send `scope: 'platform'` as a marker AND
+    // `backupScope: <BackupScope>` for the real data-scope choice. The
+    // /api/backups/schedules POST route peeks at the raw body BEFORE
+    // zod and rewrites scope -> backupScope (default FULL).
+    mutationFn: (body: ScheduleForm) => postApi(
+      '/api/backups/schedules',
+      isPlatform
+        ? { ...body, scope: 'platform', backupScope: body.scope }
+        : body,
+    ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupSchedules.all });
       toast.success('Schedule created');
@@ -195,8 +213,14 @@ export function SchedulesPage() {
   });
 
   const updateMutation = useMutation({
+    // For platform scope, send `scope: 'platform'` marker + the real
+    // BackupScope under `backupScope`. The PATCH route peeks at the
+    // raw body BEFORE zod and rewrites scope.
     mutationFn: ({ id, body }: { id: string; body: Partial<ScheduleForm> }) =>
-      patchApi(`/api/backups/schedules/${id}`, body),
+      patchApi(`/api/backups/schedules/${id}`, isPlatform
+        ? { ...body, scope: 'platform', ...(body.scope ? { backupScope: body.scope } : {}) }
+        : body,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupSchedules.all });
       toast.success('Schedule updated');
@@ -206,7 +230,9 @@ export function SchedulesPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteApi(`/api/backups/schedules/${id}`),
+    // For platform scope, pass `?scope=platform` query param so the API
+    // gates the DELETE with requirePlatformAdmin.
+    mutationFn: (id: string) => deleteApi(`/api/backups/schedules/${id}${isPlatform ? '?scope=platform' : ''}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupSchedules.all });
       setDeleteTarget(null);
@@ -220,7 +246,10 @@ export function SchedulesPage() {
 
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      patchApi(`/api/backups/schedules/${id}`, { isActive }),
+      patchApi(`/api/backups/schedules/${id}`, isPlatform
+        ? { isActive, scope: 'platform' }
+        : { isActive }
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupSchedules.all });
     },
@@ -454,17 +483,30 @@ export function SchedulesPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        breadcrumbs={false}
-        title="Backup Schedules"
-        description="Configure automated backup schedules"
-        action={
-          <Button size="sm" onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Schedule
-          </Button>
-        }
-      />
+      {isPlatform ? (
+        <PlatformPageHeader
+          title="Backup Schedules"
+          subtitle="Platform-wide automated backup schedules across all customers and sites."
+          actions={
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Schedule
+            </Button>
+          }
+        />
+      ) : (
+        <PageHeader
+          breadcrumbs={false}
+          title="Backup Schedules"
+          description="Configure automated backup schedules"
+          action={
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Schedule
+            </Button>
+          }
+        />
+      )}
 
       {isInitialEmpty ? (
         <EmptyState

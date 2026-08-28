@@ -38,6 +38,8 @@ import { queryKeys } from '@/lib/query-keys';
 import { cn, formatFileSize, formatRelativeTime, labelize } from '@/lib/utils';
 import type { ApiResponse, BackupScope, BackupStatus } from '@/shared/types';
 import { toast } from 'sonner';
+import { useAuthStore } from '@/lib/stores/auth-store';
+import { PlatformPageHeader } from '@/modules/platform/shared';
 
 // -------------------- Types --------------------
 
@@ -71,20 +73,28 @@ const stepVariants = {
 
 // -------------------- Restore Page --------------------
 
-export function RestorePage() {
+export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform' } = {}) {
   const queryClient = useQueryClient();
+  const currentUserId = useAuthStore((s) => s.user?.id ?? null);
+  const isPlatform = scope === 'platform';
   const [step, setStep] = useState<1 | 2>(1);
   const [selectedBackupId, setSelectedBackupId] = useState<string>('');
   const [confirmed, setConfirmed] = useState(false);
 
   // Fetch completed backups for selection
   const { data, isLoading } = useQuery({
-    queryKey: queryKeys.backups.list({ status: 'COMPLETED' }),
+    queryKey: queryKeys.backups.list({
+      status: 'COMPLETED',
+      // Include scope in the cache key so client and platform entries do
+      // not collide. The value here is opaque to TanStack Query.
+      scope: isPlatform ? 'platform' : undefined,
+    }),
     queryFn: () => getApi<ApiResponse<BackupOption[]>>('/api/backups', {
       status: 'COMPLETED',
       pageSize: 100,
       sort: 'createdAt',
       order: 'desc',
+      ...(isPlatform ? { scope: 'platform' } : {}),
     }, { raw: true }),
     staleTime: 15_000,
   });
@@ -100,7 +110,15 @@ export function RestorePage() {
   });
 
   const restoreMutation = useMutation({
-    mutationFn: (id: string) => postApi(`/api/backups/${id}/restore`),
+    // The restore endpoint requires `{ createdById }` in the zod body
+    // schema. We always pass it from the auth-store user id (fixing a
+    // latent bug where the page sent no body). When isPlatform, also
+    // pass `scope: 'platform'` as a marker so the API gates the
+    // request with requirePlatformAdmin.
+    mutationFn: (id: string) => postApi(`/api/backups/${id}/restore`, {
+      createdById: currentUserId,
+      ...(isPlatform ? { scope: 'platform' } : {}),
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStats.all });
@@ -135,11 +153,18 @@ export function RestorePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        breadcrumbs={false}
-        title="Restore"
-        description="Restore your system from a previous backup"
-      />
+      {isPlatform ? (
+        <PlatformPageHeader
+          title="Restore"
+          subtitle="Restore the platform database from a previous platform-wide backup across all customers and sites."
+        />
+      ) : (
+        <PageHeader
+          breadcrumbs={false}
+          title="Restore"
+          description="Restore your system from a previous backup"
+        />
+      )}
 
       {/* Step Indicator */}
       <div className="flex items-center gap-2 text-sm">

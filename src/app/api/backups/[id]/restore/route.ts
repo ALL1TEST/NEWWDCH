@@ -9,6 +9,7 @@ import { z } from 'zod/v4';
 import { copyFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -24,6 +25,11 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 const restoreSchema = z.object({
   createdById: z.string().min(1, 'Creator ID is required'),
+  // `scope` is a sentinel marker used by the platform admin UI to indicate
+  // platform-wide intent. It is OPTIONAL — when absent the request behaves
+  // EXACTLY as before (existing client behavior preserved). When present
+  // and equal to 'platform', the request is gated by requirePlatformAdmin.
+  scope: z.literal('platform').optional(),
 });
 
 // =====================================================================
@@ -71,6 +77,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
         },
         { status: 400 },
       );
+    }
+
+    // -------- scope=platform: gate with requirePlatformAdmin. The
+    // platform admin UI marks the request with `scope: 'platform'` in
+    // the body. When absent, behave EXACTLY as before.
+    if (parsed.data.scope === 'platform') {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
     }
 
     const userId = parsed.data.createdById;

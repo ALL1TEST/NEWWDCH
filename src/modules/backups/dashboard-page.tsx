@@ -18,6 +18,7 @@ import { useChartTheme } from '@/lib/chart-theme';
 import { cn, formatFileSize, formatRelativeTime, truncate } from '@/lib/utils';
 import { formatDurationMs } from '@/lib/backup-constants';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { PlatformPageHeader } from '@/modules/platform/shared';
 
 // -------------------- Types --------------------
 
@@ -96,14 +97,20 @@ function StatCardSkeleton() {
 
 // -------------------- Dashboard Page --------------------
 
-export function DashboardPage() {
+export function DashboardPage({ scope = 'client' }: { scope?: 'client' | 'platform' } = {}) {
   const navigate = useNavigationStore((s) => s.navigate);
+  const isPlatform = scope === 'platform';
   // Shared theme-aware chart palette — keeps ALL chart text readable in
   // dark mode without page-specific overrides.
   const chart = useChartTheme();
   const { data: stats, isLoading } = useQuery({
-    queryKey: queryKeys.backupStats.dashboard(),
-    queryFn: () => getApi<BackupStats>('/api/backups/stats'),
+    queryKey: isPlatform
+      ? (['backup-stats', 'dashboard', 'platform'] as const)
+      : queryKeys.backupStats.dashboard(),
+    queryFn: () => getApi<BackupStats>(
+      '/api/backups/stats',
+      isPlatform ? { scope: 'platform' } : undefined,
+    ),
     staleTime: 15_000,
   });
 
@@ -120,9 +127,18 @@ export function DashboardPage() {
     return Array.from(byDate.values());
   }, [stats?.storageTrend]);
 
-  const goToBackups = useCallback(() => navigate('backups', null, 'backups'), [navigate]);
-  const goToStorage = useCallback(() => navigate('backups', null, 'storage'), [navigate]);
-  const goToLogs = useCallback(() => navigate('backups', null, 'logs'), [navigate]);
+  const goToBackups = useCallback(
+    () => navigate(isPlatform ? 'platform-backups' : 'backups', null, 'backups'),
+    [navigate, isPlatform],
+  );
+  const goToStorage = useCallback(
+    () => navigate(isPlatform ? 'platform-backups' : 'backups', null, 'storage'),
+    [navigate, isPlatform],
+  );
+  const goToLogs = useCallback(
+    () => navigate(isPlatform ? 'platform-backups' : 'backups', null, 'logs'),
+    [navigate, isPlatform],
+  );
 
   if (isLoading || !stats) {
     return (
@@ -158,17 +174,32 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-8">
-        {/* Page Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Backups</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Monitor and manage your system backups.</p>
+        {/* Page Header — uses PlatformPageHeader (keeps the PLATFORM badge)
+            for platform scope, and the inline client header for client
+            scope. Same `title`, different subtitle. */}
+        {isPlatform ? (
+          <PlatformPageHeader
+            title="Backups"
+            subtitle="Platform-wide backup health, storage usage, and recent activity across all customers and sites."
+            actions={
+              <Button onClick={goToBackups} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Create Backup
+              </Button>
+            }
+          />
+        ) : (
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">Backups</h1>
+              <p className="mt-1 text-sm text-muted-foreground">Monitor and manage your system backups.</p>
+            </div>
+            <Button onClick={goToBackups} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Create Backup
+            </Button>
           </div>
-          <Button onClick={goToBackups} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Create Backup
-          </Button>
-        </div>
+        )}
 
       {/* Statistics Cards — 3 columns on large screens, 2 on medium, 1 on small */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
