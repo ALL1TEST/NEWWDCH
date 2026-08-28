@@ -1,5 +1,7 @@
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/platform/platform-auth';
+import { checkLimit, limitExceededResponse } from '@/lib/platform/usage-limits';
 
 // ============================================================
 // GET /api/sites — List all sites (always, no siteId filter)
@@ -63,6 +65,13 @@ export async function GET(request: NextRequest) {
 // ============================================================
 
 export async function POST(request: NextRequest) {
+  // Server-side plan-limit enforcement: the user's plan must permit
+  // another site (e.g. Beta = max 3 sites). A Beta customer who already
+  // owns 3 sites is blocked here with an actionable upgrade message.
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth.response;
+  const limit = checkLimit(auth.user, 'sites', 1);
+  if (!limit.ok) return limitExceededResponse(limit);
   try {
     const body = await request.json();
     const { name, slug, domain, description, logo, favicon } = body;

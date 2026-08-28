@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
+import { requireAuth } from '@/lib/platform/platform-auth';
+import { hasFeature, forbiddenResponse } from '@/lib/platform/entitlements';
 
 function reqId() { return 'req_' + nanoid(8); }
 
@@ -16,6 +18,13 @@ const createSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
+  // Server-side entitlement enforcement: the 'automation' feature must be
+  // granted by the user's plan (or an owner billing bypass / override).
+  // A Beta user hitting this endpoint directly is denied with 403.
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth.response;
+  const allowed = await hasFeature(auth.user, 'automation');
+  if (!allowed) return forbiddenResponse('automation');
   const id = reqId();
   try {
     const sp = new URL(request.url).searchParams;
@@ -41,6 +50,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Server-side entitlement enforcement (same as GET).
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth.response;
+  const allowed = await hasFeature(auth.user, 'automation');
+  if (!allowed) return forbiddenResponse('automation');
   const id = reqId();
   try {
     let body: unknown;

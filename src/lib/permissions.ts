@@ -35,10 +35,18 @@ export const PLATFORM_PAGES = [
   { key: 'platform-sites', label: 'Sites', icon: 'Globe' },
   { key: 'platform-subscriptions', label: 'Subscriptions', icon: 'CreditCard' },
   { key: 'platform-payments', label: 'Payments', icon: 'Receipt' },
+  { key: 'platform-plans', label: 'Plans & Pricing', icon: 'Tags' },
+  { key: 'platform-coupons', label: 'Coupons', icon: 'Ticket' },
   { key: 'platform-usage', label: 'Usage / Analytics', icon: 'BarChart3' },
+  { key: 'platform-notifications', label: 'Notifications', icon: 'Bell' },
+  { key: 'platform-email-templates', label: 'Email Templates', icon: 'Mail' },
+  { key: 'platform-smtp', label: 'SMTP Settings', icon: 'Server' },
+  { key: 'platform-backups', label: 'Backups', icon: 'Database' },
   { key: 'platform-system-health', label: 'System Health', icon: 'HeartPulse' },
   { key: 'platform-audit', label: 'Activity / Audit Log', icon: 'ScrollText' },
-  { key: 'platform-settings', label: 'Settings', icon: 'Settings' },
+  { key: 'platform-settings', label: 'Platform Settings', icon: 'Settings' },
+  { key: 'platform-feature-flags', label: 'Feature Flags', icon: 'Flag' },
+  { key: 'platform-admin-users', label: 'Admin Users', icon: 'ShieldCheck' },
 ] as const;
 
 export function isPlatformPage(pageKey: string): boolean {
@@ -71,16 +79,19 @@ export function customPermissionKeyFromName(name: string): string {
  * Check whether a user with the given role + pagePermissions array
  * is allowed to access the page identified by `pageKey`.
  *
- * PLATFORM_ADMIN: may access platform-* pages only.
- * ADMIN: full access to all built-in CMS + settings pages; may NOT
- *        access platform-* pages (that's a different experience).
- * EDITOR: only pages in their pagePermissions array.
+ * OWNER:          full access to platform-* AND client CMS pages (billing bypass).
+ * PLATFORM_ADMIN: platform-* pages only.
+ * CLIENT/ADMIN:   full access to all built-in CMS + settings pages; NOT platform-*.
+ * EDITOR:         only pages in their pagePermissions array.
  */
 export function canAccessPage(
   role: string,
   pagePermissions: string[] | null | undefined,
   pageKey: string,
 ): boolean {
+  // OWNER has full platform + client access (billing bypass).
+  if (role === 'OWNER') return true;
+
   // PLATFORM_ADMIN sees only the Platform Admin experience.
   if (role === 'PLATFORM_ADMIN') {
     return isPlatformPage(pageKey);
@@ -89,8 +100,8 @@ export function canAccessPage(
   // Client roles must never reach platform pages.
   if (isPlatformPage(pageKey)) return false;
 
-  // ADMIN always has full access to the client CMS.
-  if (role === 'ADMIN') return true;
+  // CLIENT and ADMIN always have full access to the client CMS.
+  if (role === 'CLIENT' || role === 'ADMIN') return true;
 
   // EDITOR: check pagePermissions
   if (role === 'EDITOR') {
@@ -113,10 +124,17 @@ export function getAccessiblePages(
   role: string,
   pagePermissions: string[] | null | undefined,
 ): string[] {
+  if (role === 'OWNER') {
+    return [
+      ...PLATFORM_PAGES.map((p) => p.key),
+      ...BUILTIN_PAGES.map((p) => p.key),
+      ...SETTINGS_SUBPAGES.map((s) => s.key),
+    ];
+  }
   if (role === 'PLATFORM_ADMIN') {
     return PLATFORM_PAGES.map((p) => p.key);
   }
-  if (role === 'ADMIN') {
+  if (role === 'CLIENT' || role === 'ADMIN') {
     return [
       ...BUILTIN_PAGES.map((p) => p.key),
       ...SETTINGS_SUBPAGES.map((s) => s.key),
@@ -154,10 +172,10 @@ export function serializePagePermissions(pages: string[] | null | undefined): st
 
 // -------------------- Legacy API: hasPermission --------------------
 // Kept for backward compat with sidebar nav items that use `requiredRole`.
-// ADMIN meets any requirement; EDITOR meets EDITOR but not ADMIN.
+// OWNER/ADMIN meet any requirement; EDITOR meets EDITOR but not ADMIN.
 
 export function hasPermission(userRole: UserRole, requiredRole: UserRole): boolean {
-  if (userRole === 'ADMIN') return true;
+  if (userRole === 'OWNER' || userRole === 'ADMIN' || userRole === 'CLIENT') return true;
   if (userRole === 'EDITOR') return requiredRole === 'EDITOR';
   return false;
 }
@@ -176,7 +194,9 @@ function hrefToPageKey(href: string): string {
 
 /**
  * Filter navigation items based on the user's role + pagePermissions.
- * - ADMIN: sees all items
+ * - OWNER / PLATFORM_ADMIN: sees everything passed in (the sidebar
+ *   passes the platform nav array for these roles).
+ * - CLIENT / ADMIN: sees all client items.
  * - EDITOR: sees only items whose page key is in their pagePermissions,
  *           plus settings sub-pages if 'settings' is included.
  */
@@ -185,17 +205,17 @@ export function getVisibleNavItems(
   allItems: NavItem[],
   pagePermissions: string[] | null | undefined = null,
 ): NavItem[] {
-  // PLATFORM_ADMIN sees everything passed in (the sidebar passes the
-  // platform nav array for this role).
-  if (userRole === 'PLATFORM_ADMIN') {
+  // OWNER and PLATFORM_ADMIN see everything passed in (the sidebar passes
+  // the platform nav array for these roles).
+  if (userRole === 'OWNER' || userRole === 'PLATFORM_ADMIN') {
     return allItems.map((item) => ({
       ...item,
       children: item.children ? [...item.children] : undefined,
     }));
   }
 
-  // ADMIN sees everything
-  if (userRole === 'ADMIN') {
+  // CLIENT and ADMIN see everything (client nav)
+  if (userRole === 'CLIENT' || userRole === 'ADMIN') {
     return allItems.map((item) => ({
       ...item,
       children: item.children ? [...item.children] : undefined,

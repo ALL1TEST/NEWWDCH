@@ -14,16 +14,17 @@ export default function AdminApp() {
   const navigate = useNavigationStore((s) => s.navigate);
   const user = useAuthStore((s) => s.user);
 
-  // PLATFORM_ADMIN users land on the Platform Overview by default
+  // PLATFORM_ADMIN and OWNER users land on the Platform Overview by default
   // (the hash defaults to 'dashboard' which is a client page they
   // cannot access). Redirect once on mount.
   useEffect(() => {
-    if (user?.role === 'PLATFORM_ADMIN' && !isPlatformPage(currentModule)) {
+    const isPlatformStaff = user?.role === 'PLATFORM_ADMIN' || user?.role === 'OWNER';
+    if (isPlatformStaff && !isPlatformPage(currentModule)) {
       navigate('platform-overview');
     }
     // CLIENT roles that somehow land on a platform page fall back to
     // their client dashboard.
-    if (user && user.role !== 'PLATFORM_ADMIN' && isPlatformPage(currentModule)) {
+    if (user && !isPlatformStaff && isPlatformPage(currentModule)) {
       navigate('dashboard');
     }
   }, [user, currentModule, navigate]);

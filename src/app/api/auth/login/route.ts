@@ -156,6 +156,7 @@ export async function POST(request: NextRequest) {
       bio: user.bio,
       role: user.role,
       status: user.status,
+      billingMode: user.billingMode,
       emailVerified: user.emailVerified,
       mfaEnabled: user.mfaEnabled,
       pagePermissions: parsePagePermissions(user.pagePermissions),

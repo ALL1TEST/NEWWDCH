@@ -170,6 +170,52 @@ export function BillingPage() {
 
   // -------------------- Loaded --------------------
   const billingState: ClientBillingState = billingQuery.data;
+
+  // Owner / billing-bypass users (billingMode INTERNAL/EXEMPT) get a
+  // dedicated panel instead of the plan cards — they have full platform
+  // access and are not a paying customer.
+  if (billingState.isInternal) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">{t('billing.title')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t('billing.description')}</p>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t('billing.currentPlan')}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-semibold text-lg">Internal Account</span>
+                  <Badge variant="outline" className="text-[10px] font-semibold bg-primary/10 text-primary border-primary/30">
+                    {billingState.billingMode}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground ml-7">
+                  Full platform access — billing bypass. Not counted as a paying customer.
+                </p>
+              </div>
+              <Badge variant="default">active</Badge>
+            </div>
+            <Separator />
+            <ul className="space-y-2">
+              {billingState.plan.features.map((feature) => (
+                <li key={feature} className="flex items-start gap-2 text-sm">
+                  <Check className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                  <span>{feature}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const currentPlan = billingState.plan;
   const otherPlans = billingState.allPlans.filter((p) => p.id !== currentPlan.id);
   const status = billingState.status;

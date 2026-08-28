@@ -34,12 +34,25 @@ export type PaymentStatus = 'paid' | 'pending' | 'failed' | 'refunded';
 export interface Plan {
   id: PlanId;
   name: string;
-  /** Monthly price in CHF. Yearly is billed as price * 12 (no discount). */
+  /** Monthly price in the plan's currency (legacy field, == priceMonthly). */
   price: number;
+  priceMonthly: number;
+  priceYearly: number;
   currency: string;
   interval: BillingInterval;
   isFree: boolean;
+  active: boolean;
   features: string[];
+  /** Authoritative feature keys granted by this plan (checked by hasFeature). */
+  entitlements: string[];
+  /** Plan usage limits. -1 = unlimited. */
+  limits: {
+    maxSites: number;
+    storageBytes: number;
+    aiWords: number;
+    aiArticles: number;
+    automationRuns: number;
+  };
 }
 
 export interface PlatformSite {
@@ -125,45 +138,54 @@ export interface PlatformAlert {
   time: string;
 }
 
-// -------------------- Plans (reuse existing pricing) --------------------
+// -------------------- Plans (delegated to DB-backed plan-config) --------------------
+// The editable plan definitions live in the PlanConfig table and are cached
+// by ./plan-config — the SINGLE source of truth. The owner edits there via
+// the Platform Admin; this module (admin overview + client billing) and the
+// client billing API both read the same cached values, so an owner price
+// change propagates to the client billing page and to MRR on the next read.
+// The PLANS array below is a live view re-spliced whenever the config changes.
 
-export const PLANS: Plan[] = [
-  {
-    id: 'beta',
-    name: 'Beta',
-    price: 0,
-    currency: 'CHF',
-    interval: 'monthly',
-    isFree: true,
-    features: ['Up to 3 sites', 'Basic analytics', 'Email support', '1 GB storage'],
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    price: 49,
-    currency: 'CHF',
-    interval: 'monthly',
-    isFree: false,
-    features: ['Up to 10 sites', 'Advanced analytics', 'Priority support', '10 GB storage', 'AI content tools', 'Custom domains'],
-  },
-  {
-    id: 'max',
-    name: 'Max',
-    price: 99,
-    currency: 'CHF',
-    interval: 'monthly',
-    isFree: false,
-    features: ['Unlimited sites', 'Full analytics suite', '24/7 dedicated support', '100 GB storage', 'AI content tools', 'Custom domains', 'API access', 'White-label', 'Audit log'],
-  },
-];
+import { getPlanConfigsSync, subscribe as subscribePlanConfig, type PlanConfigData } from './plan-config';
+
+function toPlan(d: PlanConfigData): Plan {
+  return {
+    id: d.planId as PlanId,
+    name: d.name,
+    price: d.priceMonthly,
+    priceMonthly: d.priceMonthly,
+    priceYearly: d.priceYearly,
+    currency: d.currency,
+    interval: d.interval,
+    isFree: d.isFree,
+    active: d.active,
+    features: d.features,
+    entitlements: d.entitlements,
+    limits: d.limits,
+  };
+}
+
+/** Live view of the DB-backed plan configs. Mutated in place on every
+ *  config refresh so existing references stay valid. */
+export const PLANS: Plan[] = [];
+
+function refreshPLANS(): void {
+  const data = getPlanConfigsSync();
+  PLANS.length = 0;
+  for (const d of data) PLANS.push(toPlan(d));
+}
+refreshPLANS();
+subscribePlanConfig(refreshPLANS);
 
 export function getPlan(id: PlanId): Plan {
   return PLANS.find((p) => p.id === id) ?? PLANS[0];
 }
 
-/** Normalized monthly price. */
-export function monthlyPrice(plan: Plan, _interval: BillingInterval): number {
-  return plan.price;
+/** Normalized monthly price. Yearly subscriptions contribute priceYearly/12
+ *  so MRR is a true monthly run-rate. */
+export function monthlyPrice(plan: Plan, interval: BillingInterval): number {
+  if (interval === 'yearly') return Math.round(plan.priceYearly / 12);
+  return plan.priceMonthly;
 }
 
 // -------------------- Helpers --------------------
@@ -783,6 +805,44 @@ export function reactivateCustomer(customerId: string, actor: string): Customer 
   return c;
 }
 
+// -------------------- Sync helpers (used by entitlements + usage-limits) --------------------
+
+/** Resolve a customer record by email (sync). Returns null when the user is
+ *  not a platform customer (e.g. owner / billing-bypass users). */
+export function getCustomerByEmailSync(email: string): Customer | null {
+  const s = store();
+  return s.customers.find((c) => c.email.toLowerCase() === email.toLowerCase()) ?? null;
+}
+
+export interface CustomerUsage {
+  sites: number;
+  storageBytes: number;
+  aiWords: number;
+  aiArticles: number;
+  automationRuns: number;
+}
+
+/** Current resource usage for a customer (sync). Derived from the same
+ *  centralized dataset as the admin overview — never an independent number. */
+export function getCustomerUsageSync(email: string): CustomerUsage {
+  const s = store();
+  const customer = s.customers.find((c) => c.email.toLowerCase() === email.toLowerCase());
+  if (!customer) {
+    return { sites: 0, storageBytes: 0, aiWords: 0, aiArticles: 0, automationRuns: 0 };
+  }
+  const sites = s.sites.filter((si) => si.customerId === customer.id);
+  const totalArticles = sites.reduce((a, si) => a + si.articles, 0);
+  const storageBytes = sites.reduce((a, si) => a + si.storageBytes, 0);
+  const aiArticles = Math.round(totalArticles * 0.28);
+  return {
+    sites: sites.length,
+    storageBytes,
+    aiWords: aiArticles * 1850,
+    aiArticles,
+    automationRuns: 0, // not tracked per-customer in the demo dataset
+  };
+}
+
 // -------------------- Client billing helpers --------------------
 
 export interface ClientBillingState {
@@ -793,11 +853,59 @@ export interface ClientBillingState {
   trialEnd: string | null;
   nextBillingAt: string | null;
   paymentHistory: Payment[];
+  /** Billing mode of the authenticated user. INTERNAL/EXEMPT users have a
+   *  billing bypass (full access, not a paying customer). */
+  billingMode: 'EXTERNAL' | 'INTERNAL' | 'EXEMPT';
+  isInternal: boolean;
 }
 
-export function getClientBilling(email: string): ClientBillingState {
+/** Synthetic "Internal" plan for owner / billing-bypass users. Carries every
+ *  entitlement and a zero price; the user is not a paying customer. */
+const INTERNAL_PLAN: Plan = {
+  id: 'beta',
+  name: 'Internal',
+  price: 0,
+  priceMonthly: 0,
+  priceYearly: 0,
+  currency: 'CHF',
+  interval: 'monthly',
+  isFree: true,
+  active: true,
+  features: ['Full platform access', 'All features enabled', 'Billing bypass', 'Not counted in MRR'],
+  entitlements: ['automation', 'ai_content', 'advanced_analytics', 'custom_domains', 'api_access', 'white_label', 'audit_log', 'advanced_seo', 'newsletter'],
+  limits: { maxSites: -1, storageBytes: -1, aiWords: -1, aiArticles: -1, automationRuns: -1 },
+};
+
+interface BillingUser {
+  email: string;
+  role?: string;
+  billingMode?: string;
+}
+
+function isBillingBypass(user: BillingUser): boolean {
+  return user.role === 'OWNER' || user.billingMode === 'INTERNAL' || user.billingMode === 'EXEMPT';
+}
+
+export function getClientBilling(user: BillingUser): ClientBillingState {
   const s = store();
-  const customer = s.customers.find((c) => c.email.toLowerCase() === email.toLowerCase()) ?? null;
+  const customer = s.customers.find((c) => c.email.toLowerCase() === user.email.toLowerCase()) ?? null;
+  const bypass = isBillingBypass(user);
+  const billingMode = (user.billingMode as 'EXTERNAL' | 'INTERNAL' | 'EXEMPT') ?? 'EXTERNAL';
+
+  if (bypass) {
+    return {
+      customer: null,
+      plan: INTERNAL_PLAN,
+      allPlans: PLANS.filter((p) => p.active),
+      status: 'active',
+      trialEnd: null,
+      nextBillingAt: null,
+      paymentHistory: [],
+      billingMode,
+      isInternal: true,
+    };
+  }
+
   const plan = customer ? getPlan(customer.planId) : getPlan('beta');
   const paymentHistory = customer
     ? s.payments
@@ -807,26 +915,38 @@ export function getClientBilling(email: string): ClientBillingState {
   return {
     customer,
     plan,
-    allPlans: PLANS,
+    allPlans: PLANS.filter((p) => p.active),
     status: customer?.subscriptionStatus ?? 'trial',
     trialEnd: customer?.trialEnd ?? null,
     nextBillingAt: customer?.nextBillingAt ?? null,
     paymentHistory,
+    billingMode,
+    isInternal: false,
   };
 }
 
-export function clientChangePlan(email: string, newPlanId: PlanId): ClientBillingState | null {
-  const s = store();
-  const c = s.customers.find((cu) => cu.email.toLowerCase() === email.toLowerCase());
-  if (!c) return null;
-  changeCustomerPlan(c.id, newPlanId, email);
-  return getClientBilling(email);
+/** Backwards-compatible email-only overload (treats caller as EXTERNAL). */
+export function getClientBillingByEmail(email: string): ClientBillingState {
+  return getClientBilling({ email, role: undefined, billingMode: 'EXTERNAL' });
 }
 
-export function clientCancelSubscription(email: string): ClientBillingState | null {
+export function clientChangePlan(user: BillingUser, newPlanId: PlanId): ClientBillingState | null {
+  if (isBillingBypass(user)) return getClientBilling(user); // bypass: no plan change
   const s = store();
-  const c = s.customers.find((cu) => cu.email.toLowerCase() === email.toLowerCase());
+  const c = s.customers.find((cu) => cu.email.toLowerCase() === user.email.toLowerCase());
   if (!c) return null;
-  cancelSubscription(c.id, email);
-  return getClientBilling(email);
+  // Reject change to an inactive plan.
+  const target = getPlan(newPlanId);
+  if (!target.active) return null;
+  changeCustomerPlan(c.id, newPlanId, user.email);
+  return getClientBilling(user);
+}
+
+export function clientCancelSubscription(user: BillingUser): ClientBillingState | null {
+  if (isBillingBypass(user)) return getClientBilling(user); // bypass: nothing to cancel
+  const s = store();
+  const c = s.customers.find((cu) => cu.email.toLowerCase() === user.email.toLowerCase());
+  if (!c) return null;
+  cancelSubscription(c.id, user.email);
+  return getClientBilling(user);
 }

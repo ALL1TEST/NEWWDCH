@@ -50,6 +50,10 @@ import {
   PanelLeftOpen,
   CreditCard,
   Receipt,
+  Tags,
+  Ticket,
+  Flag,
+  ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
@@ -140,6 +144,10 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'Server': Server,
   'CreditCard': CreditCard,
   'Receipt': Receipt,
+  'Tags': Tags,
+  'Ticket': Ticket,
+  'Flag': Flag,
+  'ShieldCheck': ShieldCheck,
 };
 
 function getIcon(iconName?: string): LucideIcon {
@@ -304,9 +312,39 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     icon: 'Receipt',
   },
   {
+    label: 'Plans & Pricing',
+    href: '#platform-plans',
+    icon: 'Tags',
+  },
+  {
+    label: 'Coupons',
+    href: '#platform-coupons',
+    icon: 'Ticket',
+  },
+  {
     label: 'Usage / Analytics',
     href: '#platform-usage',
     icon: 'BarChart3',
+  },
+  {
+    label: 'Notifications',
+    href: '#platform-notifications',
+    icon: 'Bell',
+  },
+  {
+    label: 'Email Templates',
+    href: '#platform-email-templates',
+    icon: 'Mail',
+  },
+  {
+    label: 'SMTP Settings',
+    href: '#platform-smtp',
+    icon: 'Server',
+  },
+  {
+    label: 'Backups',
+    href: '#platform-backups',
+    icon: 'Database',
   },
   {
     label: 'System Health',
@@ -319,9 +357,19 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     icon: 'ScrollText',
   },
   {
-    label: 'Settings',
+    label: 'Platform Settings',
     href: '#platform-settings',
     icon: 'Settings',
+  },
+  {
+    label: 'Feature Flags',
+    href: '#platform-feature-flags',
+    icon: 'Flag',
+  },
+  {
+    label: 'Admin Users',
+    href: '#platform-admin-users',
+    icon: 'ShieldCheck',
   },
 ];
 
@@ -902,7 +950,7 @@ export function AppSidebar() {
 
   const userRole = user?.role;
   const pagePermissions = user?.pagePermissions ?? null;
-  const isPlatformAdmin = userRole === 'PLATFORM_ADMIN';
+  const isPlatformAdmin = userRole === 'PLATFORM_ADMIN' || userRole === 'OWNER';
   const visibleItems = useMemo(() => {
     if (!userRole) return [];
     // Platform admins see the dedicated platform nav, not the client CMS nav.

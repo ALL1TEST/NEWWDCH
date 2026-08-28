@@ -166,22 +166,35 @@ export function LoginScreen() {
                   Author
                 </Button>
               </div>
-              {/* Platform Admin — a separate SaaS-owner experience with its
-                  own dashboard, sidebar, and role. Kept visually distinct
-                  (full-width, primary-tinted) so it is not confused with
-                  the client demo accounts above. */}
+              {/* Platform Owner — the SaaS owner. OWNER role with an
+                  INTERNAL billing bypass: full platform access, all
+                  features, not counted as a paying customer. Kept
+                  visually distinct (full-width, primary-tinted). */}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="h-8 w-full text-[11px] mt-1.5 border-primary/40 text-primary hover:bg-primary/5"
                 onClick={() => {
+                  setEmail('owner@example.com');
+                  setPassword('owner123');
+                  clearError();
+                }}
+              >
+                Platform Owner (SaaS Owner)
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 w-full text-[11px] mt-1.5"
+                onClick={() => {
                   setEmail('platform@example.com');
                   setPassword('platform123');
                   clearError();
                 }}
               >
-                Platform Admin (SaaS Owner)
+                Platform Admin (Staff)
               </Button>
             </div>
           </CardContent>

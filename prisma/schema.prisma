@@ -24,6 +24,18 @@ enum UserRole {
   ADMIN
   EDITOR
   PLATFORM_ADMIN
+  OWNER
+  CLIENT
+}
+
+// Billing mode controls whether a user is a paying customer or has a
+// platform-level billing bypass. INTERNAL = owner/staff (full access,
+// not counted in MRR). EXEMPT = complimentary (full access, tracked,
+// not counted in MRR). EXTERNAL = normal paying customer.
+enum BillingMode {
+  EXTERNAL
+  INTERNAL
+  EXEMPT
 }
 
 enum UserStatus {
@@ -644,6 +656,10 @@ model User {
   website       String?
   role          UserRole  @default(EDITOR)
   status        UserStatus @default(ACTIVE)
+  // Billing bypass flag. INTERNAL/EXEMPT users skip plan gating, get full
+  // feature access, and are excluded from customer/MRR counts. Not keyed
+  // by email — a proper account-level entitlement.
+  billingMode   BillingMode @default(EXTERNAL)
   password      String?
   emailVerified Boolean   @default(false)
   mfaEnabled    Boolean   @default(false)
@@ -2036,6 +2052,92 @@ model FeatureFlag {
 
   @@index([key])
   @@index([isEnabled])
+}
+
+// ============================================================
+// PLATFORM BILLING CONFIG — editable single source of truth for
+// plans, pricing, entitlements, usage limits, coupons, country
+// pricing, and per-customer feature overrides. Managed from the
+// Platform Admin. Reused by the Client Billing experience so an
+// owner edit propagates to clients immediately.
+// ============================================================
+
+// The editable plan definition. The Client Billing API reads price,
+// features, entitlements and limits from here — NOT from a hardcoded
+// constant. `features` is marketing copy; `entitlements` is the
+// authoritative feature-key list checked by hasFeature().
+model PlanConfig {
+  id            String   @id @default(cuid())
+  planId        String   @unique // 'beta' | 'pro' | 'max' | custom
+  name          String
+  priceMonthly  Int      @default(0) // major currency units (49 = 49 CHF)
+  priceYearly   Int      @default(0)
+  currency      String   @default("CHF")
+  interval      String   @default("monthly") // monthly | yearly
+  isFree        Boolean  @default(false)
+  active        Boolean  @default(true)
+  features      String   @default("[]") // JSON: string[] (marketing)
+  entitlements  String   @default("[]") // JSON: string[] (feature keys)
+  limits        String   @default("{}") // JSON: { maxSites, storageBytes, aiWords, aiArticles, automationRuns }
+  badgeVariant  String   @default("") // maps to client badge styling
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([active])
+  @@index([sortOrder])
+}
+
+model Coupon {
+  id               String    @id @default(cuid())
+  code             String    @unique
+  type             String    @default("percent") // percent | fixed
+  value            Int       @default(0) // percent: 0-100; fixed: amount in major units
+  currency         String    @default("CHF")
+  applicablePlans  String    @default("[]") // JSON planId[]; empty = all plans
+  startsAt         DateTime?
+  expiresAt        DateTime?
+  maxRedemptions   Int? // null = unlimited
+  perCustomerLimit Int?
+  active           Boolean   @default(true)
+  timesRedeemed    Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([active])
+  @@index([code])
+}
+
+model CountryPricing {
+  id             String   @id @default(cuid())
+  countryCode    String   @unique // ISO 3166-1 alpha-2: US, CH, MA, ...
+  countryName    String
+  currency       String // USD, EUR, CHF, MAD
+  isDefault      Boolean  @default(false)
+  regionalPrices String   @default("{}") // JSON map planId → { monthly, yearly }
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([active])
+  @@index([isDefault])
+}
+
+// Per-customer feature grant/revoke that does NOT change the plan.
+// e.g. "Beta customer + Automation enabled until 2025-12-31".
+model CustomerEntitlementOverride {
+  id            String    @id @default(cuid())
+  customerEmail String
+  feature       String // entitlement key, e.g. 'automation'
+  granted       Boolean  @default(true)
+  grantedUntil  DateTime? // null = no expiry
+  reason        String?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([customerEmail, feature])
+  @@index([customerEmail])
 }
 
 // ============================================================

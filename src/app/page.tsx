@@ -1,36 +1,37 @@
-'use client';
+import { cookies } from 'next/headers';
+import { db } from '@/lib/db';
+import { getMaintenanceConfig } from '@/lib/platform/maintenance';
+import AppEntry from '@/components/layout/app-entry';
+import MaintenanceNotice from '@/components/layout/maintenance-notice';
 
-import { useState } from 'react';
-import dynamic from 'next/dynamic';
-import { ThemeProvider } from 'next-themes';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Toaster } from '@/components/ui/sonner';
-import { I18nProvider } from '@/lib/i18n';
+// Always re-evaluate maintenance state on each request (never cached).
+export const dynamic = 'force-dynamic';
 
-const AppShell = dynamic(
-  () => import('@/components/layout/admin-app'),
-  { ssr: false, loading: () => <div className="flex items-center justify-center h-screen bg-background"><div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" /></div> }
-);
+export default async function Home() {
+  // Server-side maintenance gate: when maintenance is enabled, CLIENT
+  // users see the maintenance page while OWNER / PLATFORM_ADMIN remain
+  // able to access the admin area. Enforced on the server, not in the UI.
+  const cookieStore = await cookies();
+  const token = cookieStore.get('cms_session_token')?.value;
 
-export default function Home() {
-  const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 60 * 1000,
-        refetchOnWindowFocus: false,
-      },
-    },
-  }));
+  let user: { role: string; status: string } | null = null;
+  if (token) {
+    const session = await db.session.findUnique({
+      where: { token },
+      include: { user: { select: { role: true, status: true } } },
+    });
+    if (session && session.expiresAt > new Date() && session.user.status === 'ACTIVE') {
+      user = session.user;
+    }
+  }
 
-  return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-        <I18nProvider>
-          <AppShell />
-          <Toaster />
-        </I18nProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
-  );
+  const maintenance = await getMaintenanceConfig();
+  const isPlatformStaff = user?.role === 'OWNER' || user?.role === 'PLATFORM_ADMIN';
+  const blocked = maintenance.enabled && !isPlatformStaff;
+
+  if (blocked) {
+    return <MaintenanceNotice message={maintenance.message} />;
+  }
+
+  return <AppEntry />;
 }
-

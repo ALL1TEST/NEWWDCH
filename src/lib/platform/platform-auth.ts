@@ -1,12 +1,16 @@
 // ============================================================
-// PLATFORM AUTH — Server-side authorization for platform admin
+// PLATFORM AUTH — Server-side authorization for platform admin.
 // ============================================================
 // Validates the session cookie (cms_session_token) against the
-// Session/User tables and enforces that the caller has the
-// PLATFORM_ADMIN role for /api/platform/admin/* routes. Client
-// billing routes (/api/platform/billing/*) only require a valid
-// authenticated session (any role) since clients manage their own
-// subscription.
+// Session/User tables. Roles:
+//   OWNER          — full platform control + billing bypass
+//   PLATFORM_ADMIN — platform management (per permissions)
+//   CLIENT/ADMIN/EDITOR — client-side CMS only
+//
+// /api/platform/admin/* requires PLATFORM_ADMIN OR OWNER (guarded by
+// requirePlatformAdmin). Owner-only mutations (plans, pricing, SMTP,
+// feature flags, admin users) use requireOwner. Client billing routes
+// (/api/platform/billing/*) only require a valid session (requireAuth).
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -20,6 +24,7 @@ export interface AuthUser {
   name: string;
   role: string;
   status: string;
+  billingMode: string; // 'EXTERNAL' | 'INTERNAL' | 'EXEMPT'
 }
 
 /** Resolve the authenticated user from the request's session cookie. */
@@ -43,7 +48,20 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
     name: u.name ?? u.email,
     role: u.role,
     status: u.status,
+    billingMode: u.billingMode,
   };
+}
+
+/** True for the platform owner (full bypass). */
+export function isOwner(user: { role?: string; billingMode?: string } | null | undefined): boolean {
+  if (!user) return false;
+  return user.role === 'OWNER' || user.billingMode === 'INTERNAL';
+}
+
+/** True for any platform-level admin (OWNER or PLATFORM_ADMIN). */
+export function isPlatformStaff(user: { role?: string; billingMode?: string } | null | undefined): boolean {
+  if (!user) return false;
+  return isOwner(user) || user.role === 'PLATFORM_ADMIN';
 }
 
 /** Require an authenticated user (any role). Returns the user or a 401 response. */
@@ -60,11 +78,11 @@ export async function requireAuth(request: NextRequest): Promise<{ user: AuthUse
   return { user };
 }
 
-/** Require a PLATFORM_ADMIN user. Returns the user or a 401/403 response. */
+/** Require a PLATFORM_ADMIN or OWNER user. Returns the user or a 401/403 response. */
 export async function requirePlatformAdmin(request: NextRequest): Promise<{ user: AuthUser } | { response: NextResponse }> {
   const auth = await requireAuth(request);
   if ('response' in auth) return auth;
-  if (auth.user.role !== 'PLATFORM_ADMIN') {
+  if (!isPlatformStaff(auth.user)) {
     return {
       response: NextResponse.json(
         { error: { code: 'FORBIDDEN', message: 'Platform admin access required.' } },
@@ -73,6 +91,27 @@ export async function requirePlatformAdmin(request: NextRequest): Promise<{ user
     };
   }
   return { user: auth.user };
+}
+
+/** Require the platform OWNER. Returns the user or a 401/403 response.
+ *  Use for owner-only mutations (plan pricing, SMTP, admin users, etc.). */
+export async function requireOwner(request: NextRequest): Promise<{ user: AuthUser } | { response: NextResponse }> {
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth;
+  if (!isOwner(auth.user)) {
+    return {
+      response: NextResponse.json(
+        { error: { code: 'FORBIDDEN', message: 'Platform owner access required.' } },
+        { status: 403 },
+      ),
+    };
+  }
+  return { user: auth.user };
+}
+
+/** Extract client IP for audit logging (never used for auth decisions). */
+export function getClientIp(request: NextRequest): string | null {
+  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
 }
 
 /** Standard success envelope. */

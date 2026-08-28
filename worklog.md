@@ -5237,3 +5237,33 @@ Stage Summary:
 - Audit page: vertical scrollable list (max-h-600px overflow-y-auto) with severity-colored icons + client-side FilterSelect (no server filtering needed).
 - Settings page: read-only plans grid (same PLANS the Client Billing page uses) + read-only Platform Information card; no editable forms per spec.
 - Lint clean for all four files; dev log clean.
+
+---
+Task ID: 38
+Agent: main (architect)
+Task: Platform Admin / SaaS Owner system — OWNER/CLIENT roles, billingMode INTERNAL/EXEMPT, DB-backed editable plans (single source of truth), entitlements (hasFeature), usage limits, coupons, feature flags, maintenance mode, country pricing, audit, admin users — integrated into the existing app.
+
+Work Log:
+- Inspected existing architecture: platform-data.ts centralized mock dataset + 10 admin API routes + 3 client billing routes + 10 platform pages + requirePlatformAdmin RBAC (prior session Tasks 37a–e). Existing Prisma models reused: FeatureFlag, AuditLog, EmailTemplate, SmtpSetting, Notification, Backup(+Schedule/Log/Storage), Setting (key-value).
+- Prisma schema: added OWNER + CLIENT to UserRole; added BillingMode enum (EXTERNAL/INTERNAL/EXEMPT) + billingMode field on User; added PlanConfig, Coupon, CountryPricing, CustomerEntitlementOverride models. db:push applied.
+- New centralized services (src/lib/platform/): plan-config.ts (DB-backed cached plan store, single source of truth, self-seeding), entitlements.ts (hasFeature with owner bypass + per-customer override + plan entitlements), usage-limits.ts (checkLimit + maxSites/storage/AI limits), feature-flags.ts, maintenance.ts (Setting-backed, server gate), coupons.ts (validateCoupon), country-pricing.ts (server-determined price), audit.ts (logAdminAction). feature-config.ts holds the client-safe entitlement/limit vocabulary.
+- platform-data.ts: PLANS/getPlan/monthlyPrice now delegate to plan-config cache (owner edits propagate to client billing + MRR); getClientBilling accepts a user with billingMode → owner gets a synthetic "Internal" plan (billing bypass, not a paying customer); added getCustomerByEmailSync + getCustomerUsageSync (used by entitlements + usage-limits); yearly MRR normalized to monthly.
+- RBAC wiring: permissions.ts (OWNER sees all; PLATFORM_ADMIN→platform; CLIENT/ADMIN→client), admin-app.tsx (OWNER→platform area), sidebar.tsx (isPlatformStaff incl OWNER; PLATFORM_NAV_ITEMS expanded to 17 items), login-screen.tsx (Platform Owner demo button owner@example.com/owner123 + Platform Admin staff button), platform-auth.ts (isOwner, requireOwner, requirePlatformAdminOrOwner, billingMode on AuthUser), auth-store + /api/auth/me + /api/auth/login return billingMode, shared/types UserRole += OWNER/CLIENT.
+- page.tsx → server component maintenance gate (cookies() + DB; owner bypass); app-entry.tsx holds the client providers; maintenance-notice.tsx.
+- New admin API routes (all guarded + audit-logged): /api/platform/admin/plans (GET) + /plans/[planId] (PUT, owner-only), /coupons (GET/POST) + /[id] (PATCH/DELETE), /feature-flags (GET) + /[key] (PATCH owner-only), /maintenance (GET/PUT owner-only), /countries (GET/POST/DELETE), /customers/[id]/{suspend,reactivate,change-plan,cancel,override}, /admin-users (GET/POST owner-only) + /[id] (PATCH/DELETE owner-only), /entitlements/me (client nav), /countries/resolve (server-determined price). audit-log route now merges real admin-action logs with the mock feed.
+- Client-side enforcement (server-side): /api/automations GET+POST require requireAuth + hasFeature('automation') (Beta → 403 FEATURE_NOT_AVAILABLE); /api/ai/jobs GET require hasFeature('ai_content'); /api/sites POST require requireAuth + checkLimit('sites') (Beta max 3 → 403 PLAN_LIMIT_EXCEEDED). Client billing page renders an "Internal account" panel for owner/bypass users.
+- 8 new platform UI pages: platform-plans (editable Plans & Pricing — name/price/currency/interval/active/features/entitlements/limits per plan), platform-coupons (CRUD), platform-feature-flags (toggles), platform-admin-users (OWNER/PLATFORM_ADMIN mgmt + 2FA status), platform-notifications, platform-email-templates, platform-smtp (never exposes credentials), platform-backups (demo-labeled). platform-settings extended with Maintenance Mode + Country Pricing sections. All 17 modules registered in platform/index.tsx.
+- Bootstrap: src/lib/platform/bootstrap.ts creates owner@example.com (OWNER/INTERNAL, owner123) + self-seeds 3 plan configs + 3 feature flags + 4 country pricings + maintenance default. Run once.
+
+Verification (dev server :3000, single long-lived command):
+- Login owner/editor/admin → 200; owner role=OWNER billingMode=INTERNAL.
+- TEST 1 (price propagation): owner PUT /api/platform/admin/plans/pro {priceMonthly:59} → admin(pro) GET /api/platform/billing/me priceMonthly 49→59. PASS.
+- TEST 2 (entitlement enforcement): beta(editor) GET /api/automations → 403 FEATURE_NOT_AVAILABLE "automation"; owner GET /api/automations → 200 (bypass). PASS.
+- TEST 3 (maintenance gate): owner PUT /maintenance {enabled:true} → beta GET / → "Under Maintenance" (server-side); owner GET / → app (bypass); disable → beta sees app. PASS.
+- TEST 4 (data consistency): overview mrr reflects the new Pro price (derived from the same plan-config cache, not hardcoded). PASS.
+- TEST 5 (owner not a paying customer): owner /api/platform/billing/me → isInternal:true. PASS.
+- TEST 6 (RBAC): admin(pro) GET /api/platform/admin/overview → 403; owner → 200. PASS.
+- Agent Browser: owner login → #platform-overview with full 17-item platform sidebar; #platform-plans renders the editable Beta/Pro/Max cards with all 9 entitlement checkboxes + limits (Beta maxSites=3, no entitlements — matches server enforcement). No fatal errors.
+
+Stage Summary:
+- Closed loop verified: owner edits plan → client billing reflects it; owner toggles entitlement → client enforced server-side (Beta denied at /api/automations + /api/ai/jobs); owner enables maintenance → clients blocked server-side, owner bypasses. Single source of truth (plan-config DB cache) shared by admin overview, client billing, MRR, and entitlement checks. RBAC enforced server-side (requireOwner / requirePlatformAdminOrOwner). Pre-existing client dashboard + billing flow untouched. Cosmetic React key warning in the platform sidebar nav list (non-blocking, app renders cleanly). Remaining work (demo-labeled, integration points ready): per-customer coupon redemption counting, full TOTP 2FA enrollment UI, per-event notification routing UI, real backup provider execution.

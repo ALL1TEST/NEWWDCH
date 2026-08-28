@@ -21,6 +21,14 @@ const usage = dynamic(() => import('./platform-usage').then(m => ({ default: m.P
 const systemHealth = dynamic(() => import('./platform-system-health').then(m => ({ default: m.PlatformSystemHealthModule as ComponentType })), { loading: ModuleFallback });
 const audit = dynamic(() => import('./platform-audit').then(m => ({ default: m.PlatformAuditModule as ComponentType })), { loading: ModuleFallback });
 const settings = dynamic(() => import('./platform-settings').then(m => ({ default: m.PlatformSettingsModule as ComponentType })), { loading: ModuleFallback });
+const plans = dynamic(() => import('./platform-plans').then(m => ({ default: m.PlatformPlansModule as ComponentType })), { loading: ModuleFallback });
+const coupons = dynamic(() => import('./platform-coupons').then(m => ({ default: m.PlatformCouponsModule as ComponentType })), { loading: ModuleFallback });
+const featureFlags = dynamic(() => import('./platform-feature-flags').then(m => ({ default: m.PlatformFeatureFlagsModule as ComponentType })), { loading: ModuleFallback });
+const notifications = dynamic(() => import('./platform-notifications').then(m => ({ default: m.PlatformNotificationsModule as ComponentType })), { loading: ModuleFallback });
+const emailTemplates = dynamic(() => import('./platform-email-templates').then(m => ({ default: m.PlatformEmailTemplatesModule as ComponentType })), { loading: ModuleFallback });
+const smtp = dynamic(() => import('./platform-smtp').then(m => ({ default: m.PlatformSmtpModule as ComponentType })), { loading: ModuleFallback });
+const backups = dynamic(() => import('./platform-backups').then(m => ({ default: m.PlatformBackupsModule as ComponentType })), { loading: ModuleFallback });
+const adminUsers = dynamic(() => import('./platform-admin-users').then(m => ({ default: m.PlatformAdminUsersModule as ComponentType })), { loading: ModuleFallback });
 
 export const platformModuleRegistry: Record<string, ComponentType> = {
   'platform-overview': overview,
@@ -33,4 +41,12 @@ export const platformModuleRegistry: Record<string, ComponentType> = {
   'platform-system-health': systemHealth,
   'platform-audit': audit,
   'platform-settings': settings,
+  'platform-plans': plans,
+  'platform-coupons': coupons,
+  'platform-feature-flags': featureFlags,
+  'platform-notifications': notifications,
+  'platform-email-templates': emailTemplates,
+  'platform-smtp': smtp,
+  'platform-backups': backups,
+  'platform-admin-users': adminUsers,
 };

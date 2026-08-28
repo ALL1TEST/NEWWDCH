@@ -3,6 +3,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import type { ApiResponse, ApiError } from '@/shared/types';
+import { requireAuth } from '@/lib/platform/platform-auth';
+import { hasFeature, forbiddenResponse } from '@/lib/platform/entitlements';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -25,6 +27,13 @@ const SORTABLE = new Set(['createdAt', 'updatedAt', 'title', 'type', 'status', '
 // =====================================================================
 
 export async function GET(request: NextRequest) {
+  // Server-side entitlement enforcement: the 'ai_content' feature must be
+  // granted by the user's plan (or owner bypass / override). A Beta user
+  // hitting this endpoint directly is denied with 403.
+  const authOk = await requireAuth(request);
+  if ('response' in authOk) return authOk.response;
+  const allowed = await hasFeature(authOk.user, 'ai_content');
+  if (!allowed) return forbiddenResponse('ai_content');
   const id = reqId();
 
   try {

@@ -1,0 +1,1557 @@
+Build a complete, professional PLATFORM ADMIN / OWNER CONTROL CENTER for this SaaS CMS.
+
+IMPORTANT:
+This is an existing SaaS application.
+
+The goal is NOT to create another isolated dashboard or a separate application.
+
+The Platform Admin area must control the SAME platform used by normal clients.
+
+Use the existing:
+- Authentication
+- Users
+- Roles
+- Sites
+- Articles
+- Media
+- SEO
+- AI
+- Automation
+- Subscriptions
+- Plans
+- Payments
+- Billing
+- Database
+- Email infrastructure
+- Existing services/APIs
+
+Do not duplicate existing business logic.
+
+The Platform Admin / Owner must have a special internal role with full platform privileges.
+
+==================================================
+1. PLATFORM ROLES
+==================================================
+
+Define clear roles:
+
+OWNER
+PLATFORM_ADMIN
+CLIENT
+
+OWNER:
+- Full platform control
+- Can manage plans
+- Can manage pricing
+- Can manage feature access
+- Can manage customers
+- Can manage subscriptions
+- Can manage coupons
+- Can manage email/SMTP
+- Can manage backups
+- Can manage platform settings
+- Can manage platform admins
+- Can access all sites if necessary
+- Has billing bypass for internal use
+
+PLATFORM_ADMIN:
+- Platform management according to permissions
+- Customer management
+- Subscription/payment management
+- Usage monitoring
+- Support/admin operations
+- No access to highly sensitive owner-only settings unless explicitly granted
+
+CLIENT:
+- Only their own account and resources
+- Only features allowed by their subscription/entitlements
+
+IMPORTANT:
+Do not rely on hiding UI elements for authorization.
+
+Every protected admin route and backend/API action must be authorized server-side.
+
+==================================================
+2. OWNER ACCOUNT / INTERNAL CMS ACCESS
+==================================================
+
+I need one special owner account that I can use internally to access and test the CMS without paying for a subscription.
+
+DO NOT implement this as a fake subscription.
+
+DO NOT create a special coupon for myself.
+
+Implement a proper internal account/billing bypass.
+
+Example:
+
+role:
+OWNER
+
+billingMode:
+INTERNAL / EXEMPT
+
+The owner account:
+- Can access all plans/features
+- Can access all CMS features
+- Is not required to have a paid subscription
+- Is not included in customer MRR
+- Is not counted as a paying customer
+- Is not affected by plan feature restrictions
+- Can switch/test plans for QA if needed
+- Can still preview the client experience
+
+This must be implemented as a proper authorization/entitlement rule, not as hardcoded email logic.
+
+Avoid:
+if (email === "myemail@example.com") { ... }
+
+Use a proper role/account entitlement.
+
+==================================================
+3. PLATFORM OVERVIEW
+==================================================
+
+Keep the existing Platform Overview dashboard simple.
+
+Essential KPIs:
+
+- Total Customers
+- Active Subscriptions
+- MRR
+- Total Sites
+
+Useful sections:
+
+- Revenue Overview
+- Subscription Overview
+- Recent Customers
+- Recent Payments
+- Platform Usage
+- Important Admin Alerts
+- System Health
+
+Do not overload the dashboard.
+
+Detailed management belongs in dedicated admin pages.
+
+==================================================
+4. PLAN MANAGEMENT
+==================================================
+
+Create a proper:
+
+Plans & Pricing
+
+admin page.
+
+The owner must be able to EDIT plans.
+
+Current plans:
+
+Beta
+Pro
+Max
+
+The owner must be able to configure:
+
+- Plan name
+- Internal plan ID
+- Display name
+- Price
+- Currency
+- Monthly price
+- Yearly price
+- Billing interval
+- Description
+- Active/inactive
+- Sort order
+- Badge
+- Features
+- Limits
+- Usage limits
+
+Example:
+
+BETA
+Free
+
+PRO
+CHF 49/month
+
+MAX
+CHF 99/month
+
+These values must NOT be hardcoded independently in the Client Dashboard.
+
+There must be ONE source of truth.
+
+If the owner changes:
+
+Pro:
+CHF 49 → CHF 59
+
+the Client Billing page must automatically reflect the updated pricing according to the billing rules.
+
+Existing customers/subscriptions must not be silently changed if the billing provider requires grandfathering.
+
+Handle existing subscriptions and new pricing safely.
+
+==================================================
+5. PLAN FEATURE ACCESS / ENTITLEMENTS
+==================================================
+
+This is extremely important.
+
+Do NOT simply hide navigation items.
+
+Create a centralized plan entitlement system.
+
+Each plan should define which features it has access to.
+
+Example:
+
+BETA:
+- Dashboard
+- Sites: up to 3
+- Articles
+- Basic Analytics
+- Media
+- Comments
+- Basic SEO
+- Basic AI
+- No Automation
+
+PRO:
+- Everything in Beta
+- Sites: up to 10
+- Advanced Analytics
+- AI Content Tools
+- Automation
+- Custom Domains
+- Advanced SEO
+- etc.
+
+MAX:
+- Unlimited sites
+- Full analytics
+- AI content tools
+- Automation
+- API access
+- White-label
+- Audit log
+- etc.
+
+The owner must be able to enable/disable features per plan.
+
+Example:
+
+Feature:
+Automation
+
+Beta:
+OFF
+
+Pro:
+ON
+
+Max:
+ON
+
+If a Beta user tries to access:
+
+/automation
+
+they must be denied server-side.
+
+The UI should also hide/disable the feature gracefully.
+
+Do not only remove the sidebar item.
+
+Direct URL access must also be blocked.
+
+Show a professional upgrade/access message such as:
+
+"Automation is not available on your current plan."
+
+with:
+
+"Upgrade Plan"
+
+==================================================
+6. FEATURE / ENTITLEMENT MANAGEMENT
+==================================================
+
+Create a central feature registry.
+
+Example:
+
+FEATURES:
+
+automation
+advanced_analytics
+ai_content
+custom_domains
+api_access
+white_label
+audit_log
+advanced_seo
+newsletter
+etc.
+
+Plans should reference these features.
+
+Avoid scattering conditions throughout the codebase.
+
+Bad:
+
+if (plan === "pro" || plan === "max") ...
+
+Good:
+
+canAccess(user, "automation")
+
+or:
+
+hasFeature(user, "automation")
+
+All client feature access should use the same entitlement service.
+
+==================================================
+7. USAGE LIMITS
+==================================================
+
+Plans should support limits, not only feature on/off.
+
+Examples:
+
+Beta:
+- Sites: 3
+- Storage: 1 GB
+- AI words/month: defined limit
+- AI articles/month: defined limit
+- Automation runs/month: 0
+
+Pro:
+- Sites: 10
+- Storage: 10 GB
+- AI usage: defined limit
+- Automation runs: defined limit
+
+Max:
+- Sites: Unlimited
+- Storage: 100 GB
+- Higher/unlimited AI limits according to product rules
+- Higher automation limits
+
+The admin must be able to configure these limits.
+
+The system must enforce limits server-side.
+
+Example:
+
+If Beta has:
+3 sites maximum
+
+and customer already has 3 sites:
+
+Create Site should return:
+
+"Your Beta plan allows up to 3 sites. Upgrade your plan to add another site."
+
+==================================================
+8. COUNTRY-BASED PRICING / CURRENCY
+==================================================
+
+I want pricing/currency to adapt based on the customer's country.
+
+Example:
+
+US customer:
+$
+
+European customer:
+€
+
+Switzerland:
+CHF
+
+Morocco:
+MAD
+
+etc.
+
+IMPORTANT:
+Do NOT rely blindly on IP address for final billing.
+
+Use IP geolocation only as a default/initial country detection when appropriate.
+
+The customer's selected/account country and billing country should be the authoritative value for pricing/tax/billing rules where required.
+
+Create a centralized:
+
+Country / Currency / Pricing configuration.
+
+Example:
+
+Country:
+US
+Currency:
+USD
+Pricing:
+US price configuration
+
+Country:
+CH
+Currency:
+CHF
+Pricing:
+CHF configuration
+
+Country:
+EU
+Currency:
+EUR
+Pricing:
+EUR configuration
+
+The owner must be able to configure supported countries and currencies.
+
+Also support:
+
+- Default currency
+- Country → currency mapping
+- Country → pricing configuration
+- Enabled/disabled countries
+- Optional regional pricing
+
+Do not hardcode country rules in individual components.
+
+==================================================
+9. REGIONAL PRICING
+==================================================
+
+Allow the owner to configure regional prices if needed.
+
+Example:
+
+PRO:
+
+CHF 49/month
+USD 55/month
+EUR 49/month
+
+The admin should be able to manage these values centrally.
+
+The Client Billing page must use the same pricing configuration.
+
+==================================================
+10. TAX / VAT SETTINGS
+==================================================
+
+Add a simple billing/tax configuration area.
+
+Support:
+
+- Tax enabled/disabled
+- Tax name
+- VAT/GST/sales tax configuration
+- Tax-inclusive/exclusive pricing
+- Country-specific tax rules if needed
+- Business tax/VAT information
+
+Do not implement complicated tax calculation from scratch if a payment provider will handle it.
+
+Design the system so a real payment provider/tax service can be integrated later.
+
+==================================================
+11. COUPON / PROMO CODE MANAGEMENT
+==================================================
+
+Create:
+
+Coupons / Promo Codes
+
+The owner must be able to create and manage coupon codes.
+
+Each coupon can have:
+
+- Code
+- Description
+- Discount type
+- Percentage discount
+- Fixed amount discount
+- Currency
+- Applicable plans
+- Applicable countries
+- Start date
+- Expiration date
+- Maximum redemptions
+- Maximum redemptions per customer
+- Minimum purchase if needed
+- First payment only / recurring
+- Active/inactive
+
+Examples:
+
+WELCOME20
+20% off
+
+PRO50
+50% off Pro
+
+LAUNCH10
+10% off
+
+The client Billing/Checkout page must validate coupons against the SAME coupon system.
+
+Do not hardcode coupon codes inside the frontend.
+
+Coupon validation must happen server-side.
+
+==================================================
+12. SUBSCRIPTIONS
+==================================================
+
+Create a complete subscription management area.
+
+Admin should be able to see:
+
+- Customer
+- Plan
+- Status
+- Price
+- Currency
+- Billing interval
+- Start date
+- Renewal date
+- Trial status
+- Cancellation status
+- Payment status
+
+Statuses:
+
+Active
+Trial
+Past Due
+Cancelled
+Expired
+Paused if supported
+
+Do not confuse customer status with subscription status.
+
+A cancelled subscription does not necessarily mean the customer account is deleted.
+
+==================================================
+13. PAYMENTS
+==================================================
+
+Keep a dedicated Payments page.
+
+Show:
+
+- Transaction ID
+- Invoice
+- Customer
+- Plan
+- Amount
+- Currency
+- Status
+- Payment method
+- Date
+
+Statuses:
+
+Paid
+Pending
+Failed
+Refunded
+
+Use the existing billing/payment architecture.
+
+Do not create fake payment logic disconnected from the client billing system.
+
+==================================================
+14. CUSTOMER MANAGEMENT
+==================================================
+
+Create a Customers page.
+
+Show:
+
+- Name
+- Email
+- Status
+- Plan
+- Subscription status
+- Sites
+- Joined date
+- Last activity
+
+Customer details should include:
+
+Profile
+Subscription
+Payments
+Sites
+Usage
+Activity
+
+Admin actions:
+
+- View
+- Suspend
+- Reactivate
+- Change plan if authorized
+- Cancel subscription if supported
+- Reset access if supported
+
+Destructive actions require confirmation.
+
+==================================================
+15. CUSTOMER ACCESS OVERRIDES
+==================================================
+
+The owner may need to grant a customer a temporary feature or plan override.
+
+Create controlled overrides.
+
+Example:
+
+Customer:
+John
+
+Plan:
+Beta
+
+Override:
+Automation = Enabled
+
+Expiration:
+Sep 30, 2026
+
+This should be stored as an explicit entitlement override.
+
+Do NOT modify the customer's plan just to grant one feature.
+
+Support:
+
+- Feature override
+- Usage limit override
+- Trial extension
+- Complimentary access
+
+Every override must be logged in the audit log.
+
+==================================================
+16. NOTIFICATIONS
+==================================================
+
+Create a dedicated:
+
+Notifications
+
+admin page.
+
+The owner should be able to configure platform notifications.
+
+Examples:
+
+- New customer
+- New payment
+- Failed payment
+- Subscription cancelled
+- Subscription upgraded
+- Subscription downgraded
+- Trial ending
+- Storage limit reached
+- AI usage limit reached
+- System error
+- Backup failed
+- Backup completed
+
+Allow:
+
+- Enable/disable notification
+- Notification channel
+- Recipient
+- Trigger
+
+Keep it simple and extensible.
+
+==================================================
+17. EMAIL TEMPLATES
+==================================================
+
+Create:
+
+Email Templates
+
+The owner should be able to manage transactional email templates.
+
+Examples:
+
+- Welcome email
+- Email verification
+- Password reset
+- Subscription created
+- Subscription upgraded
+- Subscription cancelled
+- Payment successful
+- Payment failed
+- Trial ending
+- Invoice/payment receipt
+- Account suspended
+- Account reactivated
+- Backup failure alert
+- Admin notification
+
+Each template should support:
+
+- Subject
+- HTML/body
+- Plain text fallback
+- Variables/placeholders
+
+Example variables:
+
+{{user_name}}
+{{user_email}}
+{{plan_name}}
+{{amount}}
+{{currency}}
+{{billing_date}}
+{{site_name}}
+
+Show available variables clearly.
+
+Do not allow arbitrary unsafe template execution.
+
+==================================================
+18. SMTP SETTINGS
+==================================================
+
+Create:
+
+SMTP Settings
+
+The owner should be able to configure:
+
+- SMTP host
+- Port
+- Username
+- Password/secret
+- Encryption
+- From name
+- From email
+- Reply-to
+
+Include:
+
+"Send Test Email"
+
+The password/secret must be masked and securely stored.
+
+Never expose SMTP credentials in frontend responses.
+
+If possible, encrypt secrets at rest.
+
+Do not log SMTP passwords.
+
+==================================================
+19. EMAIL DELIVERY STATUS
+==================================================
+
+Add basic email delivery monitoring.
+
+Show:
+
+- Sent
+- Delivered if provider supports it
+- Failed
+- Bounced if provider supports it
+
+Allow admin to inspect failed email events.
+
+Do not create fake delivery status when no email provider/webhook exists.
+
+Clearly distinguish demo/mock status from real provider status.
+
+==================================================
+20. BACKUPS
+==================================================
+
+Create:
+
+Backups
+
+The owner should be able to see:
+
+- Last backup
+- Backup status
+- Backup size
+- Created date
+- Retention status
+
+Actions:
+
+- Create Backup
+- Download Backup if securely supported
+- Restore Backup
+- Delete Backup
+
+Restore must require strong confirmation.
+
+For production, backups should be stored outside the application server when possible.
+
+Support configurable retention:
+
+7 days
+30 days
+90 days
+etc.
+
+Show:
+
+Backup successful
+Backup failed
+Backup in progress
+
+Do not pretend backups are real if the current environment does not implement them.
+
+If backup functionality is currently unavailable, clearly label it as unavailable/demo rather than faking success.
+
+==================================================
+21. SYSTEM HEALTH
+==================================================
+
+Keep:
+
+System Health
+
+Monitor:
+
+- API
+- Database
+- Storage
+- Background Jobs
+- Email Service
+- AI Service
+
+Use real health checks when available.
+
+If not implemented yet:
+
+Clearly label the data as DEMO.
+
+Never present fake health data as production monitoring.
+
+==================================================
+22. MAINTENANCE MODE
+==================================================
+
+Add a platform maintenance control.
+
+Owner can enable:
+
+Maintenance Mode
+
+Configuration:
+
+- Enabled/disabled
+- Maintenance message
+- Estimated return time if desired
+- Allow admin access during maintenance
+
+When enabled:
+
+Clients should see a proper maintenance page.
+
+Platform Owner/Admin should still be able to access the admin area.
+
+This must be enforced server-side.
+
+==================================================
+23. FEATURE FLAGS
+==================================================
+
+Create a simple platform-level feature flag system.
+
+Examples:
+
+new_editor
+ai_v2
+new_analytics
+new_media_manager
+
+Owner can:
+
+- Enable
+- Disable
+
+Optionally enable for:
+
+- All users
+- Specific plan
+- Specific customer
+
+Do not confuse feature flags with plan entitlements.
+
+Feature flag:
+"Is this feature deployed/enabled?"
+
+Plan entitlement:
+"Is this customer allowed to use it?"
+
+==================================================
+24. PLATFORM CONFIGURATION
+==================================================
+
+Create:
+
+Platform Settings
+
+Include only meaningful platform-level settings:
+
+- Platform name
+- Logo
+- Default timezone
+- Default locale
+- Default currency
+- Supported currencies
+- Supported countries
+- Maintenance mode
+- Default email sender
+- Registration enabled/disabled
+- Client signup enabled/disabled
+- New site creation enabled/disabled
+
+Do not put client-level settings here.
+
+==================================================
+25. ADMIN USERS
+==================================================
+
+Create an admin user management section if not already available.
+
+Owner should be able to manage:
+
+- Platform admins
+- Admin roles
+- Admin permissions
+- Active/inactive status
+
+Do not allow normal clients to create platform admins.
+
+Require strong confirmation for:
+
+- Creating admin
+- Removing admin privileges
+- Disabling owner-level access
+
+==================================================
+26. SECURITY
+==================================================
+
+Platform Admin is a highly privileged area.
+
+Implement:
+
+- Server-side authorization
+- Role-based access control
+- Permission checks
+- Secure sessions
+- CSRF protection where applicable
+- Rate limiting for sensitive actions
+- Audit logging
+- Secure secret storage
+- Confirmation for destructive actions
+
+Recommended:
+
+Two-factor authentication for OWNER / PLATFORM_ADMIN.
+
+Especially protect:
+
+- Billing
+- Payments
+- Plan changes
+- Coupons
+- SMTP
+- Backups
+- Admin users
+- Platform settings
+
+==================================================
+27. AUDIT LOG
+==================================================
+
+Keep Activity / Audit Log but make it useful.
+
+Prioritize actual admin actions over simple page views.
+
+Log:
+
+- Plan created
+- Plan updated
+- Price changed
+- Feature access changed
+- Customer suspended
+- Customer reactivated
+- Subscription changed
+- Coupon created
+- Coupon disabled
+- Payment refunded
+- SMTP settings changed
+- Email template changed
+- Backup created
+- Backup restored
+- Backup deleted
+- Maintenance mode enabled
+- Feature flag changed
+- Admin user created
+- Permission changed
+
+Each event should contain:
+
+- Action
+- Actor
+- Target
+- Date/time
+- Result
+- Relevant metadata
+
+Do not log passwords, API keys, SMTP secrets, or sensitive credentials.
+
+==================================================
+28. ADMIN NOTIFICATIONS / ALERTS
+==================================================
+
+Admin Overview should only show important alerts.
+
+Examples:
+
+Critical:
+Failed payments
+
+Warning:
+Subscriptions past due
+
+Warning:
+Backup failed
+
+Warning:
+Storage capacity issue
+
+Info:
+New customer registered
+
+Do not put every small event on the dashboard.
+
+==================================================
+29. SEARCH AND FILTERING
+==================================================
+
+Customers:
+Search by name/email.
+
+Sites:
+Search by site/domain/customer.
+
+Subscriptions:
+Filter by plan/status.
+
+Payments:
+Search by customer/invoice/transaction.
+
+Coupons:
+Search by code/status.
+
+Audit Log:
+Filter by actor/action/date/severity.
+
+==================================================
+30. DATA CONSISTENCY
+==================================================
+
+This is critical.
+
+Use centralized services/data.
+
+Never hardcode unrelated numbers inside components.
+
+For example:
+
+MRR must be calculated from active paid subscriptions.
+
+Active subscriptions must come from subscription records.
+
+Plan distribution must come from subscriptions.
+
+Total customers must come from customer records.
+
+Total sites must come from site records.
+
+Usage must come from usage records.
+
+Payment totals must come from payment records.
+
+All dashboards must use the same underlying data.
+
+==================================================
+31. CLIENT ↔ ADMIN INTEGRATION
+==================================================
+
+The Client Dashboard and Platform Admin Dashboard must remain separate at the UI/permission level but connected at the data/business-logic level.
+
+Example:
+
+Client:
+
+Beta
+Free
+
+Admin:
+
+Customer = John
+Plan = Beta
+Status = Active
+Price = CHF 0
+
+If owner changes Beta price:
+
+Admin:
+Beta = new price
+
+Client:
+Billing page automatically reflects the new configuration.
+
+If owner disables Automation for Beta:
+
+Beta client:
+Automation inaccessible.
+
+If owner enables Automation for Beta:
+
+Beta client:
+Automation becomes accessible.
+
+This must work without duplicating feature logic.
+
+==================================================
+32. PLAN CHANGE SAFETY
+==================================================
+
+Changing a plan should not accidentally break existing customers.
+
+If pricing or features change:
+
+- Apply changes according to subscription rules
+- Do not silently charge existing customers unexpectedly
+- Distinguish new pricing from existing subscription pricing when necessary
+- Keep historical payment records unchanged
+- Keep historical invoices unchanged
+- Log pricing changes
+
+==================================================
+33. CURRENCY / COUNTRY SAFETY
+==================================================
+
+Do not make pricing decisions solely from an unreliable IP lookup.
+
+Use:
+
+1. Account/billing country
+2. Explicit customer selection when appropriate
+3. IP geolocation only as a default suggestion
+
+Never allow the client to manipulate the final server-side price simply by changing frontend currency.
+
+The server must determine the final applicable price.
+
+==================================================
+34. CURRENT ADMIN NAVIGATION
+==================================================
+
+Organize the Platform Admin sidebar into logical groups.
+
+Suggested:
+
+OVERVIEW
+- Overview
+
+CUSTOMERS
+- Customers
+- Sites
+
+BILLING
+- Subscriptions
+- Payments
+- Plans & Pricing
+- Coupons
+
+PLATFORM
+- Usage / Analytics
+- Notifications
+- Email Templates
+- SMTP
+- Backups
+- System Health
+
+SECURITY
+- Activity / Audit Log
+- Admin Users
+
+SETTINGS
+- Platform Settings
+- Feature Flags
+
+Do not add unnecessary pages just for the sake of having more navigation.
+
+==================================================
+35. WHAT SHOULD BE REMOVED / NOT OVERBUILT
+==================================================
+
+Do NOT turn the Platform Admin dashboard into a huge analytics product.
+
+Remove unnecessary duplicate information from the Overview page.
+
+For example:
+
+Do not show detailed:
+- SEO metrics
+- Client article details
+- Client media details
+- Individual client comments
+- Detailed AI operations
+- Detailed traffic analytics
+
+Those belong to the Client Dashboard or dedicated admin pages.
+
+The Platform Overview should remain concise.
+
+==================================================
+36. MOCK DATA
+==================================================
+
+For development, mock data is acceptable.
+
+However, all mock data must be centralized and relational.
+
+Example:
+
+Customers
+Subscriptions
+Payments
+Sites
+Usage
+Plans
+Coupons
+Notifications
+Audit Logs
+
+must reference each other correctly.
+
+Do not create independent fake values for each page.
+
+For example:
+
+If there are:
+19 customers
+
+and:
+19 subscriptions
+
+make sure the subscription records actually belong to those customers.
+
+If:
+15 subscriptions are active
+
+MRR must be calculated from those active paid subscriptions.
+
+If:
+64 sites exist
+
+the Sites page and Overview must both show 64.
+
+If:
+Beta has Automation disabled
+
+a Beta customer must not be able to access Automation.
+
+==================================================
+37. ERROR / LOADING STATES
+==================================================
+
+Never show fake zero values when a real request failed.
+
+Bad:
+
+API failed
+Customers = 0
+
+Good:
+
+Unable to load customers
+[Retry]
+
+Use proper:
+
+- Loading
+- Empty
+- Error
+- Success
+
+states.
+
+==================================================
+38. RESPONSIVE UI
+==================================================
+
+Keep the existing visual language.
+
+Do not redesign the entire application.
+
+Use the existing:
+
+- Sidebar
+- Typography
+- Cards
+- Buttons
+- Badges
+- Icons
+- Colors
+- Spacing
+
+The Platform Admin should feel like the same product.
+
+Support:
+
+Desktop
+Tablet
+Mobile
+
+No horizontal overflow.
+
+==================================================
+39. IMPLEMENTATION PROCESS
+==================================================
+
+Before writing code:
+
+1. Inspect the existing architecture.
+2. Find authentication.
+3. Find current user roles.
+4. Find subscription models.
+5. Find plan configuration.
+6. Find payment/billing services.
+7. Find customer/site relationships.
+8. Find existing email functionality.
+9. Find existing storage/media functionality.
+10. Find existing database structure.
+11. Find existing admin/client routes.
+12. Reuse existing services wherever possible.
+
+Do not create duplicate models when an existing model already represents the same concept.
+
+==================================================
+40. FINAL TESTING
+==================================================
+
+Test these scenarios end-to-end.
+
+TEST 1:
+Create a new plan.
+
+Verify it appears in Client Billing.
+
+TEST 2:
+Change Pro price.
+
+Verify Client Billing uses the same pricing source.
+
+TEST 3:
+Disable Automation for Beta.
+
+Verify Beta users cannot access Automation directly by URL/API.
+
+TEST 4:
+Enable Automation for Beta.
+
+Verify Beta users can access it.
+
+TEST 5:
+Create coupon.
+
+Verify client checkout validates it.
+
+TEST 6:
+Expire coupon.
+
+Verify client cannot use it.
+
+TEST 7:
+Change country/currency.
+
+Verify the displayed pricing changes according to configured regional pricing.
+
+TEST 8:
+Try manipulating currency from frontend.
+
+Verify server still applies the correct configured price.
+
+TEST 9:
+Upgrade customer Beta → Pro.
+
+Verify:
+- Client plan changes
+- Admin subscription changes
+- Plan distribution changes
+- MRR changes where applicable
+- Audit log records the change
+
+TEST 10:
+Cancel subscription.
+
+Verify both Client and Admin reflect the same subscription state.
+
+TEST 11:
+Use owner account.
+
+Verify owner can access all CMS features without requiring a paid subscription.
+
+TEST 12:
+Login as normal client.
+
+Verify client cannot access platform admin routes.
+
+TEST 13:
+Change SMTP settings.
+
+Verify credentials are never exposed in API responses or UI.
+
+TEST 14:
+Create backup.
+
+Verify status is correctly represented.
+
+TEST 15:
+Enable maintenance mode.
+
+Verify clients see maintenance mode while owner can still access admin.
+
+TEST 16:
+Create an admin user.
+
+Verify permissions work correctly.
+
+TEST 17:
+Perform sensitive admin action.
+
+Verify audit log records it.
+
+==================================================
+41. CRITICAL ARCHITECTURE RULE
+==================================================
+
+There must be ONE source of truth for:
+
+Plans
+Pricing
+Currencies
+Entitlements
+Usage limits
+Subscriptions
+Payments
+Coupons
+Customers
+Sites
+
+Do not maintain separate Client and Admin versions of these systems.
+
+Conceptually:
+
+                    SHARED BACKEND
+                         |
+        ┌────────────────┴────────────────┐
+        |                                 |
+ CLIENT EXPERIENCE                PLATFORM ADMIN
+        |                                 |
+ My Sites                         All Customers
+ My Articles                      All Sites
+ My Media                         Subscriptions
+ My SEO                           Payments
+ My AI                            Plans
+ My Automation                    Pricing
+ My Subscription                  Coupons
+                                  Email
+                                  SMTP
+                                  Backups
+                                  System
+                                  Security
+
+Same data.
+Same business logic.
+Different permissions and UI.
+
+==================================================
+42. FINAL OBJECTIVE
+==================================================
+
+The final Platform Admin should allow the platform owner to control the SaaS itself, not manage individual client content.
+
+The owner must be able to control:
+
+1. Customers
+2. Sites
+3. Plans
+4. Pricing
+5. Feature access
+6. Usage limits
+7. Subscriptions
+8. Payments
+9. Coupons
+10. Countries
+11. Currencies
+12. Regional pricing
+13. Tax configuration
+14. Notifications
+15. Email Templates
+16. SMTP
+17. Backups
+18. System Health
+19. Maintenance Mode
+20. Feature Flags
+21. Admin Users
+22. Audit Logs
+23. Platform Settings
+24. Internal owner access
+
+Keep the UI simple.
+
+Keep the architecture centralized.
+
+Keep client and admin experiences separated by role.
+
+Do not duplicate the billing/subscription system.
+
+Do not hardcode access rules inside individual pages.
+
+Do not rely on frontend-only restrictions.
+
+Do not create fake independent data.
+
+Do not break the existing Client Dashboard.
+
+Priorities:
+
+1. Security
+2. Shared architecture
+3. Correct entitlements
+4. Correct billing/subscription behavior
+5. Data consistency
+6. Admin control
+7. Simple UI
+8. Visual polish
+
+Before finishing, inspect and test the complete Client → Subscription → Entitlement → Admin flow so that changing something from Platform Admin actually affects the Client experience correctly and safely.

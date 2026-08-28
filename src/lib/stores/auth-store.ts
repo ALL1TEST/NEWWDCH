@@ -13,6 +13,7 @@ export interface CurrentUser {
   avatarUrl?: string | null;
   role: UserRole;
   status: string;
+  billingMode: 'EXTERNAL' | 'INTERNAL' | 'EXEMPT';
   pagePermissions?: string[] | null;
   createdAt?: string | null;
   lastLoginAt?: string | null;
@@ -27,6 +28,7 @@ interface ApiUser {
   bio?: string | null;
   role: string;
   status: string;
+  billingMode?: string;
   emailVerified?: boolean;
   mfaEnabled?: boolean;
   pagePermissions?: string[] | null;
@@ -38,6 +40,7 @@ interface ApiUser {
 }
 
 function mapApiUser(raw: ApiUser): CurrentUser {
+  const billingMode = (raw.billingMode === 'INTERNAL' || raw.billingMode === 'EXEMPT' ? raw.billingMode : 'EXTERNAL') as 'EXTERNAL' | 'INTERNAL' | 'EXEMPT';
   return {
     id: raw.id,
     email: raw.email,
@@ -45,6 +48,7 @@ function mapApiUser(raw: ApiUser): CurrentUser {
     avatarUrl: raw.avatar ?? null,
     role: raw.role as UserRole,
     status: raw.status,
+    billingMode,
     pagePermissions: Array.isArray(raw.pagePermissions) ? raw.pagePermissions : null,
     createdAt: raw.createdAt ?? null,
     lastLoginAt: raw.lastLoginAt ?? null,
