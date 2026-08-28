@@ -6020,3 +6020,93 @@ Stage Summary:
 - Files touched (1): `src/modules/platform/platform-notifications.tsx` — full UI/UX redesign (577 → ~470 lines). Preserved verbatim: useInfiniteQuery + getApi/postApi/deleteApi + markReadMutation + markAllReadMutation + deleteAllMutation + IntersectionObserver + ConfirmDialog + readIds local override + toast + PlatformPageHeader + requirePlatformAdmin auth. New UI/UX: category filter toolbar (7 tabs derived from event id prefix) + client-side search + date grouping (Today/Yesterday/Earlier this week/Older) + compact single-Card grouped list + type-icon avatars (sky/emerald/amber/rose/orange — no blue/indigo) + unread left-accent-bar + dot + bold title + read/unread hover actions (mark read/unread + delete, both local-override, no API change) + contextual empty state + responsive toolbar. Removed the visually-repetitive "Event Types" reference Card (categories now surfaced via filter tabs) and the ResizeObserver Read More/Less (replaced with line-clamp-2 — the dataset's messages are all 1-sentence, so no information lost).
 - Results: the Notifications page is now a clean, modern, premium SaaS admin page — single Card with date-grouped compact rows, subtle unread treatment, a 7-tab category filter + search toolbar, and minimal hover actions — visually consistent with platform-overview/customers/sites/payments/coupons. All underlying functionality preserved: fetching, read/unread, mark read/all, delete single/all, filtering (category + search + unread), counts, API, auth, permissions. No console errors, responsive on mobile (no horizontal overflow).
 - Verification: lint clean (0 new errors); agent-browser confirms header/subtitle/actions, 7 filter tabs, 4 date groups, category filter works (Customers→17 customer events), search works (payment→payment events), mark-read works (79→78 unread, 75→74 dots), hover actions present (Mark as unread + Delete), responsive 375x667 (no overflow), no page/console errors, auth preserved.
+
+
+---
+Task ID: 49
+Agent: main (orchestrator)
+Task: Redesign System Health page into a real operational monitoring/diagnostics page (not just UI polish). Remove demo banner + mock all-operational values. Add overall summary, per-service real checks with metrics, click-to-inspect service details, recent incidents from ErrorLog, health-check history from SystemMetric (with empty state). Keep auth/permissions/APIs/architecture intact. Data consistency: Overview summary and System Health page must share the same checker.
+
+Work Log:
+- Read existing implementation: platform-system-health.tsx (demo banner + mock all-operational values), /api/platform/admin/system-health/route.ts (returned getSystemHealth() mock), platform-data.ts getSystemHealth() (returned 6 hardcoded "operational" items), platform-overview.tsx System Health section (rendered the mock with "(demo)" subtitle).
+- Audited real data sources available in the existing Prisma schema:
+  - db.$queryRaw`SELECT 1` (Database latency + connection)
+  - fs.stat(db/custom.db) (Database file size)
+  - db.media.aggregate({_sum: { size: true }}) (real Storage used bytes)
+  - fs.writeFile/readFile/unlink probe to public/uploads (Storage read/write availability)
+  - db.queueJob.groupBy({ by: ['status'] }) + count by FAILED within 1h/24h + findFirst completedAt (Background Jobs queue depth, running, completed, failed, last successful run)
+  - db.smtpSetting.findFirst({ isActive: true, isDefault: true }) + db.errorLog.count (Email provider/port/encryption + recent errors)
+  - db.aiProvider.findFirst({ isActive: true, isDefault: true }) with connectionStatus/latencyMs/lastHealthCheckAt/lastError persisted fields (AI Service — reflects the result of the last real provider health check run from the AI settings page; not re-triggered here to avoid slow external HTTP calls on every page load)
+  - db.errorLog.findMany (Recent Incidents — WARNING/ERROR/FATAL within 7d, with isResolved/resolvedAt for duration)
+  - db.systemMetric (Health Check History — recorded snapshots with metricType 'service_health:<key>')
+
+- Created /home/z/my-project/src/lib/platform/system-health.ts (new, server-only):
+  - Types: ServiceHealthKey, ServiceStatus ('operational'|'degraded'|'down'|'unknown'), ServiceMetric, ServiceHealthCheck (with metrics[] + lastError + lastCheckedAt + category), HealthIncident (with service/severity/status/startedAt/resolvedAt/durationSec/description), HealthHistoryRow, HealthSnapshot (overall + healthyCount + lastCheckedAt + services[] + incidents[] + history[] + historyEnabled).
+  - 6 real per-service checkers (checkApi/checkDatabase/checkStorage/checkJobs/checkEmail/checkAi). Each returns ServiceHealthCheck with REAL status derived from a live probe + REAL latency + REAL metrics array + lastError + lastCheckedAt.
+  - rollUpOverall(): any 'down' → major_outage; any 'degraded' or 'unknown' → degraded; else operational.
+  - loadIncidents(): reads ErrorLog (WARNING/ERROR/FATAL, last 7d, take 12). Maps to HealthIncident with severity (warning/critical), status (resolved/investigating), startedAt/resolvedAt/durationSec/description.
+  - recordHistorySnapshot(): writes 6 SystemMetric rows per snapshot (metricType='service_health:<key>', value=1|0.5|0|-1, labels JSON with status/latencyMs/message). Rate-limited to 1 snapshot per minute via findFirst on recent rows. Best-effort (try/catch swallows errors so history-writing never breaks the main response).
+  - loadHistory(): reads last 144 SystemMetric rows of metricType startsWith 'service_health:', groups by createdAt, builds HealthHistoryRow[] (last 24 snapshots).
+  - runHealthChecks(): Promise.all of 6 checkers + loadIncidents + recordHistorySnapshot + loadHistory → assembles full HealthSnapshot.
+  - getSystemHealthSummary(): delegates to runHealthChecks() and projects to SystemHealthItem[] (the shape Overview already consumes), so Overview and System Health share the SAME checker.
+
+- Modified /home/z/my-project/src/lib/platform/platform-data.ts:
+  - Extended SystemHealthItem.status union to include 'unknown' (for "not configured / not yet checked").
+  - Kept getOverview() SYNCHRONOUS + client-bundle-safe. Replaced the mock `systemHealth: getSystemHealth()` array with `systemHealth: []` (placeholder). The Overview API route overlays the real live summary before returning. This is critical: a runtime `await import('./system-health')` inside platform-data.ts would pull `fs`+`db` into the client bundle via platform-settings.tsx → platform-data.ts (Turbopack statically analyzes dynamic imports). Verified by hitting the API: initial attempt returned 500 with "Module not found: Can't resolve 'fs'" — fixed by keeping platform-data.ts pure.
+  - Removed the old mock getSystemHealth() wrapper (no external callers — only getOverview used it).
+
+- Modified /home/z/my-project/src/app/api/platform/admin/overview/route.ts: calls getOverview() (sync, returns empty systemHealth[]) then `await getSystemHealthSummary()` and spreads `{ ...overview, systemHealth: summary }` into the response. Server-only call — does not leak into client bundle.
+
+- Rewrote /home/z/my-project/src/app/api/platform/admin/system-health/route.ts:
+  - GET → runHealthChecks() (returns full snapshot for the System Health page).
+  - POST → runHealthChecks() (explicit "Refresh checks" trigger for the page's Refresh button — re-runs live checks + records a fresh history snapshot if the per-minute throttle elapsed).
+  - Both require requirePlatformAdmin (auth preserved).
+
+- Extended HealthBadge in shared.tsx to support 'unknown' status (neutral zinc dot + "Unknown" label) so Overview and System Health render the new status visually.
+
+- Updated platform-overview.tsx System Health section subtitle from "Platform infrastructure status (demo)" → "Platform infrastructure status". The existing "Details →" link to System Health page stays.
+
+- Rewrote /home/z/my-project/src/modules/platform/platform-system-health.tsx (full redesign):
+  - Header: "System Health" + subtitle "Real-time platform infrastructure monitoring." + "Refresh checks" button (right side). Refresh button: useMutation POST → on success setQueryData + toast.success("Health checks refreshed."); onError toast.error; disabled while pending; shows Loader2 spinner + "Checking…" text during request.
+  - OverallSummaryCard: big colored icon (emerald/amber/rose) + overall label ("All systems operational"/"Platform degraded"/"Major outage") + overall Badge + "X of Y services healthy · Last checked <relative>" + per-service legend strip (colored dot + label) for at-a-glance scanning.
+  - Services grid (1 col mobile / 2 col sm / 3 col lg): 6 ServiceCards. Each card: service icon + label + ChevronRight, HealthBadge, latency + "Checked <relative>", short health message (line-clamp-2), 2-col compact metrics grid (first 4 metrics). Card has role="button" + tabIndex=0 + onClick + onKeyDown (Enter/Space) → opens ServiceDetailsSheet.
+  - ServiceDetailsSheet (Sheet, side=right, w-full sm:max-w-2xl, scrollable): shows service label + icon + HealthBadge + "Last checked <relative>" + HEALTH MESSAGE + LAST ERROR (rose-tinted block if present) + METRICS list (divided border, label/value rows) + Category + Response time cards + tip to open relevant settings page for deeper checks.
+  - Recent Incidents Card: title "Recent Incidents" + description. If incidents.length===0 → EmptyState with CheckCircle2 icon + "No recent incidents — the platform has been stable." Else: list of IncidentRow (severity badge + service name + status badge + description + started/resolved/duration meta line).
+  - Health Check History Card: title "Health Check History" + description. If history.length===0 → EmptyState with Activity icon + "No health-check history yet. Click \"Refresh checks\" — each run records a snapshot so history builds up over time." Else: Table (Time | API | Database | Storage | Jobs | Email | AI columns) inside max-h-80 ScrollArea; each cell shows StatusGlyph (✓ emerald / ⚠ amber / ✕ rose / ? zinc).
+  - PageSkeleton: full-page loading state (overall card skeleton + 6 service card skeletons + incidents skeleton + history skeleton).
+  - ErrorState fallback if the GET fails. EmptyState imported from shared. formatRelative from shared. formatDurationLocal inlined (NOT imported from system-health.ts — server-only module, importing it into client bundle would re-introduce the fs/db leak).
+  - Removed the DemoBanner component entirely.
+  - Type-only imports from '@/lib/platform/system-health' (HealthSnapshot etc.) are safe (erased at compile time).
+
+- Fixed a runtime bug discovered during agent-browser verification: SQLite doesn't support Prisma's `mode: 'insensitive'` option on string filters (PostgreSQL-only feature). The Email check's `db.errorLog.count({ where: { OR: [{ module: { contains: 'smtp', mode: 'insensitive' } }] } })` threw "Unknown argument `mode`". Removed all 7 `mode: 'insensitive'` usages in system-health.ts (SQLite is case-insensitive by default for `contains`).
+
+VERIFICATION (agent-browser, Platform Admin = platform@example.com/platform123, desktop 1280x800 + mobile 375x812):
+- API route: GET /api/platform/admin/system-health → 200 (returns full snapshot). POST → 200 (Refresh trigger). Both unauthenticated → 401 (auth preserved).
+- Overview route: GET /api/platform/admin/overview → 200 (systemHealth overlaid with live summary).
+- Real data confirmed via API response:
+  - API: operational, 7-31ms (real — db.user.count() timing)
+  - Database: operational, 7-31ms (real — SELECT 1 timing), DB size 2.3 MB (real — fs.stat of db/custom.db), Errors (24h) 0 (real — ErrorLog count)
+  - Storage: operational (real — fs probe to public/uploads succeeded), Used 5.6 MB (real — Media._sum.size), Available 10 GB (env STORAGE_LIMIT_BYTES default), Usage 0.1%, Read/write Available
+  - Background Jobs: operational, 20-50ms (real — QueueJob groupBy), Queue (waiting) 0, Running 0, Completed 0, Failed (24h) 0, Last success —
+  - Email Service: unknown (REAL — no default SMTP configured in this env), message "No default SMTP configuration found. Configure one in SMTP Settings.", Configuration "Not configured", Errors (24h) 0
+  - AI Service: down (REAL — persisted connectionStatus=ERROR from a previous provider health check that returned HTTP 403 "unsupported_country_region_territory"), latencyMs 108 (persisted from last check), lastError "HTTP 403: Country, region, or territory not supported", Provider "OpenAI Test", Kind OPENAI, Active models 4
+  - Overall: major_outage (because AI is down), 4/6 healthy
+- Recent Incidents: empty state shown ("No recent incidents — the platform has been stable.") — no ErrorLog rows match. Real query, no fake incidents.
+- Health Check History: REAL rows now present (just now / 1m ago / 2m ago) — each page load + Refresh records a snapshot (rate-limited 1/min). Status glyphs (✓/⚠/✕/?) render in cells. Empty state message verified when history is empty.
+- Service details Sheet: clicked AI Service card → Sheet slides in from right (sm:max-w-2xl) showing: HealthBadge "Down" + "Last checked just now" + HEALTH MESSAGE (full 403 error text) + LAST ERROR block (rose-tinted) + full METRICS list (Provider/Kind/Active models/Latency/Last check/Errors 24h) + Category (Integrations) + Response time (108ms) + tip. Close button (X) works, Escape closes.
+- Refresh button: clicked → button shows Loader2 spinner + "Checking…" text (captured at t=50ms) + disabled. POST returns 200. Success toast "Health checks refreshed." appears (captured at t=1500ms). Cached snapshot updated in place via queryClient.setQueryData → "Last checked just now" timestamp refreshed.
+- Data consistency (requirement #8): Navigated to Overview → its System Health summary shows the EXACT same statuses as the System Health page (API/Database/Storage/Jobs: Operational; Email: Unknown; AI: Down). Latency values differ slightly per call (each call re-runs live timing) but statuses match. The "(demo)" subtitle on Overview is gone.
+- Demo banner: confirmed removed ("NO DEMO BANNER" via DOM text search).
+- No false "Operational" reporting: Email shows Unknown (not Operational), AI shows Down (not Operational) — exactly the requirement "Do NOT falsely report it as Operational".
+- Console: no errors. Mobile 375×812: no horizontal scroll (bodyScrollW 375 = innerW 375), h1="System Health" renders, layout responsive (1-col cards on mobile, 3-col on desktop).
+- Lint: 0 new errors (only the 4 pre-existing baseline errors in content-create-page.tsx/content-edit-page.tsx/seo-broken-links-page.tsx remain — unrelated to this task).
+
+Stage Summary:
+- Files created (1): src/lib/platform/system-health.ts (real health-check service — 6 per-service checkers + incidents + history + summary).
+- Files modified (4): src/lib/platform/platform-data.ts (SystemHealthItem.status += 'unknown'; getOverview sync + client-bundle-safe; mock getSystemHealth removed), src/app/api/platform/admin/overview/route.ts (overlays live health summary), src/app/api/platform/admin/system-health/route.ts (GET + POST → runHealthChecks), src/modules/platform/platform-system-health.tsx (full redesign), src/modules/platform/shared.tsx (HealthBadge += 'unknown'), src/modules/platform/platform-overview.tsx (subtitle drop "(demo)").
+- Architecture preserved: Next.js App Router, requirePlatformAdmin auth, ApiResponse envelope, useQuery/useMutation/react-query, shadcn/ui Card/Badge/Button/Sheet/Table/ScrollArea/Skeleton, sonner toast, lucide-react icons. No new packages installed. No DB schema changes (uses existing Prisma models: User, Media, QueueJob, SmtpSetting, AiProvider, AiLog, AuditLog, ErrorLog, SystemMetric).
+- Data consistency: Overview's System Health summary and the System Health page both read from the same `runHealthChecks()` checker (Overview via the route-overlayed getSystemHealthSummary(); System Health via the GET endpoint's full snapshot). They can never disagree about a service's status.
+- Real, not mocked: API/Database/Storage/Jobs/Email/AI statuses all derive from live probes or persisted connection states. No service is reported as "Operational" unless a real check actually succeeded. Email (no SMTP configured) → Unknown. AI (persisted 403 error from last provider check) → Down with the real 403 message surfaced in the service details Sheet.
+- Incidents: real ErrorLog query (last 7 days, WARNING/ERROR/FATAL). Empty state shown when no incidents — no fake incidents generated.
+- History: real SystemMetric rows (metricType 'service_health:*'). Each Refresh/page-load records a snapshot (rate-limited 1/min). After 2-3 refreshes the table shows real rows with status glyphs. Empty state shown when no history exists.
+- Final result answers all 8 user questions: Is the platform healthy right now? (Overall summary) Which services are healthy? (4/6) Which have problems? (Email unknown, AI down) How fast are they responding? (latency per service) When were they last checked? (relative timestamp) What incidents happened? (Recent Incidents section) What errors are occurring? (lastError in service details Sheet) Can I inspect a specific service? (click → Sheet).

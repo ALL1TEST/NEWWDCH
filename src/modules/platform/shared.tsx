@@ -147,11 +147,12 @@ export function CustomerStatusBadge({ status }: { status: string }) {
 
 // -------------------- Health badge --------------------
 
-export function HealthBadge({ status }: { status: 'operational' | 'degraded' | 'down' }) {
+export function HealthBadge({ status }: { status: 'operational' | 'degraded' | 'down' | 'unknown' }) {
   const map = {
     operational: { dot: 'bg-emerald-500', label: 'Operational', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 border-0' },
     degraded: { dot: 'bg-amber-500', label: 'Degraded', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 border-0' },
     down: { dot: 'bg-rose-500', label: 'Down', cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400 border-0' },
+    unknown: { dot: 'bg-zinc-400', label: 'Unknown', cls: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-400 border-0' },
   };
   const s = map[status];
   return (

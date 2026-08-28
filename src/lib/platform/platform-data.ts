@@ -110,7 +110,8 @@ export interface AuditEntry {
 export interface SystemHealthItem {
   key: string;
   label: string;
-  status: 'operational' | 'degraded' | 'down';
+  // 'unknown' = service exists but is not configured / not yet checked.
+  status: 'operational' | 'degraded' | 'down' | 'unknown';
   latencyMs: number;
   note: string;
 }
@@ -542,7 +543,11 @@ export function getOverview(): PlatformOverview {
     recentPayments,
     usage,
     alerts: getAlerts(),
-    systemHealth: getSystemHealth(),
+    // Placeholder — the overview API route overlays the real
+    // (live) health summary here before returning, so that this
+    // module does not pull server-only deps (fs, db) into the
+    // client bundle via platform-settings.tsx.
+    systemHealth: [],
   };
 }
 
@@ -643,16 +648,11 @@ export function getUsage(): PlatformUsage {
   };
 }
 
-export function getSystemHealth(): SystemHealthItem[] {
-  return [
-    { key: 'api', label: 'API', status: 'operational', latencyMs: 42, note: 'All endpoints responding' },
-    { key: 'database', label: 'Database', status: 'operational', latencyMs: 8, note: 'SQLite — healthy' },
-    { key: 'storage', label: 'Storage', status: 'operational', latencyMs: 15, note: 'Local storage mounted' },
-    { key: 'jobs', label: 'Background Jobs', status: 'operational', latencyMs: 0, note: 'Queue worker running' },
-    { key: 'email', label: 'Email Service', status: 'operational', latencyMs: 320, note: 'SMTP connected' },
-    { key: 'ai', label: 'AI Service', status: 'operational', latencyMs: 540, note: 'Provider reachable' },
-  ];
-}
+// Note: the previous mock implementation was removed. The real,
+// live health-check service lives in ./system-health.ts (server-only,
+// imports fs + db). It is called directly by the Overview API route
+// and the System Health API route, NOT from here, so this in-memory
+// data module stays client-bundle-safe.
 
 export function getAlerts(): PlatformAlert[] {
   const s = store();
