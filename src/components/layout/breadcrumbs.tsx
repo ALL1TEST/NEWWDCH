@@ -226,6 +226,20 @@ export function Breadcrumbs() {
     return items;
   }, [currentModule, currentItemId, currentSubPage, isAllSites]);
 
+  // Platform Admin modules (e.g. platform-overview, platform-backups,
+  // platform-smtp, platform-email-templates, platform-customer-detail, …).
+  // The topbar MUST stay visible so the header height/spacing/layout is
+  // preserved (hasBreadcrumb returns TRUE for these — see above), but NO
+  // route/page identifier text is rendered. The area where the route name
+  // ("platform-overview", "platform-backups", …) used to appear remains
+  // empty. The "All Sites" site-context prefix is also irrelevant for
+  // platform admins (they manage customers, not sites), so it is removed
+  // too. This applies to EVERY platform-* module and all of its sub-pages
+  // / detail views.
+  if (currentModule && currentModule.startsWith('platform-')) {
+    return null;
+  }
+
   // Modules that should NOT render a topbar breadcrumb — the topbar keeps
   // ONLY the "All Sites" selector for these (no breadcrumb path next to it):
   //   - Standalone pages with no sub-pages & no hierarchy to show:
