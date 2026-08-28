@@ -103,8 +103,12 @@ export function UserProfileMenu({
   const setLocale = useLocaleStore((s) => s.setLocale);
   // Active plan — drives the colored ring on the header avatar so the
   // dropdown header's avatar matches the top-right topbar avatar trigger
-  // exactly (same ring color/thickness/offset).
+  // exactly (same ring color/thickness/offset). Platform admins
+  // (OWNER / PLATFORM_ADMIN) have INTERNAL billing and no personal
+  // subscription, so the plan-derived ring + PlanBadge are suppressed
+  // for them — a neutral ring is used instead and no badge is shown.
   const { currentPlan } = useSubscriptionStore();
+  const isPlatformStaff = user?.role === 'OWNER' || user?.role === 'PLATFORM_ADMIN';
   // Theme — same next-themes state the old topbar ThemeToggle used. The
   // dropdown is now the single in-header access point for the theme
   // control (the standalone topbar toggle was removed to avoid a
@@ -188,7 +192,8 @@ export function UserProfileMenu({
                 header of the open menu, matching the reference layout. */}
             <Avatar className={cn(
               'h-11 w-11 shrink-0 rounded-full ring-2 ring-offset-2 ring-offset-background',
-              getPlanBadgeStyle(currentPlan).ring,
+              // Platform staff: neutral ring (no plan-colored ring).
+              isPlatformStaff ? 'ring-border' : getPlanBadgeStyle(currentPlan).ring,
             )}>
               <AvatarImage
                 src={user?.avatarUrl ?? undefined}
@@ -210,7 +215,9 @@ export function UserProfileMenu({
                 <p className="truncate text-sm font-medium leading-5">
                   {user?.name ?? 'User'}
                 </p>
-                <PlanBadge className="shrink-0" />
+                {/* Plan badge is hidden for platform staff (they have no
+                    personal subscription — INTERNAL billing bypass). */}
+                {!isPlatformStaff && <PlanBadge className="shrink-0" />}
               </div>
               <p className="truncate text-xs leading-4 text-muted-foreground">
                 {user?.email ?? ''}
@@ -310,15 +317,23 @@ export function UserProfileMenu({
         </div>
         <DropdownMenuSeparator />
 
-        {/* 5 — Manage Subscription → existing billing module */}
-        <DropdownMenuItem
-          className="cursor-pointer"
-          onClick={() => handleNavigate('billing')}
-        >
-          <CreditCard className="h-4 w-4" />
-          Manage Subscription
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
+        {/* 5 — Manage Subscription → existing billing module. Hidden for
+            platform staff (OWNER / PLATFORM_ADMIN) because they have
+            INTERNAL billing — they are the SaaS owner/operator, not a
+            paying client, so a "Manage Subscription" action does not
+            apply to them. */}
+        {!isPlatformStaff && (
+          <>
+            <DropdownMenuItem
+              className="cursor-pointer"
+              onClick={() => handleNavigate('billing')}
+            >
+              <CreditCard className="h-4 w-4" />
+              Manage Subscription
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
 
         {/* 6 — Log out (destructive, existing auth-store handler) */}
         <DropdownMenuItem

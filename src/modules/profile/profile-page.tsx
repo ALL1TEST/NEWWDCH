@@ -43,6 +43,12 @@ export function ProfilePage() {
   const subscriptionStatus = useSubscriptionStore((s) => s.status);
   const navigate = useNavigationStore((s) => s.navigate);
 
+  // Platform staff (OWNER / PLATFORM_ADMIN) have INTERNAL billing — no
+  // personal subscription. The plan badge + Subscription card + Manage
+  // Billing action are hidden for them; only account/security info is
+  // shown.
+  const isPlatformStaff = user?.role === 'OWNER' || user?.role === 'PLATFORM_ADMIN';
+
   // Personal info
   const [name, setName] = useState(user?.name ?? '');
   const email = user?.email ?? '';
@@ -152,12 +158,16 @@ export function ProfilePage() {
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-semibold">{user.name}</h2>
-                <Badge
-                  variant="outline"
-                  className={`text-xs font-semibold ${getPlanBadgeClasses(currentPlan.badgeVariant)}`}
-                >
-                  {currentPlan.name}
-                </Badge>
+                {/* Plan badge hidden for platform staff (no personal
+                    subscription). */}
+                {!isPlatformStaff && (
+                  <Badge
+                    variant="outline"
+                    className={`text-xs font-semibold ${getPlanBadgeClasses(currentPlan.badgeVariant)}`}
+                  >
+                    {currentPlan.name}
+                  </Badge>
+                )}
               </div>
               <p className="text-sm text-muted-foreground mt-0.5">{user.email}</p>
             </div>
@@ -194,38 +204,41 @@ export function ProfilePage() {
         </CardContent>
       </Card>
 
-      {/* Subscription */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t('profile.subscription')}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">{t('profile.currentPlan')}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="font-semibold">{currentPlan.name}</span>
-                <Badge variant="outline" className={`text-[10px] font-semibold ${getPlanBadgeClasses(currentPlan.badgeVariant)}`}>
-                  {currentPlan.name}
-                </Badge>
+      {/* Subscription — hidden for platform staff (INTERNAL billing,
+          no personal subscription). */}
+      {!isPlatformStaff && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t('profile.subscription')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">{t('profile.currentPlan')}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="font-semibold">{currentPlan.name}</span>
+                  <Badge variant="outline" className={`text-[10px] font-semibold ${getPlanBadgeClasses(currentPlan.badgeVariant)}`}>
+                    {currentPlan.name}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {currentPlan.price === 0
+                    ? t('billing.free')
+                    : `${currentPlan.price} ${currentPlan.currency}/${currentPlan.interval}`}
+                </p>
               </div>
-              <p className="text-sm text-muted-foreground">
-                {currentPlan.price === 0
-                  ? t('billing.free')
-                  : `${currentPlan.price} ${currentPlan.currency}/${currentPlan.interval}`}
-              </p>
+              <div className="flex items-center gap-2">
+                <Badge variant={subscriptionStatus === 'active' ? 'default' : 'outline'} className="capitalize">
+                  {subscriptionStatus}
+                </Badge>
+                <Button size="sm" variant="outline" onClick={handleManageBilling}>
+                  {t('billing.manage')}
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant={subscriptionStatus === 'active' ? 'default' : 'outline'} className="capitalize">
-                {subscriptionStatus}
-              </Badge>
-              <Button size="sm" variant="outline" onClick={handleManageBilling}>
-                {t('billing.manage')}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Change Password */}
       <Card>

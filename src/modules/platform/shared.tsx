@@ -46,12 +46,7 @@ export function PlatformPageHeader({
           </Button>
         )}
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-foreground">{title}</h1>
-            <Badge variant="outline" className="text-[10px] font-semibold border-primary/30 text-primary bg-primary/5">
-              PLATFORM
-            </Badge>
-          </div>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">{title}</h1>
           {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
         </div>
       </div>

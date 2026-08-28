@@ -92,9 +92,12 @@ export function canAccessPage(
   // OWNER has full platform + client access (billing bypass).
   if (role === 'OWNER') return true;
 
-  // PLATFORM_ADMIN sees only the Platform Admin experience.
+  // PLATFORM_ADMIN sees only the Platform Admin experience, plus the
+  // shared 'profile' account-settings page (name / email / change
+  // password / account info — no client subscription controls shown to
+  // platform staff).
   if (role === 'PLATFORM_ADMIN') {
-    return isPlatformPage(pageKey);
+    return isPlatformPage(pageKey) || pageKey === 'profile';
   }
 
   // Client roles must never reach platform pages.

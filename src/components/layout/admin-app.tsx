@@ -16,10 +16,14 @@ export default function AdminApp() {
 
   // PLATFORM_ADMIN and OWNER users land on the Platform Overview by default
   // (the hash defaults to 'dashboard' which is a client page they
-  // cannot access). Redirect once on mount.
+  // cannot access). Redirect once on mount. The 'profile' page is a
+  // shared account-settings page accessible to platform staff too
+  // (name / email / change-password / account info) — it is excluded
+  // from the redirect so the profile menu's "Profile" action works for
+  // platform admins.
   useEffect(() => {
     const isPlatformStaff = user?.role === 'PLATFORM_ADMIN' || user?.role === 'OWNER';
-    if (isPlatformStaff && !isPlatformPage(currentModule)) {
+    if (isPlatformStaff && !isPlatformPage(currentModule) && currentModule !== 'profile') {
       navigate('platform-overview');
     }
     // CLIENT roles that somehow land on a platform page fall back to

@@ -166,28 +166,16 @@ export function LoginScreen() {
                   Author
                 </Button>
               </div>
-              {/* Platform Owner — the SaaS owner. OWNER role with an
-                  INTERNAL billing bypass: full platform access, all
-                  features, not counted as a paying customer. Kept
-                  visually distinct (full-width, primary-tinted). */}
+              {/* Platform Admin — staff access to the Platform Admin
+                  dashboard. OWNER role with INTERNAL billing bypass. The
+                  owner@example.com / owner123 credentials still work via
+                  the email/password fields — only the demo quick-fill
+                  button is removed. */}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="h-8 w-full text-[11px] mt-1.5 border-primary/40 text-primary hover:bg-primary/5"
-                onClick={() => {
-                  setEmail('owner@example.com');
-                  setPassword('owner123');
-                  clearError();
-                }}
-              >
-                Platform Owner (SaaS Owner)
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 w-full text-[11px] mt-1.5"
                 onClick={() => {
                   setEmail('platform@example.com');
                   setPassword('platform123');
