@@ -7,18 +7,18 @@
 // metrics independently.
 // ============================================================
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import {
   Users, CreditCard, DollarSign, Globe, TrendingUp, Server,
   HeartPulse, AlertCircle, AlertTriangle, Info, ArrowRight, FileText,
-  Sparkles, HardDrive, Activity, Cpu,
+  Sparkles, HardDrive, Activity, Cpu, Loader2,
 } from 'lucide-react';
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
@@ -37,7 +37,32 @@ export function PlatformOverviewModule() {
     ['platform-overview'],
   );
   const navigate = useNavigationStore((s) => s.navigate);
-  const qc = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Refresh handler: re-fetches the Overview dataset from
+  // /api/platform/admin/overview. Because every metric, chart, list and
+  // alert on this page derives from the single `data` object, one refetch
+  // refreshes everything (KPIs, Revenue Overview, Subscription Overview,
+  // Recent Customers, Recent Payments, Platform Usage, Admin Alerts,
+  // System Health). Shows a loading state, prevents duplicate refreshes
+  // while one is in flight, restores the normal button state afterwards
+  // and surfaces errors via toast — without reloading the browser page.
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      const result = await refetch();
+      if (result.isError) {
+        toast.error('Could not refresh overview. Please try again.');
+      } else {
+        toast.success('Overview data refreshed.');
+      }
+    } catch {
+      toast.error('Could not refresh overview. Please try again.');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -67,8 +92,11 @@ export function PlatformOverviewModule() {
         title="Platform Overview"
         subtitle="Monitor customers, subscriptions, revenue, usage, and platform health."
         actions={
-          <Button variant="outline" size="sm" onClick={() => qc.invalidateQueries({ queryKey: ['platform-overview'] })}>
-            <Activity className="h-4 w-4 mr-1.5" /> Refresh
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
+            {isRefreshing
+              ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              : <Activity className="h-4 w-4 mr-1.5" />}
+            {isRefreshing ? 'Refreshing…' : 'Refresh'}
           </Button>
         }
       />

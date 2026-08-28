@@ -37,7 +37,12 @@ export const PLATFORM_PAGES = [
   { key: 'platform-payments', label: 'Payments', icon: 'Receipt' },
   { key: 'platform-plans', label: 'Plans & Pricing', icon: 'Tags' },
   { key: 'platform-coupons', label: 'Coupons', icon: 'Ticket' },
-  { key: 'platform-usage', label: 'Usage / Analytics', icon: 'BarChart3' },
+  // NOTE: 'platform-usage' (Usage / Analytics) was intentionally removed
+  // from the Platform Admin navigation. The same usage metrics are already
+  // surfaced on the Platform Overview page (Total Sites, Articles, AI
+  // Articles, AI Words, Media Storage, Automation Runs), which is now the
+  // single source of truth for platform-level usage. The underlying usage
+  // API + PlatformUsage type are kept because Overview embeds them.
   { key: 'platform-notifications', label: 'Notifications', icon: 'Bell' },
   { key: 'platform-email-templates', label: 'Email Templates', icon: 'Mail' },
   { key: 'platform-smtp', label: 'SMTP Settings', icon: 'Server' },

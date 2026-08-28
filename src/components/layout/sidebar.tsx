@@ -322,11 +322,6 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     icon: 'Ticket',
   },
   {
-    label: 'Usage / Analytics',
-    href: '#platform-usage',
-    icon: 'BarChart3',
-  },
-  {
     label: 'Notifications',
     href: '#platform-notifications',
     icon: 'Bell',
