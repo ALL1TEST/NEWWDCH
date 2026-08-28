@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useSiteStore } from '@/lib/stores/site-store';
 import { LoginScreen } from './login-screen';
@@ -13,6 +14,27 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isCheckingAuth, checkAuth } = useAuthStore();
   const initializeSites = useSiteStore((s) => s.initialize);
   const isSiteInitialized = useSiteStore((s) => s.isInitialized);
+
+  // Invalidate all queries when the ACTIVE SITE changes, so site-scoped
+  // data (dashboard stats, content, media, etc.) refetches with the new
+  // siteId. Without this, creating a new site + auto-switching to it leaves
+  // the dashboard showing the previously-active site's data until a manual
+  // reload. The store updates `window.__CMS_ACTIVE_SITE_DB_ID__` (which the
+  // api-client reads to inject `?siteId=`), but no query is re-triggered.
+  // Guard: only fire on a real site→site switch, not during initial
+  // bootstrap (null → siteId), to avoid a redundant refetch on first load.
+  const queryClient = useQueryClient();
+  const activeSiteDbId = useSiteStore((s) => s.activeSiteDbId);
+  const prevSiteRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (
+      prevSiteRef.current !== undefined &&
+      prevSiteRef.current !== activeSiteDbId
+    ) {
+      queryClient.invalidateQueries();
+    }
+    prevSiteRef.current = activeSiteDbId;
+  }, [activeSiteDbId, queryClient]);
 
   useEffect(() => {
     checkAuth();

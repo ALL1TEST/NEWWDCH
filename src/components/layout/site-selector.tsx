@@ -54,6 +54,22 @@ function getSiteColor(slug: string): string {
   return SITE_COLORS[Math.abs(hash) % SITE_COLORS.length];
 }
 
+// -------------------- Validation helpers --------------------
+
+// Slug must be lowercase letters / numbers / hyphens, no leading/trailing hyphen.
+const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+function validateSiteFields(name: string, slug: string): { name?: string; slug?: string } {
+  const errors: { name?: string; slug?: string } = {};
+  if (!name.trim()) errors.name = 'Site name is required';
+  if (!slug.trim()) {
+    errors.slug = 'Slug is required';
+  } else if (!SLUG_PATTERN.test(slug.trim())) {
+    errors.slug = 'Slug must be lowercase letters, numbers, and hyphens only';
+  }
+  return errors;
+}
+
 // -------------------- Create Site Dialog --------------------
 
 function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
@@ -63,8 +79,13 @@ function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
   const [description, setDescription] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [open, setOpen] = useState(true);
   const createSite = useSiteStore((s) => s.createSite);
+
+  const fieldErrors = validateSiteFields(name, slug);
+  const nameError = submitAttempted ? fieldErrors.name : undefined;
+  const slugError = submitAttempted ? fieldErrors.slug : undefined;
 
   const generateSlug = useCallback((val: string) => {
     return val
@@ -80,7 +101,12 @@ function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
   };
 
   const handleSubmit = async () => {
-    if (!name.trim() || !slug.trim()) return;
+    const errors = validateSiteFields(name, slug);
+    if (errors.name || errors.slug) {
+      setSubmitAttempted(true);
+      return;
+    }
+    setSubmitAttempted(false);
     setError('');
     setIsCreating(true);
     try {
@@ -117,7 +143,11 @@ function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
               autoFocus
+              aria-invalid={!!nameError}
             />
+            {nameError && (
+              <p className="text-xs text-destructive">{nameError}</p>
+            )}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="site-slug">Slug</Label>
@@ -126,7 +156,11 @@ function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
               placeholder="my-new-blog"
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
+              aria-invalid={!!slugError}
             />
+            {slugError && (
+              <p className="text-xs text-destructive">{slugError}</p>
+            )}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="site-domain">Domain (optional)</Label>
@@ -154,7 +188,7 @@ function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!name.trim() || !slug.trim() || isCreating}>
+          <Button onClick={handleSubmit} disabled={isCreating}>
             {isCreating ? 'Creating...' : 'Create Site'}
           </Button>
         </DialogFooter>
@@ -173,12 +207,22 @@ function EditSiteDialog({ site, onClose }: { site: Site; onClose: () => void }) 
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState('');
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [open, setOpen] = useState(true);
   const updateSite = useSiteStore((s) => s.updateSite);
   const deleteSite = useSiteStore((s) => s.deleteSite);
 
+  const fieldErrors = validateSiteFields(name, slug);
+  const nameError = submitAttempted ? fieldErrors.name : undefined;
+  const slugError = submitAttempted ? fieldErrors.slug : undefined;
+
   const handleSave = async () => {
-    if (!name.trim() || !slug.trim()) return;
+    const errors = validateSiteFields(name, slug);
+    if (errors.name || errors.slug) {
+      setSubmitAttempted(true);
+      return;
+    }
+    setSubmitAttempted(false);
     setError('');
     setIsSaving(true);
     try {
@@ -230,7 +274,11 @@ function EditSiteDialog({ site, onClose }: { site: Site; onClose: () => void }) 
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoFocus
+              aria-invalid={!!nameError}
             />
+            {nameError && (
+              <p className="text-xs text-destructive">{nameError}</p>
+            )}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="edit-site-slug">Site URL / Slug</Label>
@@ -238,7 +286,11 @@ function EditSiteDialog({ site, onClose }: { site: Site; onClose: () => void }) 
               id="edit-site-slug"
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
+              aria-invalid={!!slugError}
             />
+            {slugError && (
+              <p className="text-xs text-destructive">{slugError}</p>
+            )}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="edit-site-domain">Domain</Label>
@@ -275,7 +327,7 @@ function EditSiteDialog({ site, onClose }: { site: Site; onClose: () => void }) 
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!name.trim() || !slug.trim() || isSaving}>
+          <Button onClick={handleSave} disabled={isSaving}>
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             Update Site
           </Button>

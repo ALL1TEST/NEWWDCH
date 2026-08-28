@@ -491,12 +491,12 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
             <h3 className="text-sm font-semibold">Folder</h3>
             <Separator />
             <Select
-              value={folderId}
-              onValueChange={(v) => setFolderEdits({ folderId: v })}
+              value={folderId || 'root'}
+              onValueChange={(v) => setFolderEdits({ folderId: v === 'root' ? '' : v })}
             >
               <SelectTrigger><SelectValue placeholder="No folder" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">No folder</SelectItem>
+                <SelectItem value="root">No folder</SelectItem>
                 {allFolders.map((f) => (
                   <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                 ))}
