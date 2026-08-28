@@ -80,6 +80,11 @@ import type {
 interface TemplateEditorProps {
   templateId: string;
   isNew?: boolean;
+  /** 'client' (default) creates/saves client-scoped templates; 'platform'
+   * sends scope=platform on the create mutation (guarded by
+   * requirePlatformAdmin on the server) and uses platform-scoped cache
+   * invalidation + breadcrumb copy. The per-id PATCH save is scope-agnostic. */
+  scope?: 'client' | 'platform';
   onBack: () => void;
   onPreview: (id: string) => void;
   onCreated?: (id: string) => void;
@@ -461,7 +466,8 @@ function VariableChip({
 // Main Component
 // ============================================================
 
-export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, onCreated }: TemplateEditorProps) {
+export function TemplateEditor({ templateId, isNew = false, scope = 'client', onBack, onPreview, onCreated }: TemplateEditorProps) {
+  const isPlatform = scope === 'platform';
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
 
@@ -519,9 +525,25 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
       htmlBody: string;
       category?: EmailTemplateCategory;
       status?: EmailTemplateStatus;
-    }) => postApi<EmailTemplate>('/api/email-templates', { ...data, createdById: currentUser?.id }),
+    }) => postApi<EmailTemplate>('/api/email-templates', {
+      ...data,
+      createdById: currentUser?.id,
+      // Platform scope is guarded by requirePlatformAdmin on the server and
+      // creates a system-level template (siteId = null). Client scope omits
+      // the param so the legacy client behavior is preserved.
+      ...(isPlatform ? { scope: 'platform' } : {}),
+    }),
     onSuccess: (created) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
+      // Invalidate the scope-appropriate list cache. Platform uses the
+      // platform-prefixed key; client uses the legacy key. Also invalidate
+      // the detail cache (scope-agnostic, keyed by id).
+      if (isPlatform) {
+        queryClient.invalidateQueries({ queryKey: ['email-templates', 'list', 'platform'] });
+        queryClient.invalidateQueries({ queryKey: ['email-templates', 'category-counts', 'platform'] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
+        queryClient.invalidateQueries({ queryKey: ['email-templates', 'category-counts', 'client'] });
+      }
       toast.success('Template created successfully');
       onCreated?.(created.id);
     },
@@ -567,7 +589,14 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
     }) => patchApi<EmailTemplate>(`/api/email-templates/${templateId}`, data),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.detail(templateId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
+      // Invalidate the scope-appropriate list cache so the list view refetches.
+      if (isPlatform) {
+        queryClient.invalidateQueries({ queryKey: ['email-templates', 'list', 'platform'] });
+        queryClient.invalidateQueries({ queryKey: ['email-templates', 'category-counts', 'platform'] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
+        queryClient.invalidateQueries({ queryKey: ['email-templates', 'category-counts', 'client'] });
+      }
       setSaveState('saved');
       const newSettings: TemplateSettings = {
         category: updated.category,
@@ -1052,7 +1081,7 @@ export function TemplateEditor({ templateId, isNew = false, onBack, onPreview, o
             className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors shrink-0"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span className="hidden sm:inline">Email Templates</span>
+            <span className="hidden sm:inline">{isPlatform ? 'Platform Email Templates' : 'Email Templates'}</span>
           </button>
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <span className="truncate font-medium max-w-[200px] lg:max-w-[400px]">

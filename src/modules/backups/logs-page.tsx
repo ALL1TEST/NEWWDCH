@@ -501,7 +501,7 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
         <PlatformPageHeader
           title="Backup Logs"
           subtitle="Platform-wide audit trail of every backup operation across all customers and sites."
-          action={
+          actions={
             <Button size="sm" variant="outline" onClick={handleExport} disabled={logs.length === 0}>
               <Download className="h-4 w-4 mr-2" />
               Export CSV

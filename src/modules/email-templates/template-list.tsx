@@ -62,6 +62,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { PageHeader, StatusBadge, ConfirmDialog, EmptyState } from '@/components/patterns';
+import { PlatformPageHeader } from '@/modules/platform/shared';
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { cn, formatRelativeTime, labelize } from '@/lib/utils';
@@ -91,9 +92,15 @@ interface EmailTemplate {
   _count?: { versions: number };
 }
 
-interface TemplateListProps {
+export interface TemplateListProps {
   onEdit: (id: string) => void;
   onPreview: (id: string) => void;
+  /** 'client' (default) renders the legacy client page header + uses the
+   * client-scoped query cache keys + navigates under the 'email-templates'
+   * module. 'platform' renders PlatformPageHeader (keeps the PLATFORM badge),
+   * adds scope=platform to every query/mutation, uses platform-scoped cache
+   * keys, and navigates under 'platform-email-templates'. */
+  scope?: 'client' | 'platform';
 }
 
 // -------------------- Category Tabs --------------------
@@ -271,16 +278,27 @@ function SendTestDialog({
 
 // -------------------- Category Count Query --------------------
 
-function useCategoryCounts() {
+/**
+ * Per-scope category counts. `scope=platform` requests system templates
+ * (siteId IS NULL) via the scope=platform query param; `scope=client` uses
+ * the default client behavior. The query key is scoped so the two caches
+ * never collide.
+ */
+function useCategoryCounts(scope: 'client' | 'platform' = 'client') {
   return useQuery({
-    queryKey: ['email-templates', 'category-counts'],
+    queryKey: ['email-templates', 'category-counts', scope],
     queryFn: async () => {
       const allCategories = CATEGORIES.filter((c) => c.value !== 'ALL');
       const results = await Promise.allSettled(
         allCategories.map(async (cat) => {
           const res = await getApi<{ data: EmailTemplate[]; meta: { pagination: { total: number } } }>(
             '/api/email-templates',
-            { category: cat.value, page: 1, pageSize: 1 },
+            {
+              category: cat.value,
+              page: 1,
+              pageSize: 1,
+              ...(scope === 'platform' ? { scope: 'platform' } : {}),
+            },
             { raw: true },
           );
           return { category: cat.value, count: res?.meta?.pagination?.total ?? 0 };
@@ -300,7 +318,9 @@ function useCategoryCounts() {
 
 // -------------------- Main Component --------------------
 
-export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
+export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateListProps) {
+  const isPlatform = scope === 'platform';
+  const moduleName = isPlatform ? 'platform-email-templates' : 'email-templates';
   const queryClient = useQueryClient();
   const navigate = useNavigationStore((s) => s.navigate);
 
@@ -366,13 +386,21 @@ export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
       ...(category !== 'ALL' ? { category } : {}),
       ...(statusFilter !== 'ALL' ? { status: statusFilter } : {}),
       ...(search ? { search } : {}),
+      // Platform scope requests system templates (siteId IS NULL) and is
+      // guarded by requirePlatformAdmin on the server. Client scope omits
+      // the param so the default client behavior is preserved.
+      ...(isPlatform ? { scope: 'platform' } : {}),
     }),
-    [page, pageSize, sortField, sortOrder, category, statusFilter, search],
+    [page, pageSize, sortField, sortOrder, category, statusFilter, search, isPlatform],
   );
 
   // -------------------- Data Fetching --------------------
+  // The query key is scoped so client and platform caches never collide —
+  // platform queries are prefixed with the scope to keep them isolated.
   const { data: raw, isLoading } = useQuery({
-    queryKey: queryKeys.emailTemplates.list(queryParams),
+    queryKey: isPlatform
+      ? ['email-templates', 'list', 'platform', queryParams]
+      : queryKeys.emailTemplates.list(queryParams),
     queryFn: () =>
       getApi<{ data: EmailTemplate[]; meta: { pagination: { page: number; pageSize: number; total: number; totalPages: number } } }>('/api/email-templates', queryParams, { raw: true }),
     staleTime: 10_000,
@@ -382,17 +410,31 @@ export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
   const pagination = raw?.meta?.pagination;
 
   // -------------------- Category Counts --------------------
-  const { data: categoryCounts } = useCategoryCounts();
+  const { data: categoryCounts } = useCategoryCounts(scope);
   const totalCount = categoryCounts
     ? Object.values(categoryCounts).reduce((a, b) => a + b, 0)
     : 0;
 
   // -------------------- Mutations --------------------
+  // Scope-aware invalidation predicate. Platform invalidates the platform
+  // cache keys (prefixed with 'platform'); client invalidates the legacy
+  // keys. Both scopes also invalidate the detail cache (scope-agnostic,
+  // keyed by id) so an edited template's detail refetches.
+  const invalidateAll = useCallback(() => {
+    if (isPlatform) {
+      queryClient.invalidateQueries({ queryKey: ['email-templates', 'list', 'platform'] });
+      queryClient.invalidateQueries({ queryKey: ['email-templates', 'category-counts', 'platform'] });
+    } else {
+      queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
+      queryClient.invalidateQueries({ queryKey: ['email-templates', 'category-counts', 'client'] });
+    }
+  }, [queryClient, isPlatform]);
+
   const duplicateMutation = useMutation({
     mutationFn: (id: string) => postApi(`/api/email-templates/${id}/duplicate`),
     onSuccess: () => {
       toast.success('Template duplicated successfully');
-      queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
+      invalidateAll();
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to duplicate template');
@@ -403,7 +445,7 @@ export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
     mutationFn: ({ id, status }: { id: string; status: EmailTemplateStatus }) =>
       patchApi(`/api/email-templates/${id}`, { status }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
+      invalidateAll();
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to update template status');
@@ -414,7 +456,7 @@ export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
     mutationFn: (id: string) => deleteApi(`/api/email-templates/${id}`),
     onSuccess: () => {
       toast.success('Template deleted');
-      queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
+      invalidateAll();
       setDeleteTarget(null);
     },
     onError: (err: Error) => {
@@ -426,7 +468,7 @@ export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
     mutationFn: (id: string) => postApi(`/api/email-templates/${id}/revert`),
     onSuccess: () => {
       toast.success('Template reverted to default');
-      queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
+      invalidateAll();
       setRevertTarget(null);
     },
     onError: (err: Error) => {
@@ -435,11 +477,15 @@ export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
   });
 
   const seedMutation = useMutation({
-    mutationFn: () => postApi<{ seeded: number; skipped: number; total: number }>('/api/email-templates/seed'),
+    mutationFn: () => postApi<{ seeded: number; skipped: number; total: number }>(
+      '/api/email-templates/seed',
+      // Platform scope is guarded by requirePlatformAdmin on the server.
+      isPlatform ? { scope: 'platform' } : {},
+    ),
     onSuccess: (res: any) => {
       const data = res?.data ?? res ?? { seeded: 0, skipped: 0, total: 0 };
       const { seeded, skipped } = data;
-      queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
+      invalidateAll();
       if (seeded > 0) {
         toast.success(`${seeded} default template${seeded > 1 ? 's' : ''} created${skipped > 0 ? `, ${skipped} already existed` : ''}`);
       } else if (skipped > 0) {
@@ -455,40 +501,56 @@ export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
   });
 
   // -------------------- Navigation Handlers --------------------
+  // Platform scope navigates under 'platform-email-templates' so the URL
+  // hash is #platform-email-templates/new and the platform module router
+  // picks it up. Client scope uses the legacy 'email-templates' module.
   const handleCreate = useCallback(() => {
-    navigate('email-templates', 'new');
-  }, [navigate]);
+    navigate(moduleName, 'new');
+  }, [navigate, moduleName]);
 
   // -------------------- Render --------------------
+  // Scope-aware page header. Platform scope uses PlatformPageHeader (keeps
+  // the PLATFORM badge) with platform-level copy; client scope uses the
+  // legacy PageHeader with the original copy.
+  const headerAction = (
+    <div className="flex flex-col items-end gap-2">
+      <Button size="sm" onClick={handleCreate}>
+        <Plus className="h-4 w-4 mr-2" />
+        Create Template
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => setSeedDialogOpen(true)}
+        disabled={seedMutation.isPending}
+        className="border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40"
+      >
+        {seedMutation.isPending ? (
+          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+        ) : (
+          <Cpu className="h-3.5 w-3.5 mr-1.5" />
+        )}
+        Seed Defaults
+      </Button>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <PageHeader
-        title="Email Templates"
-        description="Manage email templates for all system notifications, newsletters, and transactional emails."
-        action={
-          <div className="flex flex-col items-end gap-2">
-            <Button size="sm" onClick={handleCreate}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Template
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setSeedDialogOpen(true)}
-              disabled={seedMutation.isPending}
-              className="border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40"
-            >
-              {seedMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              ) : (
-                <Cpu className="h-3.5 w-3.5 mr-1.5" />
-              )}
-              Seed Defaults
-            </Button>
-          </div>
-        }
-      />
+      {isPlatform ? (
+        <PlatformPageHeader
+          title="Email Templates"
+          subtitle="Platform-wide system email templates: welcome, payment, subscription, trial, invoice, and account lifecycle. Visible to all customers and sites."
+          actions={headerAction}
+        />
+      ) : (
+        <PageHeader
+          title="Email Templates"
+          description="Manage email templates for all system notifications, newsletters, and transactional emails."
+          action={headerAction}
+        />
+      )}
 
       {/* Category Tabs */}
       <div className="border-b">
@@ -592,7 +654,9 @@ export function TemplateList({ onEdit, onPreview }: TemplateListProps) {
             description={
               search || statusFilter !== 'ALL' || category !== 'ALL'
                 ? 'Try adjusting your filters to find what you\'re looking for.'
-                : 'Create your first email template or seed the defaults to get started.'
+                : isPlatform
+                  ? 'Create your first platform template or seed the defaults to get started.'
+                  : 'Create your first email template or seed the defaults to get started.'
             }
             action={
               !search && statusFilter === 'ALL' && category === 'ALL'

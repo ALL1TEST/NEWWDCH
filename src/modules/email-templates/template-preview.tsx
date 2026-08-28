@@ -34,6 +34,12 @@ import type {
 
 interface TemplatePreviewProps {
   templateId: string;
+  /** 'client' (default) or 'platform'. The fetch is by ID and is
+   * scope-agnostic (the per-id GET works for both scopes), so this prop is
+   * currently used only for API consistency and future-proofing. No
+   * server-side authorization difference exists for reading a single
+   * template by ID. */
+  scope?: 'client' | 'platform';
   onBack: () => void;
 }
 
@@ -164,7 +170,10 @@ const DEVICE_WIDTHS: Record<DeviceMode, string> = {
 // Component
 // ============================================================
 
-export function TemplatePreview({ templateId, onBack }: TemplatePreviewProps) {
+export function TemplatePreview({ templateId, scope = 'client', onBack }: TemplatePreviewProps) {
+  // `scope` is accepted for API consistency; the per-id fetch is
+  // scope-agnostic so no behavioral branching is needed here currently.
+  void scope;
   const [device, setDevice] = useState<DeviceMode>('desktop');
   const [darkMode, setDarkMode] = useState(false);
 

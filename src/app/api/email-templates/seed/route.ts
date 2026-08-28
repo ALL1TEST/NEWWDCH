@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -530,10 +531,32 @@ const DEFAULT_TEMPLATES: TemplateDef[] = [
 // POST — seed
 // =====================================================================
 
-export async function POST(_request: NextRequest) {
+export async function POST(request: NextRequest) {
   const id = reqId();
 
   try {
+    // Parse body to detect scope=platform (platform-admin-only). When the
+    // body is empty or not JSON, fall back to legacy client behavior.
+    let bodyScope: string | undefined;
+    try {
+      const body = await request.json();
+      bodyScope = typeof body === 'object' && body !== null
+        ? (body as { scope?: unknown }).scope as string | undefined
+        : undefined;
+    } catch {
+      // No body — legacy client seed. Default to client behavior.
+    }
+    const isPlatformScope = bodyScope === 'platform';
+
+    // -------- scope=platform: platform admin can seed system templates
+    // (siteId = null). Falls through to legacy client behavior otherwise.
+    let platformCreatedById: string | null = null;
+    if (isPlatformScope) {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+      platformCreatedById = auth.user.id;
+    }
+
     // Find a known user to use as createdById
     const firstUser = await db.user.findFirst({ select: { id: true } });
     if (!firstUser) {
@@ -543,7 +566,7 @@ export async function POST(_request: NextRequest) {
       );
     }
 
-    const createdById = firstUser.id;
+    const createdById = isPlatformScope && platformCreatedById ? platformCreatedById : firstUser.id;
     let seeded = 0;
     let skipped = 0;
 
@@ -556,6 +579,10 @@ export async function POST(_request: NextRequest) {
 
       await db.emailTemplate.create({
         data: {
+          // Platform-scope templates are system-level (siteId = null);
+          // client-scope templates use the legacy behavior (also null here
+          // since the seed route has always created system templates).
+          siteId: null,
           name: tpl.name,
           slug: tpl.slug,
           subject: tpl.subject,
