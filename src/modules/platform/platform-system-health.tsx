@@ -17,16 +17,13 @@
 // service's status.
 // ============================================================
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
-} from '@/components/ui/sheet';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -37,7 +34,7 @@ import { toast } from 'sonner';
 import {
   RefreshCw, Loader2, Server, Database, HardDrive, Briefcase,
   Mail, Sparkles, HeartPulse, AlertTriangle, CheckCircle2,
-  XCircle, HelpCircle, Clock, ChevronRight, AlertCircle, Activity,
+  XCircle, HelpCircle, Clock, AlertCircle, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -61,8 +58,6 @@ export function PlatformSystemHealthModule() {
     staleTime: 15_000,
     refetchOnWindowFocus: false,
   });
-
-  const [selectedKey, setSelectedKey] = useState<ServiceHealthKey | null>(null);
 
   // Refresh checks = explicit POST to the same endpoint (re-runs the
   // live checks and records a fresh history snapshot if the per-minute
@@ -110,10 +105,6 @@ export function PlatformSystemHealthModule() {
     );
   }
 
-  const selectedService = selectedKey
-    ? data.services.find((s) => s.key === selectedKey) ?? null
-    : null;
-
   return (
     <div className="space-y-6">
       <PlatformPageHeader
@@ -149,14 +140,13 @@ export function PlatformSystemHealthModule() {
       <section className="space-y-3">
         <SectionHeading
           title="Services"
-          description="Click any service to inspect its metrics, recent health checks, and recent errors."
+          description="Real-time status, latency, metrics, and recent errors for each platform service."
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {data.services.map((svc) => (
             <ServiceCard
               key={svc.key}
               svc={svc}
-              onInspect={() => setSelectedKey(svc.key)}
             />
           ))}
         </div>
@@ -167,12 +157,6 @@ export function PlatformSystemHealthModule() {
 
       {/* Health check history */}
       <HealthHistoryCard history={data.history} />
-
-      {/* Service details sheet */}
-      <ServiceDetailsSheet
-        service={selectedService}
-        onOpenChange={(open) => { if (!open) setSelectedKey(null); }}
-      />
     </div>
   );
 }
@@ -267,17 +251,10 @@ const STATUS_BORDER: Record<ServiceStatus, string> = {
   unknown: 'border-l-zinc-400',
 };
 
-function ServiceCard({ svc, onInspect }: { svc: ServiceHealthCheck; onInspect: () => void }) {
+function ServiceCard({ svc }: { svc: ServiceHealthCheck }) {
   return (
     <Card
-      role="button"
-      tabIndex={0}
-      onClick={onInspect}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onInspect(); } }}
-      className={cn(
-        'border-l-4 cursor-pointer transition-shadow hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
-        STATUS_BORDER[svc.status],
-      )}
+      className={cn('border-l-4', STATUS_BORDER[svc.status])}
     >
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-2">
@@ -285,10 +262,8 @@ function ServiceCard({ svc, onInspect }: { svc: ServiceHealthCheck; onInspect: (
             <span className="shrink-0 text-muted-foreground">{SERVICE_ICON[svc.key]}</span>
             <p className="text-sm font-semibold truncate">{svc.label}</p>
           </div>
-          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+          <HealthBadge status={svc.status} />
         </div>
-
-        <HealthBadge status={svc.status} />
 
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" />
@@ -300,10 +275,23 @@ function ServiceCard({ svc, onInspect }: { svc: ServiceHealthCheck; onInspect: (
 
         <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{svc.message}</p>
 
-        {/* Compact key metrics — show the first 2 only to keep cards scannable */}
+        {/* Last error — surfaced directly on the card when present */}
+        {svc.lastError && (
+          <div className="rounded-md border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/30 p-2.5">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-wider text-rose-600 dark:text-rose-400 mb-0.5">Last error</p>
+                <p className="text-xs font-mono break-all leading-relaxed line-clamp-4">{svc.lastError}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* All metrics — surfaced directly on the card (no truncation, no drawer) */}
         {svc.metrics.length > 0 && (
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1 pt-1 border-t border-border/60">
-            {svc.metrics.slice(0, 4).map((m) => (
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 pt-1 border-t border-border/60">
+            {svc.metrics.map((m) => (
               <div key={m.label} className="min-w-0">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground/80 truncate">{m.label}</p>
                 <p className="text-xs font-medium truncate" title={m.hint ?? m.value}>{m.value}</p>
@@ -313,95 +301,6 @@ function ServiceCard({ svc, onInspect }: { svc: ServiceHealthCheck; onInspect: (
         )}
       </CardContent>
     </Card>
-  );
-}
-
-// -------------------- Service details sheet --------------------
-
-function ServiceDetailsSheet({
-  service, onOpenChange,
-}: {
-  service: ServiceHealthCheck | null;
-  onOpenChange: (open: boolean) => void;
-}) {
-  return (
-    <Sheet open={service !== null} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
-        {service && (
-          <>
-            <SheetHeader className="pb-2 border-b border-border">
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">{SERVICE_ICON[service.key]}</span>
-                <SheetTitle className="text-base">{service.label}</SheetTitle>
-              </div>
-              <SheetDescription className="sr-only">Service diagnostic details</SheetDescription>
-              <div className="flex items-center gap-2 mt-2">
-                <HealthBadge status={service.status} />
-                <span className="text-xs text-muted-foreground">
-                  Last checked {formatRelative(service.lastCheckedAt)}
-                </span>
-              </div>
-            </SheetHeader>
-
-            <div className="px-4 py-4 space-y-5">
-              {/* Status message */}
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground/80 mb-1">Health message</p>
-                <p className="text-sm leading-relaxed">{service.message}</p>
-              </div>
-
-              {/* Last error */}
-              {service.lastError && (
-                <div className="rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/30 p-3">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-rose-600 dark:text-rose-400 mb-0.5">Last error</p>
-                      <p className="text-xs font-mono break-all leading-relaxed">{service.lastError}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Metrics */}
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground/80 mb-2">Metrics</p>
-                <div className="rounded-lg border border-border divide-y divide-border">
-                  {service.metrics.map((m) => (
-                    <div key={m.label} className="flex items-start justify-between gap-3 px-3 py-2.5">
-                      <div className="min-w-0">
-                        <p className="text-xs text-muted-foreground">{m.label}</p>
-                        {m.hint && <p className="text-[10px] text-muted-foreground/70 truncate">{m.hint}</p>}
-                      </div>
-                      <p className="text-xs font-medium text-right" title={m.value}>{m.value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Category + diagnostics summary */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border border-border p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground/80">Category</p>
-                  <p className="text-xs font-medium capitalize mt-0.5">{service.category}</p>
-                </div>
-                <div className="rounded-lg border border-border p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground/80">Response time</p>
-                  <p className="text-xs font-medium mt-0.5">
-                    {service.latencyMs !== null ? `${service.latencyMs}ms` : 'Not measured'}
-                  </p>
-                </div>
-              </div>
-
-              <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
-                Tip: open the relevant settings page (SMTP Settings, AI Providers,
-                Background Jobs) to re-run provider-level health checks.
-              </p>
-            </div>
-          </>
-        )}
-      </SheetContent>
-    </Sheet>
   );
 }
 
