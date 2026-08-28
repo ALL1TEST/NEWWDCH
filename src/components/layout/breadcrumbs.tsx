@@ -160,10 +160,20 @@ const NO_BREADCRUMB_MODULES = new Set([
 // Returns `true` if the given module should render a topbar breadcrumb,
 // `false` otherwise. `null` / `undefined` (initial load → Dashboard) returns
 // `false` (no breadcrumb).
+//
+// PLATFORM ADMIN modules (every `platform-*` route: platform-overview,
+// platform-backups, platform-smtp, platform-email-templates, platform-
+// customer-detail, … and all their sub-pages / detail views) return `false`
+// so the topbar is hidden entirely on desktop (`sm:hidden` in `Topbar` —
+// see `topbar.tsx`). The main content then sits flush against the top of
+// the viewport (no empty 56px strip above the page title). On mobile the
+// topbar stays visible because it carries the mobile drawer toggle
+// (`SidebarTrigger`) — same behavior as Client no-breadcrumb modules.
 export function hasBreadcrumb(
   currentModule: string | null | undefined,
 ): boolean {
   if (!currentModule) return false;
+  if (currentModule.startsWith('platform-')) return false;
   return !NO_BREADCRUMB_MODULES.has(currentModule);
 }
 
@@ -226,19 +236,10 @@ export function Breadcrumbs() {
     return items;
   }, [currentModule, currentItemId, currentSubPage, isAllSites]);
 
-  // Platform Admin modules (e.g. platform-overview, platform-backups,
-  // platform-smtp, platform-email-templates, platform-customer-detail, …).
-  // The topbar MUST stay visible so the header height/spacing/layout is
-  // preserved (hasBreadcrumb returns TRUE for these — see above), but NO
-  // route/page identifier text is rendered. The area where the route name
-  // ("platform-overview", "platform-backups", …) used to appear remains
-  // empty. The "All Sites" site-context prefix is also irrelevant for
-  // platform admins (they manage customers, not sites), so it is removed
-  // too. This applies to EVERY platform-* module and all of its sub-pages
-  // / detail views.
-  if (currentModule && currentModule.startsWith('platform-')) {
-    return null;
-  }
+  // Platform Admin modules (`platform-*`) are handled by `hasBreadcrumb`
+  // above (returns `false`), so the guard immediately below short-circuits
+  // them — the topbar is hidden on desktop via `sm:hidden` (see topbar.tsx)
+  // and the main content sits flush against the top of the viewport.
 
   // Modules that should NOT render a topbar breadcrumb — the topbar keeps
   // ONLY the "All Sites" selector for these (no breadcrumb path next to it):
