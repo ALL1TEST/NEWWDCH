@@ -68,7 +68,6 @@ import {
 import {
   ErrorState,
   PlanBadge,
-  formatCurrency,
 } from '@/modules/platform/shared';
 import {
   ENTITLEMENT_KEYS,
@@ -93,6 +92,43 @@ function getPlanBadgeId(planId: string): 'free' | 'plus' | 'pro' | 'max' {
   // Legacy 'beta' plan id (pre-migration) → render as 'plus' badge.
   if (planId === 'beta') return 'plus';
   return 'free';
+}
+
+// -------------------- Price formatting helpers --------------------
+
+/** Display symbol for a currency code. Plans & Pricing shows a
+ *  symbol (not the ISO text code) per the visual spec — e.g. "$7.50"
+ *  not "USD 7.50" / "CHF 7.50". The stored currency code in the DB is
+ *  unaffected; this is a display-only mapping. Unknown codes default
+ *  to '$' so the price always renders as a compact symbol + number. */
+function currencySymbol(code: string): string {
+  const map: Record<string, string> = {
+    USD: '$',
+    EUR: '€',
+    GBP: '£',
+    JPY: '¥',
+    CNY: '¥',
+  };
+  return map[(code ?? '').toUpperCase()] ?? '$';
+}
+
+/** Format an integer amount with the display symbol, no decimals.
+ *  e.g. (90, 'USD') → "$90"; (0, 'CHF') → "$0". */
+function formatPriceSymbol(amount: number, currency: string): string {
+  return `${currencySymbol(currency)}${amount.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`;
+}
+
+/** Format with 2 decimals — used for the monthly-equivalent of a
+ *  yearly price (yearly 90 → "$7.50"). Always two decimals so the
+ *  large primary price reads "$7.50" / "$40.83" / "$82.50". */
+function formatPriceSymbolMonthlyEquiv(amount: number, currency: string): string {
+  return `${currencySymbol(currency)}${amount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 // -------------------- Plan summary tile --------------------
@@ -162,7 +198,7 @@ function PlanSummaryCard({
         {/* Header: plan name (clean text label) + quick active toggle */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-2xl font-semibold tracking-tight text-foreground">{plan.name}</h3>
+            <h3 className="text-3xl font-bold tracking-tight text-foreground">{plan.name}</h3>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Label
@@ -180,63 +216,59 @@ function PlanSummaryCard({
           </div>
         </div>
 
-        {/* Price — reflects the global billing-interval selector (Monthly / Yearly).
-             Free plan always shows "Free" regardless of the selector.
-             The price row + divider break out with -mx-6 into the card
-             padding (8px from the card edge) so the Yearly layout —
-             large monthly-equivalent + "/ month" + small "CHF X / year"
-             group, all on one line — has enough width to keep the small
-             yearly price fully visible instead of clipped. Monthly and
-             Free simply get extra breathing room; their visible output
-             is unchanged. */}
+        {/* Price — reflects the global billing-interval selector
+             (Monthly / Yearly). The MAIN price uses the SAME large
+             typography (text-5xl font-semibold) on every card so the
+             visual hierarchy is consistent across Free / Plus / Pro /
+             Max and the main price is clearly larger than the plan name
+             (text-3xl). The currency is shown as a SYMBOL ($ / € / £)
+             — never the ISO text code — per the Plans & Pricing visual
+             spec.
+               - Free:    $0
+               - Monthly: $X / month
+               - Yearly:  $X.XX / month   $X / year
+             For Yearly, the monthly equivalent (priceYearly / 12,
+             computed dynamically, never hardcoded) is the LARGE primary
+             price; the actual yearly total is shown smaller and muted
+             beside it on the same line. "/ month" belongs to the large
+             monthly price; "/ year" belongs to the small yearly total.
+             The price row + divider break out with -mx-6 into the
+             card padding (p-8 → 8px gutter from the card edge) so the
+             Yearly layout has enough width to keep the small yearly
+             total fully visible instead of clipped. Monthly and Free
+             simply get extra breathing room. shrink-0 +
+             whitespace-nowrap + leading-none on the large span prevent
+             it wrapping to a 2nd line box; ml-2 widens the gap between
+             the two price groups vs. the gap between the large number
+             and its "/ month" label. */}
         <div className="-mx-6 mt-8">
           {plan.isFree ? (
             <div className="flex items-baseline gap-2">
-              <span className="text-5xl font-semibold tracking-tight text-foreground">Free</span>
+              <span className="shrink-0 whitespace-nowrap text-5xl font-semibold leading-none tracking-tight text-foreground">
+                {formatPriceSymbol(0, plan.currency)}
+              </span>
             </div>
           ) : billingInterval === 'yearly' ? (
-            // Yearly selected — compact INLINE presentation. The
-            // EQUIVALENT MONTHLY price (priceYearly / 12) is the MAIN
-            // LARGE price; the ACTUAL yearly price is shown smaller and
-            // muted directly beside it on the same horizontal line (no
-            // separate "≈ / month" line below). "/ month" belongs to
-            // the large monthly price; "/ year" belongs to the small
-            // yearly price. The monthly equivalent is computed
-            // dynamically from the real yearly price stored in the DB
-            // (priceYearly / 12) — never hardcoded.
-            //   e.g. Plus →  CHF 7.50 / month   CHF 90 / year
-            //        Pro  →  CHF 40.83 / month  CHF 490 / year
-            //        Max  →  CHF 82.50 / month  CHF 990 / year
-            //
-            // The card content is only ~245px (sidebar + 3-col grid +
-            // p-8), which cannot hold a text-5xl "CHF 7.50" + "/ month"
-            // + the full "CHF X / year" group on one line (the yearly
-            // would be clipped off). The large monthly-equivalent uses
-            // text-xl — still clearly larger than the text-sm yearly
-            // price, satisfying the large/prominent hierarchy — and the
-            // row breaks out with the container's -mx-6 (above) to gain
-            // the width needed to keep the small yearly price fully
-            // visible. shrink-0 + whitespace-nowrap + leading-none on
-            // the large span prevent it wrapping to a 2nd line box.
-            // ml-2 widens the gap between the two price groups vs. the
-            // gap between the large number and its "/ month" label.
+            // Yearly — compact INLINE: [LARGE $X.XX] [small / month]
+            // [small $X / year]. The monthly equivalent (priceYearly /
+            // 12) is the dominant large price; the real yearly total
+            // stays small/muted beside it.
+            //   e.g. Plus →  $7.50 / month   $90 / year
+            //        Pro  →  $40.83 / month  $490 / year
+            //        Max  →  $82.50 / month  $990 / year
             <div className="flex items-baseline gap-2">
-              <span className="shrink-0 whitespace-nowrap text-xl font-semibold leading-none tracking-tight text-foreground">
-                {plan.currency}{' '}
-                {(plan.priceYearly / 12).toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+              <span className="shrink-0 whitespace-nowrap text-5xl font-semibold leading-none tracking-tight text-foreground">
+                {formatPriceSymbolMonthlyEquiv(plan.priceYearly / 12, plan.currency)}
               </span>
               <span className="whitespace-nowrap text-sm text-muted-foreground">/ month</span>
               <span className="ml-2 shrink-0 whitespace-nowrap text-sm text-muted-foreground">
-                {formatCurrency(plan.priceYearly, plan.currency)} / year
+                {formatPriceSymbol(plan.priceYearly, plan.currency)} / year
               </span>
             </div>
           ) : (
             <div className="flex items-baseline gap-2">
               <span className="shrink-0 whitespace-nowrap text-5xl font-semibold leading-none tracking-tight text-foreground">
-                {formatCurrency(plan.priceMonthly, plan.currency)}
+                {formatPriceSymbol(plan.priceMonthly, plan.currency)}
               </span>
               <span className="whitespace-nowrap text-sm text-muted-foreground">/ month</span>
             </div>

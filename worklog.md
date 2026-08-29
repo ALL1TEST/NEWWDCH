@@ -6958,3 +6958,42 @@ Stage Summary:
 - Yearly price hierarchy FIXED: monthly-equivalent is now the LARGE/prominent price; actual yearly price is the small/muted value beside it; "/ month" → large, "/ year" → small. Matches the user's exact examples (CHF 7.50 / month   CHF 90 / year, etc.).
 - Required a -mx-6 breakout of the price row + divider into the card padding (gaining ~48px width) plus downgrading the large monthly-equivalent from text-5xl to text-xl — the card content area (~245px, sidebar + 3-col grid + p-8) is too narrow to hold a text-5xl "CHF 7.50" + full labels + the "CHF X / year" group on one line. text-xl is the largest size that fits cleanly without clipping the small yearly price.
 - Monthly mode, Free plan, cards, features, buttons, plan data all unchanged. Lint baseline preserved. Browser-verified (agent-browser + VLM).
+
+---
+Task ID: 66
+Agent: main (orchestrator)
+Task: Fix pricing typography & currency display on Plans & Pricing — consistent large main price, $ symbol instead of text, Free shows $0, plan names slightly larger/stronger, Yearly hierarchy [LARGE monthly-equiv][small /month][small $X/year]
+
+Work Log:
+- Read worklog (Task 65 context: prior Yearly compact inline layout had hierarchy reversed — yearly total was large, monthly-equiv was small; currency shown as "CHF" text)
+- Read src/modules/platform/platform-plans.tsx price block (lines ~183-244) + plan name (line 165) + Monthly/Yearly selector (lines ~1200-1222) + grid (lg:grid-cols-3)
+- Confirmed stored currency = 'CHF' (plan-config.ts), but user spec explicitly requires $ symbol display (not "USD"/"CHF" text) with all examples using $
+- Added 3 local display-only helpers in platform-plans.tsx (after getPlanBadgeId):
+  - currencySymbol(code): USD→$, EUR→€, GBP→£, JPY/CNY→¥, default '$' (stored currency code in DB unaffected — display-only mapping per spec)
+  - formatPriceSymbol(amount, currency): symbol + 0-decimal integer (e.g. (90,'USD')→"$90"; (0,'CHF')→"$0")
+  - formatPriceSymbolMonthlyEquiv(amount, currency): symbol + 2-decimal (e.g. (7.5,'USD')→"$7.50")
+- Bumped plan name: text-2xl font-semibold → text-3xl font-bold (slightly larger + visually stronger; same on all 4 cards)
+- Rewrote price block (lines 219-276) — MAIN price now consistent text-5xl font-semibold across Free/Monthly/Yearly:
+  - Free: $0 (text-5xl, no /month — matches user's literal "$0" example)
+  - Monthly: $X (text-5xl) + "/ month" (text-sm muted)
+  - Yearly: $X.XX (text-5xl, monthly-equiv = priceYearly/12 dynamic) + "/ month" (text-sm) + "$X / year" (text-sm muted, ml-2 separator) — monthly-equiv is LARGE primary, yearly total SMALL beside it on one line
+  - Kept all guards: shrink-0 + whitespace-nowrap + leading-none on large span; items-baseline; gap-2; ml-2 between groups; -mx-6 breakout for width
+- Removed now-unused formatCurrency import (lines 68-71)
+- bun run lint: 4 errors + 3 warnings — ALL pre-existing in content-edit-page.tsx / seo-broken-links-page.tsx, NONE in platform-plans.tsx (baseline unchanged)
+- Browser verification (agent-browser, 1440x900 desktop, logged in as Platform Admin via platform@example.com / platform123):
+  - Monthly mode: VLM confirmed Free=$0, Plus=$9, Pro=$49, Max=$99 all at ~48px (text-5xl), $ symbol (no USD/CHF text), plan names ~30px bold, alignment consistent
+  - Yearly mode: VLM confirmed Plus="$7.50 / month $90 / year", Pro="$40.83 / month $490 / year", Max="$82.50 / month $990 / year" — monthly-equiv LARGE primary, yearly total small/muted, all on ONE line
+  - Max card DOM inspection: rowWidth=345, scrollWidth==clientWidth (no horizontal clip), 3 spans ($82.50=178px, /month=55px, $990/year=81px) sum+gaps=345; 4px scrollHeight>clientHeight is benign font-metrics artifact (content sits in mt-8 margin, not clipped by card overflow-hidden which only crops rounded corners)
+  - Targeted Max screenshot + VLM re-confirmed: "$82.50 / month $990 / year" fully visible, one line, nothing clipped
+  - Browser console: clean (only React DevTools info + HMR connected), no errors/hydration warnings
+
+Stage Summary:
+- Pricing typography & currency display fully fixed per 6-point spec:
+  1. Main price consistent text-5xl across ALL plans (Free/Plus/Pro/Max), clearly larger than text-3xl plan name
+  2. Currency shown as $ symbol everywhere (no "USD"/"CHF" text); helper maps ISO code→symbol, default '$'
+  3. Free shows "$0" (not "Free" word) in same large text-5xl typography as paid plans
+  4. Plan names text-3xl font-bold — same typography/size/weight/spacing on all 4 cards
+  5. Yearly layout: [LARGE $7.50] [small / month] [small $90 / year] — monthly-equiv dominant, yearly total muted
+  6. Exact same typography system/spacing/alignment applied to every card
+- No changes to card layout, features, buttons, plan logic, or yearly/monthly calculation logic (priceYearly/12 still dynamic)
+- Lint baseline unchanged; browser-verified clean render on Monthly + Yearly + Free; Max yearly fits on one line with no clipping
