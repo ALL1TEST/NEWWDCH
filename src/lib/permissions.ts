@@ -92,7 +92,14 @@ export const PLATFORM_PAGES = [
   // src/lib/platform/feature-flags.ts) are KEPT — every flag still has
   // a server-side authoritative source that the rest of the app reads via
   // isFlagEnabled(); only the dedicated toggle UI is gone.
-  { key: 'platform-admin-users', label: 'Admin Users', icon: 'ShieldCheck' },
+  // 'platform-admin-users' (Admin Users) was removed as a standalone
+  // admin page in Task 56. The underlying `/api/platform/admin/admin-users`
+  // and `/api/platform/admin/admin-users/[id]` routes (plus the User
+  // prisma model + requirePlatformAdmin / requireOwner guards) are KEPT —
+  // platform admins / owners can still be provisioned and managed via
+  // the API; only the dedicated list/CRUD UI is gone. The auth flow
+  // (login, session, role checks) is unchanged and unrelated to this
+  // reader page.
 ] as const;
 
 export function isPlatformPage(pageKey: string): boolean {

@@ -331,11 +331,6 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     href: '#platform-backups',
     icon: 'Database',
   },
-  {
-    label: 'Admin Users',
-    href: '#platform-admin-users',
-    icon: 'ShieldCheck',
-  },
 ];
 
 // -------------------- Explicit Top-Level Section Mapping --------------------
