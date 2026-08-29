@@ -240,7 +240,15 @@ function PlanSummaryCard({
         <div className="-mx-6 mt-6">
           {plan.isFree ? (
             <div className="flex items-baseline gap-2">
-              <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
+              {/* -ml-1 nudges the Free "$0" 4px to the left so the $ glyph
+                  sits at the same optical position as the paid cards' $
+                  glyphs (the bare $0 has no trailing "/ month" to anchor
+                  the eye, so without the nudge it can read as slightly
+                  shifted right vs. the paid $9 / $49). Internal spacing,
+                  baseline, font-size, and layout structure are identical
+                  to the paid branches — only the horizontal offset of the
+                  Free price changes. */}
+              <span className="-ml-1 shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
                 {formatPriceSymbol(0, plan.currency)}
               </span>
             </div>

@@ -7221,3 +7221,28 @@ Stage Summary:
 - The only contextual difference (not a styling difference) is that the Free card shows just "$0" while paid Monthly cards show "$X / month" and paid Yearly cards show "$X.XX / month $X / year" — but the '$' glyph itself is rendered identically
 - No changes to: pricing/plan logic, Monthly/Yearly toggle logic, plan data, features content, card dimensions, toggle position, create/edit dialog logic, backend/API/DB
 - Lint baseline unchanged (4 errors + 3 warnings, none in platform-plans.tsx)
+
+---
+Task ID: 73
+Agent: main (orchestrator)
+Task: Move the Free "$0" price slightly to the left so the $ symbol (and 0) sit at the same optical position as the paid cards' $ glyphs ($9, $49). Keep the same font size, spacing, baseline, and overall price layout across all plans. (Follow-up to Task 72 — user reported the $0 still looked misaligned and explicitly asked to nudge it left.)
+
+Work Log:
+- Read /home/z/my-project/worklog.md (Tasks 0-72 history); Task 72 concluded "already satisfied, no change" but the user came back asking specifically to "move the $0 price slightly to the left" — so a tangible change is required this time.
+- Re-read current src/modules/platform/platform-plans.tsx price section (lines 240-272): the Free branch, Yearly branch, and Monthly branch all use the SAME span class `shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground` inside the SAME `flex items-baseline gap-2` wrapper inside the SAME `-mx-6 mt-6` parent. So by construction the $ glyph is at the same x in all branches.
+- Logged into Platform Admin via agent-browser (page was already at #platform-overview from the previous session — shortcut auto-login persisted); navigated to Plans & Pricing via sidebar JS event dispatch.
+- BEFORE measurement (Range API for glyph-level precision, + card-relative offset): all 4 cards had the $ glyph at EXACTLY 9px from the card's left edge (Free $0, Plus $9, Pro $49, Max $99) — dollarOffsetFromCard = 9 on every card; dollarWidth = 24.16px; fontSize = 36px. So the $ WAS technically aligned by the DOM. VLM also confirmed "no visible misalignment" on the before screenshot.
+- However, the user has now TWICE reported a perceived misalignment and explicitly asked to "move the $0 price slightly to the left". Since I cannot ask clarifying questions, I respected the user's explicit instruction and applied a small, reversible leftward nudge to the Free price span ONLY (the literal request).
+- Applied Edit to src/modules/platform/platform-plans.tsx Free branch (line 251): added `-ml-1` (4px negative left margin) to the Free price span className → `-ml-1 shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground`. Added an inline comment explaining the rationale (bare $0 has no trailing "/ month" to anchor the eye, so it can read as slightly shifted right vs paid $9/$49; nudge compensates; internal spacing/baseline/font-size/layout structure unchanged — only the horizontal offset of the Free price changes). No other code touched. No data/logic changes.
+- AFTER measurement (Monthly mode, page reloaded to pick up HMR): Free $0 $ glyph now at 5px from card left edge (marginLeft: -4px, was 9px → moved 4px LEFT as requested); Plus/Pro/Max unchanged at 9px. fontSize 36px, dollarWidth 24.16px — identical across all cards. VLM on the after screenshot still perceives the $ as "aligned" across cards (the 4px shift is sub-perceptible at screenshot scale, matching the user's "slightly" intent).
+- AFTER measurement (Yearly mode, switched via Yearly toggle JS click): Free $0 at 5px (marginLeft -4px); Plus $7.50 / Pro $40.83 / Max $82.50 all unchanged at 9px. Nudge applies identically in both modes (Free branch is the same code in both — plan.isFree is checked before billingInterval).
+- bun run lint: 4 errors + 3 warnings — NONE in platform-plans.tsx (all in seo-broken-links-page.tsx / data-table.tsx / storage-page.tsx / content-create-page.tsx / content-edit-page.tsx); baseline count unchanged (4+3).
+- Browser console: clean — no error overlay; the only "Hydration" mention in body.textContent is Next.js's serialized `suppressHydrationWarning` attribute in the RSC stream (self.__next_f.push), NOT a real hydration error; page renders 4 cards correctly; HMR applied cleanly (dev.log empty).
+
+Stage Summary:
+- Free "$0" price nudged 4px to the LEFT per user's explicit request (Task 72's "no change" did not satisfy the user; they asked again, more specifically, to move $0 left).
+- Change is minimal and isolated: a single `-ml-1` class added to the Free price span in src/modules/platform/platform-plans.tsx (line 251). Nothing else touched.
+- Measurement confirms the requested shift: Free $ glyph moved from 9px → 5px (card-relative); paid $ glyphs unchanged at 9px. The $ glyph itself, font size (36px), glyph width (24.16px), baseline, and the rest of the price-row structure (text-4xl font-semibold, gap-2 wrapper, -mx-6 breakout parent) are IDENTICAL across all 4 cards — only the horizontal offset of the Free $0 changed.
+- Applies identically in Monthly and Yearly modes (Free branch is shared between modes).
+- Lint baseline unchanged (4 errors + 3 warnings, none in platform-plans.tsx); browser-verified clean render on Monthly + Yearly; VLM + precise DOM measurement both confirm the change is live and the rest of the layout is intact.
+- No changes to: pricing/plan logic, Monthly/Yearly toggle logic, plan data, features content, card dimensions, toggle position, create/edit dialog logic, backend/API/DB.
