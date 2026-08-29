@@ -6933,3 +6933,28 @@ Stage Summary:
 - Bonus: fixed the same pre-existing wrapping bug in the Monthly branch so all Monthly cards render on one line at 48px (was wrapping Pro/Max to 96px).
 - Both Monthly and Yearly states render every card (Free/Plus/Pro/Max) at a uniform 48px price-row height → zero layout shift when toggling the selector.
 - Lint baseline preserved (4 errors + 3 warnings, all pre-existing). Dev server clean. Browser-verified (agent-browser + VLM).
+
+---
+Task ID: 66
+Agent: main (Z.ai Code)
+Task: Plans & Pricing — fix the Yearly price display hierarchy. The previous Yearly layout (Task 65) had the visual hierarchy REVERSED (yearly price was the large/prominent one; monthly-equivalent was small/muted). User requires: monthly-equivalent = LARGE/prominent, actual yearly price = small/muted beside it; "/ month" belongs to the large monthly price, "/ year" belongs to the small yearly price. Keep Monthly mode unchanged and the compact inline layout.
+
+Work Log:
+- Re-read the Yearly branch in src/modules/platform/platform-plans.tsx (built in Task 65). Confirmed it rendered: [small "CHF 7.50 /month"] [large text-5xl "CHF 90"] [small "/year"] — i.e. yearly large, monthly small (reversed vs. user requirement).
+- First attempt: naively swapped the text-5xl onto the monthly-equivalent span and text-sm onto the yearly span, kept the same flat flex structure. E2E-measured with agent-browser: the small yearly group "CHF 90 / year" got CLIPPED OFF (131–173px overflow) because the card content area is only ~245px wide (sidebar ~256px + 3-col grid + p-8 card padding), and the large "CHF 7.50" at text-5xl alone is 234px — leaving no room for "/ month" + the full "CHF X / year" group. Also confirmed the PREVIOUS (reversed) implementation had the SAME clipping bug (the "/year" label was clipped there too, ~86px) — the card is fundamentally too narrow for a text-5xl price + full labels + secondary price on one line.
+- Root cause: card content width (~245px) < minimum width needed for "CHF 7.50" (text-5xl, 234px) + "/ month" (~55px) + "CHF 90 / year" (~95px) + gaps (~24px) ≈ 408px. No text-5xl layout fits.
+- Solution: (a) break the price row + the divider below it out of the card padding with -mx-6 (extends 24px into the 32px p-8 padding on each side → ~293px content width, still 8px from the card edge, no overlap with the card border) so Monthly/Free simply get extra breathing room (their visible output is unchanged) while Yearly gains the width it needs; (b) use text-xl (20px, leading-none) for the monthly-equivalent — the LARGEST size that fits with the user's exact full format ("CHF X.XX / month   CHF XX / year", labels with spaces) without clipping. text-xl is still clearly larger than the text-sm (14px) yearly price (1.43×), so the large/prominent hierarchy reads clearly. (text-2xl/24px overflows by ~15px and clips the yearly; text-5xl is impossible.)
+- Kept: dynamic monthly-equivalent = priceYearly / 12 with 2 fraction digits (Plus 7.50, Pro 40.83, Max 82.50); shrink-0 + whitespace-nowrap + leading-none on the large span (no wrap to a 2nd line box); ml-2 for a wider gap between the two price groups vs. the gap-2 between the large number and its "/ month" label; Free branch unchanged (always "Free"); Monthly branch untouched (text-5xl "CHF X / month", 48px) per "Monthly mode must remain unchanged".
+- E2E verification (agent-browser, logged in via Platform Admin quick-login → Sign in → #platform-plans → Yearly):
+  * Hierarchy now correct per VLM (z-ai vision): Plus = "CHF 7.50" large/bold + "/ month" (belongs to large) + "CHF 90 / year" small/muted (belongs to small); Pro = "CHF 40.83" large + "CHF 490 / year" small. Exactly matches the user's requested examples.
+  * No clipping: all yearly prices fully visible (Pro/Max have 6–7px margin to the card right edge — tight but inside; VLM confirmed "fully visible without truncation").
+  * Dynamic values correct: 7.50 = 90/12, 40.83 = 490/12, 82.50 = 990/12.
+  * Monthly mode unchanged & correct: Free/Plus/Pro/Max all render "CHF X / month" on one line at 48px (the Pro/Max anti-wrap fix from Task 65 is preserved).
+  * Free plan stays "Free" (no monthly/yearly calc).
+- Lint: 4 errors + 3 warnings, all pre-existing in content-edit-page.tsx / seo-broken-links-page.tsx — no new errors.
+- dev.log: no runtime errors during the E2E visits.
+
+Stage Summary:
+- Yearly price hierarchy FIXED: monthly-equivalent is now the LARGE/prominent price; actual yearly price is the small/muted value beside it; "/ month" → large, "/ year" → small. Matches the user's exact examples (CHF 7.50 / month   CHF 90 / year, etc.).
+- Required a -mx-6 breakout of the price row + divider into the card padding (gaining ~48px width) plus downgrading the large monthly-equivalent from text-5xl to text-xl — the card content area (~245px, sidebar + 3-col grid + p-8) is too narrow to hold a text-5xl "CHF 7.50" + full labels + the "CHF X / year" group on one line. text-xl is the largest size that fits cleanly without clipping the small yearly price.
+- Monthly mode, Free plan, cards, features, buttons, plan data all unchanged. Lint baseline preserved. Browser-verified (agent-browser + VLM).

@@ -181,53 +181,57 @@ function PlanSummaryCard({
         </div>
 
         {/* Price — reflects the global billing-interval selector (Monthly / Yearly).
-             Free plan always shows "Free" regardless of the selector. */}
-        <div className="mt-8">
+             Free plan always shows "Free" regardless of the selector.
+             The price row + divider break out with -mx-6 into the card
+             padding (8px from the card edge) so the Yearly layout —
+             large monthly-equivalent + "/ month" + small "CHF X / year"
+             group, all on one line — has enough width to keep the small
+             yearly price fully visible instead of clipped. Monthly and
+             Free simply get extra breathing room; their visible output
+             is unchanged. */}
+        <div className="-mx-6 mt-8">
           {plan.isFree ? (
             <div className="flex items-baseline gap-2">
               <span className="text-5xl font-semibold tracking-tight text-foreground">Free</span>
             </div>
           ) : billingInterval === 'yearly' ? (
-            // Yearly selected — compact INLINE presentation matching the
-            // reference image. The main yearly price stays large &
-            // prominent; the equivalent monthly price is a small muted
-            // value positioned directly beside it on the same horizontal
-            // line (no separate "≈ / month" line below). The monthly
-            // equivalent is computed dynamically from the real yearly
-            // price stored in the DB (priceYearly / 12) — never hardcoded.
-            //   e.g. Plus →  CHF 7.50 /month   CHF 90/year
-            //        Pro  →  CHF 40.83 /month  CHF 490/year
-            //        Max  →  CHF 82.50 /month  CHF 990/year
+            // Yearly selected — compact INLINE presentation. The
+            // EQUIVALENT MONTHLY price (priceYearly / 12) is the MAIN
+            // LARGE price; the ACTUAL yearly price is shown smaller and
+            // muted directly beside it on the same horizontal line (no
+            // separate "≈ / month" line below). "/ month" belongs to
+            // the large monthly price; "/ year" belongs to the small
+            // yearly price. The monthly equivalent is computed
+            // dynamically from the real yearly price stored in the DB
+            // (priceYearly / 12) — never hardcoded.
+            //   e.g. Plus →  CHF 7.50 / month   CHF 90 / year
+            //        Pro  →  CHF 40.83 / month  CHF 490 / year
+            //        Max  →  CHF 82.50 / month  CHF 990 / year
             //
-            // Single flat flex row (no nested inline-flex). The large
-            // yearly price span carries whitespace-nowrap + shrink-0 so
-            // "CHF 90" can never wrap to a second line box — without
-            // those guards the flex layout squeezes the span below its
-            // content width and the price wraps to two 48px lines
-            // (doubling the row to 96px and shifting the card content
-            // below). With the guards the row stays at the same 48px
-            // height as the Monthly branch (zero layout shift when
-            // toggling the selector) and items-baseline keeps the digit
-            // baselines aligned exactly like the Monthly price. The small
-            // monthly-equivalent span carries an extra right margin
-            // (mr-2) so the gap between the two price groups is wider
-            // than the gap between the large yearly number and its
-            // "/year" label.
+            // The card content is only ~245px (sidebar + 3-col grid +
+            // p-8), which cannot hold a text-5xl "CHF 7.50" + "/ month"
+            // + the full "CHF X / year" group on one line (the yearly
+            // would be clipped off). The large monthly-equivalent uses
+            // text-xl — still clearly larger than the text-sm yearly
+            // price, satisfying the large/prominent hierarchy — and the
+            // row breaks out with the container's -mx-6 (above) to gain
+            // the width needed to keep the small yearly price fully
+            // visible. shrink-0 + whitespace-nowrap + leading-none on
+            // the large span prevent it wrapping to a 2nd line box.
+            // ml-2 widens the gap between the two price groups vs. the
+            // gap between the large number and its "/ month" label.
             <div className="flex items-baseline gap-2">
-              {plan.priceYearly > 0 && (
-                <span className="mr-2 whitespace-nowrap text-sm text-muted-foreground">
-                  {plan.currency}{' '}
-                  {(plan.priceYearly / 12).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}{' '}
-                  /month
-                </span>
-              )}
-              <span className="shrink-0 whitespace-nowrap text-5xl font-semibold leading-none tracking-tight text-foreground">
-                {formatCurrency(plan.priceYearly, plan.currency)}
+              <span className="shrink-0 whitespace-nowrap text-xl font-semibold leading-none tracking-tight text-foreground">
+                {plan.currency}{' '}
+                {(plan.priceYearly / 12).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               </span>
-              <span className="shrink-0 whitespace-nowrap text-sm text-muted-foreground">/year</span>
+              <span className="whitespace-nowrap text-sm text-muted-foreground">/ month</span>
+              <span className="ml-2 shrink-0 whitespace-nowrap text-sm text-muted-foreground">
+                {formatCurrency(plan.priceYearly, plan.currency)} / year
+              </span>
             </div>
           ) : (
             <div className="flex items-baseline gap-2">
@@ -240,7 +244,7 @@ function PlanSummaryCard({
         </div>
 
         {/* Thin horizontal divider between the price section and the features section */}
-        <div className="mt-8 h-px bg-border" aria-hidden />
+        <div className="-mx-6 mt-8 h-px bg-border" aria-hidden />
 
         {/* Feature items (section label omitted) */}
         <div className="mt-6">
