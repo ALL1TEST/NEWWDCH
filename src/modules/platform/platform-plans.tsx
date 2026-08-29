@@ -27,7 +27,6 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApi, postApi, putApi } from '@/lib/api-client';
 import { toast } from 'sonner';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -57,6 +56,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {
+  Check,
   ChevronDown,
   Loader2,
   Pencil,
@@ -66,7 +66,6 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import {
-  PlatformPageHeader,
   ErrorState,
   PlanBadge,
   formatBytes,
@@ -105,32 +104,13 @@ function formatLimitValue(key: LimitKey, value: number): string {
   return value.toLocaleString();
 }
 
-/** One-line compact limits summary used on the plan card. */
-function summarizeLimits(limits: PlanLimits): string {
-  return [
-    `${formatLimitValue('maxSites', limits.maxSites)} sites`,
-    formatLimitValue('storageBytes', limits.storageBytes),
-    `${formatLimitValue('aiWords', limits.aiWords)} AI words`,
-    `${formatLimitValue('aiArticles', limits.aiArticles)} AI articles`,
-    `${formatLimitValue('automationRuns', limits.automationRuns)} automation runs`,
-  ].join(' · ');
-}
-
-/** One-line compact entitlement summary used on the plan card. */
-function summarizeEntitlements(entitlements: string[]): string {
-  if (entitlements.length === 0) return 'No advanced features';
-  return entitlements
-    .map((key) => ENTITLEMENT_LABELS[key as EntitlementKey] ?? key)
-    .join(' · ');
-}
-
 // -------------------- Plan summary tile --------------------
 
 function PlanSummaryTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 flex items-center gap-2">
-      <span className="text-lg font-bold tracking-tight tabular-nums">{value}</span>
-      <span className="text-xs text-muted-foreground">{label}</span>
+    <div className="flex items-center gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-2.5">
+      <span className="text-xl font-semibold tabular-nums text-zinc-50">{value}</span>
+      <span className="text-xs text-zinc-500">{label}</span>
     </div>
   );
 }
@@ -170,85 +150,115 @@ function PlanSummaryCard({
     },
   });
 
+  // Feature list shown on the card. Prefer the client-facing marketing
+  // copy (plan.features); fall back to the structured entitlement labels
+  // so a brand-new plan with no marketing copy still surfaces a readable
+  // feature list. Either way the data shown is real plan data — no mock.
+  const featureItems =
+    plan.features.length > 0
+      ? plan.features
+      : plan.entitlements.map((k) => ENTITLEMENT_LABELS[k as EntitlementKey] ?? k);
+
   return (
     <>
-      <Card className={plan.active ? '' : 'opacity-70'}>
-        <CardContent className="p-4 space-y-4">
-          {/* Header: name + badge + quick active toggle */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <h3 className="text-base font-semibold tracking-tight truncate">{plan.name}</h3>
+      <div
+        className={`group relative flex h-full flex-col overflow-hidden rounded-3xl border border-white/[0.08] bg-[#161616] p-8 transition-colors duration-300 hover:border-white/[0.16] ${
+          plan.active ? '' : 'opacity-60'
+        }`}
+      >
+        {/* Header: name + badge + quick active toggle */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-2xl font-semibold tracking-tight text-zinc-50">{plan.name}</h3>
+            <div className="mt-2.5">
               <PlanBadge planId={getPlanBadgeId(plan.planId)} />
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Label
-                htmlFor={`active-${plan.planId}`}
-                className="text-xs text-muted-foreground cursor-pointer"
-              >
-                {plan.active ? 'Active' : 'Inactive'}
-              </Label>
-              <Switch
-                id={`active-${plan.planId}`}
-                checked={plan.active}
-                disabled={!canEdit || activeMutation.isPending}
-                onCheckedChange={(v) => activeMutation.mutate(v)}
-              />
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Label
+              htmlFor={`active-${plan.planId}`}
+              className="cursor-pointer text-xs text-zinc-500"
+            >
+              {plan.active ? 'Active' : 'Inactive'}
+            </Label>
+            <Switch
+              id={`active-${plan.planId}`}
+              checked={plan.active}
+              disabled={!canEdit || activeMutation.isPending}
+              onCheckedChange={(v) => activeMutation.mutate(v)}
+            />
+          </div>
+        </div>
+
+        {/* Price */}
+        <div className="mt-8">
+          {plan.isFree ? (
+            <div className="flex items-baseline gap-2">
+              <span className="text-5xl font-semibold tracking-tight text-zinc-50">Free</span>
             </div>
-          </div>
-
-          {/* Price */}
-          <div className="space-y-0.5">
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-              Price
+          ) : (
+            <div className="flex items-baseline gap-2">
+              <span className="text-5xl font-semibold tracking-tight text-zinc-50">
+                {formatCurrency(plan.priceMonthly, plan.currency)}
+              </span>
+              <span className="text-sm text-zinc-500">/ month</span>
+            </div>
+          )}
+          {!plan.isFree && plan.priceYearly > 0 && (
+            <p className="mt-1.5 text-sm text-zinc-500">
+              {formatCurrency(plan.priceYearly, plan.currency)} / year
             </p>
-            {plan.isFree ? (
-              <p className="text-2xl font-bold tracking-tight">Free</p>
+          )}
+        </div>
+
+        {/* Billing interval pill */}
+        <div className="mt-4">
+          <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium capitalize text-zinc-400">
+            {plan.interval} billing
+          </span>
+        </div>
+
+        {/* Features */}
+        <div className="mt-8">
+          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Features</p>
+          <ul className="mt-3.5 space-y-2.5">
+            {featureItems.length === 0 ? (
+              <li className="text-sm text-zinc-600">No features configured</li>
             ) : (
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold tracking-tight">
-                  {formatCurrency(plan.priceMonthly, plan.currency)}
-                </span>
-                <span className="text-xs text-muted-foreground">/ month</span>
+              featureItems.map((f, i) => (
+                <li key={`${f}-${i}`} className="flex items-start gap-2.5 text-sm text-zinc-300">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" />
+                  <span className="leading-snug">{f}</span>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+
+        {/* Usage Limits */}
+        <div className="mt-8">
+          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Usage Limits</p>
+          <div className="mt-3.5 grid grid-cols-2 gap-2">
+            {LIMIT_KEYS.map((k) => (
+              <div
+                key={k}
+                className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2"
+              >
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">{LIMIT_LABELS[k]}</p>
+                <p className="mt-0.5 text-sm font-medium text-zinc-200">
+                  {formatLimitValue(k, plan.limits[k])}
+                </p>
               </div>
-            )}
-            {!plan.isFree && plan.priceYearly > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {formatCurrency(plan.priceYearly, plan.currency)} / year
-              </p>
-            )}
+            ))}
           </div>
+        </div>
 
-          {/* Billing interval */}
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Billing</span>
-            <span className="font-medium capitalize">{plan.interval}</span>
-          </div>
-
-          {/* Features */}
-          <div className="space-y-1">
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-              Features
-            </p>
-            <p className="text-sm leading-snug">{summarizeEntitlements(plan.entitlements)}</p>
-          </div>
-
-          {/* Limits */}
-          <div className="space-y-1">
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-              Limits
-            </p>
-            <p className="text-sm leading-snug text-foreground/90">
-              {summarizeLimits(plan.limits)}
-            </p>
-          </div>
-
-          <Separator />
-
-          {/* Edit button */}
+        {/* Edit button — pinned to card bottom */}
+        <div className="mt-auto pt-8">
           <Button
             variant="outline"
             size="sm"
-            className="w-full"
+            className="w-full rounded-full border-white/15 bg-transparent text-zinc-200 hover:bg-white/5 hover:text-white hover:border-white/25"
             disabled={!canEdit}
             onClick={() => setEditing(true)}
           >
@@ -256,12 +266,12 @@ function PlanSummaryCard({
             Edit Plan
           </Button>
           {!canEdit && (
-            <p className="text-[10px] text-muted-foreground text-center -mt-2">
+            <p className="mt-2 text-center text-[10px] text-zinc-600">
               Editing is restricted to the OWNER role.
             </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {editing && (
         <EditPlanDialog plan={plan} open={editing} onOpenChange={setEditing} />
@@ -914,78 +924,93 @@ export function PlatformPlansModule() {
   }, [plansQuery.data]);
 
   return (
-    <div className="space-y-6">
-      <PlatformPageHeader
-        title="Plans & Pricing"
-        subtitle="Manage plans, pricing, features and usage limits. Changes are shared with the Client Billing page."
-        actions={
-          isOwner ? (
-            <Button size="sm" onClick={() => setShowCreate(true)}>
+    <div className="dark -mx-6 -mt-4 -mb-6 min-h-full bg-[#0a0a0a] px-6 pb-10 pt-4 text-zinc-50">
+      <div className="mx-auto max-w-7xl space-y-8">
+        {/* Premium header */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-zinc-50 sm:text-4xl">
+              Plans &amp; Pricing
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm text-zinc-400 sm:text-[15px]">
+              Manage plans, pricing, features and usage limits. Changes are shared with the
+              Client Billing page.
+            </p>
+          </div>
+          {isOwner ? (
+            <Button
+              onClick={() => setShowCreate(true)}
+              className="h-10 shrink-0 rounded-full bg-zinc-50 px-5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-200"
+            >
               <Plus className="h-4 w-4 mr-2" />
               Create Plan
             </Button>
-          ) : undefined
-        }
-      />
+          ) : null}
+        </div>
 
-      {!isOwner && (
-        <Card>
-          <CardContent className="p-4 flex items-start gap-3 bg-amber-50/50 dark:bg-amber-950/20">
-            <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+        {!isOwner && (
+          <div className="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-4">
+            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
             <div className="text-sm">
-              <p className="font-medium text-amber-800 dark:text-amber-400">View-only</p>
-              <p className="text-muted-foreground">
+              <p className="font-medium text-amber-300">View-only</p>
+              <p className="text-zinc-400">
                 Editing plan pricing, entitlements and limits is restricted to the OWNER role.
               </p>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        )}
 
-      {/* Compact plan summary */}
-      <div className="flex flex-wrap items-center gap-2">
-        <PlanSummaryTile label="Plans" value={summary.total} />
-        <PlanSummaryTile label="Paid Plans" value={summary.paid} />
-        <PlanSummaryTile label="Free Plan" value={summary.free} />
-      </div>
-
-      {plansQuery.isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[0, 1, 2].map((i) => (
-            <Card key={i}>
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <Skeleton className="h-5 w-20" />
-                  <Skeleton className="h-5 w-16" />
-                </div>
-                <Skeleton className="h-8 w-24" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-9 w-full" />
-              </CardContent>
-            </Card>
-          ))}
+        {/* Premium plan summary */}
+        <div className="flex flex-wrap items-center gap-3">
+          <PlanSummaryTile label="Plans" value={summary.total} />
+          <PlanSummaryTile label="Paid Plans" value={summary.paid} />
+          <PlanSummaryTile label="Free Plan" value={summary.free} />
         </div>
-      ) : plansQuery.isError || !plansQuery.data ? (
-        <Card>
-          <CardContent className="p-4">
+
+        {plansQuery.isLoading ? (
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="flex h-[560px] flex-col rounded-3xl border border-white/[0.08] bg-[#161616] p-8"
+              >
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-7 w-24 bg-white/[0.06]" />
+                  <Skeleton className="h-6 w-16 rounded-full bg-white/[0.06]" />
+                </div>
+                <Skeleton className="mt-8 h-12 w-32 bg-white/[0.06]" />
+                <Skeleton className="mt-4 h-6 w-28 rounded-full bg-white/[0.06]" />
+                <div className="mt-8 space-y-3">
+                  <Skeleton className="h-4 w-full bg-white/[0.06]" />
+                  <Skeleton className="h-4 w-5/6 bg-white/[0.06]" />
+                  <Skeleton className="h-4 w-4/6 bg-white/[0.06]" />
+                </div>
+                <div className="mt-auto grid grid-cols-2 gap-2 pt-8">
+                  {Array.from({ length: 6 }).map((_, j) => (
+                    <Skeleton key={j} className="h-14 w-full bg-white/[0.06]" />
+                  ))}
+                </div>
+                <Skeleton className="mt-8 h-10 w-full rounded-full bg-white/[0.06]" />
+              </div>
+            ))}
+          </div>
+        ) : plansQuery.isError || !plansQuery.data ? (
+          <div className="rounded-3xl border border-white/[0.08] bg-[#161616] p-4">
             <ErrorState
               message="Unable to load plan configuration."
               onRetry={() => plansQuery.refetch()}
             />
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {plansQuery.data.map((plan) => (
-            <PlanSummaryCard key={plan.planId} plan={plan} canEdit={isOwner} />
-          ))}
-        </div>
-      )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {plansQuery.data.map((plan) => (
+              <PlanSummaryCard key={plan.planId} plan={plan} canEdit={isOwner} />
+            ))}
+          </div>
+        )}
 
-      {showCreate && (
-        <CreatePlanDialog open={showCreate} onOpenChange={setShowCreate} />
-      )}
+        {showCreate && <CreatePlanDialog open={showCreate} onOpenChange={setShowCreate} />}
+      </div>
     </div>
   );
 }
