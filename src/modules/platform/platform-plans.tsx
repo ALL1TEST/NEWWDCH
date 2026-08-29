@@ -241,7 +241,7 @@ function PlanSummaryCard({
              it wrapping to a 2nd line box; ml-2 widens the gap between
              the two price groups vs. the gap between the large number
              and its "/ month" label. */}
-        <div className="-mx-6 mt-8">
+        <div className="-mx-6 mt-6">
           {plan.isFree ? (
             <div className="flex items-baseline gap-2">
               <span className="shrink-0 whitespace-nowrap text-5xl font-semibold leading-none tracking-tight text-foreground">
@@ -275,19 +275,30 @@ function PlanSummaryCard({
           )}
         </div>
 
-        {/* Thin horizontal divider between the price section and the features section */}
-        <div className="-mx-6 mt-8 h-px bg-border" aria-hidden />
+        {/* Thin horizontal divider between the price section and the features section.
+             Equidistant from the price above and the feature list below (mt-6 both
+             sides) for a consistent, compact vertical rhythm on every card. */}
+        <div className="-mx-6 mt-6 h-px bg-border" aria-hidden />
 
-        {/* Feature items (section label omitted) */}
+        {/* Feature items (section label omitted). Same typography on every card:
+             text-[15px] leading-normal so features read as a clear medium-size
+             block — visibly subordinate to the text-5xl price and text-3xl plan
+             name, never competing with them. Check icon is h-4 w-4 with mt-0.5
+             so its optical center aligns with the first line of feature text;
+             gap-2.5 keeps a consistent icon↔text column gutter; items-start
+             pins the icon to the first line even when a feature wraps to 2
+             lines, so rows never look vertically misaligned. All cards share
+             the card's p-8 left padding, so every feature column starts at the
+             same x. */}
         <div className="mt-6">
           <ul className="space-y-2.5">
             {featureItems.length === 0 ? (
-              <li className="text-sm text-muted-foreground">No features configured</li>
+              <li className="text-[15px] leading-normal text-muted-foreground">No features configured</li>
             ) : (
               featureItems.map((f, i) => (
-                <li key={`${f}-${i}`} className="flex items-start gap-2.5 text-sm text-card-foreground">
+                <li key={`${f}-${i}`} className="flex items-start gap-2.5 text-[15px] leading-normal text-card-foreground">
                   <Check className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="leading-snug">{f}</span>
+                  <span>{f}</span>
                 </li>
               ))
             )}

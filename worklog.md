@@ -6997,3 +6997,42 @@ Stage Summary:
   6. Exact same typography system/spacing/alignment applied to every card
 - No changes to card layout, features, buttons, plan logic, or yearly/monthly calculation logic (priceYearly/12 still dynamic)
 - Lint baseline unchanged; browser-verified clean render on Monthly + Yearly + Free; Max yearly fits on one line with no clipping
+
+---
+Task ID: 67
+Agent: main (orchestrator)
+Task: Polish typography & spacing inside all Plans & Pricing cards so feature content is visually consistent with the price section — clear compact rhythm, equidistant divider, readable medium feature text, aligned check icons, full card consistency. Visual-only; no data/logic changes.
+
+Work Log:
+- Read worklog (Task 66 context: pricing typography & $ symbol already fixed; price text-5xl, plan name text-3xl font-bold, Free=$0)
+- Re-read src/modules/platform/platform-plans.tsx card section (lines 193-321) to get exact current strings
+- Identified spacing asymmetry: price container mt-8 (name→price=32px) + divider mt-8 (price→divider=32px) + features mt-6 (divider→features=24px) → divider NOT equidistant (32 above vs 24 below)
+- Identified feature text was text-sm (14px, "too small" per user) with leading-snug on span (1.375, tight)
+- Applied 3 MultiEdit changes (visual only, no data/logic):
+  1. Price container: `-mx-6 mt-8` → `-mx-6 mt-6` (name→price = 24px, uniform compact rhythm)
+  2. Divider: `-mx-6 mt-8 h-px bg-border` → `-mx-6 mt-6 h-px bg-border` (price→divider = 24px = divider→features = 24px, EQUIDISTANT)
+  3. Feature list block: li `text-sm` → `text-[15px] leading-normal text-card-foreground`; empty-state li matched; span `leading-snug` removed (inherits li leading-normal); check icon kept `mt-0.5 h-4 w-4 shrink-0 text-muted-foreground` (aligns optical center with first line, consistent across rows); gap-2.5 + items-start kept (icon pinned to first line on multi-line wrap, no row misalignment); space-y-2.5 kept (consistent row spacing)
+- Resulting rhythm: name →(24px)→ price →(24px)→ divider →(24px)→ features — uniform 24px compact, divider equidistant both sides
+- bun run lint: 4 errors + 3 warnings — ALL pre-existing in content-edit-page.tsx / seo-broken-links-page.tsx, NONE in platform-plans.tsx (baseline unchanged)
+- Browser verification (agent-browser, 1440x900, Platform Admin, plans page):
+  - Monthly mode screenshot + VLM: confirmed (1) clear compact vertical rhythm, (2) divider equidistant, (3) feature text readable medium (~14-16px, subordinate to large price), (4) check icons uniform & vertically aligned no misalignment, (5) all cards same padding/typography/divider/spacing, (6) Edit Plan button aligned at bottom
+  - Yearly mode: switched toggle, screenshot confirmed same layout (only price row content changes; rhythm/divider/features unchanged)
+  - PRECISE DOM measurement on all 4 cards (Free/Plus/Pro/Max):
+    * gap_price_to_divider = 24px on ALL 4 ✓
+    * gap_divider_to_features = 24px on ALL 4 ✓ → equidistant: true on every card
+    * featFontSize = 15px, featLineHeight = 22.5px (15×1.5 leading-normal), featColor = identical lab value on ALL 4 ✓
+    * iconSize = 16x16 on ALL 4, iconSizeConsistentAcrossCards = true ✓
+    * iconTopOffset_vs_li = 2px (mt-0.5), iconLeftOffset_vs_li = 0px on ALL 4 → all icons align at same x, same y offset, no row misalignment ✓
+  - Browser console: clean (only HMR/Fast-Refresh logs + React DevTools info), no errors
+
+Stage Summary:
+- Plans & Pricing cards polished per 8-point spec (visual only, zero data/logic changes):
+  1. Plan names: unchanged (text-3xl font-bold, same on Free/Plus/Pro/Max — already satisfied by Task 66)
+  2. Price→features spacing: uniform 24px compact rhythm (name→price→divider→features all 24px); divider EQUIDISTANT (24px both sides) — the key fix
+  3. Feature typography: text-[15px] leading-normal text-card-foreground — readable medium, consistent font/size/weight/line-height/color across all 4 cards; clearly subordinate to text-5xl price & text-3xl plan name (hierarchy 48 > 30 > 15)
+  4. Check icons: h-4 w-4 (16x16) uniform; mt-0.5 aligns optical center with first line; gap-2.5 consistent gutter; items-start pins to first line on wrap → no row misalignment
+  5. Feature alignment: all cards share p-8 left padding → every feature column starts at same x (iconLeftOffset=0 on all)
+  6. Hierarchy preserved: plan name=strong heading, main price=largest, /month & /year=smaller muted, divider=subtle, features=readable medium
+  7. Card consistency: same p-8 padding, -mx-6 divider/price breakout, feature-row spacing (space-y-2.5), divider treatment, Edit button mt-auto bottom-aligned
+  8. No changes to plan names/prices/features/data/limits/toggles/monthly-yearly logic/create-edit logic/backend/API/DB
+- Lint baseline unchanged; browser-verified clean render; precise DOM measurement numerically confirms equidistant divider + consistent typography + aligned icons across all 4 cards
