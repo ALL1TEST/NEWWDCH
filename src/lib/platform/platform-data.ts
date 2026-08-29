@@ -602,30 +602,133 @@ export function listSubscriptions(opts?: { status?: SubscriptionStatus | 'all'; 
     .map((c) => ({ ...c, planName: getPlan(c.planId).name, monthlyPrice: monthlyPrice(getPlan(c.planId), c.billingInterval) }));
 }
 
-export function listPayments(opts?: { status?: PaymentStatus | 'all'; search?: string }): (Payment & { customerName: string; customerEmail: string })[] {
-  const s = store();
-  let list = [...s.payments];
+export async function listPayments(opts?: { status?: PaymentStatus | 'all'; search?: string }): Promise<(Payment & { customerName: string; customerEmail: string })[]> {
+  // REAL DB-backed (replaces the in-memory PAYMENT_SEED mock). The admin
+  // Payments table now reads the live Payment table, joined to the User
+  // (customer) + Subscription. Stripe webhooks (invoice.paid /
+  // checkout.session.completed / payment_intent.*) and the dev seed
+  // script write these rows, so this is the actual relational state.
+  //
+  // Server-side filtering:
+  //   - status: exact match on Payment.status
+  //   - search: case-insensitive substring over payment id, invoice
+  //     number, Stripe invoice/payment-intent/charge IDs, and the
+  //     customer's name + email (via the User join).
+  //
+  // Returns the SAME shape the UI has always consumed
+  // (Payment & { customerName, customerEmail }) so the Payments page is
+  // unchanged — only the data source switched from mock to real DB. The
+  // summary values (total payments, paid count, paid total) are derived
+  // client-side from this array by the Payments page (already dynamic).
+  const { db } = await import('@/lib/db');
+
+  const where: { status?: string; OR?: unknown[] } = {};
   if (opts?.status && opts.status !== 'all') {
-    list = list.filter((p) => p.status === opts.status);
+    where.status = opts.status;
   }
   if (opts?.search) {
-    const q = opts.search.toLowerCase();
-    list = list.filter((p) => {
-      const c = s.customers.find((cu) => cu.id === p.customerId);
-      return (
-        p.id.toLowerCase().includes(q) ||
-        p.invoiceNumber.toLowerCase().includes(q) ||
-        (c?.name.toLowerCase().includes(q) ?? false) ||
-        (c?.email.toLowerCase().includes(q) ?? false)
-      );
-    });
+    const q = opts.search;
+    where.OR = [
+      { id: { contains: q } },
+      { invoiceNumber: { contains: q } },
+      { stripeInvoiceId: { contains: q } },
+      { stripePaymentIntentId: { contains: q } },
+      { stripeChargeId: { contains: q } },
+      { user: { OR: [{ name: { contains: q } }, { email: { contains: q } }] } },
+    ];
   }
-  return list
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .map((p) => {
-      const c = s.customers.find((cu) => cu.id === p.customerId);
-      return { ...p, customerName: c?.name ?? '—', customerEmail: c?.email ?? '—' };
-    });
+
+  const rows = await db.payment.findMany({
+    where,
+    include: { user: { select: { id: true, name: true, email: true } }, subscription: true },
+    orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
+    take: 500,
+  });
+
+  const mapped = rows.map((r) => mapPaymentRow(r));
+  // Precise effective-date sort (paidAt ?? createdAt desc) so pending /
+  // failed rows (paidAt null) interleave by their createdAt.
+  mapped.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  return mapped;
+}
+
+/** Normalize a Prisma Payment row (with user included) to the public
+ *  Payment interface the admin UI consumes. The shape is identical to
+ *  the legacy mock Payment so the UI is unchanged; only the data source
+ *  switched to the real DB. */
+function mapPaymentRow(r: {
+  id: string;
+  userId: string;
+  planId: string;
+  amount: number;
+  currency: string;
+  status: string;
+  method: string | null;
+  invoiceNumber: string | null;
+  stripeInvoiceId: string | null;
+  stripePaymentIntentId: string | null;
+  stripeChargeId: string | null;
+  paymentMethodType: string | null;
+  paymentMethodDetails: string | null;
+  paidAt: Date | null;
+  createdAt: Date;
+  user: { id: string; name: string | null; email: string } | null;
+}): Payment & { customerName: string; customerEmail: string } {
+  const planId = (['free', 'plus', 'pro', 'max'].includes(r.planId) ? r.planId : 'free') as PlanId;
+  const status = (['paid', 'pending', 'failed', 'refunded'].includes(r.status)
+    ? r.status
+    : 'pending') as PaymentStatus;
+  return {
+    id: r.id,
+    customerId: r.userId,
+    planId,
+    amount: r.amount,
+    currency: r.currency,
+    status,
+    method: r.method ?? deriveMethodLabel(r.paymentMethodType, r.paymentMethodDetails) ?? '—',
+    date: (r.paidAt ?? r.createdAt).toISOString(),
+    invoiceNumber: r.invoiceNumber ?? r.stripeInvoiceId ?? '—',
+    customerName: r.user?.name ?? r.user?.email ?? '—',
+    customerEmail: r.user?.email ?? '—',
+  };
+}
+
+/** Build a human-readable payment-method label from the stored metadata,
+ *  e.g. "Visa ••4242". Falls back to the capitalized type. */
+function deriveMethodLabel(type: string | null, detailsJson: string | null): string | null {
+  if (!type) return null;
+  if (type === 'card' && detailsJson) {
+    try {
+      const d = JSON.parse(detailsJson) as { brand?: string; last4?: string };
+      if (d.brand && d.last4) return `${capitalize(d.brand)} ••${d.last4}`;
+      if (d.brand) return capitalize(d.brand);
+    } catch {
+      // ignore malformed JSON
+    }
+  }
+  return capitalize(type);
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Real-DB recent payments for the Dashboard overview widget — mirrors
+ *  listPayments but capped at `limit` (default 6) to match the overview
+ *  "recent payments" panel. The overview route overlays this over the
+ *  (still-mock) getOverview() result so the Dashboard's payment widget
+ *  always agrees with the Payments page — same rows, same customer
+ *  names, same amounts, same dates. */
+export async function getRecentPaymentsReal(limit = 6): Promise<(Payment & { customerName: string; customerEmail: string })[]> {
+  const { db } = await import('@/lib/db');
+  const rows = await db.payment.findMany({
+    include: { user: { select: { id: true, name: true, email: true } } },
+    orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
+    take: limit,
+  });
+  const mapped = rows.map((r) => mapPaymentRow(r));
+  mapped.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  return mapped;
 }
 
 export function listSites(): (PlatformSite & { customerName: string })[] {

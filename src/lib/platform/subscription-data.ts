@@ -378,7 +378,11 @@ export async function subscribeToFreePlan(
  * - Computes the calendar-based currentPeriodEnd from the Stripe
  *   subscription's `current_period_end` (Stripe is the source of truth
  *   for paid subscriptions).
- * - Records a Payment row if `paymentIntent` info is provided.
+ * - Records a Payment row if `payment` info is provided — fully
+ *   relational: links to the Subscription, captures the Stripe Invoice
+ *   ID, PaymentIntent ID, Charge ID, and the payment-method metadata
+ *   (brand / last4 / exp / funding / country) so the admin Payments
+ *   table shows the real Stripe state.
  */
 export async function activateSubscriptionFromStripe(params: {
   userId: string;
@@ -393,6 +397,14 @@ export async function activateSubscriptionFromStripe(params: {
     currency: string;
     stripeInvoiceId?: string;
     invoiceNumber?: string;
+    // Full Stripe relational + payment-method metadata, fetched by the
+    // webhook from the PaymentIntent / latest Charge.
+    stripePaymentIntentId?: string;
+    stripeChargeId?: string;
+    paymentMethodType?: string;
+    paymentMethodDetails?: string; // JSON
+    method?: string; // display label, e.g. "Visa ••4242"
+    description?: string;
   };
 }): Promise<SubscriptionRow> {
   const { userId, planId, billingInterval, payment } = params;
@@ -416,7 +428,8 @@ export async function activateSubscriptionFromStripe(params: {
     ? await db.subscription.update({ where: { userId }, data })
     : await db.subscription.create({ data });
 
-  // Record the payment row, if provided.
+  // Record the payment row, if provided — with the full Stripe relational
+  // + payment-method metadata so the admin Payments table mirrors Stripe.
   if (payment) {
     await db.payment.create({
       data: {
@@ -426,9 +439,14 @@ export async function activateSubscriptionFromStripe(params: {
         amount: payment.amount,
         currency: payment.currency,
         status: 'paid',
-        method: 'Stripe',
+        method: payment.method ?? 'Stripe',
         invoiceNumber: payment.invoiceNumber ?? null,
         stripeInvoiceId: payment.stripeInvoiceId ?? null,
+        stripePaymentIntentId: payment.stripePaymentIntentId ?? null,
+        stripeChargeId: payment.stripeChargeId ?? null,
+        paymentMethodType: payment.paymentMethodType ?? null,
+        paymentMethodDetails: payment.paymentMethodDetails ?? null,
+        description: payment.description ?? null,
         paidAt: new Date(),
       },
     });

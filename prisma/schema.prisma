@@ -2143,6 +2143,17 @@ model Subscription {
 // configured; in dev (no Stripe keys) only free / no-charge payments are
 // recorded. Never fake a 'paid' status — checkout returns 503 if Stripe
 // is not configured and the plan has a positive price.
+//
+// Every payment row is fully relational: it connects to its Customer
+// (userId → User), Subscription (subscriptionId), Plan (planId →
+// PlanConfig), Stripe Invoice (stripeInvoiceId), Stripe PaymentIntent
+// (stripePaymentIntentId), Stripe Charge (stripeChargeId), and the
+// payment method metadata (paymentMethodType + paymentMethodDetails
+// JSON: brand, last4, expMonth, expYear, funding, country). All of these
+// are populated by the Stripe webhook (invoice.paid / checkout.session
+// completed / payment_intent.*) so the admin Payments table, the
+// customer detail view, and the Dashboard always reflect the real Stripe
+// state. Stripe is the source of truth; this table mirrors it.
 model Payment {
   id              String       @id @default(cuid())
   userId          String
@@ -2150,12 +2161,19 @@ model Payment {
   subscriptionId  String?
   subscription    Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   planId          String
-  amount          Int          @default(0) // major currency units
-  currency        String       @default("CHF")
+  amount          Int          @default(0) // major currency units (e.g. 49 = 49 CHF)
+  currency        String       @default("CHF") // ISO 4217 (USD, EUR, CHF, ...)
   status          String       @default("pending") // pending | paid | failed | refunded
-  method          String?
-  invoiceNumber   String?
-  stripeInvoiceId String?
+  method          String? // display label, e.g. "Visa ••4242" or "Stripe"
+  invoiceNumber   String? // human-readable invoice reference, e.g. "INV-2026-1042"
+  // ---- Stripe relational refs (source of truth when Stripe is configured) ----
+  stripeInvoiceId        String? // Stripe Invoice ID (in_...)
+  stripePaymentIntentId  String? // Stripe PaymentIntent ID (pi_...)
+  stripeChargeId         String? // Stripe Charge ID (ch_...) — populated from the PI's latest charge
+  // ---- Payment method metadata (mirrors Stripe PaymentMethod) ----
+  paymentMethodType      String? // 'card' | 'ach_debit' | 'sepa_debit' | 'link' | ...
+  paymentMethodDetails   String? // JSON: { brand, last4, expMonth, expYear, funding, country, wallet }
+  description            String? // optional memo / failure reason / line description
   paidAt          DateTime?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -2163,6 +2181,8 @@ model Payment {
   @@index([userId])
   @@index([status])
   @@index([planId])
+  @@index([stripeInvoiceId])        // webhook dedup: find by invoice
+  @@index([stripePaymentIntentId])  // webhook dedup: find by payment intent
 }
 
 model Coupon {
