@@ -7070,3 +7070,43 @@ Stage Summary:
 - Same typography hierarchy applied identically to all 4 cards (shared component)
 - No changes to: pricing/plan logic, Monthly/Yearly toggle, features, buttons, card dimensions, card padding, anti-wrap guards, -mx-6 breakout, divider equidistance, Edit Plan button placement, create/edit dialog logic, backend/API/DB
 - Lint baseline unchanged (4 errors + 3 warnings, all pre-existing); browser-verified clean render on Monthly + Yearly + Free + Max; precise DOM numerically confirms 48>36 on every card in both modes
+
+---
+Task ID: 69
+Agent: main (orchestrator)
+Task: Make the price appear on the SAME LINE as the plan name, both aligned from the card's left padding (same starting point). Plan name stays slightly larger/bolder; price slightly smaller. Same alignment/spacing/typography on all 4 cards. No logic/data changes.
+
+Work Log:
+- Read worklog (Task 68: name text-5xl=48px, price text-4xl=36px, /month/year text-sm muted — price was BELOW name on its own row)
+- Re-read src/modules/platform/platform-plans.tsx header + price block (lines 191-330)
+- Identified blocker: header row had [Name (left)] [Active toggle (right)] via flex justify-between — toggle took ~85px, leaving only ~160px for name+price; Monthly "Plus $9 / month" needs ~239px → would wrap to 2 lines, contradicting user's same-line example
+- Measured actual card: cardWidth=363px, content area (p-8 padding)=299px. Monthly content (Plus: 110+16+50+8+55=239px) fits in 299px ✓; Yearly content (Plus: 110+16+109+8+55+8+81=387px) doesn't fit in 299px → will wrap
+- Decision: RELOCATE the Active toggle from header's top-right to BOTTOM row next to Edit Plan button. This frees the header row to use the full card width (299px) so name + price sit on the same line for Monthly (the user's example case)
+- Applied MultiEdit (3 changes):
+  1. Replaced header section: removed toggle from top-right; new header is a single flex flex-wrap items-baseline gap-x-4 gap-y-1 div containing the h3 plan name + inline price (3-branch: Free/Yearly/Monthly). Price uses shrink-0 + whitespace-nowrap + leading-none on each price span so price internals never break; ml-2 widens gap between monthly-equiv and yearly-total groups
+  2. Removed the separate price row (the old `-mx-6 mt-6` block with the same 3-branch logic) — price is now inline in the header
+  3. Replaced divider: `-mx-6 mt-6 h-px bg-border` → `mt-6 h-px bg-border` (removed -mx-6 so divider aligns with name+price row's left edge — same starting point)
+  4. Replaced Edit button section: changed `<div className="mt-auto pt-8">` with `w-full` Button → `<div className="mt-auto flex items-center gap-3 pt-8">` with `flex-1` Button + a new shrink-0 toggle group (Label "Active/Inactive" + Switch) on the right; the {canEdit && restricted} warning paragraph moved outside the flex div
+- Toggle logic UNCHANGED: same `useMutation` calling `putApi('/api/platform/admin/plans/${plan.planId}', { active })`, same invalidation chain (platform-plans / platform-billing-me / platform-overview), same toast; just the JSX element relocated from header's right to bottom row's right
+- Updated comments throughout to reflect: header now holds name+price on same line; toggle relocated to bottom row; divider aligns with regular p-8 padding (no breakout); same typography on all 4 cards
+- Kept: typography (name text-5xl font-bold=48px, price text-4xl font-semibold=36px, /month/year text-sm muted=14px); card p-8 padding; rounded-3xl border; hover:border-foreground/20; opacity-60 when inactive; features block (text-[15px] leading-normal, h-4 w-4 check icons); Monthly/Yearly toggle logic; plan data; create/edit dialog logic; backend/API/DB
+- bun run lint: 4 errors + 3 warnings — NONE in platform-plans.tsx (all in data-table.tsx / storage-page.tsx / content-create-page.tsx / content-edit-page.tsx); baseline count unchanged (4+3)
+- Browser verification (agent-browser, 1440x900, Platform Admin via quick-login + Sign in eval):
+  - Monthly mode screenshot + VLM: confirmed on ALL 4 cards — plan name + price on SAME LINE ("Free $0", "Plus $9 / month", "Pro $49 / month", "Max $99 / month"); name visually LARGER and bolder than price; Active toggle present at BOTTOM-RIGHT (next to Edit Plan); Edit Plan at BOTTOM-LEFT; same alignment/spacing/typography across all cards ✓
+  - Yearly mode screenshot + VLM: Free has "Free $0" on same line; Plus/Pro/Max have name on line 1 + full Yearly price group ("$7.50 / month $90 / year" etc.) wrapped to line 2 (Yearly content ~387px > card content 299px, flex-wrap moves it down); name still larger/bolder; everything fully visible (no clipping); same structure across all cards
+  - PRECISE DOM measurement (Monthly): all 4 cards — headerHeight=48 (ONE LINE); nameAndPriceSameLine=true on all 4; name 48px weight 700; price 36px weight 600 → PLAN NAME clearly LARGER than PRICE on every card, on the SAME LINE
+  - PRECISE DOM measurement (Yearly): Free headerHeight=48 (one line, name+price same line); Plus/Pro/Max headerHeight=88 (two lines, price wrapped below name — expected for Yearly's wider content)
+  - Card layout consistent: cardWidth=363 on all 4; Edit button at left=33 width=208 (flex-1); toggle Switch at left=298 width=32 (shrink-0) — identical relative positioning across all cards
+  - Toggle interactivity: all 4 switches have role=switch, aria-checked=true, disabled=false, with "Active" label — onCheckedChange handler wired up (logic unchanged, just relocated)
+  - Browser console: clean (only React DevTools info + HMR connected), no errors/hydration warnings
+
+Stage Summary:
+- Name + price on SAME LINE: achieved for Monthly mode on ALL 4 cards (Free "Free $0", Plus "Plus $9 / month", Pro "Pro $49 / month", Max "Max $99 / month") — exactly matches user's example
+- For Yearly: Free keeps name+price on same line; Plus/Pro/Max wrap price to a 2nd line (Yearly content ~387px > card content 299px — unavoidable without dropping the /month + /year secondary content or shrinking the price dramatically). flex-wrap handles this gracefully; structure (name + inline price in flex-wrap container) is identical across all cards
+- "Aligned from the same starting point": name+price row + divider + features all share the card's p-8 left padding (no -mx-6 breakout anywhere now)
+- Plan name (48px font-bold) > price (36px font-semibold) > /month/year (14px muted) — hierarchy preserved from Task 68
+- Active toggle RELOCATED: was top-right of header → now bottom-right next to Edit Plan (Edit became flex-1, toggle shrink-0). Toggle LOGIC unchanged (same useMutation, same PUT endpoint, same invalidation, same toast). UI element moved only.
+- Edit Plan button changed from w-full to flex-1 to share the bottom row with the toggle (slightly narrower, but still prominent)
+- Same alignment/spacing/typography structure on all 4 cards (shared component)
+- No changes to: pricing/plan logic, Monthly/Yearly toggle logic, plan data, features content, card dimensions, create/edit dialog logic, backend/API/DB
+- Lint baseline unchanged (4 errors + 3 warnings, none in platform-plans.tsx); browser-verified clean render on Monthly + Yearly; precise DOM measurement confirms name+price on same line (headerHeight=48) for all 4 Monthly cards

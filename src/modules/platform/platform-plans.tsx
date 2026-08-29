@@ -195,71 +195,44 @@ function PlanSummaryCard({
           plan.active ? '' : 'opacity-60'
         }`}
       >
-        {/* Header: plan name (clean text label) + quick active toggle.
-            The plan name is the LARGEST typographic element on the card
-            (text-5xl font-bold) so it is clearly larger than the main
-            price below it. Same typography on Free / Plus / Pro / Max. */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="text-5xl font-bold tracking-tight text-foreground">{plan.name}</h3>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Label
-              htmlFor={`active-${plan.planId}`}
-              className="cursor-pointer text-xs text-muted-foreground"
-            >
-              {plan.active ? 'Active' : 'Inactive'}
-            </Label>
-            <Switch
-              id={`active-${plan.planId}`}
-              checked={plan.active}
-              disabled={!canEdit || activeMutation.isPending}
-              onCheckedChange={(v) => activeMutation.mutate(v)}
-            />
-          </div>
-        </div>
-
-        {/* Price — reflects the global billing-interval selector
-             (Monthly / Yearly). The MAIN price uses the SAME typography
-             (text-4xl font-semibold) on every card so the visual
-             hierarchy is consistent across Free / Plus / Pro / Max and
-             the main price stays slightly smaller than the plan name
-             (text-5xl) while still clearly prominent. The currency is
-             shown as a SYMBOL ($ / € / £) — never the ISO text code —
-             per the Plans & Pricing visual spec.
-               - Free:    $0
-               - Monthly: $X / month
-               - Yearly:  $X.XX / month   $X / year
-             For Yearly, the monthly equivalent (priceYearly / 12,
-             computed dynamically, never hardcoded) is the LARGE primary
-             price; the actual yearly total is shown smaller and muted
-             beside it on the same line. "/ month" belongs to the large
-             monthly price; "/ year" belongs to the small yearly total.
-             The price row + divider break out with -mx-6 into the
-             card padding (p-8 → 8px gutter from the card edge) so the
-             Yearly layout has enough width to keep the small yearly
-             total fully visible instead of clipped. Monthly and Free
-             simply get extra breathing room. shrink-0 +
-             whitespace-nowrap + leading-none on the large span prevent
-             it wrapping to a 2nd line box; ml-2 widens the gap between
-             the two price groups vs. the gap between the large number
+        {/* Header: plan name + INLINE price on the SAME LINE, both
+             aligned from the card's left padding (p-8) as the shared
+             starting point. The plan name is the LARGEST typographic
+             element on the card (text-5xl font-bold); the price sits
+             on the same baseline to its right, slightly smaller
+             (text-4xl font-semibold) but still prominent. Same
+             typography + alignment on Free / Plus / Pro / Max.
+               - Free:    <name> $0
+               - Monthly: <name> $X / month
+               - Yearly:  <name> $X.XX / month   $X / year
+             The quick active toggle used to live in this header's
+             top-right; it has been relocated to the bottom row (next
+             to Edit Plan) so the name + price row can use the FULL
+             card width and the price can sit on the same line as the
+             name instead of wrapping below it. flex-wrap lets the
+             price wrap to a 2nd line only when the Yearly content
+             (monthly-equiv + "/ month" + "$X / year") is too wide to
+             fit alongside the name on one line. shrink-0 +
+             whitespace-nowrap + leading-none on each price span keep
+             the price internals from breaking across lines; ml-2
+             widens the gap between the monthly-equiv group and the
+             yearly-total group vs. the gap between the large number
              and its "/ month" label. */}
-        <div className="-mx-6 mt-6">
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <h3 className="text-5xl font-bold tracking-tight text-foreground">{plan.name}</h3>
           {plan.isFree ? (
-            <div className="flex items-baseline gap-2">
-              <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
-                {formatPriceSymbol(0, plan.currency)}
-              </span>
-            </div>
+            <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
+              {formatPriceSymbol(0, plan.currency)}
+            </span>
           ) : billingInterval === 'yearly' ? (
-            // Yearly — compact INLINE: [LARGE $X.XX] [small / month]
+            // Yearly — INLINE: [LARGE $X.XX] [small / month]
             // [small $X / year]. The monthly equivalent (priceYearly /
             // 12) is the dominant large price; the real yearly total
             // stays small/muted beside it.
             //   e.g. Plus →  $7.50 / month   $90 / year
             //        Pro  →  $40.83 / month  $490 / year
             //        Max  →  $82.50 / month  $990 / year
-            <div className="flex items-baseline gap-2">
+            <span className="flex shrink-0 items-baseline gap-2">
               <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
                 {formatPriceSymbolMonthlyEquiv(plan.priceYearly / 12, plan.currency)}
               </span>
@@ -267,21 +240,24 @@ function PlanSummaryCard({
               <span className="ml-2 shrink-0 whitespace-nowrap text-sm text-muted-foreground">
                 {formatPriceSymbol(plan.priceYearly, plan.currency)} / year
               </span>
-            </div>
+            </span>
           ) : (
-            <div className="flex items-baseline gap-2">
+            <span className="flex shrink-0 items-baseline gap-2">
               <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
                 {formatPriceSymbol(plan.priceMonthly, plan.currency)}
               </span>
               <span className="whitespace-nowrap text-sm text-muted-foreground">/ month</span>
-            </div>
+            </span>
           )}
         </div>
 
         {/* Thin horizontal divider between the price section and the features section.
              Equidistant from the price above and the feature list below (mt-6 both
-             sides) for a consistent, compact vertical rhythm on every card. */}
-        <div className="-mx-6 mt-6 h-px bg-border" aria-hidden />
+             sides) for a consistent, compact vertical rhythm on every card. The
+             divider aligns with the card's p-8 padding (no -mx-6 breakout) so it
+             shares the same starting point as the name + price row above and the
+             feature list below. */}
+        <div className="mt-6 h-px bg-border" aria-hidden />
 
         {/* Feature items (section label omitted). Same typography on every card:
              text-[15px] leading-normal so features read as a clear medium-size
@@ -308,24 +284,45 @@ function PlanSummaryCard({
           </ul>
         </div>
 
-        {/* Edit button — pinned to card bottom */}
-        <div className="mt-auto pt-8">
+        {/* Bottom row — Edit Plan (left, flex-1) + quick active toggle
+             (right, shrink-0), pinned to the card bottom. The toggle used
+             to live in the header's top-right; it was relocated here so the
+             name + price row above can use the full card width and the
+             price can sit on the same line as the name. The Edit button
+             changed from w-full to flex-1 to share the row with the toggle.
+             The toggle's logic (auto-save PUT to /api/platform/admin/plans/
+             [planId] with { active }) is unchanged. */}
+        <div className="mt-auto flex items-center gap-3 pt-8">
           <Button
             variant="outline"
             size="sm"
-            className="w-full rounded-full"
+            className="flex-1 rounded-full"
             disabled={!canEdit}
             onClick={() => setEditing(true)}
           >
             <Pencil className="h-4 w-4 mr-2" />
             Edit Plan
           </Button>
-          {!canEdit && (
-            <p className="mt-2 text-center text-[10px] text-muted-foreground">
-              Editing is restricted to the OWNER role.
-            </p>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            <Label
+              htmlFor={`active-${plan.planId}`}
+              className="cursor-pointer text-xs text-muted-foreground"
+            >
+              {plan.active ? 'Active' : 'Inactive'}
+            </Label>
+            <Switch
+              id={`active-${plan.planId}`}
+              checked={plan.active}
+              disabled={!canEdit || activeMutation.isPending}
+              onCheckedChange={(v) => activeMutation.mutate(v)}
+            />
+          </div>
         </div>
+        {!canEdit && (
+          <p className="mt-2 text-center text-[10px] text-muted-foreground">
+            Editing is restricted to the OWNER role.
+          </p>
+        )}
       </div>
 
       {editing && (
