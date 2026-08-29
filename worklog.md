@@ -6786,3 +6786,80 @@ Stage Summary:
   8. Same premium dark pricing-card style and spacing preserved ✓ — cardBg rgb(22, 22, 22) (#161616), rounded-3xl, border-white/[0.08], p-8, text-5xl price, lucide Check feature list, 2-col usage-limits grid, full-width rounded-full Edit CTA — all unchanged.
 - Lint baseline preserved (4 errors + 3 warnings, all pre-existing in content-edit-page.tsx / seo-broken-links-page.tsx).
 - Dev server compiles cleanly. No runtime errors / hydration mismatches / unhandled exceptions during E2E.
+
+---
+Task ID: 63
+Agent: main
+Task: Follow-up cleanup of Platform Admin → Plans & Pricing page. Remove the hardcoded black/dark mode from the page so it follows the dashboard's global theme system (light when light, dark when dark). Remove the "FEATURES" section label, remove the yearly price text from all plan cards, and remove the entire Usage Limits section (labels + values + boxes) from the cards. Keep all functionality (active toggles, Edit Plan, Create Plan), plan names, monthly prices, feature items, plan counts, and all backend/DB/API logic unchanged. Adjust card spacing so no empty gaps remain after the removals.
+
+Work Log:
+- Read the current state of src/modules/platform/platform-plans.tsx (1009 lines) — the premium dark redesign from Tasks 61/62 had a hardcoded `dark` class + `bg-black` + `text-zinc-50` + negative-margin full-bleed wrapper. Card colors were hardcoded `bg-[#161616]`, `text-zinc-50`, `text-zinc-300`, `border-white/[0.08]`, etc. The card displayed: plan name + colored PlanBadge pill, monthly price + yearly price line, billing pill, FEATURES label + checkmark list, USAGE LIMITS label + 2-col grid of 5 limit cards, Edit Plan button.
+- Confirmed the dashboard's standard theme pattern by reading sibling modules: platform-overview.tsx uses `<div className="space-y-6">` wrapper + `<PlatformPageHeader>` + shadcn `<Card>`/`<CardContent>`. platform-coupons.tsx uses `<div className="space-y-4">` + `<PlatformPageHeader>` + shadcn Card. shared.tsx PlatformPageHeader uses `text-foreground` + `text-muted-foreground`. All use theme tokens (no `dark` class on a wrapper, no hardcoded `bg-black`). Confirmed the dashboard's theme system is next-themes via `<ThemeToggle>` (src/components/layout/theme-toggle.tsx) — the global `.dark` class is applied to `<html>` by next-themes; all CSS variables (`--background`, `--foreground`, `--card`, `--muted-foreground`, `--border`, etc.) resolve to light or dark values based on that single ancestor class.
+- Verified symbol usage via grep before deleting: `formatBytes` only used by `formatLimitValue`; `type LimitKey` only used by `formatLimitValue`; `formatLimitValue` only used inside the PlanSummaryCard's Usage Limits section. `LIMIT_KEYS` / `LIMIT_LABELS` / `UNLIMITED` are still used by EditPlanDialog — KEEP those imports.
+- Applied 5 surgical MultiEdit operations on src/modules/platform/platform-plans.tsx:
+  1. **Imports**: removed `formatBytes` (from shared import) and `type LimitKey` (from feature-config import) — both only used by the now-removed `formatLimitValue` helper.
+  2. **Removed `formatLimitValue` function entirely** (was used only by the card's Usage Limits section, now deleted).
+  3. **PlanSummaryTile**: `border-white/[0.06] bg-white/[0.02] text-zinc-50 text-zinc-500` → `border bg-muted/40 text-foreground text-muted-foreground` (theme-aware tokens).
+  4. **PlanSummaryCard**: full JSX rewrite using theme tokens:
+     • Card div: `border border-white/[0.08] bg-[#161616] hover:border-white/[0.16]` → `border bg-card text-card-foreground hover:border-foreground/20` (theme-aware; same rounded-3xl p-8 premium look).
+     • Plan name h3: `text-zinc-50` → `text-foreground`.
+     • Active/Inactive Label: `text-zinc-500` → `text-muted-foreground`.
+     • Price: `text-zinc-50` → `text-foreground`; "/ month" suffix: `text-zinc-500` → `text-muted-foreground`.
+     • **REMOVED the entire yearly-price `<p>` block** (the `{!plan.isFree && plan.priceYearly > 0 && (...)}` line showing "CHF X / year"). Spec #3 satisfied.
+     • Divider: `bg-white/[0.06]` → `bg-border` (theme-aware).
+     • **REMOVED the `<p>Features</p>` section label**. Spec #2 satisfied. Removed the now-redundant `mt-3.5` between the (deleted) label and the ul.
+     • Feature `<li>` text: `text-zinc-300` → `text-card-foreground`; Check icon: `text-zinc-500` → `text-muted-foreground`.
+     • "No features configured" text: `text-zinc-600` → `text-muted-foreground`.
+     • **REMOVED the entire Usage Limits section** (the `{/* Usage Limits */}` div + the 2-col grid of 5 limit cards). Spec #4 satisfied.
+     • Edit button: removed hardcoded `border-white/15 bg-transparent text-zinc-200 hover:bg-white/5 hover:text-white hover:border-white/25`; kept `variant="outline" size="sm" className="w-full rounded-full"` — the shadcn outline variant is theme-aware by default.
+     • "Editing is restricted…" text: `text-zinc-600` → `text-muted-foreground`.
+     • Resulting card structure (no empty gaps): header → mt-8 price → mt-8 divider → mt-6 features list → mt-auto pt-8 Edit button. Natural spacing preserved.
+  5. **PlatformPlansModule wrapper**: full JSX rewrite:
+     • **REMOVED `dark -mx-6 -mt-4 -mb-6 min-h-full bg-black px-6 pb-10 pt-4 text-zinc-50`** (the hardcoded dark-mode full-bleed wrapper). Spec #1 satisfied. New wrapper: `mx-auto max-w-7xl space-y-8` — standard dashboard page wrapper pattern (no `dark` class, no forced bg, no negative margins; the parent `<main className="bg-background">` provides the page bg via the global theme).
+     • Merged the previous inner `mx-auto max-w-7xl space-y-8` div into the outer (eliminated redundancy).
+     • h1: `text-zinc-50` → `text-foreground`; subtitle: `text-zinc-400` → `text-muted-foreground`.
+     • Create Plan button: `bg-zinc-50 text-zinc-900 hover:bg-zinc-200` → `bg-foreground text-background hover:opacity-90` (theme-aware inverted pill — white pill with dark text in light mode, dark pill with white text in dark mode).
+     • View-only notice: `border-amber-500/20 bg-amber-500/[0.06]` → `border-amber-500/30 bg-amber-50 dark:bg-amber-950/40`; text colors → `text-amber-600 dark:text-amber-400`, `text-amber-700 dark:text-amber-300`, body `text-muted-foreground` (uses the dashboard's standard explicit light/dark pattern via `dark:` prefix, not a local `dark` class).
+     • Skeletons: `border-white/[0.08] bg-[#161616]` → `border bg-card`; removed `bg-white/[0.06]` from all Skeletons (uses default muted bg via theme); removed the `mt-4 h-6 w-28 rounded-full` skeleton (was the billing pill skeleton, no longer needed); removed the `mt-auto grid grid-cols-2 gap-2 pt-8` 6-box limits skeleton grid (no longer needed); reduced card height from h-[560px] to h-[420px] to match the new card content size (header + price + divider + features list + Edit button) — no empty gap.
+     • Error card: `border-white/[0.08] bg-[#161616] p-4` → `border bg-card p-4`.
+- Lint: `bun run lint` = 4 errors + 3 warnings, ALL pre-existing in content-edit-page.tsx / seo-broken-links-page.tsx (baseline unchanged since Task 61). Zero new issues in platform-plans.tsx. The removed `formatLimitValue` + `formatBytes` + `type LimitKey` were properly cleaned up (no unused-symbol warnings).
+- Browser E2E verification (agent-browser, logged in as Platform Admin via "Platform Admin (Staff)" quick-login button → platform@example.com / platform123 → "Sign in" → click "Plans & Pricing" sidebar link via pointer-event dispatch workaround since React onClick doesn't respond to synthetic click):
+  • **LIGHT mode verification (default theme, htmlHasDarkClass=false)**:
+    - pageWrapperClass = "mx-auto max-w-7xl space-y-8" ✓ (NO `dark` class, NO `bg-black`, NO negative margins — hardcoded dark mode removed)
+    - pageWrapperHasLocalDarkClass = false ✓
+    - cardBg = "lab(100 0 0)" ✓ (pure white — light theme `--card` value)
+    - planNameColor = "lab(2.75381 0 0)" ✓ (near-black — light theme `--foreground` value)
+    - hasFeaturesLabel = false ✓ ("FEATURES" label removed)
+    - hasYearlyPrice = false ✓ (no "CHF X / year" text)
+    - yearlyPriceMatches = [] ✓
+    - hasUsageLimitsLabels = false ✓ (no Max Sites / Storage (bytes) / AI Words / AI Articles / Automation Runs labels)
+    - dividers = 5 (4 per-card + 1 elsewhere — thin divider preserved between price and features)
+  • **DARK mode verification (toggled via ThemeToggle button in topbar via pointer-event dispatch; htmlHasDarkClass=true)**:
+    - pageWrapperClass = "mx-auto max-w-7xl space-y-8" ✓ (same JSX, no local dark class — page now follows the GLOBAL theme)
+    - pageWrapperHasLocalDarkClass = false ✓ (the page wrapper hasn't changed; the dark mode comes from the global `.dark` class on `<html>` set by next-themes, NOT from a local hardcoded `dark` class on the page)
+    - cardBg = "lab(7.78201 -0.0000149012 0)" ✓ (near-black — dark theme `--card` value)
+    - planNameColor = "lab(98.26 0 0)" ✓ (near-white — dark theme `--foreground` value)
+    - monthSuffixColor = "lab(66.128 -0.0000298023 0.0000119209)" ✓ (medium grey — dark theme `--muted-foreground` value)
+    - createBtnBg = "lab(98.26 0 0)" + createBtnText = "lab(2.75381 0 0)" ✓ (inverted pill — white bg + dark text in dark theme via `bg-foreground text-background`)
+    - hasFeaturesLabel = false, hasYearlyPrice = false, hasUsageLimitsLabels = false ✓ (all removals preserved in dark mode too)
+    - cardCount = 4 ✓ (Beta / Pro / Max / Enterprise — all 4 plan cards rendered in both themes)
+  • **Edit Plan functionality (in dark mode)**: pointer-event dispatch opened the Beta card's Edit Plan dialog. Snapshot confirmed — Dialog title "Edit Beta" (h2), Basic Information (Name=Beta, Monthly=0, Yearly=0, Currency=CHF, Interval=monthly, Active toggle checked), Feature Access (9 entitlement checkboxes, 0/9 checked = matches DEFAULT_PLAN_CONFIGS for Beta), **Usage Limits section still present INSIDE the Edit Plan dialog** (heading "Usage Limits" h4 + 5 spinbuttons: 3 sites / 1073741824 bytes = 1 GB storage / 0 AI Words / 0 AI Articles / 0 Automation Runs), Client Display collapsible (collapsed), Reset + Save Plan buttons. Spec #5 satisfied: Edit Plan functionality byte-identical to before — the card just doesn't DISPLAY the limits anymore, but the OWNER can still edit them via the dialog.
+  • **Active toggle round-trip (in dark mode)**: pointer-event dispatch on the Beta card's Switch (#active-beta). Network captured `PUT /api/platform/admin/plans/beta → 200`. Direct API fetch after: GET /api/platform/admin/plans returned all 4 plans with active=true, monthly prices intact (Beta=0 CHF, Pro=49 CHF, Max=99 CHF, Enterprise=199 CHF), and **yearly prices STILL in the DB** (Beta=0, Pro=490, Max=990, Enterprise=1990) — they're just not displayed on the card anymore (spec #3 satisfied without losing the underlying data).
+  • **Plan counts summary**: 3 PlanSummaryTile rendered with values "4 Plans", "3 Paid Plans", "1 Free Plan" — spec #5 (plan counts preserved) satisfied. The tiles use theme tokens (bg-muted/40, text-foreground, text-muted-foreground) and adapt to both themes.
+  • **Page bg inherited**: main's computed bg = "rgba(0, 0, 0, 0)" (transparent) — the page inherits the dashboard's bg-background from the parent `<div className="bg-background">`. The page no longer has its own hardcoded bg-black; it follows the global theme.
+  • Dev log: 0 errors / 0 exceptions / 0 hydration mismatches during the entire verification flow.
+  • Browser console: only normal HMR / Fast Refresh / React DevTools install hint logs — zero runtime errors.
+  • Screenshots saved: /home/z/my-project/plans-pricing-light.png (72 KB) + /home/z/my-project/plans-pricing-dark.png (72 KB) for visual record of both themes.
+
+Stage Summary:
+- Files changed: src/modules/platform/platform-plans.tsx ONLY (5 surgical MultiEdit operations on the imports + helpers + PlanSummaryTile + PlanSummaryCard + PlatformPlansModule wrapper). No backend / API / DB / schema changes. No other files touched.
+- 6 user requests satisfied:
+  1. Hardcoded dark mode removed; page follows dashboard's global theme ✓ — `pageWrapperClass = "mx-auto max-w-7xl space-y-8"` (no `dark` class, no `bg-black`, no negative margins). Verified in BOTH light mode (cardBg=lab(100 0 0)=white, planNameColor=lab(2.75381 0 0)=near-black) AND dark mode (cardBg=lab(7.78...)=near-black, planNameColor=lab(98.26 0 0)=near-white) via the global next-themes system. Same JSX, no local dark class, just theme tokens (bg-card / text-foreground / text-muted-foreground / bg-border / bg-muted/40 / bg-foreground + text-background for the inverted Create Plan pill / explicit dark: prefixes for the amber view-only notice).
+  2. "FEATURES" section label removed from all plan cards; feature items + checkmarks kept ✓ — `hasFeaturesLabel = false` in both themes; the `<ul>` of feature items with lucide `<Check>` icons is preserved unchanged.
+  3. Yearly price text removed from all plan cards ✓ — `hasYearlyPrice = false`, `yearlyPriceMatches = []` in both themes. The yearly price `<p>` block was deleted from the JSX. The yearly price VALUE remains in the DB (Beta=0, Pro=490, Max=990, Enterprise=1990) and is still editable via the Edit Plan dialog (spec #5: backend/DB logic unchanged).
+  4. Entire Usage Limits section removed from plan cards (labels + values + boxes) ✓ — `hasUsageLimitsLabels = false` in both themes. The 2-col grid of 5 limit cards (Max Sites / Storage (bytes) / AI Words / AI Articles / Automation Runs) was deleted from the PlanSummaryCard JSX. The limit VALUES remain in the DB and are still editable via the Edit Plan dialog's Usage Limits section (5 spinbuttons verified with real values).
+  5. Plan names / monthly prices / active toggles / feature items / Edit Plan buttons / Create Plan functionality / plan counts / all backend-DB-API logic unchanged ✓ — verified via Edit Plan dialog opening with real Beta data + PUT /api/platform/admin/plans/beta returning 200 + GET /api/platform/admin/plans returning all 4 plans with active=true, monthly prices intact, yearly prices intact in DB. 3 summary tiles still rendered: "4 Plans", "3 Paid Plans", "1 Free Plan".
+  6. Card spacing adjusted naturally after removals (no empty gaps) ✓ — the card now flows: header → mt-8 price → mt-8 divider (h-px bg-border) → mt-6 features list (no label, ul directly under divider) → mt-auto pt-8 Edit button pinned to card bottom. Skeleton card height reduced from h-[560px] to h-[420px] to match the new content size (removed the 6-box limits skeleton grid and the billing-pill skeleton). No empty gaps in either loaded or loading state.
+- Lint baseline preserved (4 errors + 3 warnings, all pre-existing in content-edit-page.tsx / seo-broken-links-page.tsx).
+- Dev server compiles cleanly. No runtime errors / hydration mismatches / unhandled exceptions during E2E in both light and dark mode.
+- The page now belongs to the dashboard's theme system: toggling the global ThemeToggle in the topbar instantly flips the Plans & Pricing page between light and dark mode along with the rest of the dashboard. No separate theme/mode for this page.
