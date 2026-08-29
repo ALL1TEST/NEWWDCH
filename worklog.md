@@ -6743,3 +6743,46 @@ Stage Summary:
 - Files changed: src/modules/platform/platform-plans.tsx ONLY (UI/UX redesign). No backend/API/DB/schema changes. No other files touched. Dialogs (EditPlanDialog, CreatePlanDialog) kept byte-for-byte identical → edit/create logic, fields, validation, mutation endpoints, invalidation chains all unchanged.
 - Premium dark pricing layout achieved: charcoal/black page (#0a0a0a), slightly-lighter rounded-3xl cards (#161616) with thin white/8% borders, large white plan names, dominant text-5xl prices, muted zinc secondary text, clean checkmark feature lists, billing-interval pill, 2-col usage-limits grid, full-width rounded-full Edit CTA, equal-height 3-col grid (Enterprise wraps). Responsive (1/2/3 cols). Sidebar + topbar untouched.
 - All required data preserved on cards: plan name, badge, active toggle, price (monthly+yearly), billing period, features, usage limits, edit action.
+
+---
+Task ID: 62
+Agent: main
+Task: Follow-up visual refinement of Platform Admin → Plans & Pricing page. Only adjust the page styling and card content presentation per 8 specific user requests. No backend / API / DB / data / logic changes. Keep all functionality (active toggles, Edit Plan, Create Plan), plan data, prices, features, limits unchanged.
+
+Work Log:
+- Read src/modules/platform/platform-plans.tsx (1009 lines) to locate the previously-redesigned premium dark Plans & Pricing layout (Task 61). Mapped the exact JSX blocks to adjust: PlanSummaryCard header (lines 169-176), Price block (lines 190-209), Billing interval pill (lines 214-219), Features section (lines 222-236), Usage Limits section (lines 239-254), and the page wrapper (line 927).
+- Confirmed PlanBadge is still used inside EditPlanDialog (line 363) — kept the PlanBadge import + getPlanBadgeId helper intact so the Edit Plan dialog is byte-identical to before (Edit Plan functionality unchanged per spec).
+- Applied 4 surgical MultiEdit changes (only the PlanSummaryCard component and the page wrapper were touched — the EditPlanDialog / CreatePlanDialog / activeMutation / saveMutation / createMutation / buildPatch code remains byte-for-byte identical):
+  1. Page wrapper background: `bg-[#0a0a0a]` → `bg-black` (pure #000 — pure/dark black per user spec #1).
+  2. Removed the entire colored `<PlanBadge planId={getPlanBadgeId(plan.planId)} />` block from the card header. The plan name (h3 text-2xl text-zinc-50) remains as the only clean text label — no colored pill/background for Pro/Beta/Max labels per user spec #4. Updated the section comment to "Header: plan name (clean text label) + quick active toggle" for accuracy.
+  3. Removed the entire "Billing interval pill" block (`<div className="mt-4">…{plan.interval} billing…</div>`) — the "Monthly Billing"/"Yearly Billing" text/badge is gone from every plan card per user spec #2.
+  4. Removed the `<p>Usage Limits</p>` heading line above the limits grid (kept the 5 limit cards: sites / storage / AI words / AI articles / automation runs — all values intact) per user spec #3. Updated the comment to "Usage Limits — heading omitted; limit values shown directly".
+  5. Added a new subtle thin horizontal divider line between the price section and the features section: `<div className="mt-8 h-px bg-white/[0.06]" aria-hidden />`. The "Features" label is kept (per spec #5). The Features block top margin changed from mt-8 → mt-6 to maintain premium spacing rhythm after the divider.
+- Lint: `bun run lint` = 4 errors + 3 warnings, ALL pre-existing in content-edit-page.tsx / seo-broken-links-page.tsx (baseline unchanged since Task 61). Zero new issues in platform-plans.tsx.
+- Browser E2E verification (agent-browser, logged in as Platform Admin — session was still alive; sid: "Plans & Pricing" link clicked via pointer-event dispatch workaround since React onClick doesn't respond to synthetic click()):
+  • Computed-style checks via `getComputedStyle` on the page wrapper + 4 plan cards + 4 dividers + DOM text scans:
+    - pageBg = "rgb(0, 0, 0)" ✓ pure black #000 (spec #1 satisfied)
+    - hasMonthlyBilling = false ✓ "Monthly Billing" badge/text removed from all cards (spec #2 satisfied)
+    - hasUsageLimitsHeading = false ✓ "Usage Limits" heading removed (spec #3 satisfied)
+    - hasFeaturesHeading = true ✓ "Features" label still present (spec #5 satisfied)
+    - coloredPills = 0 ✓ no amber/violet/emerald pill backgrounds for Pro/Beta/Max labels (spec #4 satisfied)
+    - thinDividers = 4 with dividerHeights = ["1px","1px","1px","1px"] ✓ thin 1px horizontal divider between price and features sections on every card (spec #5 satisfied)
+    - cardBg = "rgb(22, 22, 22)" ✓ premium dark #161616 cards preserved (spec #8 satisfied)
+  • Edit Plan functionality: pointer-event dispatch opened the Beta card's Edit Plan dialog. Snapshot confirmed the dialog shows the real Beta plan data — Dialog title "Edit Beta" (h2), Basic Information (Name=Beta, Monthly=0, Yearly=0, Currency=CHF, Interval=monthly, Active toggle checked), Feature Access (9 entitlement checkboxes, 0/9 checked = matches DEFAULT_PLAN_CONFIGS for Beta), Usage Limits (5 inputs: 3 sites, 1073741824 bytes = 1 GB storage, 0 AI words, 0 AI articles, 0 automation runs), Client Display collapsible (optional, collapsed), Reset + Save Plan buttons. Dialog code byte-for-byte identical → functionality unchanged (spec #6 satisfied).
+  • Active toggle round-trip: dispatched pointer events on the Beta card's Switch (#active-beta). Network captured 2× PUT /api/platform/admin/plans/beta → 200 (one from the initial click, one from the pointer-event dispatch — both successful, second re-activated the plan). Direct API fetch after: GET /api/platform/admin/plans returned all 4 plans (Beta/Pro/Max/Enterprise) with active=true — final state matches the expected default (spec #6 + spec #7 satisfied: no backend logic change).
+  • Dev log: 0 errors / 0 exceptions / 0 hydration mismatches during the entire verification flow. Browser console: only normal HMR / Fast Refresh / React DevTools install hint logs — zero runtime errors.
+  • Saved screenshot: /home/z/my-project/plans-pricing-final.png (74 KB) for visual record.
+
+Stage Summary:
+- Files changed: src/modules/platform/platform-plans.tsx ONLY (4 surgical MultiEdit operations on the PlanSummaryCard component + 1 on the page wrapper). No backend / API / DB / schema changes. No other files touched.
+- 8 user requests satisfied:
+  1. Page background pure/dark black (#000) ✓ — pageBg computed as rgb(0, 0, 0).
+  2. "Monthly Billing" badge/text removed from every plan card ✓ — hasMonthlyBilling = false (entire billing-interval pill block deleted).
+  3. "USAGE LIMITS" heading removed; all 5 limit values/cards kept ✓ — hasUsageLimitsHeading = false, grid + values unchanged.
+  4. Colored PlanBadge pill removed from Pro/Beta/Max labels; plan name remains as clean text ✓ — coloredPills = 0, plan name (h3 text-2xl) is the only label.
+  5. "FEATURES" label kept; subtle thin 1px horizontal divider added between price and features sections ✓ — hasFeaturesHeading = true, 4× 1px dividers (one per card).
+  6. All existing plan data, prices, features, limits, active toggles, and Edit Plan functionality unchanged ✓ — Edit Plan dialog opens with real Beta data (prices 0/0 CHF monthly, 0/9 entitlements, 3 sites / 1 GB storage / 0 / 0 / 0 limits); Active toggle PUTs to /api/platform/admin/plans/beta with 200 response.
+  7. No backend logic / DB / API changes ✓ — only the PlanSummaryCard component + page wrapper className were touched.
+  8. Same premium dark pricing-card style and spacing preserved ✓ — cardBg rgb(22, 22, 22) (#161616), rounded-3xl, border-white/[0.08], p-8, text-5xl price, lucide Check feature list, 2-col usage-limits grid, full-width rounded-full Edit CTA — all unchanged.
+- Lint baseline preserved (4 errors + 3 warnings, all pre-existing in content-edit-page.tsx / seo-broken-links-page.tsx).
+- Dev server compiles cleanly. No runtime errors / hydration mismatches / unhandled exceptions during E2E.

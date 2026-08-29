@@ -166,13 +166,10 @@ function PlanSummaryCard({
           plan.active ? '' : 'opacity-60'
         }`}
       >
-        {/* Header: name + badge + quick active toggle */}
+        {/* Header: plan name (clean text label) + quick active toggle */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-2xl font-semibold tracking-tight text-zinc-50">{plan.name}</h3>
-            <div className="mt-2.5">
-              <PlanBadge planId={getPlanBadgeId(plan.planId)} />
-            </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Label
@@ -211,15 +208,11 @@ function PlanSummaryCard({
           )}
         </div>
 
-        {/* Billing interval pill */}
-        <div className="mt-4">
-          <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium capitalize text-zinc-400">
-            {plan.interval} billing
-          </span>
-        </div>
+        {/* Thin horizontal divider between the price section and the features section */}
+        <div className="mt-8 h-px bg-white/[0.06]" aria-hidden />
 
         {/* Features */}
-        <div className="mt-8">
+        <div className="mt-6">
           <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Features</p>
           <ul className="mt-3.5 space-y-2.5">
             {featureItems.length === 0 ? (
@@ -235,10 +228,9 @@ function PlanSummaryCard({
           </ul>
         </div>
 
-        {/* Usage Limits */}
+        {/* Usage Limits — heading omitted; limit values shown directly */}
         <div className="mt-8">
-          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Usage Limits</p>
-          <div className="mt-3.5 grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {LIMIT_KEYS.map((k) => (
               <div
                 key={k}
@@ -924,7 +916,7 @@ export function PlatformPlansModule() {
   }, [plansQuery.data]);
 
   return (
-    <div className="dark -mx-6 -mt-4 -mb-6 min-h-full bg-[#0a0a0a] px-6 pb-10 pt-4 text-zinc-50">
+    <div className="dark -mx-6 -mt-4 -mb-6 min-h-full bg-black px-6 pb-10 pt-4 text-zinc-50">
       <div className="mx-auto max-w-7xl space-y-8">
         {/* Premium header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
