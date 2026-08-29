@@ -512,26 +512,33 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
   // Scope-aware page header. Platform scope uses PlatformPageHeader (keeps
   // the PLATFORM badge) with platform-level copy; client scope uses the
   // legacy PageHeader with the original copy.
+  //
+  // Platform scope intentionally hides the "Seed Defaults" manual-seeding
+  // action — platform system templates are created through the application
+  // bootstrap / migration logic, not via an admin-facing button. The client
+  // scope keeps the button (it seeds CMS article/comment templates).
   const headerAction = (
     <div className="flex flex-col items-end gap-2">
       <Button size="sm" onClick={handleCreate}>
         <Plus className="h-4 w-4 mr-2" />
         Create Template
       </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => setSeedDialogOpen(true)}
-        disabled={seedMutation.isPending}
-        className="border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40"
-      >
-        {seedMutation.isPending ? (
-          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-        ) : (
-          <Cpu className="h-3.5 w-3.5 mr-1.5" />
-        )}
-        Seed Defaults
-      </Button>
+      {!isPlatform && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setSeedDialogOpen(true)}
+          disabled={seedMutation.isPending}
+          className="border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40"
+        >
+          {seedMutation.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+          ) : (
+            <Cpu className="h-3.5 w-3.5 mr-1.5" />
+          )}
+          Seed Defaults
+        </Button>
+      )}
     </div>
   );
 
@@ -642,7 +649,6 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
                 <Skeleton className="h-5 w-20" />
                 <Skeleton className="h-5 w-20" />
                 <Skeleton className="h-5 w-32" />
-                <Skeleton className="h-5 w-12" />
                 <Skeleton className="h-8 w-8 ml-auto" />
               </div>
             ))}
@@ -655,11 +661,11 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
               search || statusFilter !== 'ALL' || category !== 'ALL'
                 ? 'Try adjusting your filters to find what you\'re looking for.'
                 : isPlatform
-                  ? 'Create your first platform template or seed the defaults to get started.'
+                  ? 'Create your first platform template to get started.'
                   : 'Create your first email template or seed the defaults to get started.'
             }
             action={
-              !search && statusFilter === 'ALL' && category === 'ALL'
+              !search && statusFilter === 'ALL' && category === 'ALL' && !isPlatform
                 ? {
                     label: 'Seed Default Templates',
                     onClick: () => seedMutation.mutate(),
@@ -677,7 +683,6 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
                   <TableHead>Status</TableHead>
                   <TableHead>Provider</TableHead>
                   <TableHead>Last Updated</TableHead>
-                  <TableHead>Language</TableHead>
                   <TableHead className="pr-4 w-12"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -743,16 +748,6 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
                     {/* Last Updated */}
                     <TableCell className="text-muted-foreground text-sm">
                       {formatRelativeTime(template.updatedAt)}
-                    </TableCell>
-
-                    {/* Language */}
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className="shrink-0 px-1.5 py-0 text-[10px] font-bold uppercase"
-                      >
-                        {template.language || 'EN'}
-                      </Badge>
                     </TableCell>
 
                     {/* Actions */}
@@ -941,16 +936,21 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
         isLoading={revertMutation.isPending}
       />
 
-      {/* Seed Defaults Confirm Dialog */}
-      <ConfirmDialog
-        open={seedDialogOpen}
-        onOpenChange={setSeedDialogOpen}
-        title="Seed Default Templates"
-        description="This will add any missing default system email templates. Existing templates (including your custom ones) will not be modified."
-        confirmLabel="Seed Defaults"
-        onConfirm={() => seedMutation.mutate()}
-        isLoading={seedMutation.isPending}
-      />
+      {/* Seed Defaults Confirm Dialog — platform scope hides this since the
+          platform page no longer exposes the Seed Defaults action (system
+          templates are seeded via bootstrap/migration). The dialog remains
+          available for client scope. */}
+      {!isPlatform && (
+        <ConfirmDialog
+          open={seedDialogOpen}
+          onOpenChange={setSeedDialogOpen}
+          title="Seed Default Templates"
+          description="This will add any missing default system email templates. Existing templates (including your custom ones) will not be modified."
+          confirmLabel="Seed Defaults"
+          onConfirm={() => seedMutation.mutate()}
+          isLoading={seedMutation.isPending}
+        />
+      )}
     </div>
   );
 }

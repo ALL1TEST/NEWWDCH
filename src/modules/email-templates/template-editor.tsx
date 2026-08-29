@@ -120,10 +120,29 @@ interface VariableGroup {
 }
 
 // ============================================================
-// Constants
+// Constants — Dynamic Variable Groups (scope-aware)
 // ============================================================
+//
+// The Dynamic Variables panel shown in the template editor sidebar is
+// scope-aware so the platform Email Templates page only exposes
+// variables relevant to platform-wide system emails (customer, site,
+// subscription, platform-level, system URLs). The client Email
+// Templates page keeps the broader set (including CMS-only Article /
+// Comment / Newsletter groups) since client templates legitimately
+// cover article / comment notifications.
+//
+// IMPORTANT: only variables that the backend / template renderer can
+// actually resolve are listed. The platform renderer (see
+// src/modules/email-templates/template-preview.tsx `DUMMY_DATA` and
+// the seeded templates in src/app/api/email-templates/seed/route.ts)
+// defines the canonical resolver surface — anything not present there
+// is NOT invented here. In particular the platform.* / payment.* /
+// subscription.billing_interval / subscription.next_billing variables
+// are intentionally omitted because no resolver currently exists for
+// them; the platform.* concept is represented via the existing
+// company.* keys which the renderer does support.
 
-const VARIABLE_GROUPS: VariableGroup[] = [
+const CLIENT_VARIABLE_GROUPS: VariableGroup[] = [
   {
     label: 'Customer',
     icon: <MousePointerClick className="h-3.5 w-3.5" />,
@@ -214,6 +233,68 @@ const VARIABLE_GROUPS: VariableGroup[] = [
     ],
   },
 ];
+
+// Platform-scope variable groups — strict subset that excludes
+// CMS-only groups (Article / Comment / Newsletter) and consolidates
+// the platform / company / user concepts into the canonical platform
+// email contexts: CUSTOMER, SITE, SUBSCRIPTION, PLATFORM, SYSTEM.
+// Every key here is resolvable by the template-preview renderer
+// (`DUMMY_DATA` in template-preview.tsx) so the admin can write a
+// platform template using only these variables and see them replaced
+// in the preview pane.
+const PLATFORM_VARIABLE_GROUPS: VariableGroup[] = [
+  {
+    label: 'Customer',
+    icon: <MousePointerClick className="h-3.5 w-3.5" />,
+    variables: [
+      { key: 'customer.first_name', description: 'Customer\'s first name' },
+      { key: 'customer.last_name', description: 'Customer\'s last name' },
+      { key: 'customer.email', description: 'Customer\'s email address' },
+    ],
+  },
+  {
+    label: 'Site',
+    icon: <Code2 className="h-3.5 w-3.5" />,
+    variables: [
+      { key: 'site.name', description: 'Site / platform name' },
+      { key: 'site.url', description: 'Site / platform URL' },
+    ],
+  },
+  {
+    label: 'Subscription',
+    icon: <Send className="h-3.5 w-3.5" />,
+    variables: [
+      { key: 'subscription.plan', description: 'Subscription plan name' },
+      { key: 'subscription.status', description: 'Subscription status' },
+    ],
+  },
+  {
+    label: 'Platform',
+    icon: <Mail className="h-3.5 w-3.5" />,
+    variables: [
+      { key: 'company.name', description: 'Platform name' },
+      { key: 'company.url', description: 'Platform URL' },
+      { key: 'company.support_email', description: 'Platform support email' },
+    ],
+  },
+  {
+    label: 'System',
+    icon: <Code2 className="h-3.5 w-3.5" />,
+    variables: [
+      { key: 'verification_url', description: 'Email verification link' },
+      { key: 'reset_password_url', description: 'Password reset link' },
+      { key: 'invite_url', description: 'Invitation accept link' },
+      { key: 'unsubscribe_url', description: 'Global unsubscribe link' },
+      { key: 'current_date', description: 'Current date' },
+      { key: 'current_year', description: 'Current year' },
+    ],
+  },
+];
+
+/** Returns the variable groups appropriate for the given scope. */
+function getVariableGroups(scope: 'client' | 'platform'): VariableGroup[] {
+  return scope === 'platform' ? PLATFORM_VARIABLE_GROUPS : CLIENT_VARIABLE_GROUPS;
+}
 
 const CATEGORY_OPTIONS: { value: EmailTemplateCategory; label: string }[] = [
   { value: 'CUSTOMER_EMAILS', label: 'Customer Emails' },
@@ -851,7 +932,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
           <p className="text-xs text-muted-foreground truncate">
             Preview: {subject.replace(/\{\{[^}]+\}\}/g, (match) => {
               const key = match.replace(/\{\{|\}\}/g, '');
-              const found = VARIABLE_GROUPS.flatMap((g) => g.variables).find((v) => v.key === key);
+              const found = getVariableGroups(scope).flatMap((g) => g.variables).find((v) => v.key === key);
               return found ? `[${found.description}]` : match;
             })}
           </p>
@@ -1046,7 +1127,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="max-h-72 overflow-y-auto px-1 pb-2">
-            {VARIABLE_GROUPS.map((group) => (
+            {getVariableGroups(scope).map((group) => (
               <div key={group.label} className="mb-3">
                 <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   {group.icon}
