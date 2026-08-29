@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { requirePlatformAdmin, ok, fail, getClientIp } from '@/lib/platform/platform-auth';
-import { isStripeConfigured, getStripeClient, cancelStripeSubscription } from '@/lib/stripe';
+import { isStripeConfiguredAsync, getStripeClient, cancelStripeSubscription } from '@/lib/stripe';
 import { db } from '@/lib/db';
 import { logAdminAction } from '@/lib/platform/audit';
 import { getCustomer } from '@/lib/platform/platform-data';
@@ -45,9 +45,9 @@ export async function POST(request: NextRequest) {
   if (sub.status !== 'cancelled') {
     // If Stripe is configured and we have a stripeSubscriptionId, schedule
     // cancellation at period end via Stripe.
-    if (isStripeConfigured() && sub.stripeSubscriptionId) {
+    if ((await isStripeConfiguredAsync()) && sub.stripeSubscriptionId) {
       try {
-        const stripe = getStripeClient();
+        const stripe = await getStripeClient();
         await cancelStripeSubscription(stripe, sub.stripeSubscriptionId, true);
       } catch (err) {
         const msg = (err as Error).message;

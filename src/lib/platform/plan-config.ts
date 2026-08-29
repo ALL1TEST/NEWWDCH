@@ -491,11 +491,35 @@ export interface PlanConfigInput {
   sortOrder?: number;
 }
 
-/** Update an existing plan config. Writes DB, refreshes cache. */
+/** Update an existing plan config. Writes DB, refreshes cache.
+ *
+ *  AUTO-SYNC TO STRIPE: when Stripe is configured AND the plan is
+ *  PAID (priceMonthly > 0 OR priceYearly > 0) AND the admin did NOT
+ *  explicitly set the Stripe Price IDs in this patch (i.e. the field
+ *  is omitted from `patch`), the backend calls syncPlanToStripe to
+ *  ensure a Stripe Product + monthly + yearly Prices exist and writes
+ *  the resolved Stripe Price IDs back onto the row. This means the
+ *  admin can edit a paid plan's name / features / limits and the
+ *  Stripe side stays in sync without manually wiring price IDs.
+ *
+ *  When the admin explicitly sets `stripePriceIdMonthly` / `stripePriceIdYearly`
+ *  (even to null = "clear"), the auto-sync is skipped — the admin is
+ *  taking manual control of the Stripe side. They can use the dedicated
+ *  "Sync to Stripe" route (/api/platform/admin/plans/[planId]/sync-stripe)
+ *  to push the local plan to Stripe at any time. */
 export async function savePlanConfig(planId: string, patch: PlanConfigInput): Promise<PlanConfigData | null> {
   const existing = await db.planConfig.findUnique({ where: { planId } });
   if (!existing) return null;
   const current = rowToData(existing);
+
+  // Distinguish "field omitted" from "field set to null". When the
+  // admin omits both stripePriceId* fields, they want the backend to
+  // keep them in sync with Stripe automatically (see AUTO-SYNC above).
+  // When either is explicitly provided (including null to clear),
+  // the admin is taking manual control.
+  const adminTouchedStripePriceIds =
+    'stripePriceIdMonthly' in patch || 'stripePriceIdYearly' in patch;
+
   const next: PlanConfigData = {
     planId: current.planId,
     name: patch.name ?? current.name,
@@ -516,10 +540,63 @@ export async function savePlanConfig(planId: string, patch: PlanConfigInput): Pr
   };
   await db.planConfig.update({ where: { planId }, data: dataToRow(next) });
   await hydrate();
+
+  // ---- AUTO-SYNC TO STRIPE ----
+  // Best-effort — never throws. Swallows Stripe errors so an admin
+  // edit doesn't fail just because Stripe is unreachable. The admin
+  // can use the explicit "Sync to Stripe" route to surface errors.
+  if (!adminTouchedStripePriceIds && !next.isFree && (next.priceMonthly > 0 || next.priceYearly > 0)) {
+    try {
+      const { isStripeConfiguredAsync, getStripeClient, syncPlanToStripe } = await import('@/lib/stripe');
+      if (await isStripeConfiguredAsync()) {
+        const stripe = await getStripeClient();
+        const syncResult = await syncPlanToStripe(stripe, {
+          planId: next.planId,
+          name: next.name,
+          priceMonthly: next.priceMonthly,
+          priceYearly: next.priceYearly,
+          currency: next.currency,
+          stripePriceIdMonthly: next.stripePriceIdMonthly,
+          stripePriceIdYearly: next.stripePriceIdYearly,
+        });
+        // Persist the resolved Stripe Price IDs back onto the row
+        // (only when they changed — otherwise the update is a no-op).
+        if (
+          syncResult.stripePriceIdMonthly !== next.stripePriceIdMonthly ||
+          syncResult.stripePriceIdYearly !== next.stripePriceIdYearly
+        ) {
+          await db.planConfig.update({
+            where: { planId },
+            data: {
+              stripePriceIdMonthly: syncResult.stripePriceIdMonthly,
+              stripePriceIdYearly: syncResult.stripePriceIdYearly,
+            },
+          });
+          await hydrate();
+        }
+      }
+    } catch {
+      // best-effort — never block the save on a Stripe error
+    }
+  }
+
   return getPlanConfigSync(planId);
 }
 
-/** Create a new plan config. */
+/** Create a new plan config.
+ *
+ *  AUTO-SYNC TO STRIPE: when Stripe is configured AND the new plan
+ *  is PAID (priceMonthly > 0 OR priceYearly > 0) AND the admin did
+ *  NOT explicitly provide Stripe Price IDs in the input, the backend
+ *  calls syncPlanToStripe to create a Stripe Product + monthly +
+ *  yearly Prices and writes the resolved Stripe Price IDs back onto
+ *  the new plan row. So creating a new paid plan in Platform Admin
+ *  automatically creates the corresponding Stripe Product + Prices —
+ *  no need to manually wire Stripe Price IDs in the Stripe dashboard.
+ *
+ *  When the admin explicitly provides Stripe Price IDs (manually
+ *  created in the Stripe dashboard), the auto-sync is skipped — the
+ *  admin is asserting the Stripe side is already wired. */
 export async function createPlanConfig(
   input: PlanConfigInput & { planId: string; name: string },
 ): Promise<PlanConfigData> {
@@ -551,6 +628,52 @@ export async function createPlanConfig(
   };
   await db.planConfig.create({ data: dataToRow(data) });
   await hydrate();
+
+  // ---- AUTO-SYNC TO STRIPE ----
+  // Best-effort — never throws. The plan row is already created; if
+  // the Stripe side fails, the admin can use the explicit "Sync to
+  // Stripe" route to surface errors.
+  const adminTouchedStripePriceIds =
+    'stripePriceIdMonthly' in input || 'stripePriceIdYearly' in input;
+  if (
+    !adminTouchedStripePriceIds &&
+    !data.isFree &&
+    (data.priceMonthly > 0 || data.priceYearly > 0)
+  ) {
+    try {
+      const { isStripeConfiguredAsync, getStripeClient, syncPlanToStripe } = await import('@/lib/stripe');
+      if (await isStripeConfiguredAsync()) {
+        const stripe = await getStripeClient();
+        const syncResult = await syncPlanToStripe(stripe, {
+          planId: data.planId,
+          name: data.name,
+          priceMonthly: data.priceMonthly,
+          priceYearly: data.priceYearly,
+          currency: data.currency,
+          stripePriceIdMonthly: data.stripePriceIdMonthly,
+          stripePriceIdYearly: data.stripePriceIdYearly,
+        });
+        if (
+          syncResult.stripePriceIdMonthly !== data.stripePriceIdMonthly ||
+          syncResult.stripePriceIdYearly !== data.stripePriceIdYearly
+        ) {
+          await db.planConfig.update({
+            where: { planId: data.planId },
+            data: {
+              stripePriceIdMonthly: syncResult.stripePriceIdMonthly,
+              stripePriceIdYearly: syncResult.stripePriceIdYearly,
+            },
+          });
+          await hydrate();
+          data.stripePriceIdMonthly = syncResult.stripePriceIdMonthly;
+          data.stripePriceIdYearly = syncResult.stripePriceIdYearly;
+        }
+      }
+    } catch {
+      // best-effort — never block the create on a Stripe error
+    }
+  }
+
   return data;
 }
 

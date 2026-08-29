@@ -46,7 +46,7 @@ import { NextRequest } from 'next/server';
 import { requireAuth, ok, fail } from '@/lib/platform/platform-auth';
 import { ensurePlanAssignable, getUserSubscription } from '@/lib/platform/subscription-data';
 import {
-  isStripeConfigured,
+  isStripeConfiguredAsync,
   getStripeClient,
   resolveStripePriceId,
   getPublicStripeConfig,
@@ -86,10 +86,10 @@ export async function POST(request: NextRequest) {
   }
 
   // Stripe must be configured.
-  if (!isStripeConfigured()) {
+  if (!(await isStripeConfiguredAsync())) {
     return fail(
       'PAYMENT_PROVIDER_NOT_CONFIGURED',
-      'Stripe is not configured on this platform. Set STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET in .env to enable real checkout. Free plans can be selected directly without Stripe.',
+      'Stripe is not configured on this platform. Connect your Stripe account in Platform Admin → Stripe Settings, or set STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET in .env, to enable real checkout. Free plans can be selected directly without Stripe.',
       503,
     );
   }
@@ -125,8 +125,8 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const appUrl = getPublicStripeConfig().appUrl;
-  const stripe = getStripeClient();
+  const appUrl = (await getPublicStripeConfig()).appUrl;
+  const stripe = await getStripeClient();
 
   try {
     // Pre-create or fetch the Stripe Customer so the webhook can attribute
@@ -234,5 +234,5 @@ export async function POST(request: NextRequest) {
  *  (publishable key + configured flag). Used by the client to decide
  *  whether to show "Checkout via Stripe" or "Stripe not configured". */
 export async function GET() {
-  return ok(getPublicStripeConfig());
+  return ok(await getPublicStripeConfig());
 }

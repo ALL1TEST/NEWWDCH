@@ -58,7 +58,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { activateSubscriptionFromStripe, cancelSubscription } from '@/lib/platform/subscription-data';
 import {
-  isStripeConfigured,
+  isStripeConfiguredAsync,
   verifyStripeWebhook,
   getStripeClient,
   markWebhookEventProcessed,
@@ -67,7 +67,7 @@ import {
 import type Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
-  if (!isStripeConfigured()) {
+  if (!(await isStripeConfiguredAsync())) {
     return NextResponse.json(
       { error: { code: 'PAYMENT_PROVIDER_NOT_CONFIGURED', message: 'Stripe is not configured.' } },
       { status: 503 },
@@ -462,7 +462,7 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
   if (!planId) return;
 
   // Look up the Stripe subscription to get the real period end + IDs.
-  const stripe = getStripeClient();
+  const stripe = await getStripeClient();
   let stripeSub: Stripe.Subscription | null = null;
   if (session.subscription) {
     stripeSub = await stripe.subscriptions.retrieve(session.subscription as string);
@@ -619,7 +619,7 @@ async function handleInvoicePaid(event: Stripe.Event) {
   }
 
   // Fetch the payment-method metadata for the full relational record.
-  const stripe = getStripeClient();
+  const stripe = await getStripeClient();
   const meta = await fetchPaymentMethodMeta(stripe, piId);
 
   // Find the user's subscription row.
@@ -675,7 +675,7 @@ async function handleInvoiceFailed(event: Stripe.Event) {
   if (existingPayment) return;
 
   // Fetch payment-method metadata + the failure reason for the description.
-  const stripe = getStripeClient();
+  const stripe = await getStripeClient();
   const meta = await fetchPaymentMethodMeta(stripe, piId);
   let failureReason: string | null = null;
   if (piId) {
@@ -733,7 +733,7 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
   if (!planId) return; // can't attribute to a plan → skip
 
   const sub = await db.subscription.findUnique({ where: { userId } });
-  const stripe = getStripeClient();
+  const stripe = await getStripeClient();
   const meta = await fetchPaymentMethodMeta(stripe, pi.id);
 
   await db.payment.create({
@@ -773,7 +773,7 @@ async function handlePaymentIntentFailed(event: Stripe.Event) {
   if (!planId) return;
 
   const sub = await db.subscription.findUnique({ where: { userId } });
-  const stripe = getStripeClient();
+  const stripe = await getStripeClient();
   const meta = await fetchPaymentMethodMeta(stripe, pi.id);
 
   const piAny = pi as unknown as { last_payment_error?: { message?: string } | null };

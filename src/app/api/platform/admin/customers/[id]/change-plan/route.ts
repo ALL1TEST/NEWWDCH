@@ -8,7 +8,7 @@ import {
 } from '@/lib/platform/platform-data';
 import { logAdminAction } from '@/lib/platform/audit';
 import {
-  isStripeConfigured,
+  isStripeConfiguredAsync,
   getStripeClient,
   cancelStripeSubscription,
   updateSubscriptionPrice,
@@ -74,9 +74,9 @@ export async function POST(request: NextRequest) {
   if (target.isFree) {
     // Downgrade to FREE. If Stripe is configured AND the sub has a
     // stripeSubscriptionId, cancel it immediately (no proration).
-    if (isStripeConfigured() && sub.stripeSubscriptionId) {
+    if ((await isStripeConfiguredAsync()) && sub.stripeSubscriptionId) {
       try {
-        const stripe = getStripeClient();
+        const stripe = await getStripeClient();
         await cancelStripeSubscription(stripe, sub.stripeSubscriptionId, false);
       } catch (err) {
         const msg = (err as Error).message;
@@ -91,10 +91,10 @@ export async function POST(request: NextRequest) {
     // Upgrade / switch to a PAID plan. Requires Stripe to be configured
     // (admin cannot force a paid plan without a payment provider —
     // there would be no payment method on the Stripe subscription).
-    if (!isStripeConfigured()) {
+    if (!(await isStripeConfiguredAsync())) {
       return fail(
         'PAYMENT_PROVIDER_NOT_CONFIGURED',
-        'Stripe is not configured. Admin cannot force a paid plan without a payment provider. Configure STRIPE_SECRET_KEY or use the customer checkout flow.',
+        'Stripe is not configured. Admin cannot force a paid plan without a payment provider. Configure credentials in Platform Admin → Stripe Settings or use the customer checkout flow.',
         503,
       );
     }
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
         );
       }
       try {
-        const stripe = getStripeClient();
+        const stripe = await getStripeClient();
         await updateSubscriptionPrice(stripe, sub.stripeSubscriptionId, newPriceId);
       } catch (err) {
         const msg = (err as Error).message;

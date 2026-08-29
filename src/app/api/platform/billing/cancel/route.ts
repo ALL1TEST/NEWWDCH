@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { requireAuth, ok, fail } from '@/lib/platform/platform-auth';
 import { getClientBillingAsync } from '@/lib/platform/platform-data';
-import { isStripeConfigured, getStripeClient, cancelStripeSubscription } from '@/lib/stripe';
+import { isStripeConfiguredAsync, getStripeClient, cancelStripeSubscription } from '@/lib/stripe';
 import { db } from '@/lib/db';
 
 // ============================================================
@@ -44,9 +44,9 @@ export async function POST(request: NextRequest) {
   // webhook will fire at the actual end and call cancelSubscription(userId)
   // (with the default immediatelyUnlinkStripe=true) to finalize the local
   // row.
-  if (isStripeConfigured() && sub.stripeSubscriptionId) {
+  if ((await isStripeConfiguredAsync()) && sub.stripeSubscriptionId) {
     try {
-      const stripe = getStripeClient();
+      const stripe = await getStripeClient();
       await cancelStripeSubscription(stripe, sub.stripeSubscriptionId, true);
     } catch (err) {
       const msg = (err as Error).message;

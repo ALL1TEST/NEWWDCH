@@ -2276,6 +2276,49 @@ model WebhookEvent {
   @@index([objectId])
 }
 
+// ============================================================
+// STRIPE SETTINGS — admin-configured Stripe credentials.
+// ============================================================
+// Singleton row (id='singleton'). Stores the platform's Stripe
+// account credentials so the Platform Owner can connect Stripe
+// from the admin UI without editing .env. Secret keys (sk_test_,
+// sk_live_, whsec_) are stored AES-256-GCM encrypted via
+// /lib/encryption; only the masked form is ever returned to the
+// frontend. Publishable keys are non-secret and stored as plaintext.
+//
+// When this row exists and `mode` is 'test' or 'live' with the
+// matching secret key set, /lib/stripe.ts reads from it BEFORE
+// falling back to process.env.STRIPE_* (so both sources work —
+// admin-configured takes precedence, .env is the fallback).
+//
+// `lastTestStatus` / `lastTestedAt` / `lastTestErrorMessage` record
+// the outcome of the most recent "Test Connection" action so the
+// admin can see at a glance whether the current credentials are
+// working.
+// ============================================================
+model StripeSettings {
+  id                   String   @id @default("singleton")
+  mode                 String   @default("test") // 'test' | 'live'
+  // Encrypted secret keys (AES-256-GCM, base64). null = not configured.
+  secretKeyTestEncrypted   String?
+  secretKeyLiveEncrypted   String?
+  webhookSecretTestEncrypted String?
+  webhookSecretLiveEncrypted String?
+  // Publishable keys (non-secret — exposed to the client via /api/billing/checkout GET).
+  publishableKeyTest   String?
+  publishableKeyLive    String?
+  // Public app URL for success/cancel redirects.
+  appUrl                String?
+  // Last Test Connection result.
+  lastTestStatus        String? // 'success' | 'error' | null
+  lastTestedAt          DateTime?
+  lastTestErrorMessage  String?
+  // Audit fields.
+  updatedBy             String? // User.id of the last editor
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
 model CountryPricing {
   id             String   @id @default(cuid())
   countryCode    String   @unique // ISO 3166-1 alpha-2: US, CH, MA, ...

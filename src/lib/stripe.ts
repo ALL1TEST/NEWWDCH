@@ -1,50 +1,189 @@
 // ============================================================
 // STRIPE CLIENT + CONFIGURATION GUARD.
 // ============================================================
-// This is the SINGLE place that reads Stripe env vars and constructs
-// the Stripe SDK client. The rest of the codebase calls
+// This is the SINGLE place that resolves Stripe credentials and
+// constructs the Stripe SDK client. The rest of the codebase calls
 // `isStripeConfigured()` to gate real billing; when false, checkout
 // returns 503 with a clear "not configured" message and NEVER fakes
 // a successful payment.
 //
+// CREDENTIAL RESOLUTION ORDER (per credential type):
+//   1. The StripeSettings singleton row in the DB (admin-configured
+//      via Platform Admin → Stripe Settings). Secret keys are stored
+//      AES-256-GCM encrypted; only the masked form is returned to the
+//      frontend. Publishable keys are stored as plaintext.
+//   2. process.env.STRIPE_* (fallback — works without any DB row,
+//      e.g. on first deploy before the admin has connected Stripe).
+//
+// So an admin can connect Stripe from the UI without editing .env,
+// and existing .env-based deployments keep working.
+//
 // Stripe SDK is only ever imported server-side (this file is imported
 // by API routes and webhook handlers). The publishable key is exposed
-// to the client only via /api/billing/config (so the client can show
-// the right UI without leaking the secret key).
+// to the client only via /api/billing/checkout (GET) (so the client
+// can show the right UI without leaking the secret key).
 // ============================================================
 
 import Stripe from 'stripe';
+import { encrypt, decrypt, maskSecret } from '@/lib/encryption';
 
-let _client: Stripe | null = null;
+// -------------------- DB-backed settings cache --------------------
+// In-memory cache of the StripeSettings singleton row. Re-read on
+// demand (invalidateStripeSettingsCache below) — call after every
+// mutation (save / test-connection) so the next getStripeClient()
+// picks up the new credentials without a dev-server restart.
+interface ResolvedStripeSettings {
+  mode: 'test' | 'live';
+  secretKey: string | null; // resolved plaintext (decrypted) for the active mode
+  publishableKey: string | null;
+  webhookSecret: string | null;
+  appUrl: string | null;
+}
 
-/** True when STRIPE_SECRET_KEY is present (non-empty). */
+let _resolvedCache: ResolvedStripeSettings | null = null;
+let _resolvedCacheAt = 0;
+const RESOLVED_TTL_MS = 5_000; // 5s — keeps reads fast but picks up edits quickly
+
+/** Invalidate the in-memory cache of resolved Stripe settings.
+ *  Call after every saveStripeSettings() / mutation so the next
+ *  getStripeClient() reads the fresh DB row. */
+export function invalidateStripeSettingsCache(): void {
+  _resolvedCache = null;
+  _resolvedCacheAt = 0;
+  _client = null; // force the SDK client to be reconstructed on next use
+}
+
+/** Read the StripeSettings singleton row from the DB and decrypt
+ *  the secret keys for the ACTIVE mode. Returns null when no row
+ *  exists yet. Never throws — every error degrades to null. */
+async function loadResolvedSettings(): Promise<ResolvedStripeSettings | null> {
+  const { db } = await import('@/lib/db');
+  try {
+    const row = await db.stripeSettings.findUnique({ where: { id: 'singleton' } });
+    if (!row) return null;
+    const mode = (row.mode === 'live' ? 'live' : 'test') as 'test' | 'live';
+    const secretEncrypted = mode === 'live' ? row.secretKeyLiveEncrypted : row.secretKeyTestEncrypted;
+    const webhookEncrypted = mode === 'live' ? row.webhookSecretLiveEncrypted : row.webhookSecretTestEncrypted;
+    const publishable = mode === 'live' ? row.publishableKeyLive : row.publishableKeyTest;
+
+    let secretKey: string | null = null;
+    if (secretEncrypted) {
+      try {
+        secretKey = await decrypt(secretEncrypted);
+      } catch {
+        secretKey = null;
+      }
+    }
+    let webhookSecret: string | null = null;
+    if (webhookEncrypted) {
+      try {
+        webhookSecret = await decrypt(webhookEncrypted);
+      } catch {
+        webhookSecret = null;
+      }
+    }
+    return {
+      mode,
+      secretKey,
+      publishableKey: publishable ?? null,
+      webhookSecret,
+      appUrl: row.appUrl ?? null,
+    };
+  } catch {
+    // Table not yet created, db not reachable, etc. → fall back to env.
+    return null;
+  }
+}
+
+/** Get the resolved Stripe settings (DB → env fallback), with a
+ *  5s in-memory cache so it's cheap to call repeatedly. Public so
+ *  the admin settings page can read the masked view + the test
+ *  connection route can show what it tested with. */
+export async function getResolvedStripeSettings(): Promise<ResolvedStripeSettings & {
+  source: 'db' | 'env' | 'none';
+}> {
+  // 1. DB row (admin-configured).
+  const now = Date.now();
+  if (_resolvedCache && now - _resolvedCacheAt < RESOLVED_TTL_MS) {
+    return { ..._resolvedCache, source: 'db' };
+  }
+  const fromDb = await loadResolvedSettings();
+  if (fromDb && (fromDb.secretKey || fromDb.publishableKey || fromDb.webhookSecret)) {
+    _resolvedCache = fromDb;
+    _resolvedCacheAt = now;
+    return { ...fromDb, source: 'db' };
+  }
+  // 2. Env fallback.
+  const envSettings: ResolvedStripeSettings = {
+    mode: process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_') ? 'live' : 'test',
+    secretKey: process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY.trim().length > 0
+      ? process.env.STRIPE_SECRET_KEY
+      : null,
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY && process.env.STRIPE_PUBLISHABLE_KEY.trim().length > 0
+      ? process.env.STRIPE_PUBLISHABLE_KEY
+      : null,
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET && process.env.STRIPE_WEBHOOK_SECRET.trim().length > 0
+      ? process.env.STRIPE_WEBHOOK_SECRET
+      : null,
+    appUrl: process.env.STRIPE_APP_URL ?? null,
+  };
+  // If env has no usable secret key either, source is 'none' (the
+  // admin UI shows "Stripe is not connected — configure below").
+  const hasEnvCreds = Boolean(envSettings.secretKey) || Boolean(envSettings.publishableKey) || Boolean(envSettings.webhookSecret);
+  return { ...envSettings, source: hasEnvCreds ? 'env' : 'none' };
+}
+
+/** True when Stripe secret key is configured (DB or env). */
+export async function isStripeConfiguredAsync(): Promise<boolean> {
+  const s = await getResolvedStripeSettings();
+  return Boolean(s.secretKey && s.secretKey.trim().length > 0);
+}
+
+/** Sync version — checks env vars only. Kept for backwards compat
+ *  with callers that haven't been migrated to the async pattern
+ *  (e.g. the webhook handler's pre-flight guard). Prefer
+ *  isStripeConfiguredAsync() everywhere new. */
 export function isStripeConfigured(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY.trim().length > 0);
 }
 
-/** Get the shared Stripe SDK client. Throws if not configured — call
- *  isStripeConfigured() first. */
-export function getStripeClient(): Stripe {
-  if (!_client) {
-    const key = process.env.STRIPE_SECRET_KEY;
-    if (!key) throw new Error('STRIPE_SECRET_KEY is not configured.');
-    _client = new Stripe(key, {
-      // Pin to a stable API version. Update together with the SDK.
-      apiVersion: '2026-08-26.dahlia' as Stripe.LatestApiVersion,
-      typescript: true,
-      // Surface errors as detailed objects (don't hide fields).
-      maxNetworkRetries: 2,
-    });
-  }
+let _client: Stripe | null = null;
+
+/** Get the shared Stripe SDK client. Reads the secret key from DB
+ *  first, then falls back to env. Throws if neither is configured —
+ *  call isStripeConfiguredAsync() first. */
+export async function getStripeClient(): Promise<Stripe> {
+  const settings = await getResolvedStripeSettings();
+  const key = settings.secretKey;
+  if (!key) throw new Error('Stripe is not configured. Set credentials in Platform Admin → Stripe Settings or in .env.');
+  // If the cache is fresh and the key matches, reuse the SDK client.
+  if (_client && _cachedClientKey === key) return _client;
+  _client = new Stripe(key, {
+    // Pin to a stable API version. Update together with the SDK.
+    apiVersion: '2026-08-26.dahlia' as Stripe.LatestApiVersion,
+    typescript: true,
+    // Surface errors as detailed objects (don't hide fields).
+    maxNetworkRetries: 2,
+  });
+  _cachedClientKey = key;
   return _client;
 }
+let _cachedClientKey: string | null = null;
 
-/** Public configuration the client can safely see (no secret keys). */
-export function getPublicStripeConfig() {
+/** Public configuration the client can safely see (no secret keys).
+ *  Publishable key + app URL + configured flag. */
+export async function getPublicStripeConfig(): Promise<{
+  configured: boolean;
+  publishableKey: string;
+  appUrl: string;
+  mode: 'test' | 'live';
+}> {
+  const s = await getResolvedStripeSettings();
   return {
-    configured: isStripeConfigured(),
-    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY ?? '',
-    appUrl: process.env.STRIPE_APP_URL ?? 'http://localhost:3000',
+    configured: Boolean(s.secretKey && s.secretKey.trim().length > 0),
+    publishableKey: s.publishableKey ?? '',
+    appUrl: s.appUrl ?? 'http://localhost:3000',
+    mode: s.mode,
   };
 }
 
@@ -67,17 +206,20 @@ export async function resolveStripePriceId(
   return row.stripePriceIdMonthly ?? null;
 }
 
-/** Verify the Stripe webhook signature using STRIPE_WEBHOOK_SECRET.
- *  Returns the verified event or null if verification fails. */
+/** Verify the Stripe webhook signature. Reads the webhook secret from
+ *  DB first, then falls back to STRIPE_WEBHOOK_SECRET. Returns the
+ *  verified event or null if verification fails (or Stripe isn't
+ *  configured). */
 export async function verifyStripeWebhook(
   rawBody: Buffer | string,
   signature: string,
 ): Promise<Stripe.Event | null> {
-  if (!isStripeConfigured()) return null;
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  const settings = await getResolvedStripeSettings();
+  const secret = settings.webhookSecret;
   if (!secret) return null;
   try {
-    return getStripeClient().webhooks.constructEventAsync(
+    const stripe = await getStripeClient();
+    return await stripe.webhooks.constructEventAsync(
       rawBody instanceof Buffer ? rawBody : Buffer.from(rawBody),
       signature,
       secret,
@@ -446,5 +588,347 @@ export async function markWebhookEventProcessed(params: {
     // conservative: any other error → treat as duplicate so the
     // webhook skips processing (request still returns 200 to Stripe).
     return false;
+  }
+}
+
+// ============================================================
+// ADMIN STRIPE SETTINGS — credential storage + Test Connection.
+// ============================================================
+// saveStripeSettings: encrypts secret keys (sk_*, whsec_*) and
+//   upserts the singleton row. Publishable keys (pk_*) are stored
+//   as plaintext. Returns the masked view (safe for the admin UI).
+//
+// getStripeSettingsForAdmin: returns the masked view + last test
+//   result + webhook URL hint. Never returns raw secret values —
+//   the admin UI shows masked strings (sk_...xxxx) and only ever
+//   sends a fresh plaintext key when rotating.
+//
+// testStripeConnection: constructs a temporary Stripe client from
+//   the provided (or stored) credentials and pings Stripe's
+//   /v1/balance endpoint (read-only, no side effects). On success
+//   returns account info; on failure returns the Stripe error code
+//   + message. Records the outcome on the singleton row so the UI
+//   can show the last test result.
+// ============================================================
+
+export interface StripeSettingsInput {
+  mode: 'test' | 'live';
+  // Plaintext credentials from the admin UI. Empty string = "leave
+  // unchanged" (the existing encrypted value is kept); null/undefined
+  // = "clear" (the field is set to null).
+  secretKeyTest?: string;
+  secretKeyLive?: string;
+  publishableKeyTest?: string;
+  publishableKeyLive?: string;
+  webhookSecretTest?: string;
+  webhookSecretLive?: string;
+  appUrl?: string;
+}
+
+export interface StripeSettingsView {
+  mode: 'test' | 'live';
+  secretKeyTestMasked: string; // masked or '' when not configured
+  secretKeyLiveMasked: string;
+  publishableKeyTest: string; // plaintext (non-secret)
+  publishableKeyLive: string;
+  webhookSecretTestMasked: string;
+  webhookSecretLiveMasked: string;
+  appUrl: string;
+  lastTestStatus: 'success' | 'error' | null;
+  lastTestedAt: string | null;
+  lastTestErrorMessage: string | null;
+  // Whether each credential is configured (so the UI can show ✓/✗).
+  hasSecretKeyTest: boolean;
+  hasSecretKeyLive: boolean;
+  hasWebhookSecretTest: boolean;
+  hasWebhookSecretLive: boolean;
+  hasPublishableKeyTest: boolean;
+  hasPublishableKeyLive: boolean;
+  // The source the active Stripe client resolves to ('db' | 'env' | 'none').
+  activeSource: 'db' | 'env' | 'none';
+  isConfigured: boolean;
+}
+
+const EMPTY_MASKED = '';
+
+/** Read the StripeSettings singleton (or null when no row exists). */
+async function readStripeSettingsRow() {
+  const { db } = await import('@/lib/db');
+  return db.stripeSettings.findUnique({ where: { id: 'singleton' } });
+}
+
+/** Decrypt a stored encrypted secret (returns null when ciphertext
+ *  is null or decryption fails). */
+async function tryDecrypt(ciphertext: string | null | undefined): Promise<string | null> {
+  if (!ciphertext) return null;
+  try {
+    return await decrypt(ciphertext);
+  } catch {
+    return null;
+  }
+}
+
+/** Build the safe masked view for the admin UI. Never returns raw
+ *  secret values. */
+export async function getStripeSettingsForAdmin(): Promise<StripeSettingsView> {
+  const row = await readStripeSettingsRow();
+
+  const secretKeyTest = await tryDecrypt(row?.secretKeyTestEncrypted);
+  const secretKeyLive = await tryDecrypt(row?.secretKeyLiveEncrypted);
+  const webhookSecretTest = await tryDecrypt(row?.webhookSecretTestEncrypted);
+  const webhookSecretLive = await tryDecrypt(row?.webhookSecretLiveEncrypted);
+  const publishableKeyTest = row?.publishableKeyTest ?? '';
+  const publishableKeyLive = row?.publishableKeyLive ?? '';
+
+  const resolved = await getResolvedStripeSettings();
+
+  return {
+    mode: (row?.mode === 'live' ? 'live' : 'test'),
+    secretKeyTestMasked: secretKeyTest ? maskSecret(secretKeyTest) : EMPTY_MASKED,
+    secretKeyLiveMasked: secretKeyLive ? maskSecret(secretKeyLive) : EMPTY_MASKED,
+    publishableKeyTest,
+    publishableKeyLive,
+    webhookSecretTestMasked: webhookSecretTest ? maskSecret(webhookSecretTest) : EMPTY_MASKED,
+    webhookSecretLiveMasked: webhookSecretLive ? maskSecret(webhookSecretLive) : EMPTY_MASKED,
+    appUrl: row?.appUrl ?? '',
+    lastTestStatus: (row?.lastTestStatus === 'success' || row?.lastTestStatus === 'error')
+      ? row.lastTestStatus
+      : null,
+    lastTestedAt: row?.lastTestedAt?.toISOString() ?? null,
+    lastTestErrorMessage: row?.lastTestErrorMessage ?? null,
+    hasSecretKeyTest: Boolean(secretKeyTest),
+    hasSecretKeyLive: Boolean(secretKeyLive),
+    hasWebhookSecretTest: Boolean(webhookSecretTest),
+    hasWebhookSecretLive: Boolean(webhookSecretLive),
+    hasPublishableKeyTest: Boolean(publishableKeyTest),
+    hasPublishableKeyLive: Boolean(publishableKeyLive),
+    activeSource: resolved.source,
+    isConfigured: Boolean(resolved.secretKey && resolved.secretKey.trim().length > 0),
+  };
+}
+
+/** Save (encrypt + upsert) Stripe credentials. Empty-string values
+ *  for secret keys mean "leave unchanged" (the existing encrypted
+ *  value is preserved); null/undefined means "clear". Publishable
+ *  keys are written as plaintext (non-secret). Returns the masked
+ *  view. Never returns raw secret values. */
+export async function saveStripeSettings(
+  input: StripeSettingsInput,
+  editorUserId: string,
+): Promise<StripeSettingsView> {
+  const { db } = await import('@/lib/db');
+  const existing = await readStripeSettingsRow();
+
+  // ---- Secret keys: encrypt when provided; preserve when empty string ----
+  const encryptOrPreserve = async (
+    plaintext: string | undefined,
+    existingEncrypted: string | null | undefined,
+  ): Promise<string | null> => {
+    if (plaintext === undefined || plaintext === null) return null; // clear
+    if (plaintext === '') return existingEncrypted ?? null; // preserve
+    return await encrypt(plaintext);
+  };
+
+  const secretKeyTestEncrypted = await encryptOrPreserve(
+    input.secretKeyTest,
+    existing?.secretKeyTestEncrypted,
+  );
+  const secretKeyLiveEncrypted = await encryptOrPreserve(
+    input.secretKeyLive,
+    existing?.secretKeyLiveEncrypted,
+  );
+  const webhookSecretTestEncrypted = await encryptOrPreserve(
+    input.webhookSecretTest,
+    existing?.webhookSecretTestEncrypted,
+  );
+  const webhookSecretLiveEncrypted = await encryptOrPreserve(
+    input.webhookSecretLive,
+    existing?.webhookSecretLiveEncrypted,
+  );
+
+  // ---- Publishable keys: plaintext (non-secret). Empty string
+  //      preserves existing; null clears. ----
+  const resolvePub = (v: string | undefined, existingVal: string | null): string | null => {
+    if (v === undefined || v === null) return null;
+    if (v === '') return existingVal ?? null;
+    return v;
+  };
+  const publishableKeyTest = resolvePub(input.publishableKeyTest, existing?.publishableKeyTest ?? null);
+  const publishableKeyLive = resolvePub(input.publishableKeyLive, existing?.publishableKeyLive ?? null);
+
+  // ---- App URL: empty string = unset (no preserve semantic — caller
+  //      should pass the full URL). ----
+  const appUrl = input.appUrl ?? existing?.appUrl ?? null;
+
+  await db.stripeSettings.upsert({
+    where: { id: 'singleton' },
+    create: {
+      id: 'singleton',
+      mode: input.mode,
+      secretKeyTestEncrypted,
+      secretKeyLiveEncrypted,
+      webhookSecretTestEncrypted,
+      webhookSecretLiveEncrypted,
+      publishableKeyTest,
+      publishableKeyLive,
+      appUrl,
+      updatedBy: editorUserId,
+    },
+    update: {
+      mode: input.mode,
+      secretKeyTestEncrypted,
+      secretKeyLiveEncrypted,
+      webhookSecretTestEncrypted,
+      webhookSecretLiveEncrypted,
+      publishableKeyTest,
+      publishableKeyLive,
+      appUrl,
+      updatedBy: editorUserId,
+    },
+  });
+
+  // Force the next read to pick up the new credentials.
+  invalidateStripeSettingsCache();
+
+  return getStripeSettingsForAdmin();
+}
+
+/** Test a Stripe connection by pinging the read-only /v1/balance
+ *  endpoint. Uses the currently-configured credentials when
+ *  `input` is null/undefined; otherwise constructs a temporary
+ *  client from `input` (so the admin can test BEFORE saving).
+ *  Records the outcome on the singleton row.
+ *
+ *  Returns `{ success: true, accountInfo }` on success, or
+ *  `{ success: false, code, message }` on failure. Never throws. */
+export async function testStripeConnection(
+  input?: StripeSettingsInput,
+): Promise<
+  | { success: true; mode: 'test' | 'live'; accountInfo: { id: string; type: string; country: string; email: string | null; displayName: string | null } }
+  | { success: false; mode: 'test' | 'live'; code: string; message: string }
+> {
+  // Resolve the secret key to test with.
+  let secretKey: string | null = null;
+  let mode: 'test' | 'live' = 'test';
+
+  if (input) {
+    mode = input.mode;
+    const candidate = mode === 'live' ? input.secretKeyLive : input.secretKeyTest;
+    if (candidate && candidate.trim().length > 0) {
+      secretKey = candidate;
+    } else {
+      // Fall back to the stored value for the chosen mode.
+      const row = await readStripeSettingsRow();
+      const enc = mode === 'live' ? row?.secretKeyLiveEncrypted : row?.secretKeyTestEncrypted;
+      secretKey = await tryDecrypt(enc);
+    }
+  } else {
+    const resolved = await getResolvedStripeSettings();
+    secretKey = resolved.secretKey;
+    mode = resolved.mode;
+  }
+
+  if (!secretKey || secretKey.trim().length === 0) {
+    const msg = 'No Stripe secret key is configured for the selected mode. Set the secret key first.';
+    await recordTestOutcome(mode, 'error', msg);
+    return { success: false, mode, code: 'NOT_CONFIGURED', message: msg };
+  }
+
+  // Basic key-shape validation — sk_test_ / sk_live_ / rk_test_ /
+  // rk_live_ (restricted keys also work for read-only calls).
+  const keyShapeOk =
+    secretKey.startsWith('sk_test_') ||
+    secretKey.startsWith('sk_live_') ||
+    secretKey.startsWith('rk_test_') ||
+    secretKey.startsWith('rk_live_');
+  if (!keyShapeOk) {
+    const msg = 'The secret key does not look like a Stripe secret key (expected sk_test_… or sk_live_…).';
+    await recordTestOutcome(mode, 'error', msg);
+    return { success: false, mode, code: 'INVALID_KEY_SHAPE', message: msg };
+  }
+
+  try {
+    // Construct a TEMPORARY client (not the cached singleton) so we
+    // can test credentials that haven't been saved yet.
+    const tempClient = new Stripe(secretKey, {
+      apiVersion: '2026-08-26.dahlia' as Stripe.LatestApiVersion,
+      typescript: true,
+      maxNetworkRetries: 1,
+    });
+    // /v1/balance is read-only and free of side effects — perfect for
+    // testing credentials. It also works with restricted keys that
+    // have the "Balance" read permission.
+    const balance = await tempClient.balance.retrieve();
+    // Resolve the account for richer info (id, country, display name).
+    // This call requires the "Settings" read permission, which secret
+    // keys always have. Fall back gracefully when restricted keys
+    // can't reach it.
+    let accountInfo: { id: string; type: string; country: string; email: string | null; displayName: string | null };
+    try {
+      const acct = await tempClient.accounts.retrieve();
+      accountInfo = {
+        id: acct.id,
+        type: (acct as unknown as { type?: string }).type ?? 'standard',
+        country: (acct as unknown as { country?: string }).country ?? '',
+        email: (acct as unknown as { email?: string | null }).email ?? null,
+        displayName: (acct as unknown as { display_name?: string | null }).display_name ?? null,
+      };
+    } catch {
+      // Restricted key with no Settings read — still a successful
+      // test (the secret key authenticates to Stripe).
+      accountInfo = {
+        id: '(restricted key)',
+        type: 'restricted',
+        country: '',
+        email: null,
+        displayName: null,
+      };
+    }
+    const balanceAvailable = balance.available?.[0]?.amount;
+    await recordTestOutcome(
+      mode,
+      'success',
+      null,
+      `account_id=${accountInfo.id}, available=${balanceAvailable ?? 'n/a'}`,
+    );
+    return { success: true, mode, accountInfo };
+  } catch (err: unknown) {
+    const e = (err ?? {}) as { code?: string; message?: string; type?: string };
+    const code = e.code ?? e.type ?? 'stripe_error';
+    const message = e.message ?? 'Unknown Stripe error';
+    await recordTestOutcome(mode, 'error', `${code}: ${message}`);
+    return { success: false, mode, code, message };
+  }
+}
+
+/** Persist the last test-connection outcome on the singleton row.
+ *  Best-effort — never throws. */
+async function recordTestOutcome(
+  mode: 'test' | 'live',
+  status: 'success' | 'error',
+  errorMessage: string | null,
+  _detail?: string,
+): Promise<void> {
+  try {
+    const { db } = await import('@/lib/db');
+    await db.stripeSettings.upsert({
+      where: { id: 'singleton' },
+      create: {
+        id: 'singleton',
+        mode,
+        lastTestStatus: status,
+        lastTestedAt: new Date(),
+        lastTestErrorMessage: errorMessage,
+      },
+      update: {
+        mode,
+        lastTestStatus: status,
+        lastTestedAt: new Date(),
+        lastTestErrorMessage: errorMessage,
+      },
+    });
+    invalidateStripeSettingsCache();
+  } catch {
+    // best-effort
   }
 }

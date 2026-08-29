@@ -9,7 +9,7 @@
 
 import { db } from '@/lib/db';
 import {
-  isStripeConfigured,
+  isStripeConfiguredAsync,
   getStripeClient,
   clearStripeCouponMirror,
 } from '@/lib/stripe';
@@ -158,9 +158,9 @@ export async function updateCoupon(id: string, input: CouponInput): Promise<Coup
     input.maxRedemptions !== undefined;
   const deactivated = input.active === false;
   const hasMirror = Boolean(existing.stripeCouponId || existing.stripePromotionCodeId);
-  if ((materialChanged || deactivated) && hasMirror && isStripeConfigured()) {
+  if ((materialChanged || deactivated) && hasMirror && (await isStripeConfiguredAsync())) {
     try {
-      const stripe = getStripeClient();
+      const stripe = await getStripeClient();
       await clearStripeCouponMirror(
         stripe,
         existing.stripeCouponId,
@@ -188,11 +188,11 @@ export async function deleteCoupon(id: string): Promise<boolean> {
     const existing = await db.coupon.findUnique({ where: { id } });
     if (
       existing &&
-      isStripeConfigured() &&
+      (await isStripeConfiguredAsync()) &&
       (existing.stripeCouponId || existing.stripePromotionCodeId)
     ) {
       try {
-        const stripe = getStripeClient();
+        const stripe = await getStripeClient();
         await clearStripeCouponMirror(
           stripe,
           existing.stripeCouponId,

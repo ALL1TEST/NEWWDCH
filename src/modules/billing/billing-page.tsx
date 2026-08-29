@@ -121,7 +121,7 @@ export function BillingPage() {
       const e = err as { code?: string; message?: string; status?: number };
       if (e?.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
         toast.error(
-          'Stripe is not configured on this platform. The admin must set STRIPE_SECRET_KEY in .env to enable real checkout. Free plans can still be selected directly.',
+          'Stripe is not configured on this platform. An admin must connect Stripe in Platform Admin → Stripe Settings to enable real checkout. Free plans can still be selected directly.',
         );
       } else if (e?.code === 'STRIPE_PRICE_NOT_CONFIGURED') {
         toast.error(

@@ -64,6 +64,9 @@ import {
   RotateCcw,
   Save,
   ShieldAlert,
+  RefreshCw,
+  ExternalLink,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   ErrorState,
@@ -444,6 +447,43 @@ function EditPlanDialog({
     },
   });
 
+  // Sync this plan to Stripe (creates/reuses the Stripe Product + monthly +
+  // yearly Prices and writes the resolved Stripe Price IDs back onto the
+  // plan row). Surfaces Stripe errors inline so the admin can fix them.
+  const syncToStripeMutation = useMutation({
+    mutationFn: () =>
+      postApi<{
+        planId: string;
+        stripePriceIdMonthly: string;
+        stripePriceIdYearly: string;
+        created: boolean;
+      }>(`/api/platform/admin/plans/${plan.planId}/sync-stripe`),
+    onSuccess: (data) => {
+      // Reflect the synced Stripe Price IDs in the local form state so the
+      // admin can see them without re-opening the dialog.
+      setStripePriceIdMonthly(data.stripePriceIdMonthly);
+      setStripePriceIdYearly(data.stripePriceIdYearly);
+      queryClient.invalidateQueries({ queryKey: ['platform-plans'] });
+      toast.success(
+        data.created
+          ? `Synced to Stripe — created monthly (${data.stripePriceIdMonthly.slice(0, 14)}…) + yearly (${data.stripePriceIdYearly.slice(0, 14)}…) Prices.`
+          : 'Stripe Prices are already in sync.',
+      );
+    },
+    onError: (err: unknown) => {
+      const e = err as { code?: string; message?: string; error?: { code?: string; message?: string } };
+      const code = e?.code ?? e?.error?.code;
+      const msg = e?.message ?? e?.error?.message;
+      if (code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
+        toast.error('Stripe is not connected. Configure credentials in Platform Admin → Stripe Settings first.');
+      } else if (code === 'VALIDATION_ERROR') {
+        toast.error(msg || 'Free plans do not need Stripe — set a price above 0 first.');
+      } else {
+        toast.error(msg || 'Unable to sync plan to Stripe.');
+      }
+    },
+  });
+
   const buildPatch = (): PlanPatch => {
     const monthly = Number(priceMonthly) || 0;
     const yearly = Number(priceYearly) || 0;
@@ -601,12 +641,44 @@ function EditPlanDialog({
                 />
               </button>
             </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-2 pt-2">
+            <CollapsibleContent className="space-y-3 pt-2">
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Wire this plan to Stripe for real recurring billing. Leave empty to keep the plan
-                manageable in Platform Admin without Stripe — checkout will refuse to fake a
-                successful payment in that case.
+                Wire this plan to Stripe for real recurring billing. When you click <strong>Save</strong>,
+                the backend will automatically create the corresponding Stripe Product + monthly +
+                yearly Prices and store the resolved Stripe Price IDs below (unless you set them
+                manually — then it respects your values). You can also trigger an explicit sync now.
               </p>
+              {/* Sync button + status */}
+              <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  disabled={syncToStripeMutation.isPending}
+                  onClick={() => syncToStripeMutation.mutate()}
+                >
+                  {syncToStripeMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  Sync to Stripe
+                </Button>
+                <div className="text-[11px] text-muted-foreground">
+                  {stripePriceIdMonthly && stripePriceIdYearly ? (
+                    <span className="inline-flex items-center gap-1 text-emerald-700">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Wired: monthly + yearly Prices set
+                    </span>
+                  ) : (
+                    <span>
+                      Not yet wired. Click the button to create the Stripe Product + Prices
+                      (requires Stripe to be connected).
+                    </span>
+                  )}
+                </div>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Stripe Price ID — Monthly</Label>
@@ -614,7 +686,7 @@ function EditPlanDialog({
                     value={stripePriceIdMonthly}
                     onChange={(e) => setStripePriceIdMonthly(e.target.value)}
                     className="h-9 font-mono text-xs"
-                    placeholder="price_…"
+                    placeholder="price_… (auto-filled after sync)"
                   />
                 </div>
                 <div className="space-y-1">
@@ -623,10 +695,21 @@ function EditPlanDialog({
                     value={stripePriceIdYearly}
                     onChange={(e) => setStripePriceIdYearly(e.target.value)}
                     className="h-9 font-mono text-xs"
-                    placeholder="price_…"
+                    placeholder="price_… (auto-filled after sync)"
                   />
                 </div>
               </div>
+              <p className="text-[11px] text-muted-foreground">
+                Tip: leave these fields untouched to let the backend auto-sync on Save. Setting them
+                manually (even clearing) takes manual control of the Stripe side. Connect Stripe in{' '}
+                <a
+                  href="#platform-stripe-settings"
+                  className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
+                >
+                  Stripe Settings
+                  <ExternalLink className="h-3 w-3" />
+                </a>.
+              </p>
             </CollapsibleContent>
           </Collapsible>
 
@@ -1051,9 +1134,10 @@ function CreatePlanDialog({
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-2 pt-2">
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Wire this plan to Stripe for real recurring billing. Leave empty to keep the plan
-                manageable in Platform Admin without Stripe — checkout will refuse to fake a
-                successful payment in that case.
+                When you create a paid plan with Stripe connected, the backend will automatically
+                create the corresponding Stripe Product + monthly + yearly Prices and store the
+                resolved Stripe Price IDs. Leave these fields empty to let the backend auto-sync.
+                Set them manually only if you pre-created the Stripe Prices in the Stripe dashboard.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
@@ -1062,7 +1146,7 @@ function CreatePlanDialog({
                     value={stripePriceIdMonthly}
                     onChange={(e) => setStripePriceIdMonthly(e.target.value)}
                     className="h-9 font-mono text-xs"
-                    placeholder="price_…"
+                    placeholder="price_… (auto-created on Save)"
                   />
                 </div>
                 <div className="space-y-1">
@@ -1071,10 +1155,21 @@ function CreatePlanDialog({
                     value={stripePriceIdYearly}
                     onChange={(e) => setStripePriceIdYearly(e.target.value)}
                     className="h-9 font-mono text-xs"
-                    placeholder="price_…"
+                    placeholder="price_… (auto-created on Save)"
                   />
                 </div>
               </div>
+              <p className="text-[11px] text-muted-foreground">
+                Connect Stripe first in{' '}
+                <a
+                  href="#platform-stripe-settings"
+                  className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
+                >
+                  Stripe Settings
+                  <ExternalLink className="h-3 w-3" />
+                </a>{' '}
+                so auto-sync works on plan creation.
+              </p>
             </CollapsibleContent>
           </Collapsible>
 

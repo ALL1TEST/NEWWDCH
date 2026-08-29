@@ -312,6 +312,11 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     icon: 'Ticket',
   },
   {
+    label: 'Stripe Settings',
+    href: '#platform-stripe-settings',
+    icon: 'CreditCard',
+  },
+  {
     label: 'Notifications',
     href: '#platform-notifications',
     icon: 'Bell',
