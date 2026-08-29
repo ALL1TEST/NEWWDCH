@@ -6908,3 +6908,28 @@ Stage Summary:
   18. Real SaaS subscription system end-to-end — Platform Admin creates plan → saved to PlanConfig DB → feature permissions + limits stored → Stripe billing config connected (stripePriceIdMonthly/Yearly fields) → customer sees plan in Client Billing → customer selects Monthly/Yearly → checkout uses correct Stripe price → successful payment webhook activates subscription → customer receives configured feature access → usage tracked against configured limits → renewal/expiration calculated correctly (calendar-based) → Platform Admin can see/manage resulting subscription state (DB Subscription + Payment tables) ✓
 - Lint baseline preserved (4 errors + 3 warnings, all pre-existing).
 - Dev server compiles cleanly. No runtime errors during E2E. The 4 plans (Free/Plus/Pro/Max) are the only plans in the DB; no Enterprise; no Beta. DB Subscription + Payment tables created and functional. Stripe integration is real code (compiles + works when keys are present); in the sandbox (no STRIPE_SECRET_KEY) it returns 503 instead of faking success. Calendar-based subscription periods implemented (addCalendarMonths/addCalendarYears, NOT +30 days). Free-trial duration enforced server-side via entitlements.ts.
+
+---
+Task ID: 65
+Agent: main (Z.ai Code)
+Task: Plans & Pricing — refine the "Yearly" price presentation inside each pricing card to a compact inline layout matching the reference image (small muted monthly-equivalent + large prominent yearly price, all on one horizontal line; remove the old "≈ CHF X / month" separate line below).
+
+Work Log:
+- Read src/modules/platform/platform-plans.tsx: confirmed the Monthly/Yearly selector already exists (lines ~1165-1191) and passes billingInterval down to each PlanSummaryCard; the price render block was at lines 183-212 with a flex-col layout (yearly price large + "≈ CHF X / month" on a separate line below) — exactly what the user wanted removed.
+- Replaced the Yearly branch with a single flat flex row (items-baseline gap-2): a small muted span "{currency} {priceYearly/12 with min/max 2 fraction digits} /month" (whitespace-nowrap + mr-2 so the gap between the two price groups is wider than the number↔label gap), then the large text-5xl yearly price (shrink-0 + whitespace-nowrap + leading-none), then a small muted "/year" label (shrink-0 + whitespace-nowrap).
+- Monthly equivalent is computed dynamically from the real DB yearly price (priceYearly / 12) via toLocaleString — never hardcoded. Examples produced: Plus 7.50, Pro 40.83, Max 82.50 (each = yearly/12).
+- Kept the Free branch (always "Free") and the Monthly branch (CHF X / month) untouched in structure.
+- E2E verification with agent-browser (logged in as Platform Admin, navigated to #platform-plans via eval-dispatched PointerEvents because plain click() doesn't fire Next.js client routing):
+  * First attempt: nested inline-flex wrapper around the large price → the row measured 96px (double the expected 48px). Root-caused via getComputedStyle + bounding rects: the large span was WRAPPING to two 48px line boxes because the flex container is only ~243px wide (sidebar + p-8 card padding) and "CHF 90" (~182px) + siblings exceeded it; the large span had no whitespace-nowrap so it shrunk below content width and wrapped.
+  * Fix: added whitespace-nowrap + shrink-0 to the large yearly span AND the /year label so neither can wrap or shrink. Flattened to a single flex (no nested inline-flex). Result: all Yearly cards render at 48px (same as Free/Monthly) — zero layout shift when toggling the selector.
+  * Discovered the same pre-existing wrapping bug affected the Monthly branch for 2-digit prices (Pro "CHF 49" and Max "CHF 99" wrapped to 96px while 1-digit Plus "CHF 9" stayed 48px). Applied the same surgical anti-wrap fix (shrink-0 + whitespace-nowrap + leading-none on the large Monthly span; whitespace-nowrap on the "/ month" label) so Monthly now renders "CHF 49 / month" on one line at 48px for every card — matching the user's stated expectation ("When Monthly is selected, keep the normal monthly presentation: CHF 49 /month"). No visual style change, only anti-wrap guards.
+  * Verified no clipping: /month label right edge is 29-61px inside the card right edge for all cards (overflow-hidden never triggers).
+  * VLM (z-ai vision) analysis of the Yearly screenshot confirmed: Plus shows "CHF 7.50 /month" (small muted, left) + large yearly price, both on the SAME horizontal line, NO "≈" symbol and NO separate "per month" line below; Pro identical with "CHF 40.83 /month". Max verified identical via measurements.
+- Ran bun run lint: 4 errors + 3 warnings, all pre-existing in content-edit-page.tsx / seo-broken-links-page.tsx — no new errors introduced.
+- Checked dev.log: no runtime errors/warnings during the E2E visits.
+
+Stage Summary:
+- Yearly price presentation now matches the reference image exactly: compact inline, small muted monthly-equivalent directly beside the large prominent yearly price, both on one horizontal line, no separate "≈ / month" line. Values calculated dynamically (priceYearly / 12).
+- Bonus: fixed the same pre-existing wrapping bug in the Monthly branch so all Monthly cards render on one line at 48px (was wrapping Pro/Max to 96px).
+- Both Monthly and Yearly states render every card (Free/Plus/Pro/Max) at a uniform 48px price-row height → zero layout shift when toggling the selector.
+- Lint baseline preserved (4 errors + 3 warnings, all pre-existing). Dev server clean. Browser-verified (agent-browser + VLM).
