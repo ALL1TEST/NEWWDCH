@@ -359,6 +359,20 @@ const PAYMENT_SEED: PaymentSeed[] = [
   { customerIdx: 18, planId: 'max', amount: 99, status: 'paid', method: 'Visa ••1188', daysAgo: 44 },
   { customerIdx: 4, planId: 'max', amount: 99, status: 'failed', method: 'Amex ••1005', daysAgo: 1 },
   { customerIdx: 8, planId: 'max', amount: 99, status: 'failed', method: 'Mastercard ••5514', daysAgo: 4 },
+  // ---- Coverage: payments for the remaining mock customers so every
+  // customer detail page's "Recent Payments" section shows real rows
+  // (no more "No payments recorded." empty states). Each entry uses the
+  // customer's own planId + amount so the PlanBadge + Amount match their
+  // subscription. Deterministic — no Math.random.
+  { customerIdx: 1, planId: 'plus', amount: 9, status: 'paid', method: 'Visa ••4242', daysAgo: 4 },     // Editor User — Plus monthly
+  { customerIdx: 1, planId: 'plus', amount: 9, status: 'paid', method: 'Visa ••4242', daysAgo: 34 },
+  { customerIdx: 2, planId: 'plus', amount: 9, status: 'paid', method: 'Mastercard ••5555', daysAgo: 10 },  // Author User — Plus monthly
+  { customerIdx: 6, planId: 'plus', amount: 9, status: 'paid', method: 'Amex ••3782', daysAgo: 8 },      // Emma Rodriguez — Plus monthly
+  { customerIdx: 6, planId: 'plus', amount: 9, status: 'paid', method: 'Amex ••3782', daysAgo: 38 },
+  { customerIdx: 9, planId: 'plus', amount: 9, status: 'paid', method: 'Discover ••6011', daysAgo: 5 },   // James Brown — Plus monthly
+  { customerIdx: 11, planId: 'plus', amount: 9, status: 'paid', method: 'Visa ••1881', daysAgo: 3 },     // William Davis — Plus monthly trial (initial)
+  { customerIdx: 13, planId: 'plus', amount: 9, status: 'paid', method: 'Visa ••4242', daysAgo: 18 },    // Daniel Lee — Plus monthly
+  { customerIdx: 13, planId: 'plus', amount: 9, status: 'paid', method: 'Visa ••4242', daysAgo: 48 },
 ];
 
 // -------------------- Audit log (initial entries) --------------------

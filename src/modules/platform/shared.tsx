@@ -294,7 +294,14 @@ export function formatBytes(bytes: number): string {
 }
 
 export function formatCurrency(amount: number, currency = 'CHF'): string {
-  return `${currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  // Platform display convention: render USD and CHF with the $ symbol
+  // (the DB stores either code; the UI is normalized to $). Other ISO
+  // 4217 codes fall back to their code prefix so they remain
+  // distinguishable if/when they appear.
+  const symbol = currency === 'USD' || currency === 'CHF'
+    ? '$'
+    : `${currency} `;
+  return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
 export function formatDate(iso: string | null): string {

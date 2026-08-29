@@ -146,19 +146,9 @@ export function PlatformPaymentsModule() {
                           ) : (
                             <span>{p.id}</span>
                           )}
-                          {p.stripeChargeId && (
-                            <p className="text-[10px] text-muted-foreground">{p.stripeChargeId}</p>
-                          )}
                         </td>
                         <td className="py-2.5 pr-4 text-xs text-muted-foreground">
-                          {/* Human-readable invoice number (INV-2026-1042)
-                              is primary; the Stripe Invoice ID (in_…) is
-                              shown beneath so the row is verifiably tied
-                              to a real Stripe invoice. */}
                           <span>{p.invoiceNumber}</span>
-                          {p.stripeInvoiceId && (
-                            <p className="text-[10px] font-mono">{p.stripeInvoiceId}</p>
-                          )}
                         </td>
                         <td className="py-2.5 pr-4">
                           <p className="font-medium truncate max-w-[140px]">{p.customerName}</p>
