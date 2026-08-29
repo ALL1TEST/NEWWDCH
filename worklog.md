@@ -7110,3 +7110,45 @@ Stage Summary:
 - Same alignment/spacing/typography structure on all 4 cards (shared component)
 - No changes to: pricing/plan logic, Monthly/Yearly toggle logic, plan data, features content, card dimensions, create/edit dialog logic, backend/API/DB
 - Lint baseline unchanged (4 errors + 3 warnings, none in platform-plans.tsx); browser-verified clean render on Monthly + Yearly; precise DOM measurement confirms name+price on same line (headerHeight=48) for all 4 Monthly cards
+
+---
+Task ID: 70
+Agent: main (orchestrator)
+Task: Fix Monthly/Yearly so EXACT SAME card layout/typography in both modes — only price values change. Name + price on SAME LINE in both modes. Yearly: monthly-equiv = main price, yearly-total = smaller/muted beside it. No card height/position changes between modes.
+
+Work Log:
+- Read worklog (Task 69: name+price on same line for Monthly; Yearly wrapped to 2nd line because content too wide → card height changed between modes, violating user's "same layout" requirement)
+- Measured exact span widths in current state (Yearly mode, text-4xl=36px price, text-sm=14px labels):
+  * Card width=363, content area (p-8)=299px, with -mx-6 breakout=345px (measured)
+  * "$82.50" at 36px = 134px; "$40.83" = 134px; "$7.50" = 109px; "$0" = 48px
+  * "/ month" at 14px = 55px; "$990 / year" = 81px; "$490 / year" = 81px; "$90 / year" = 72px
+  * Name widths: Free=114, Plus=110, Pro=88, Max=108
+- Identified blocker: at text-4xl (36px) price, Max Yearly content = 108+12+134+8+55+8+8+81 = 414px — way over 345px breakout. Even at text-3xl (30px) = 364px, still over. Need smaller price.
+- Calculated that text-2xl (24px) price + text-xs (12px) labels fits Max Yearly in 345px breakout (scale factors: 24/36=0.667 for price, 12/14=0.857 for labels)
+- First implementation attempt (text-2xl + text-xs + -mx-6 + gap-x-3 + gap-2 + ml-2): measured → Max Yearly STILL WRAPPED (headerHeight=76, sameLine=false). Root cause: the `ml-2` on the yearly-total span STACKS ON TOP of the parent's `gap-2`, creating a 16px gap (not 8px as I calculated). Actual content = 108+12+89+8+47+8+8+69 = 349px, 4px over 345px breakout.
+- Fix: (1) changed `gap-x-3` (12px) → `gap-x-2` (8px) between name and price (saves 4px); (2) removed `ml-2` from yearly-total span (saves 8px, gap between /month and $X/year is now just gap-2=8px, uniform with other gaps). New Max Yearly content = 108+8+89+8+47+8+69 = 337px → fits in 345px with 8px margin ✓
+- Updated comment block to reflect: -mx-6 breakout ≈345px, widest case Max Yearly=337px (8px margin), uniform 8px gutters throughout the price row, no ml-2
+- Kept: text-5xl font-bold name (48px); flex-wrap as safety net; shrink-0 + whitespace-nowrap + leading-none on price spans; -mx-6 on divider (aligns with header); all anti-wrap guards; toggle at bottom-right next to Edit Plan; features block; Monthly/Yearly toggle logic; plan data; create/edit dialog logic; backend/API/DB
+- bun run lint: 4 errors + 3 warnings — NONE in platform-plans.tsx (all in data-table.tsx / storage-page.tsx / content-create-page.tsx / content-edit-page.tsx); baseline count unchanged (4+3)
+- Browser verification (agent-browser, 1440x900, Platform Admin):
+  - PRECISE DOM measurement Monthly mode: all 4 cards — headerHeight=48 (ONE LINE), sameLine=true; cardHeight Free/Plus/Pro=412, Max=510 (Max taller due to more features, not price wrap)
+  - PRECISE DOM measurement Yearly mode: all 4 cards — headerHeight=48 (ONE LINE), sameLine=true; cardHeight Free/Plus/Pro=412, Max=510 → IDENTICAL to Monthly ✓
+  - VLM side-by-side comparison (Monthly screenshot vs Yearly screenshot): confirmed (1) name+price on SAME LINE in both modes for all 4 cards; (2) card heights identical between modes; (3) price vertical position identical; (4) feature list + Edit Plan button at same vertical position; (5) only price VALUES differ ($9→$7.50+$90/yr, $49→$40.83+$490/yr, $99→$82.50+$990/yr, Free stays $0)
+  - Targeted Max Yearly screenshot + VLM: confirmed "Max $82.50 / month $990 / year" on ONE LINE, fully visible (no clipping/wrapping), $82.50 is main/larger (bold), $990/year is smaller/muted beside it
+  - Browser console: clean (only React DevTools info + HMR/Fast Refresh), no errors/hydration warnings
+
+Stage Summary:
+- Monthly/Yearly layout consistency FIXED per spec:
+  - Name + price on SAME LINE in BOTH modes for ALL 4 cards (Free/Plus/Pro/Max) ✓
+  - Card heights IDENTICAL between Monthly and Yearly (Free/Plus/Pro=412, Max=510 in both) ✓
+  - Price position, feature position, button position — all identical between modes ✓
+  - Only price VALUES change: Monthly shows $X/month; Yearly shows $X.XX/month + $X/year ✓
+  - Yearly: monthly-equiv (priceYearly/12, dynamic) = MAIN/larger price; yearly-total = smaller/muted beside it ✓
+- Typography (IDENTICAL in both modes, same on all 4 cards):
+  - Plan name: text-5xl font-bold (48px) — LARGEST
+  - Main price: text-2xl font-semibold (24px) — slightly smaller than name, still clearly larger than labels
+  - /month, /year: text-xs text-muted-foreground (12px) — small muted
+- Layout: -mx-6 breakout on header + divider (345px content area); gap-x-2 (8px) name-price; gap-2 (8px) between all price elements (uniform gutters, no ml-2); flex-wrap as safety net
+- Width budget: Max Yearly (widest case) = 337px, fits in 345px with 8px margin; all other cards have more margin
+- No changes to: pricing/plan logic, Monthly/Yearly toggle logic, plan data, features content, card dimensions, create/edit dialog logic, backend/API/DB, toggle position (still bottom-right next to Edit Plan)
+- Lint baseline unchanged (4 errors + 3 warnings, none in platform-plans.tsx); browser-verified clean render; precise DOM measurement + VLM both confirm identical layout in both modes
