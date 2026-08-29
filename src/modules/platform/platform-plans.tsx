@@ -206,12 +206,15 @@ function PlanSummaryCard({
 
         {/* Price — sits BELOW the plan name on its own row. Reflects
              the global billing-interval selector (Monthly / Yearly).
-             The row breaks out with -mx-6 into the card padding (p-8 →
-             8px gutter from the card edge) so the Yearly layout ($X.XX
-             / month   $X / year) fits on ONE line alongside Monthly —
-             same row width, same one-line layout, same card height in
-             both modes. Only the price VALUES change between Monthly
-             and Yearly.
+             The price's LEFT edge aligns with the plan name's first
+             letter — the "$" sits directly under "F" of Free, "P" of
+             Plus/Pro, "M" of Max (no left breakout, so the price column
+             is flush with the name column above it). A RIGHT-side
+             breakout (-mr-6, into the card padding p-8) is kept so the
+             Yearly layout ($X.XX / month   $X / year) still fits on ONE
+             line at wider card widths; flex-wrap lets it wrap gracefully
+             at narrower widths. Only the price VALUES change between
+             Monthly and Yearly.
 
              Typography (IDENTICAL in both modes, same on all 4 cards):
                - Main price: text-4xl font-semibold (36px) — slightly
@@ -229,26 +232,19 @@ function PlanSummaryCard({
              price; the actual yearly total is shown smaller and muted
              beside it on the same line. "/ month" belongs to the large
              monthly price; "/ year" belongs to the small yearly total.
-             Width budget (measured): -mx-6 breakout ≈ 345px. Widest
-             case = Max Yearly: $82.50(134) + gap-2(8) + /month(55) +
-             gap-2(8) + ml-2(8) + $990/year(81) = 294px → fits with ~51px
-             margin. shrink-0 + whitespace-nowrap + leading-none on
-             each price span keep the internals from breaking across
-             lines; ml-2 widens the gap between the monthly-equiv group
-             and the yearly-total group vs. the gap between the large
-             number and its "/ month" label. */}
-        <div className="-mx-6 mt-6">
+             Width budget (measured): card content (p-8) ≈ 245-269px
+             (varies with viewport) + right -mr-6 breakout (24px) ≈
+             269-293px. Widest case = Max Yearly: $82.50(134) + gap-2(8)
+             + /month(55) + gap-2(8) + $990/year(81) = 286px → fits at
+             wider card widths, wraps to 2 lines at narrower widths
+             (flex-wrap). shrink-0 + whitespace-nowrap + leading-none on
+             each price span keep each span's internals from breaking;
+             uniform gap-2 (8px) between every price element (no ml-2)
+             so wrapped lines stay left-aligned. */}
+        <div className="-mr-6 mt-6">
           {plan.isFree ? (
-            <div className="flex items-baseline gap-2">
-              {/* -ml-1 nudges the Free "$0" 4px to the left so the $ glyph
-                  sits at the same optical position as the paid cards' $
-                  glyphs (the bare $0 has no trailing "/ month" to anchor
-                  the eye, so without the nudge it can read as slightly
-                  shifted right vs. the paid $9 / $49). Internal spacing,
-                  baseline, font-size, and layout structure are identical
-                  to the paid branches — only the horizontal offset of the
-                  Free price changes. */}
-              <span className="-ml-1 shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
                 {formatPriceSymbol(0, plan.currency)}
               </span>
             </div>
@@ -260,17 +256,17 @@ function PlanSummaryCard({
             //   e.g. Plus →  $7.50 / month   $90 / year
             //        Pro  →  $40.83 / month  $490 / year
             //        Max  →  $82.50 / month  $990 / year
-            <div className="flex items-baseline gap-2">
+            <div className="flex flex-wrap items-baseline gap-2">
               <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
                 {formatPriceSymbolMonthlyEquiv(plan.priceYearly / 12, plan.currency)}
               </span>
               <span className="whitespace-nowrap text-sm text-muted-foreground">/ month</span>
-              <span className="ml-2 shrink-0 whitespace-nowrap text-sm text-muted-foreground">
+              <span className="shrink-0 whitespace-nowrap text-sm text-muted-foreground">
                 {formatPriceSymbol(plan.priceYearly, plan.currency)} / year
               </span>
             </div>
           ) : (
-            <div className="flex items-baseline gap-2">
+            <div className="flex flex-wrap items-baseline gap-2">
               <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
                 {formatPriceSymbol(plan.priceMonthly, plan.currency)}
               </span>
@@ -282,9 +278,11 @@ function PlanSummaryCard({
         {/* Thin horizontal divider between the price section and the features section.
              Equidistant from the price above and the feature list below (mt-6 both
              sides) for a consistent, compact vertical rhythm on every card. The
-             divider breaks out with -mx-6 to align with the price row above
-             (same starting point, same ending point) — identical in both modes. */}
-        <div className="-mx-6 mt-6 h-px bg-border" aria-hidden />
+             divider uses -mr-6 (right breakout only) so its left edge aligns with
+             the price row + plan name above (flush to the content left) while its
+             right edge extends into the card padding to match the price row —
+             identical in both modes. */}
+        <div className="-mr-6 mt-6 h-px bg-border" aria-hidden />
 
         {/* Feature items (section label omitted). Same typography on every card:
              text-[15px] leading-normal so features read as a clear medium-size
