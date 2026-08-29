@@ -436,6 +436,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
         },
       });
 
+      // Log the failed storage_test so the audit trail reflects the
+      // validation failure.
+      try {
+        await db.backupLog.create({
+          data: {
+            backupId: null,
+            action: 'storage_test',
+            status: 'failed',
+            storageProvider: storage.provider,
+            verificationResult: 'FAILED',
+            errorMessage: `Config validation failed: ${configValidation.errors.join('; ')}`,
+            createdById: storage.createdById,
+            siteId: storage.siteId,
+          },
+        });
+      } catch (logErr) {
+        console.warn(`[BACKUP_STORAGE:TEST] Failed to write log for ${storageId}:`, logErr);
+      }
+
       return NextResponse.json({
         data: { ...failedResult, testedAt: now.toISOString() },
         meta: { requestId: id },
@@ -463,6 +482,26 @@ export async function POST(request: NextRequest, context: RouteContext) {
         isActive: result.success,
       },
     });
+
+    // Write a BackupLog entry for the storage_test action so the Logs
+    // page reflects every storage test. The log carries the provider +
+    // the storage's owner id so the audit trail is complete.
+    try {
+      await db.backupLog.create({
+        data: {
+          backupId: null,
+          action: 'storage_test',
+          status: result.success ? 'success' : 'failed',
+          storageProvider: storage.provider,
+          verificationResult: result.success ? 'VERIFIED' : 'FAILED',
+          errorMessage: result.success ? null : result.message,
+          createdById: storage.createdById,
+          siteId: storage.siteId,
+        },
+      });
+    } catch (logErr) {
+      console.warn(`[BACKUP_STORAGE:TEST] Failed to write log for ${storageId}:`, logErr);
+    }
 
     return NextResponse.json({ data: { ...result, testedAt: now.toISOString() }, meta: { requestId: id } });
   } catch (error) {

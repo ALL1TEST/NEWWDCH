@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
       completedCount,
       failedCount,
       creatingCount,
+      restoredCount,
       avgDurationResult,
       lastBackup,
       nextScheduled,
@@ -59,9 +60,12 @@ export async function GET(request: NextRequest) {
       // Total number of backups
       db.backup.count({ where: siteWhere }),
 
-      // Total storage used (sum of sizes)
+      // Total storage used (sum of sizes for backups that actually have
+      // files on disk — COMPLETED or RESTORED. Backups in CREATING /
+      // FAILED / VERIFYING / DELETING / RESTORING are in-flight or
+      // failed and may not have a complete file.)
       db.backup.aggregate({
-        where: { ...siteWhere, status: 'COMPLETED' },
+        where: { ...siteWhere, status: { in: ['COMPLETED', 'RESTORED'] } },
         _sum: { size: true },
       }),
 
@@ -74,9 +78,12 @@ export async function GET(request: NextRequest) {
       // Currently creating
       db.backup.count({ where: { ...siteWhere, status: 'CREATING' } }),
 
+      // Restored backups (have real files on disk + a successful restore log)
+      db.backup.count({ where: { ...siteWhere, status: 'RESTORED' } }),
+
       // Average duration of completed backups
       db.backup.aggregate({
-        where: { ...siteWhere, status: 'COMPLETED', durationMs: { not: null } },
+        where: { ...siteWhere, status: { in: ['COMPLETED', 'RESTORED'] }, durationMs: { not: null } },
         _avg: { durationMs: true },
       }),
 
@@ -155,12 +162,14 @@ export async function GET(request: NextRequest) {
       typeDistribution[t.type] = t._count;
     }
 
-    // Storage trend: last 7 days of backup sizes
+    // Storage trend: last 7 days of backup sizes — includes COMPLETED
+    // AND RESTORED backups (both have real on-disk files). The dashboard
+    // chart counts backups per day from this trend.
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const storageTrend = await db.backup.findMany({
-      where: { ...siteWhere, status: 'COMPLETED', completedAt: { gte: sevenDaysAgo } },
+      where: { ...siteWhere, status: { in: ['COMPLETED', 'RESTORED'] }, completedAt: { gte: sevenDaysAgo } },
       select: { completedAt: true, size: true },
       orderBy: { completedAt: 'asc' },
     });
@@ -172,6 +181,7 @@ export async function GET(request: NextRequest) {
       completedBackups: completedCount,
       failedBackups: failedCount,
       creatingBackups: creatingCount,
+      restoredBackups: restoredCount,
       successRate: Math.round(successRate * 100) / 100,
       avgDurationMs,
       avgDurationFormatted: avgDurationMs >= 1000

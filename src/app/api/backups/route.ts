@@ -258,10 +258,17 @@ export async function POST(request: NextRequest) {
     const siteId = isPlatformScope ? null : d.siteId;
     const createdById = isPlatformScope && platformUser ? platformUser.id : d.createdById;
 
-    // Use the backup service for real backup creation (archive → encrypt → upload → verify → log)
+    // Use the backup service's startBackup() — a fire-and-forget entry
+    // point that creates the CREATING record synchronously (fast, the
+    // admin UI does not freeze) and schedules the long-running
+    // archive → encrypt → upload → verify operation in the background.
+    // The operation transitions the record to COMPLETED or FAILED on
+    // completion; the client's TanStack Query invalidation + 10s
+    // staleTime ensures the UI picks up the new status without manual
+    // refresh.
     try {
-      const { createBackup } = await import('@/lib/backup/backup-service');
-      const backup = await createBackup({
+      const { startBackup } = await import('@/lib/backup/backup-service');
+      const backup = await startBackup({
         name: d.name,
         scope: d.scope,
         type: d.type,
@@ -275,7 +282,8 @@ export async function POST(request: NextRequest) {
         scheduleId: d.scheduleId,
       });
 
-      // Fetch with includes for the response
+      // Fetch with includes for the response — the record is CREATING
+      // at this point (the operation is still running in the background).
       const result = await db.backup.findUnique({ where: { id: backup.id }, include: listIncludes });
       return NextResponse.json({ data: result, meta: { requestId: id } }, { status: 201 });
     } catch (backupError) {

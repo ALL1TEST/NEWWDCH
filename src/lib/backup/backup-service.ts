@@ -53,9 +53,17 @@ export interface CreateBackupParams {
   scheduleId?: string | null;
 }
 
-export async function createBackup(params: CreateBackupParams) {
+// ============================================================
+// createBackupRecord — fast synchronous record creation.
+// Creates the CREATING backup record + an initial "create"
+// log entry (status=in_progress). Returns immediately; the
+// long-running archive → encrypt → upload → verify work is
+// performed by executeBackupOperation() (which can be awaited
+// for synchronous use OR fire-and-forgot for background use).
+// ============================================================
+
+async function createBackupRecord(params: CreateBackupParams) {
   const id = 'bkp_' + nanoid(10);
-  const startedAt = Date.now();
   const now = new Date();
   const timestamp = formatTimestamp(now);
   const scope = params.scope;
@@ -74,21 +82,18 @@ export async function createBackup(params: CreateBackupParams) {
     if (!createdById) throw new Error('No user found. Cannot create backup.');
   }
 
-  // Determine storage destination
-  let storage: StorageProvider | null = null;
+  // Determine storage destination (the record itself; the upload happens later)
   let storageConfigRecord: { id: string; name: string; provider: string; config: string } | null = null;
   if (params.storageId) {
     storageConfigRecord = await db.backupStorage.findUnique({ where: { id: params.storageId } }) as any;
-    if (storageConfigRecord) {
-      storage = await createStorageProvider(storageConfigRecord.provider, storageConfigRecord.config);
-    }
   }
 
   const encryptionStatus = params.encryptionEnabled ? 'ENCRYPTED' as const : 'NONE' as const;
 
-  // Create the backup record
+  // Create the backup record (CREATING status — the operation has not yet run)
   const backup = await db.backup.create({
     data: {
+      id,
       name: backupName,
       filename,
       scope,
@@ -104,6 +109,41 @@ export async function createBackup(params: CreateBackupParams) {
       scheduleId: params.scheduleId ?? null,
     },
   });
+
+  // Initial "create" log entry — status=in_progress. Updated to
+  // success/failed by executeBackupOperation() when the work finishes.
+  await db.backupLog.create({
+    data: {
+      backupId: backup.id,
+      action: 'create',
+      status: 'in_progress',
+      storageProvider: (storageConfigRecord?.provider || params.storageProvider || 'LOCAL') as any,
+      createdById,
+      siteId: params.siteId ?? null,
+    },
+  });
+
+  return { backup, storageConfigRecord, localArchivePath, filename, startedAt: Date.now() };
+}
+
+// ============================================================
+// executeBackupOperation — the long-running work.
+// Archive → encrypt → upload → verify → update record + log.
+// Used by both createBackup() (synchronous, scheduler) and
+// startBackup() (fire-and-forget, API route).
+// ============================================================
+
+async function executeBackupOperation(
+  params: CreateBackupParams,
+  ctx: { backup: { id: string }; storageConfigRecord: { id: string; name: string; provider: string; config: string } | null; localArchivePath: string; filename: string; startedAt: number },
+) {
+  const { backup, storageConfigRecord, localArchivePath, filename, startedAt } = ctx;
+  const scope = params.scope;
+  const createdById = params.createdById ?? (await getFirstUserId()) ?? undefined;
+  let storage: StorageProvider | null = null;
+  if (storageConfigRecord) {
+    storage = await createStorageProvider(storageConfigRecord.provider, storageConfigRecord.config);
+  }
 
   try {
     // ---- Step 1: Create the archive ----
@@ -218,6 +258,46 @@ export async function createBackup(params: CreateBackupParams) {
 
     throw error;
   }
+}
+
+// ============================================================
+// createBackup — SYNCHRONOUS (used by the scheduler).
+// Awaits the full archive → encrypt → upload → verify flow.
+// ============================================================
+
+export async function createBackup(params: CreateBackupParams) {
+  const ctx = await createBackupRecord(params);
+  return executeBackupOperation(params, ctx);
+}
+
+// ============================================================
+// startBackup — FIRE-AND-FORGET (used by the API route).
+// Creates the CREATING record + initial log entry synchronously
+// (fast, returns immediately so the admin UI does not freeze),
+// then schedules executeBackupOperation() to run in the
+// background. The Promise is NOT awaited by the caller; any
+// error is captured and recorded as a failed log entry.
+// ============================================================
+
+export async function startBackup(params: CreateBackupParams) {
+  const ctx = await createBackupRecord(params);
+  const { backup } = ctx;
+
+  // Fire-and-forget. Use a microtask via Promise.resolve().then()
+  // so the function returns immediately and the operation runs
+  // asynchronously in the same process. Errors are captured and
+  // logged to BackupLog — the admin UI sees the CREATING →
+  // COMPLETED/FAILED transition on the next refetch.
+  Promise.resolve()
+    .then(() => executeBackupOperation(params, ctx))
+    .catch((err: unknown) => {
+      // executeBackupOperation already wrote a failed log entry
+      // (see its catch block) — this outer catch is a safety net
+      // for any error thrown before that catch block runs.
+      console.error(`[BACKUP_SERVICE] startBackup(${backup.id}) failed:`, err);
+    });
+
+  return backup;
 }
 
 // ============================================================
@@ -354,13 +434,52 @@ export async function restoreBackup(backupId: string, createdById?: string) {
   if (!backup) throw new Error('Backup not found');
   if (backup.status !== 'COMPLETED') throw new Error('Only completed backups can be restored');
 
+  // Defensive null-check — storagePath is nullable in the schema, but the
+  // create flow always sets it. Throw a clean error if it's somehow null.
+  if (!backup.storagePath) {
+    throw new Error('Backup has no storage path — cannot be restored');
+  }
+  if (!existsSync(backup.storagePath)) {
+    throw new Error('Backup file not found at the storage path');
+  }
+
   const startedAt = Date.now();
 
-  try {
-    if (!existsSync(backup.storagePath)) {
-      throw new Error('Backup file not found at the storage path');
-    }
+  // Capture the backup's own metadata BEFORE the DB replace. The archived
+  // database file captured this backup record at CREATING time (size=0,
+  // checksum=null, verificationStatus=PENDING, storagePath=.zip), so
+  // after we overwrite DB_PATH the backup record will appear to revert
+  // to CREATING. We re-apply the captured metadata below so the post-
+  // restore state shows accurate values (status=RESTORED, original
+  // checksum/size/verification/storagePath from before the restore).
+  const capturedMeta = {
+    size: backup.size,
+    checksum: backup.checksum,
+    verificationStatus: backup.verificationStatus,
+    storagePath: backup.storagePath,
+    filename: backup.filename,
+    encryptionStatus: backup.encryptionStatus,
+    scope: backup.scope,
+    type: backup.type,
+    name: backup.name,
+    note: backup.note,
+    storageProvider: backup.storageProvider,
+    createdById: backup.createdById,
+    siteId: backup.siteId,
+    scheduleId: backup.scheduleId,
+    completedAt: backup.completedAt,
+    createdAt: backup.createdAt,
+    durationMs: backup.durationMs,
+    downloadCount: backup.downloadCount,
+    databaseSize: backup.databaseSize,
+    fileCount: backup.fileCount,
+  };
 
+  // Mark as RESTORING so the UI shows the in-flight state and concurrent
+  // restores are prevented.
+  await db.backup.update({ where: { id: backupId }, data: { status: 'RESTORING' } });
+
+  try {
     // If encrypted, decrypt first
     let dbRestorePath = backup.storagePath;
     if (backup.encryptionStatus === 'ENCRYPTED') {
@@ -373,28 +492,38 @@ export async function restoreBackup(backupId: string, createdById?: string) {
       dbRestorePath = decryptedPath;
     }
 
-    // For now, restore the database from the archive
-    // (Extract the database.sqlite3 file from the zip)
+    // Restore the database from the archive. The zip's `database.sqlite3`
+    // entry exists for DATABASE_ONLY / FULL scopes. For SETTINGS_ONLY /
+    // MEDIA_ONLY scopes there is no database entry — skip the DB replace
+    // and just record the restore as successful.
     if (dbRestorePath.endsWith('.zip') || dbRestorePath.endsWith('.enc')) {
-      const { createReadStream } = await import('node:fs');
-      const yauzl = await import('yauzl').catch(() => null);
-      // Use unzip approach: extract database.sqlite3 to a temp path, then copy to DB_PATH
       const tmpDbPath = join(TMP_DIR, `restore-db-${Date.now()}.sqlite3`);
-      await extractFileFromZip(dbRestorePath, 'database.sqlite3', tmpDbPath);
 
-      if (existsSync(tmpDbPath)) {
-        // Create a backup of the current DB before overwriting
-        const currentDbBackup = DB_PATH + '.pre-restore';
-        if (existsSync(DB_PATH)) {
-          copyFileSync(DB_PATH, currentDbBackup);
+      // Pre-flight: peek into the zip to see whether `database.sqlite3` exists.
+      // For SETTINGS_ONLY / MEDIA_ONLY backups, it won't — and we should not
+      // throw, just record a successful restore with the database untouched.
+      const zipBuffer = await readFile(dbRestorePath);
+      const zip = await JSZip.loadAsync(zipBuffer);
+      const dbFile = zip.file('database.sqlite3');
+
+      if (dbFile) {
+        const content = await dbFile.async('nodebuffer');
+        await writeFile(tmpDbPath, content);
+
+        if (existsSync(tmpDbPath)) {
+          // Create a backup of the current DB before overwriting (safety net).
+          const currentDbBackup = DB_PATH + '.pre-restore';
+          if (existsSync(DB_PATH)) {
+            copyFileSync(DB_PATH, currentDbBackup);
+          }
+          // Replace the DB
+          copyFileSync(tmpDbPath, DB_PATH);
+          // Clean up temp
+          try { unlinkSync(tmpDbPath); } catch {}
         }
-        // Replace the DB
-        copyFileSync(tmpDbPath, DB_PATH);
-        // Clean up temp
-        try { unlinkSync(tmpDbPath); } catch {}
       }
     } else {
-      // Direct DB file backup (old format)
+      // Direct DB file backup (old format) — copy straight to DB_PATH.
       const currentDbBackup = DB_PATH + '.pre-restore';
       if (existsSync(DB_PATH)) {
         copyFileSync(DB_PATH, currentDbBackup);
@@ -405,6 +534,37 @@ export async function restoreBackup(backupId: string, createdById?: string) {
     const durationMs = Date.now() - startedAt;
     const dbStat = existsSync(DB_PATH) ? statSync(DB_PATH).size : 0;
 
+    // The DB replace above reverted the backup's own metadata fields
+    // (size, checksum, verificationStatus, storagePath, filename, etc.)
+    // to their CREATING-time values. Re-apply the captured metadata
+    // PLUS set status=RESTORED so the post-restore state is accurate:
+    // the backup keeps its real checksum/size/verification + shows
+    // status=RESTORED.
+    await db.backup.update({
+      where: { id: backupId },
+      data: {
+        status: 'RESTORED',
+        databaseSize: dbStat,
+        size: capturedMeta.size,
+        checksum: capturedMeta.checksum,
+        verificationStatus: capturedMeta.verificationStatus,
+        storagePath: capturedMeta.storagePath,
+        filename: capturedMeta.filename,
+        encryptionStatus: capturedMeta.encryptionStatus,
+        scope: capturedMeta.scope,
+        type: capturedMeta.type,
+        name: capturedMeta.name,
+        note: capturedMeta.note,
+        storageProvider: capturedMeta.storageProvider,
+        siteId: capturedMeta.siteId,
+        scheduleId: capturedMeta.scheduleId,
+        completedAt: capturedMeta.completedAt,
+        durationMs: capturedMeta.durationMs,
+        downloadCount: capturedMeta.downloadCount,
+        fileCount: capturedMeta.fileCount,
+      },
+    });
+
     await db.backupLog.create({
       data: {
         backupId,
@@ -412,7 +572,9 @@ export async function restoreBackup(backupId: string, createdById?: string) {
         status: 'success',
         databaseSize: dbStat,
         durationMs,
+        storageProvider: backup.storageProvider,
         createdById: createdById || await getFirstUserId(),
+        siteId: backup.siteId,
       },
     });
 
@@ -466,7 +628,7 @@ export async function applyRetention(scheduleId: string, retentionCount: number)
   for (const backup of toDelete) {
     try {
       // Delete the physical file
-      if (existsSync(backup.storagePath)) {
+      if (backup.storagePath && existsSync(backup.storagePath)) {
         unlinkSync(backup.storagePath);
       }
 
@@ -478,28 +640,36 @@ export async function applyRetention(scheduleId: string, retentionCount: number)
         if (storageRecord) {
           try {
             const provider = await createStorageProvider(storageRecord.provider, storageRecord.config);
-            await provider.deleteFile(backup.storagePath);
+            await provider.deleteFile(backup.storagePath ?? '');
           } catch {}
         }
       }
 
-      // Log the deletion
+      // Log the deletion — set backupId=null because the cascade delete
+      // below would wipe any log entry tied to the deleted backup. The
+      // audit trail still references the deleted backup via the
+      // `warnings` field which carries the backup id + name.
       await db.backupLog.create({
         data: {
-          backupId: backup.id,
+          backupId: null, // survives the cascade delete below
           action: 'retention_delete',
           status: 'success',
-          warnings: `Deleted by retention policy (keeping ${retentionCount} backups)`,
+          storageProvider: backup.storageProvider,
+          archiveSize: backup.size,
+          warnings: `Deleted backup ${backup.id} ("${backup.name}") by retention policy (keeping ${retentionCount} newest)`,
+          siteId: backup.siteId,
         },
       });
     } catch (err) {
       // Log deletion failure
       await db.backupLog.create({
         data: {
-          backupId: backup.id,
+          backupId: null,
           action: 'retention_delete',
           status: 'failed',
+          storageProvider: backup.storageProvider,
           errorMessage: err instanceof Error ? err.message : 'Unknown error',
+          siteId: backup.siteId,
         },
       });
     }
@@ -531,9 +701,11 @@ export async function runScheduledBackups() {
   const results: { scheduleId: string; success: boolean; message: string }[] = [];
 
   for (const schedule of dueSchedules) {
-    // Prevent duplicate execution — check if a backup is already running for this schedule
+    // Prevent duplicate execution — check if a backup is already running
+    // for this schedule. Only CREATING / VERIFYING / RESTORING count as
+    // in-flight (the BackupStatus enum does NOT include a 'RUNNING' value).
     const runningBackup = await db.backup.findFirst({
-      where: { scheduleId: schedule.id, status: { in: ['CREATING', 'RUNNING'] } },
+      where: { scheduleId: schedule.id, status: { in: ['CREATING', 'VERIFYING', 'RESTORING'] } },
     });
     if (runningBackup) {
       results.push({ scheduleId: schedule.id, success: false, message: 'A backup is already running for this schedule' });

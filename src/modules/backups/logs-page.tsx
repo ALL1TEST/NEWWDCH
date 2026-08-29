@@ -63,19 +63,23 @@ interface LogRow {
 
 const ACTION_OPTIONS = [
   { value: 'all', label: 'All Actions' },
-  { value: 'CREATE', label: 'Create' },
-  { value: 'RESTORE', label: 'Restore' },
-  { value: 'VERIFY', label: 'Verify' },
-  { value: 'DOWNLOAD', label: 'Download' },
-  { value: 'DELETE', label: 'Delete' },
-  { value: 'SCHEDULE', label: 'Schedule' },
+  { value: 'create', label: 'Create' },
+  { value: 'restore', label: 'Restore' },
+  { value: 'verify', label: 'Verify' },
+  { value: 'download', label: 'Download' },
+  { value: 'delete', label: 'Delete' },
+  { value: 'schedule', label: 'Schedule' },
+  { value: 'schedule_run', label: 'Schedule Run' },
+  { value: 'retention_delete', label: 'Retention Delete' },
+  { value: 'storage_test', label: 'Storage Test' },
+  { value: 'storage_create', label: 'Storage Create' },
 ];
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'All Status' },
-  { value: 'SUCCESS', label: 'Success' },
-  { value: 'FAILED', label: 'Failed' },
-  { value: 'IN_PROGRESS', label: 'In Progress' },
+  { value: 'success', label: 'Success' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'in_progress', label: 'In Progress' },
 ];
 
 // -------------------- Search Empty State (inline) --------------------
@@ -313,26 +317,30 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
         id: 'action',
         header: 'Action',
         accessorKey: 'action',
-        size: 120,
-        cell: ({ getValue }) => (
-          <Badge
-            variant="outline"
-            className={cn(
-              'border-transparent font-medium',
-              getValue() === 'CREATE'
-                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                : getValue() === 'RESTORE'
-                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                  : getValue() === 'VERIFY'
-                    ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'
-                    : getValue() === 'DELETE'
-                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                      : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
-            )}
-          >
-            {labelize(getValue() as string)}
-          </Badge>
-        ),
+        size: 140,
+        cell: ({ getValue }) => {
+          const v = (getValue() as string) ?? '';
+          // Map raw lowercase action values to badge colors.
+          const colorClass =
+            v === 'create' || v === 'storage_create'
+              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+              : v === 'restore'
+                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                : v === 'verify' || v === 'storage_test'
+                  ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'
+                  : v === 'delete' || v === 'retention_delete'
+                    ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                    : v === 'schedule' || v === 'schedule_run'
+                      ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'
+                      : v === 'download'
+                        ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400'
+                        : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300';
+          return (
+            <Badge variant="outline" className={cn('border-transparent font-medium', colorClass)}>
+              {labelize(v)}
+            </Badge>
+          );
+        },
       },
       {
         id: 'status',

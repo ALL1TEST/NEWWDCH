@@ -1,14 +1,22 @@
 // ============================================================
 // POST /api/backups/[id]/restore — Restore a backup
 // ============================================================
+// Calls the backup-service restoreBackup() function which:
+//   1. Validates the backup is COMPLETED.
+//   2. Marks the backup as RESTORING.
+//   3. Decrypts the archive if encrypted (AES-256-GCM).
+//   4. Extracts `database.sqlite3` from the zip and copies it to
+//      DB_PATH (with a `.pre-restore` safety-net backup first).
+//   5. Updates the backup status to RESTORED.
+//   6. Writes a BackupLog entry (action=restore, status=success/failed).
+// Never copies the raw (possibly encrypted) backup file directly to
+// DB_PATH — that would corrupt the database.
+// ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
-import { copyFile, stat } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import path from 'node:path';
 import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
@@ -16,8 +24,6 @@ import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
 function reqId() {
   return 'req_' + nanoid(8);
 }
-
-const DB_PATH = path.join(process.cwd(), 'db', 'custom.db');
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -89,14 +95,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const userId = parsed.data.createdById;
 
-    // Verify backup file exists
-    if (!backup.storagePath || !existsSync(backup.storagePath)) {
-      return NextResponse.json(
-        { error: { code: 'FILE_NOT_FOUND', message: 'Backup file does not exist on disk' }, meta: { requestId: id } },
-        { status: 400 },
-      );
-    }
-
+    // Prevent concurrent restores
     if (backup.status === 'RESTORING') {
       return NextResponse.json(
         { error: { code: 'ALREADY_RESTORING', message: 'Backup is already being restored' }, meta: { requestId: id } },
@@ -104,73 +103,26 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const startedAt = Date.now();
+    // Only COMPLETED backups can be restored (the service re-validates
+    // this, but checking here lets us return a clean 400 instead of a 500).
+    if (backup.status !== 'COMPLETED') {
+      return NextResponse.json(
+        { error: { code: 'INVALID_STATE', message: `Only completed backups can be restored (current: ${backup.status})` }, meta: { requestId: id } },
+        { status: 400 },
+      );
+    }
 
-    // Mark as RESTORING
-    await db.backup.update({
-      where: { id: backupId },
-      data: { status: 'RESTORING' },
-    });
-
+    // Delegate to the service — it handles decrypt + extract + DB
+    // replace + status update + log entry atomically.
     try {
-      // Copy the backup file back to the database location
-      await copyFile(backup.storagePath, DB_PATH);
-
-      const durationMs = Date.now() - startedAt;
-      const restoredStat = await stat(DB_PATH);
-
-      // Update backup status
-      const updated = await db.backup.update({
-        where: { id: backupId },
-        data: {
-          status: 'RESTORED',
-          databaseSize: restoredStat.size,
-        },
-      });
-
-      // Create BackupLog entry
-      await db.backupLog.create({
-        data: {
-          backupId,
-          action: 'restore',
-          status: 'success',
-          databaseSize: restoredStat.size,
-          fileCount: 1,
-          archiveSize: restoredStat.size,
-          durationMs,
-          storageProvider: backup.storageProvider,
-          createdById: userId,
-          siteId: backup.siteId,
-        },
-      });
+      const { restoreBackup } = await import('@/lib/backup/backup-service');
+      const result = await restoreBackup(backupId, userId);
 
       return NextResponse.json({
-        data: { id: backupId, status: 'RESTORED', durationMs },
+        data: { id: backupId, status: 'RESTORED', ...result },
         meta: { requestId: id },
       });
     } catch (restoreError) {
-      const durationMs = Date.now() - startedAt;
-
-      // Mark as FAILED
-      await db.backup.update({
-        where: { id: backupId },
-        data: { status: 'FAILED' },
-      });
-
-      // Create error log
-      await db.backupLog.create({
-        data: {
-          backupId,
-          action: 'restore',
-          status: 'failed',
-          durationMs,
-          storageProvider: backup.storageProvider,
-          errorMessage: restoreError instanceof Error ? restoreError.message : 'Unknown restore error',
-          createdById: userId,
-          siteId: backup.siteId,
-        },
-      });
-
       return NextResponse.json(
         {
           error: {

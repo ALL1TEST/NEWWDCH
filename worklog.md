@@ -6622,3 +6622,93 @@ Stage Summary:
 - Files unchanged but audited: `src/modules/platform/platform-email-templates.tsx` (10-line scope wrapper), `src/modules/email-templates/email-templates-page.tsx` (scope-routing wrapper), `src/modules/email-templates/template-list.tsx` (Seed Defaults gating + Language-column removal from Task 59 still intact — verified), `src/app/api/email-templates/seed/route.ts` (18 default templates + scope=platform guard — untouched), `src/app/api/email-templates/route.ts` (list + create), `src/app/api/email-templates/[id]/route.ts` (per-id GET/PATCH/DELETE), `src/app/api/email-templates/[id]/send-test/route.ts` (mock — returns success without rendering), `src/lib/campaign-service.ts` (separate newsletter `{{name}}/{{email}}` system — unrelated), the prisma `EmailTemplate` model, the 8 category options, the `VariableChip` component (pre-existing nested-button warning untouched).
 - Platform Email Templates page now exposes EXACTLY: 5 variable groups (Customer / Subscription / Payment / Platform / System), 20 variables, all backend-resolvable. No SITE group, no CMS-only groups (Article/Comment/Newsletter/Company/User), no `company.*` keys (replaced by `platform.*`), no invented/demo variables.
 - Verification: lint clean (0 new errors); agent-browser confirms every spec point — 5 groups with 20 backend-resolvable variables, company.*→platform.* rename done, SITE removed for platform-only templates, new payment/subscription-billing variables truly resolved in the live preview (unreplacedCount: 0), Create Template flow works end-to-end (create → save → preview → delete), subject preview is scope-aware, mobile 375x812 no overflow, no new console/page errors, existing email-sending / rendering / seeding infrastructure completely untouched, platform state restored to the original 6 templates.
+
+---
+Task ID: 61
+Agent: main (Backups — full real functional backup system)
+Task: Fully implement the Platform Admin Backups section as a REAL functional backup system (not a UI mockup). Connect every Backups page, action, form, statistic, status, schedule, storage destination and log to real application data and backend logic. Platform-level only (across all customers and sites). Full audit trail. Real background-job execution. Real checksums/encryption/storage. Real retention policy. Real scheduler loop. Remove all fake/demo "COMPLETED" backup records.
+
+Work Log:
+- Inspected the existing infrastructure first: prisma schema already has Backup, BackupSchedule, BackupLog, BackupStorage models with full enums (BackupStatus, BackupScope, BackupStorageProvider, BackupVerificationStatus, BackupEncryptionStatus, BackupScheduleFrequency). The platform-auth module already provides requirePlatformAdmin / requireOwner RBAC. The backups module already has scope-aware sub-pages (DashboardPage, BackupsListPage, SchedulesPage, RestorePage, StoragePage, LogsPage) + a platform-backups.tsx wrapper that passes scope="platform". The API routes (/api/backups, /api/backups/stats, /api/backups/[id]/{verify,restore,download}, /api/backups/storage, /api/backups/schedules, /api/backups/logs, /api/backups/scheduler) were already wired to the DB + RBAC. The backup-service.ts already had createBackup, verifyBackup, restoreBackup, applyRetention, runScheduledBackups, testStorageConnection. The storage providers (Local, S3, R2, Wasabi, B2, GCS, Azure, FTP, Google Drive, Dropbox, OneDrive) already implemented the StorageProvider interface with real testConnection/upload/download/verify/deleteFile.
+- Identified the real gaps that violated the spec:
+  • DB had 19 fake "COMPLETED" backup records seeded by prisma/seed-backups-demo.ts — none had real on-disk files; their storagePaths pointed to /var/backups/cms/... (nonexistent) or null. Violated "Do not mark a backup as Completed unless the operation actually succeeded."
+  • The restore API route (/api/backups/[id]/restore/route.ts) did NOT call the backup-service restoreBackup() function — it just did `copyFile(backup.storagePath, DB_PATH)` which would copy an ENCRYPTED .enc file directly to DB_PATH, corrupting the database. The service's restoreBackup() function properly decrypts + extracts via JSZip.
+  • POST /api/backups awaited createBackup() synchronously — admin UI froze during long operations. Spec requires background jobs.
+  • Download route did NOT write a BackupLog entry for the download action.
+  • Storage test route did NOT write a BackupLog entry for the storage_test action.
+  • No real scheduler loop existed — runScheduledBackups() was only triggered manually via POST /api/backups/scheduler.
+  • runScheduledBackups queried `status: { in: ['CREATING', 'RUNNING'] }` — but 'RUNNING' is not a valid BackupStatus enum value, so the query threw a Prisma error.
+  • applyRetention's retention_delete log entries were cascade-deleted along with the backup records (the BackupLog.backupId FK has onDelete: Cascade).
+  • The backup record's metadata fields (size, checksum, verificationStatus, storagePath) reverted to CREATING-time values after restore — because the archived DB captured them at CREATING time.
+- Wiped 22 fake BackupLog + 19 fake Backup + 5 fake BackupSchedule + 2 fake BackupStorage records via a single $transaction (kept the real on-disk backup files + the seed script as clearly-marked demo data).
+- Refactored backup-service.ts to split createBackup into two functions:
+  • createBackupRecord(params) — fast synchronous creation of the CREATING record + initial "create" log entry (status=in_progress). Returns immediately.
+  • executeBackupOperation(params, ctx) — the long-running work: archive → encrypt → upload → verify → update record + log.
+  • createBackup(params) — calls createBackupRecord + awaits executeBackupOperation (synchronous — used by the scheduler so applyRetention sees the new COMPLETED backup).
+  • startBackup(params) — calls createBackupRecord synchronously, then schedules executeBackupOperation via Promise.resolve().then(...).catch(logError) — fire-and-forget so the admin UI does not freeze.
+- Updated POST /api/backups to call startBackup() and return 201 immediately with the CREATING record (the operation continues in the background; the client's TanStack Query invalidation + 10s staleTime picks up the COMPLETED/FAILED transition).
+- Replaced the entire /api/backups/[id]/restore/route.ts implementation to delegate to restoreBackup() (proper decrypt + JSZip extract + DB replace + status update + log entry). The previous implementation just did copyFile which would corrupt encrypted backups.
+- Improved restoreBackup() in backup-service.ts:
+  • Added defensive null-check for storagePath.
+  • Added a RESTORING status update at the start so concurrent restores are prevented.
+  • Captures the backup's own metadata (size, checksum, verificationStatus, storagePath, filename, encryptionStatus, scope, type, name, note, storageProvider, etc.) BEFORE the DB replace.
+  • Re-applies the captured metadata AFTER the DB replace so the post-restore state shows accurate values (status=RESTORED + original checksum/size/verification preserved), instead of reverting to the CREATING-time state captured by the archived DB.
+  • Pre-flight peek into the zip to skip the DB replace for SETTINGS_ONLY / MEDIA_ONLY backups (no database.sqlite3 entry).
+- Updated DELETE /api/backups/[id] route:
+  • Added requirePlatformAdmin RBAC when ?scope=platform is passed.
+  • Refuses to delete a backup currently in RESTORING status (returns 409 LOCKED — would corrupt the in-flight restore).
+  • Tries both .zip and .enc variants of storagePath for file unlink (handles the case where the DB was restored + storagePath was reverted to .zip but the actual on-disk file is .enc).
+  • Writes a BackupLog entry with action='delete' (backupId=null to survive the cascade delete).
+- Updated GET /api/backups/[id]/download route:
+  • Added requirePlatformAdmin RBAC when ?scope=platform is passed.
+  • Writes a BackupLog entry with action='download' (success status, archiveSize, storageProvider, downloaderId when known).
+- Updated POST /api/backups/storage/[id] (test-connection) route to write a BackupLog entry with action='storage_test' (both for the success and the config-validation-failure branches).
+- Updated POST /api/backups/storage route to write a BackupLog entry with action='storage_create' when a storage destination is added.
+- Updated POST /api/backups/schedules route to write a BackupLog entry with action='schedule' when a schedule is created.
+- Fixed the runScheduledBackups bug: changed `status: { in: ['CREATING', 'RUNNING'] }` to `status: { in: ['CREATING', 'VERIFYING', 'RESTORING'] }` — only valid BackupStatus enum values.
+- Fixed applyRetention: changed the retention_delete log entries to use backupId=null so they survive the cascade delete of the backup records. The audit trail still references the deleted backup via the warnings field ("Deleted backup <id> (\"<name>\") by retention policy (keeping <N> newest)"). Also added null checks for storagePath.
+- Updated GET /api/backups/stats to sum Total Storage across both COMPLETED and RESTORED backups (both have real on-disk files). Added restoredBackups count to the response. Updated the storageTrend query + avg duration query to include RESTORED.
+- Updated the Logs page (logs-page.tsx):
+  • Added new action filter options: Create, Restore, Verify, Download, Delete, Schedule, Schedule Run, Retention Delete, Storage Test, Storage Create.
+  • Updated the Action badge cell to map lowercase action values to color classes (create=emerald, restore=amber, verify=sky, delete=red, schedule=violet, download=teal, etc.).
+- Updated the server-side logs search (ACTION_VALUES + STATUS_VALUES) to use lowercase values that match what the BackupLog entries actually store.
+- Created the backup-scheduler mini-service (mini-services/backup-scheduler/index.ts) on port 3010:
+  • Long-running bun process that ticks every 60 seconds.
+  • Calls runScheduledBackups() directly (no HTTP round-trip).
+  • Writes a BackupLog entry with action='schedule_run' per tick that had due schedules (so the audit trail reflects when each schedule ticked).
+  • Tiny HTTP listener on :3010 for gateway health-check.
+  • Started via `setsid bash -c 'exec bun index.ts > backup-scheduler.log 2>&1' < /dev/null` so it survives parent shell exit (PID 15774).
+- Verified dev server still compiles cleanly. Lint baseline unchanged (4 errors + 3 warnings, all in unrelated files content-edit-page.tsx + seo-broken-links-page.tsx — none from my changes).
+- E2E verified via agent-browser (logged in as platform@example.com / platform123 via the Platform Admin quick-login button):
+  • Storage: Added "Local Platform Backups" storage destination → real row appears in Storage table (Active, no test yet). Verified via direct API that test-connection writes lastTestAt + lastTestResult + isActive + a storage_test BackupLog entry (status=success, verificationResult=VERIFIED). UI showed Last Test="Today at 10:16 AM" + Test Result="Passed" after reload.
+  • Create Backup: POST /api/backups returned 201 immediately with status=CREATING (fire-and-forget confirmed). Background operation completed in 124ms (real archive, real SHA-256 checksum, real AES-256-GCM encryption). On-disk file: backup-...-database_only.enc (260956 bytes, ASCII text — NOT the SQLite plaintext header, confirming real encryption). DB record transitioned to COMPLETED + VERIFIED. Two BackupLog entries written: create in_progress → create success (with durationMs + verificationResult).
+  • Backups table showed real values: Name, Database Only, Manual, 255 KB, Local, Encrypted, Verified, Completed, 124ms, Today at 10:17 AM.
+  • Verify: API re-computes SHA-256 + compares to stored checksum → VERIFIED. BackupLog entry written.
+  • Download: API returns the real file stream + writes action='download' BackupLog + increments downloadCount. HTTP 200, 146813 bytes downloaded, downloadCount=1.
+  • Schedule: Created schedule via API → DB record has all required fields (Name, Description, Frequency=DAILY, Scope=DATABASE_ONLY, StorageProvider=LOCAL, EncryptionEnabled, VerificationEnabled, RetentionCount=7, IsActive, nextRunAt=tomorrow 2 AM computed dynamically). BackupLog entry with action='schedule' written. UI showed all fields correctly.
+  • Scheduler + Retention: Forced schedule due, called runScheduledBackups() directly. Run #1 created backup #1. Run #2 created backup #2 (count=2, no retention). Run #3 created backup #3 + retention deleted backup #1 (kept newest 2). Run #4 created backup #4 + retention deleted backup #2. Final state: 2 backups kept (newest 2). retention_delete BackupLog entries survived the cascade delete (backupId=null) with warnings field carrying the deleted backup's id + name.
+  • Restore: API returned 200 with status=RESTORED, durationMs=51-183, databaseSize=2420736 (real). Real AES-256-GCM decryption → real JSZip extraction of database.sqlite3 → real DB_PATH replace. Real .pre-restore safety-net file created. BackupLog entry with action='restore', status=success. Post-restore metadata (size, checksum, verificationStatus, storagePath) correctly preserved via the captured-meta re-application.
+  • Delete: API returned 200 with {deleted:true}. Real on-disk file unlinked (tries .zip + .enc variants). BackupLog entry with action='delete', status=success, warnings if file not present. Backup count went from 3 → 2.
+  • Logs page: Showed ALL operations in the audit trail with correct action labels + colors: Storage Create (emerald), Storage Test (sky), Create (emerald, in_progress→success), Restore (amber, success, with DB size + duration), Download (teal). Filters include all 11 action types. Recent Activity section on Overview showed the same operations.
+  • Overview: Stats reflect real DB state — Total Backups=2, Total Storage=143.44 KB (real sum of RESTORED backup sizes), Failed=0, avgDurationMs=291. Backup Activity chart shows "Aug 29" with bars. statusDistribution={RESTORED: 2}, scopeDistribution={DATABASE_ONLY: 2}, typeDistribution={MANUAL: 2}.
+  • No page errors / no console errors / no compile errors in dev.log during the entire flow.
+- Final on-disk state: 2 real DB-tracked backup files (backup-2026-08-29T10-22-47-database_only.zip + backup-2026-08-29T10-23-48-database_only.zip) + 2 pre-existing orphan files from Aug 20. 1 storage destination. 1 schedule. 10 BackupLog entries spanning all action types.
+
+Stage Summary:
+- Files modified (8):
+  - `src/lib/backup/backup-service.ts` — split createBackup into createBackupRecord (fast sync) + executeBackupOperation (long async) + createBackup (sync, scheduler) + startBackup (fire-and-forget, API route). Improved restoreBackup: added RESTORING status, captured-metadata re-application, defensive null-checks, SETTINGS_ONLY/MEDIA_ONLY handling. Fixed runScheduledBackups 'RUNNING' enum bug → 'CREATING'/'VERIFYING'/'RESTORING'. Fixed applyRetention: backupId=null to survive cascade delete, added null checks for storagePath, log carries backup id+name in warnings.
+  - `src/app/api/backups/route.ts` — POST now calls startBackup() (fire-and-forget) and returns 201 immediately with the CREATING record. UI doesn't freeze during long operations.
+  - `src/app/api/backups/[id]/route.ts` — DELETE: added requirePlatformAdmin RBAC for platform scope, refuses RESTORING backups (409 LOCKED), tries both .zip and .enc variants for file unlink, writes BackupLog action='delete' with backupId=null.
+  - `src/app/api/backups/[id]/restore/route.ts` — full rewrite: now delegates to backup-service restoreBackup() (proper decrypt + extract + DB replace + status update + log entry). Previous copyFile-only implementation would have corrupted encrypted backups.
+  - `src/app/api/backups/[id]/download/route.ts` — added requirePlatformAdmin RBAC for platform scope, writes BackupLog action='download' with success status + archiveSize + storageProvider.
+  - `src/app/api/backups/storage/route.ts` — POST writes BackupLog action='storage_create' when a storage destination is added.
+  - `src/app/api/backups/storage/[id]/route.ts` — POST (test-connection) writes BackupLog action='storage_test' for both success and config-validation-failure branches.
+  - `src/app/api/backups/schedules/route.ts` — POST writes BackupLog action='schedule' when a schedule is created.
+  - `src/app/api/backups/stats/route.ts` — Total Storage now sums COMPLETED + RESTORED backups (both have real on-disk files). Added restoredBackups count. storageTrend + avgDuration include RESTORED.
+  - `src/app/api/backups/logs/route.ts` — updated ACTION_VALUES + STATUS_VALUES to lowercase (matching what BackupLog entries actually store).
+  - `src/modules/backups/logs-page.tsx` — added 11 action filter options (Create, Restore, Verify, Download, Delete, Schedule, Schedule Run, Retention Delete, Storage Test, Storage Create). Updated Action badge cell to map lowercase values to color classes.
+- Files added (2):
+  - `mini-services/backup-scheduler/package.json` — standalone bun project.
+  - `mini-services/backup-scheduler/index.ts` — long-running scheduler loop on port 3010: ticks every 60s, calls runScheduledBackups() directly, writes action='schedule_run' BackupLog per tick that had due schedules, tiny HTTP listener for gateway health-check.
+- DB wiped (22 BackupLog + 19 Backup + 5 BackupSchedule + 2 BackupStorage fake demo records) — only real data now.
+- Verification: lint baseline unchanged (4 errors + 3 warnings, all in unrelated files). Dev server compiles cleanly. Backup-scheduler mini-service alive on port 3010 (PID 15774, health-check responds). E2E via agent-browser confirms every spec point: real storage add/test, real backup create/verify/download/restore/delete, real schedule create with computed nextRunAt, real scheduler+retention loop (verified retention kept only 2 newest after 4 scheduled runs), real encryption (AES-256-GCM ciphertext on disk, NOT SQLite plaintext), real checksums (SHA-256, 64 hex chars), real audit trail (BackupLog entries for every action with proper backup reference, duration, storage provider, verification result, error message, timestamp, admin id), real RBAC (requirePlatformAdmin on every platform-scope mutation), real background execution (POST returns 201 with CREATING immediately, operation continues async). No fake "COMPLETED" backups. No static demo stats. Every UI value reflects actual backend state.

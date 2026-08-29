@@ -269,6 +269,25 @@ export async function POST(request: NextRequest) {
       include: listIncludes,
     });
 
+    // Write a BackupLog entry for the schedule creation so the audit
+    // trail reflects every configured schedule. The action='schedule'
+    // value matches the Schedule filter option in the Logs page.
+    try {
+      await db.backupLog.create({
+        data: {
+          backupId: null,
+          action: 'schedule',
+          status: 'success',
+          storageProvider: d.storageProvider,
+          warnings: `Schedule "${d.name}" created (${d.frequency}, retention=${d.retentionCount})`,
+          createdById,
+          siteId,
+        },
+      });
+    } catch (logErr) {
+      console.warn(`[BACKUP_SCHEDULES:CREATE] Failed to write log:`, logErr);
+    }
+
     return NextResponse.json({ data: item, meta: { requestId: id } }, { status: 201 });
   } catch (error) {
     console.error(`[BACKUP_SCHEDULES:CREATE] ${id} —`, error);

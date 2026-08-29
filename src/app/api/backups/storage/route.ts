@@ -446,6 +446,24 @@ export async function POST(request: NextRequest) {
       include: listIncludes,
     });
 
+    // Write a BackupLog entry for the storage destination creation so
+    // the audit trail reflects every configured destination.
+    try {
+      await db.backupLog.create({
+        data: {
+          backupId: null,
+          action: 'storage_create',
+          status: 'success',
+          storageProvider: d.provider,
+          warnings: `Storage destination "${d.name}" created`,
+          createdById,
+          siteId,
+        },
+      });
+    } catch (logErr) {
+      console.warn(`[BACKUP_STORAGE:CREATE] Failed to write log:`, logErr);
+    }
+
     // Mask secrets in the response
     const { maskConfigSecrets } = await import('@/lib/backup/providers');
     let responseConfig: Record<string, unknown>;

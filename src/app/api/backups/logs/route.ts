@@ -27,16 +27,22 @@ const listIncludes = {
 const SORTABLE = new Set(['createdAt', 'action', 'status', 'durationMs', 'archiveSize']);
 
 // ---------- label maps (for search matching) -------------------------
-// The UI displays labelized forms of these string/enums (e.g. "IN_PROGRESS"
-// → "In Progress", "CLOUDFLARE_R2" → "Cloudflare R2"). Search must match
-// what the user SEES, so for each search term we pre-compute the set of
-// raw enum values whose raw form OR labelized form contains the term, then
-// OR a `provider IN (...)` / `action IN (...)` / `status IN (...)` clause
-// with the free-text `contains` clauses on errorMessage and backup.name.
+// The UI displays labelized forms of these string/enums (e.g. "in_progress"
+// → "In Progress", "storage_test" → "Storage Test", "CLOUDFLARE_R2" →
+// "Cloudflare R2"). Search must match what the user SEES, so for each
+// search term we pre-compute the set of raw action/status values whose
+// raw form OR labelized form contains the term, then OR a `action IN (...)`
+// / `status IN (...)` clause with the free-text `contains` clauses on
+// errorMessage and backup.name.
+//
+// Actions are stored lowercase in the DB (create, verify, restore,
+// download, delete, schedule, schedule_run, retention_delete,
+// storage_test, storage_create). Statuses are also lowercase (success,
+// failed, in_progress).
 
-const ACTION_VALUES = ['CREATE', 'RESTORE', 'VERIFY', 'DOWNLOAD', 'DELETE', 'SCHEDULE', 'STORAGE_TEST'] as const;
+const ACTION_VALUES = ['create', 'restore', 'verify', 'download', 'delete', 'schedule', 'schedule_run', 'retention_delete', 'storage_test', 'storage_create'] as const;
 
-const STATUS_VALUES = ['SUCCESS', 'FAILED', 'IN_PROGRESS', 'SKIPPED', 'PENDING'] as const;
+const STATUS_VALUES = ['success', 'failed', 'in_progress'] as const;
 
 const PROVIDER_LABELS: Record<string, string> = {
   LOCAL: 'Local',

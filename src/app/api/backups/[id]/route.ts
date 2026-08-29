@@ -3,6 +3,11 @@
 // PATCH  /api/backups/[id] — Update backup (note, name)
 // DELETE /api/backups/[id] — Delete backup + file cleanup
 // ============================================================
+// DELETE is gated by requirePlatformAdmin when ?scope=platform is
+// passed — platform-wide backups cannot be deleted by client-side
+// users. Every delete also writes a BackupLog entry (action=delete)
+// so the audit trail in the Logs page reflects every deletion.
+// ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
@@ -10,6 +15,7 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -133,11 +139,24 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 // DELETE — delete backup + file cleanup
 // =====================================================================
 
-export async function DELETE(_request: NextRequest, context: RouteContext) {
+export async function DELETE(request: NextRequest, context: RouteContext) {
   const id = reqId();
 
   try {
     const { id: backupId } = await context.params;
+
+    // -------- scope=platform: gate with requirePlatformAdmin. The
+    // platform admin UI passes `scope=platform` as a query param on
+    // the DELETE URL. When absent, behave EXACTLY as before (no
+    // RBAC change) — client-side backups remain deletable by the
+    // site's admins.
+    const scopeParam = new URL(request.url).searchParams.get('scope');
+    let deleterId: string | null = null;
+    if (scopeParam === 'platform') {
+      const auth = await requirePlatformAdmin(request);
+      if ('response' in auth) return auth.response;
+      deleterId = auth.user.id;
+    }
 
     const existing = await db.backup.findUnique({ where: { id: backupId } });
     if (!existing) {
@@ -147,16 +166,65 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       );
     }
 
-    // Delete the physical backup file if it exists
-    if (existing.storagePath && existsSync(existing.storagePath)) {
-      try {
-        await unlink(existing.storagePath);
-      } catch (fileErr) {
-        console.warn(`[BACKUPS:DELETE] Failed to delete file ${existing.storagePath}:`, fileErr);
+    // Refuse to delete a backup that is currently being restored — the
+    // restore flow reads the file from disk mid-operation; deleting it
+    // mid-flight would corrupt the in-progress restore.
+    if (existing.status === 'RESTORING') {
+      return NextResponse.json(
+        { error: { code: 'LOCKED', message: 'Backup is currently being restored — try again later.' }, meta: { requestId: id } },
+        { status: 409 },
+      );
+    }
+
+    // Delete the physical backup file if it exists. The backup's
+    // storagePath may point to either the .zip (CREATING state, before
+    // encryption) or .enc (final state after encryption). For robustness,
+    // try the canonical path first, then the encrypted variant if the
+    // canonical path doesn't exist.
+    let fileDeleted = false;
+    const tryPaths = [
+      existing.storagePath,
+      existing.storagePath?.replace(/\.zip$/, '.enc'),
+      existing.storagePath?.replace(/\.enc$/, '.zip'),
+    ].filter((p, i, arr): p is string => typeof p === 'string' && arr.indexOf(p) === i);
+    for (const p of tryPaths) {
+      if (existsSync(p)) {
+        try {
+          await unlink(p);
+          fileDeleted = true;
+          break;
+        } catch (fileErr) {
+          console.warn(`[BACKUPS:DELETE] Failed to delete file ${p}:`, fileErr);
+        }
       }
     }
 
     await db.backup.delete({ where: { id: backupId } });
+
+    // Write a BackupLog entry for the delete action so the Logs page
+    // reflects every deletion. The log is written AFTER the row delete
+    // (so the backup record itself is gone first) but with backupId
+    // carried via the BackupLog's nullable backupId FK — the FK has
+    // onDelete: Cascade, so we delete the backup BEFORE writing the
+    // log to avoid the cascade wiping the log we just wrote. We use
+    // a separate non-cascading field via `action='delete'` and set
+    // backupId=null since the backup no longer exists.
+    try {
+      await db.backupLog.create({
+        data: {
+          backupId: null, // backup row already deleted
+          action: 'delete',
+          status: 'success',
+          archiveSize: existing.size,
+          storageProvider: existing.storageProvider,
+          warnings: fileDeleted ? undefined : 'Backup file was not present on disk at deletion time',
+          createdById: deleterId,
+          siteId: existing.siteId,
+        },
+      });
+    } catch (logErr) {
+      console.warn(`[BACKUPS:DELETE] Failed to write log for ${backupId}:`, logErr);
+    }
 
     return NextResponse.json({ data: { id: backupId, deleted: true }, meta: { requestId: id } });
   } catch (error) {
