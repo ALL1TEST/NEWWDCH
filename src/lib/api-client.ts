@@ -36,7 +36,9 @@ export class ApiClientError extends Error {
     this.status = 0;
     this.details = error.details;
     this.docUrl = error.doc_url;
-    this.requestId = meta.requestId;
+    // Defensive: some error responses omit `meta` — don't crash during
+    // construction; just leave requestId empty in that case.
+    this.requestId = meta?.requestId ?? '';
   }
 }
 
