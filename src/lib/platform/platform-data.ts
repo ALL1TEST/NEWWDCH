@@ -95,6 +95,14 @@ export interface Payment {
   method: string;
   date: string;
   invoiceNumber: string;
+  // ---- Stripe transaction details (source of truth when Stripe is
+  // configured). The admin Payments page surfaces these so every row is
+  // verifiably tied to a real Stripe PaymentIntent / Charge / Invoice.
+  // All optional — null when Stripe is not configured (dev seed / free
+  // plan charges that don't go through Stripe).
+  stripeInvoiceId?: string | null;
+  stripePaymentIntentId?: string | null;
+  stripeChargeId?: string | null;
 }
 
 export interface AuditEntry {
@@ -688,6 +696,12 @@ function mapPaymentRow(r: {
     method: r.method ?? deriveMethodLabel(r.paymentMethodType, r.paymentMethodDetails) ?? '—',
     date: (r.paidAt ?? r.createdAt).toISOString(),
     invoiceNumber: r.invoiceNumber ?? r.stripeInvoiceId ?? '—',
+    // Stripe transaction details — surfaced in the admin Payments table
+    // so every row is verifiably tied to a real Stripe PaymentIntent /
+    // Charge / Invoice. Null/undefined when Stripe isn't configured.
+    stripeInvoiceId: r.stripeInvoiceId,
+    stripePaymentIntentId: r.stripePaymentIntentId,
+    stripeChargeId: r.stripeChargeId,
     customerName: r.user?.name ?? r.user?.email ?? '—',
     customerEmail: r.user?.email ?? '—',
   };

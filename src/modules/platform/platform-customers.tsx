@@ -2,8 +2,12 @@
 
 // ============================================================
 // PLATFORM CUSTOMERS — list every SaaS customer on the platform
-// with search + plan/status filters. Clicking a row opens the
-// customer detail view.
+// with search + plan/status filters. "View Customer" is the
+// main row action and opens the customer detail page (where
+// account / subscription / sites management lives). Customer-
+// management UI is centralized on the Customers + detail pages
+// — it is intentionally NOT duplicated on the Payments page
+// (which is financial-only).
 // ============================================================
 
 import React, { useState, useEffect } from 'react';
@@ -141,13 +145,13 @@ export function PlatformCustomersModule() {
                         </td>
                         <td className="py-2.5 text-right">
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
                             className="h-7"
                             onClick={() => navigate('platform-customer-detail', c.id)}
                           >
                             <Eye className="h-3.5 w-3.5 mr-1" />
-                            View
+                            View Customer
                           </Button>
                         </td>
                       </tr>

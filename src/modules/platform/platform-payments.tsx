@@ -6,6 +6,18 @@
 // server-side; status filtering is server-side too. A small
 // paid-summary (count + total) is derived from the returned
 // array, never hardcoded.
+//
+// Scope: this page is FINANCIAL ONLY. Each row surfaces the
+// transaction ID (Stripe PaymentIntent ID, with the Charge ID
+// beneath), invoice reference (human invoice number + Stripe
+// invoice ID), customer reference (name + email), plan, amount
+// + currency, payment status (paid / pending / failed /
+// refunded — refunds and failures are first-class statuses,
+// not a separate UI), payment method metadata (derived from
+// the stored card details, e.g. "Visa ••4242"), and date.
+// Customer-management UI (sites, storage, account status,
+// suspend/reactivate) lives on the Customers page + customer
+// detail page — it is NOT duplicated here.
 // ============================================================
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -125,8 +137,29 @@ export function PlatformPaymentsModule() {
                   <tbody className="divide-y">
                     {data.map((p) => (
                       <tr key={p.id} className="hover:bg-accent/30 transition-colors">
-                        <td className="py-2.5 pr-4 font-mono text-xs">{p.id}</td>
-                        <td className="py-2.5 pr-4 text-xs text-muted-foreground">{p.invoiceNumber}</td>
+                        <td className="py-2.5 pr-4 font-mono text-xs">
+                          {/* Stripe PaymentIntent ID is the real "transaction
+                              ID"; fall back to the internal record id when
+                              Stripe isn't configured. */}
+                          {p.stripePaymentIntentId ? (
+                            <span>{p.stripePaymentIntentId}</span>
+                          ) : (
+                            <span>{p.id}</span>
+                          )}
+                          {p.stripeChargeId && (
+                            <p className="text-[10px] text-muted-foreground">{p.stripeChargeId}</p>
+                          )}
+                        </td>
+                        <td className="py-2.5 pr-4 text-xs text-muted-foreground">
+                          {/* Human-readable invoice number (INV-2026-1042)
+                              is primary; the Stripe Invoice ID (in_…) is
+                              shown beneath so the row is verifiably tied
+                              to a real Stripe invoice. */}
+                          <span>{p.invoiceNumber}</span>
+                          {p.stripeInvoiceId && (
+                            <p className="text-[10px] font-mono">{p.stripeInvoiceId}</p>
+                          )}
+                        </td>
                         <td className="py-2.5 pr-4">
                           <p className="font-medium truncate max-w-[140px]">{p.customerName}</p>
                           <p className="text-xs text-muted-foreground truncate max-w-[160px]">
