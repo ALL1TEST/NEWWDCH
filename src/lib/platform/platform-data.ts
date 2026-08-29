@@ -25,7 +25,7 @@
 
 // -------------------- Types --------------------
 
-export type PlanId = 'beta' | 'pro' | 'max';
+export type PlanId = 'free' | 'plus' | 'pro' | 'max';
 export type SubscriptionStatus = 'active' | 'trial' | 'past_due' | 'cancelled' | 'expired';
 export type BillingInterval = 'monthly' | 'yearly';
 export type CustomerStatus = 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED';
@@ -211,19 +211,19 @@ function isoDaysAhead(days: number): string {
 
 const CUSTOMER_SEED: Omit<Customer, 'id'>[] = [
   { name: 'Admin User', email: 'admin@example.com', status: 'ACTIVE', planId: 'pro', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(120), subscriptionStart: isoDaysAgo(90), nextBillingAt: isoDaysAhead(2), trialEnd: null, company: 'Acme Studios', country: 'Switzerland', storageLimitBytes: 10 * GB },
-  { name: 'Editor User', email: 'editor@example.com', status: 'ACTIVE', planId: 'beta', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(64), subscriptionStart: isoDaysAgo(64), nextBillingAt: isoDaysAhead(5), trialEnd: null, company: 'Maple Media', country: 'Germany', storageLimitBytes: 1 * GB },
-  { name: 'Author User', email: 'author@example.com', status: 'ACTIVE', planId: 'beta', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(40), subscriptionStart: isoDaysAgo(40), nextBillingAt: isoDaysAhead(8), trialEnd: null, company: null, country: 'France', storageLimitBytes: 1 * GB },
+  { name: 'Editor User', email: 'editor@example.com', status: 'ACTIVE', planId: 'plus', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(64), subscriptionStart: isoDaysAgo(64), nextBillingAt: isoDaysAhead(5), trialEnd: null, company: 'Maple Media', country: 'Germany', storageLimitBytes: 1 * GB },
+  { name: 'Author User', email: 'author@example.com', status: 'ACTIVE', planId: 'plus', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(40), subscriptionStart: isoDaysAgo(40), nextBillingAt: isoDaysAhead(8), trialEnd: null, company: null, country: 'France', storageLimitBytes: 1 * GB },
   { name: 'John Smith', email: 'john@example.com', status: 'ACTIVE', planId: 'pro', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(58), subscriptionStart: isoDaysAgo(58), nextBillingAt: isoDaysAhead(3), trialEnd: null, company: 'Smith Digital', country: 'United Kingdom', storageLimitBytes: 10 * GB },
   { name: 'Sarah Wilson', email: 'sarah@example.com', status: 'ACTIVE', planId: 'max', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(95), subscriptionStart: isoDaysAgo(95), nextBillingAt: isoDaysAhead(1), trialEnd: null, company: 'Wilson Group', country: 'United States', storageLimitBytes: 100 * GB },
   { name: 'Michael Chen', email: 'michael@example.com', status: 'ACTIVE', planId: 'pro', subscriptionStatus: 'active', billingInterval: 'yearly', createdAt: isoDaysAgo(210), subscriptionStart: isoDaysAgo(210), nextBillingAt: isoDaysAhead(155), trialEnd: null, company: 'Chen Analytics', country: 'Singapore', storageLimitBytes: 10 * GB },
-  { name: 'Emma Rodriguez', email: 'emma@example.com', status: 'ACTIVE', planId: 'beta', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(28), subscriptionStart: isoDaysAgo(28), nextBillingAt: isoDaysAhead(4), trialEnd: null, company: null, country: 'Spain', storageLimitBytes: 1 * GB },
+  { name: 'Emma Rodriguez', email: 'emma@example.com', status: 'ACTIVE', planId: 'plus', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(28), subscriptionStart: isoDaysAgo(28), nextBillingAt: isoDaysAhead(4), trialEnd: null, company: null, country: 'Spain', storageLimitBytes: 1 * GB },
   { name: 'David Kim', email: 'david@example.com', status: 'ACTIVE', planId: 'pro', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(72), subscriptionStart: isoDaysAgo(72), nextBillingAt: isoDaysAhead(6), trialEnd: null, company: 'Kim Labs', country: 'South Korea', storageLimitBytes: 10 * GB },
   { name: 'Lisa Anderson', email: 'lisa@example.com', status: 'ACTIVE', planId: 'max', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(140), subscriptionStart: isoDaysAgo(140), nextBillingAt: isoDaysAhead(7), trialEnd: null, company: 'Anderson Co', country: 'Canada', storageLimitBytes: 100 * GB },
-  { name: 'James Brown', email: 'james@example.com', status: 'ACTIVE', planId: 'beta', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(15), subscriptionStart: isoDaysAgo(15), nextBillingAt: isoDaysAhead(16), trialEnd: null, company: null, country: 'Australia', storageLimitBytes: 1 * GB },
+  { name: 'James Brown', email: 'james@example.com', status: 'ACTIVE', planId: 'plus', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(15), subscriptionStart: isoDaysAgo(15), nextBillingAt: isoDaysAhead(16), trialEnd: null, company: null, country: 'Australia', storageLimitBytes: 1 * GB },
   { name: 'Olivia Martinez', email: 'olivia@example.com', status: 'ACTIVE', planId: 'pro', subscriptionStatus: 'trial', billingInterval: 'monthly', createdAt: isoDaysAgo(6), subscriptionStart: isoDaysAgo(6), nextBillingAt: isoDaysAhead(8), trialEnd: isoDaysAhead(8), company: 'Martinez LLC', country: 'Mexico', storageLimitBytes: 10 * GB },
-  { name: 'William Davis', email: 'william@example.com', status: 'ACTIVE', planId: 'beta', subscriptionStatus: 'trial', billingInterval: 'monthly', createdAt: isoDaysAgo(3), subscriptionStart: isoDaysAgo(3), nextBillingAt: isoDaysAhead(11), trialEnd: isoDaysAhead(11), company: null, country: 'Ireland', storageLimitBytes: 1 * GB },
+  { name: 'William Davis', email: 'william@example.com', status: 'ACTIVE', planId: 'plus', subscriptionStatus: 'trial', billingInterval: 'monthly', createdAt: isoDaysAgo(3), subscriptionStart: isoDaysAgo(3), nextBillingAt: isoDaysAhead(11), trialEnd: isoDaysAhead(11), company: null, country: 'Ireland', storageLimitBytes: 1 * GB },
   { name: 'Sophia Garcia', email: 'sophia@example.com', status: 'ACTIVE', planId: 'pro', subscriptionStatus: 'past_due', billingInterval: 'monthly', createdAt: isoDaysAgo(80), subscriptionStart: isoDaysAgo(80), nextBillingAt: isoDaysAhead(-2), trialEnd: null, company: 'Garcia Media', country: 'Argentina', storageLimitBytes: 10 * GB },
-  { name: 'Daniel Lee', email: 'daniel@example.com', status: 'ACTIVE', planId: 'beta', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(48), subscriptionStart: isoDaysAgo(48), nextBillingAt: isoDaysAhead(12), trialEnd: null, company: null, country: 'Norway', storageLimitBytes: 1 * GB },
+  { name: 'Daniel Lee', email: 'daniel@example.com', status: 'ACTIVE', planId: 'plus', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(48), subscriptionStart: isoDaysAgo(48), nextBillingAt: isoDaysAhead(12), trialEnd: null, company: null, country: 'Norway', storageLimitBytes: 1 * GB },
   { name: 'Charlotte Taylor', email: 'charlotte@example.com', status: 'ACTIVE', planId: 'pro', subscriptionStatus: 'active', billingInterval: 'yearly', createdAt: isoDaysAgo(300), subscriptionStart: isoDaysAgo(300), nextBillingAt: isoDaysAhead(65), trialEnd: null, company: 'Taylor Press', country: 'United Kingdom', storageLimitBytes: 10 * GB },
   { name: 'Ethan Moore', email: 'ethan@example.com', status: 'ACTIVE', planId: 'max', subscriptionStatus: 'active', billingInterval: 'monthly', createdAt: isoDaysAgo(160), subscriptionStart: isoDaysAgo(160), nextBillingAt: isoDaysAhead(9), trialEnd: null, company: 'Moore Ventures', country: 'United States', storageLimitBytes: 100 * GB },
   { name: 'Ava Thomas', email: 'ava@example.com', status: 'ACTIVE', planId: 'pro', subscriptionStatus: 'cancelled', billingInterval: 'monthly', createdAt: isoDaysAgo(200), subscriptionStart: isoDaysAgo(200), nextBillingAt: null, trialEnd: null, company: null, country: 'New Zealand', storageLimitBytes: 10 * GB },
@@ -492,7 +492,7 @@ export function getOverview(): PlatformOverview {
 
   let mrr = 0;
   for (const c of customers) {
-    if (c.subscriptionStatus === 'active' && c.planId !== 'beta') {
+    if (c.subscriptionStatus === 'active' && c.planId !== 'free') {
       mrr += monthlyPrice(getPlan(c.planId), c.billingInterval);
     }
   }
@@ -503,7 +503,7 @@ export function getOverview(): PlatformOverview {
     planId: p.id,
     planName: p.name,
     count: customers.filter((c) => c.planId === p.id).length,
-    color: p.id === 'beta' ? '#f59e0b' : p.id === 'pro' ? '#8b5cf6' : '#10b981',
+    color: p.id === 'free' ? '#10b981' : p.id === 'plus' ? '#f59e0b' : p.id === 'pro' ? '#8b5cf6' : '#ec4899',
   }));
 
   const statuses: SubscriptionStatus[] = ['active', 'trial', 'past_due', 'cancelled', 'expired'];
@@ -853,7 +853,7 @@ export interface ClientBillingState {
   customer: Customer | null;
   plan: Plan;
   allPlans: Plan[];
-  status: SubscriptionStatus;
+  status: SubscriptionStatus | 'none';
   trialEnd: string | null;
   nextBillingAt: string | null;
   paymentHistory: Payment[];
@@ -861,12 +861,28 @@ export interface ClientBillingState {
    *  billing bypass (full access, not a paying customer). */
   billingMode: 'EXTERNAL' | 'INTERNAL' | 'EXEMPT';
   isInternal: boolean;
+  // ---- NEW (Task 64): real DB Subscription fields ----
+  /** The billing interval chosen for THIS subscription (monthly | yearly). */
+  billingInterval?: 'monthly' | 'yearly';
+  /** Calendar-based next billing/expiration date (DB Subscription.currentPeriodEnd). */
+  currentPeriodEnd?: string | null;
+  /** For free plans with a limited duration: the ISO date when the trial expires. */
+  freeTrialExpiresAt?: string | null;
+  /** True when the user's free-trial has expired and gated features are blocked. */
+  freeTrialExpired?: boolean;
+  /** Stripe IDs (when the subscription was created via Stripe Checkout). */
+  stripeSubscriptionId?: string | null;
+  stripeCustomerId?: string | null;
+  /** True when the user must take action (expired trial / past_due). */
+  requiresPlanAction?: boolean;
+  /** True when the source of truth is the DB Subscription row (vs the legacy in-memory seed). */
+  hasRealSubscription?: boolean;
 }
 
 /** Synthetic "Internal" plan for owner / billing-bypass users. Carries every
  *  entitlement and a zero price; the user is not a paying customer. */
 const INTERNAL_PLAN: Plan = {
-  id: 'beta',
+  id: 'free',
   name: 'Internal',
   price: 0,
   priceMonthly: 0,
@@ -881,6 +897,8 @@ const INTERNAL_PLAN: Plan = {
 };
 
 interface BillingUser {
+  /** User row id — required for the DB Subscription lookup. */
+  id?: string;
   email: string;
   role?: string;
   billingMode?: string;
@@ -907,10 +925,18 @@ export function getClientBilling(user: BillingUser): ClientBillingState {
       paymentHistory: [],
       billingMode,
       isInternal: true,
+      billingInterval: 'monthly',
+      currentPeriodEnd: null,
+      freeTrialExpiresAt: null,
+      freeTrialExpired: false,
+      stripeSubscriptionId: null,
+      stripeCustomerId: null,
+      requiresPlanAction: false,
+      hasRealSubscription: false,
     };
   }
 
-  const plan = customer ? getPlan(customer.planId) : getPlan('beta');
+  const plan = customer ? getPlan(customer.planId) : getPlan('free');
   const paymentHistory = customer
     ? s.payments
         .filter((p) => p.customerId === customer.id)
@@ -926,33 +952,164 @@ export function getClientBilling(user: BillingUser): ClientBillingState {
     paymentHistory,
     billingMode,
     isInternal: false,
+    billingInterval: customer?.billingInterval ?? 'monthly',
+    currentPeriodEnd: customer?.nextBillingAt ?? null,
+    freeTrialExpiresAt: null,
+    freeTrialExpired: false,
+    stripeSubscriptionId: null,
+    stripeCustomerId: null,
+    requiresPlanAction: customer?.subscriptionStatus === 'past_due' || customer?.subscriptionStatus === 'expired',
+    hasRealSubscription: false,
   };
 }
+
+/**
+ * Async variant that prefers the DB Subscription row over the legacy
+ * in-memory customer. This is the version called by /api/platform/billing/me.
+ *
+ * The legacy in-memory customer (CUSTOMER_SEED) is still consulted for
+ * the Platform Admin Customers/Payments pages and for demo users who
+ * don't yet have a DB Subscription row.
+ *
+ * For users WITH a DB Subscription row:
+ *   - status, billingInterval, currentPeriodEnd, trialEnd come from the DB.
+ *   - freeTrialExpired is computed from trialEnd + plan.isFree + status.
+ *   - paymentHistory comes from the DB Payment table (real Stripe invoices
+ *     when Stripe is configured; empty for free plans).
+ *
+ * For users WITHOUT a DB Subscription row (legacy or fresh):
+ *   - Falls back to getClientBilling() (in-memory customer or Free plan).
+ */
+export async function getClientBillingAsync(user: BillingUser): Promise<ClientBillingState> {
+  // Bypass users: return the synthetic Internal plan (no DB lookup).
+  if (isBillingBypass(user)) return getClientBilling(user);
+
+  // No user id → can't look up DB Subscription. Fall back to legacy.
+  if (!user.id) return getClientBilling(user);
+
+  // Try the DB Subscription first.
+  const subState = await getClientSubscriptionState({
+    id: user.id,
+    email: user.email,
+    role: user.role ?? '',
+    billingMode: user.billingMode,
+  });
+
+  // No DB subscription row → fall back to the in-memory legacy state.
+  if (!subState.subscription) {
+    return getClientBilling(user);
+  }
+
+  // We have a real DB subscription. Build the ClientBillingState from it
+  // (NOT from the in-memory customer — the DB is the source of truth).
+  const plan = toPlan(subState.plan);
+
+  // Load real payment history from the DB Payment table.
+  const dbPayments = await getUserPayments(user.id);
+
+  return {
+    customer: null, // no in-memory customer when DB subscription is the source
+    plan,
+    allPlans: PLANS.filter((p) => p.active),
+    status: subState.status,
+    trialEnd: subState.trialEnd,
+    nextBillingAt: subState.currentPeriodEnd,
+    paymentHistory: dbPayments.map((p) => ({
+      id: p.id,
+      customerId: user.id as string,
+      planId: p.planId as PlanId,
+      amount: p.amount,
+      currency: p.currency,
+      status: p.status,
+      method: p.method ?? '—',
+      date: p.createdAt.toISOString(),
+      invoiceNumber: p.invoiceNumber ?? '—',
+    })),
+    billingMode: (user.billingMode as 'EXTERNAL' | 'INTERNAL' | 'EXEMPT') ?? 'EXTERNAL',
+    isInternal: false,
+    billingInterval: subState.billingInterval,
+    currentPeriodEnd: subState.currentPeriodEnd,
+    freeTrialExpiresAt: subState.freeTrialExpiresAt,
+    freeTrialExpired: subState.freeTrialExpired,
+    stripeSubscriptionId: subState.subscription.stripeSubscriptionId,
+    stripeCustomerId: subState.subscription.stripeCustomerId,
+    requiresPlanAction: subState.requiresPlanAction,
+    hasRealSubscription: true,
+  };
+}
+
+// DB Subscription lookup helper — imported here (statically) so the
+// async client-billing path can resolve real subscription state. The
+// subscription-data module imports nothing from this file, so there is
+// no circular dependency.
+import { getClientSubscriptionState, getUserPayments, subscribeToFreePlan, cancelSubscription as cancelDbSubscription } from './subscription-data';
 
 /** Backwards-compatible email-only overload (treats caller as EXTERNAL). */
 export function getClientBillingByEmail(email: string): ClientBillingState {
   return getClientBilling({ email, role: undefined, billingMode: 'EXTERNAL' });
 }
 
-export function clientChangePlan(user: BillingUser, newPlanId: PlanId): ClientBillingState | null {
+/**
+ * Change plan — for FREE plans this writes a real DB Subscription row
+ * (with the configured free-trial duration if any). For PAID plans
+ * this function REFUSES and the caller must redirect the user to
+ * /api/billing/checkout (Stripe). This is the only way to change plan
+ * without going through Stripe — and it ONLY works for free plans.
+ *
+ * For backwards compatibility with the legacy in-memory demo customers,
+ * if the user matches a CUSTOMER_SEED entry we ALSO mutate that entry
+ * (so the Platform Admin Customers page stays consistent). The DB
+ * Subscription row is the source of truth for the Client Billing page.
+ */
+export async function clientChangePlan(
+  user: BillingUser,
+  newPlanId: PlanId,
+): Promise<ClientBillingState | null> {
   if (isBillingBypass(user)) return getClientBilling(user); // bypass: no plan change
-  const s = store();
-  const c = s.customers.find((cu) => cu.email.toLowerCase() === user.email.toLowerCase());
-  if (!c) return null;
-  // Reject change to an inactive plan.
+  if (!user.id) return null; // no user id → can't write DB Subscription
+
+  // Look up the target plan from the live cache.
   const target = getPlan(newPlanId);
   if (!target.active) return null;
-  changeCustomerPlan(c.id, newPlanId, user.email);
-  return getClientBilling(user);
-}
 
-export function clientCancelSubscription(user: BillingUser): ClientBillingState | null {
-  if (isBillingBypass(user)) return getClientBilling(user); // bypass: nothing to cancel
+  // For FREE plans: write a DB Subscription row via subscribeToFreePlan.
+  if (target.isFree) {
+    const result = await subscribeToFreePlan(user.id, newPlanId);
+    if (!result.ok) return null;
+  } else {
+    // PAID plan: REFUSE. The user must use /api/billing/checkout (Stripe).
+    // Returning null here signals "must use checkout". The Client Billing
+    // UI detects this and shows the Upgrade button → /api/billing/checkout.
+    return null;
+  }
+
+  // Also mutate the in-memory demo customer (if one exists for this email)
+  // so the Platform Admin Customers page stays consistent with the new state.
   const s = store();
   const c = s.customers.find((cu) => cu.email.toLowerCase() === user.email.toLowerCase());
-  if (!c) return null;
-  cancelSubscription(c.id, user.email);
-  return getClientBilling(user);
+  if (c) changeCustomerPlan(c.id, newPlanId, user.email);
+
+  return getClientBillingAsync(user);
+}
+
+/**
+ * Cancel subscription — writes to the DB Subscription row (the source
+ * of truth) and also mutates the legacy in-memory demo customer if one
+ * exists. Returns the updated ClientBillingState.
+ */
+export async function clientCancelSubscription(user: BillingUser): Promise<ClientBillingState | null> {
+  if (isBillingBypass(user)) return getClientBilling(user); // bypass: nothing to cancel
+  if (!user.id) return null;
+
+  // Cancel the DB Subscription (the authoritative record).
+  await cancelDbSubscription(user.id);
+
+  // Also mutate the in-memory demo customer if one exists.
+  const s = store();
+  const c = s.customers.find((cu) => cu.email.toLowerCase() === user.email.toLowerCase());
+  if (c) cancelSubscription(c.id, user.email);
+
+  return getClientBillingAsync(user);
 }
 
 // ============================================================

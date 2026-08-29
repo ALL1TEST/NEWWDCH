@@ -68,7 +68,8 @@ export function PlatformCustomersModule() {
           value={planId}
           onChange={setPlanId}
           options={[
-            { value: 'beta', label: 'Beta' },
+            { value: 'free', label: 'Free' },
+            { value: 'plus', label: 'Plus' },
             { value: 'pro', label: 'Pro' },
             { value: 'max', label: 'Max' },
           ]}

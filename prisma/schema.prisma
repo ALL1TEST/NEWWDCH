@@ -716,6 +716,10 @@ model User {
   resolvedAlerts    Alert[] @relation("AlertResolver")
   securityEvents    SecurityEvent[]
 
+  // Billing (real subscription + payment records — DB-backed source of truth)
+  subscription      Subscription?
+  payments          Payment[]
+
   @@index([email])
   @@index([role])
   @@index([status])
@@ -2066,26 +2070,99 @@ model FeatureFlag {
 // features, entitlements and limits from here — NOT from a hardcoded
 // constant. `features` is marketing copy; `entitlements` is the
 // authoritative feature-key list checked by hasFeature().
+//
+// planId values: 'free' | 'plus' | 'pro' | 'max' | custom.
+// freePlanDurationDays: null = unlimited; positive N = trial duration in
+//   days for free plans (enforced server-side; expired trial blocks
+//   gated features).
+// stripePriceIdMonthly/Yearly: optional Stripe Price IDs for real
+//   recurring billing. Empty = Stripe not yet wired for this plan; the
+//   checkout API refuses to fake success in that case.
 model PlanConfig {
-  id            String   @id @default(cuid())
-  planId        String   @unique // 'beta' | 'pro' | 'max' | custom
-  name          String
-  priceMonthly  Int      @default(0) // major currency units (49 = 49 CHF)
-  priceYearly   Int      @default(0)
-  currency      String   @default("CHF")
-  interval      String   @default("monthly") // monthly | yearly
-  isFree        Boolean  @default(false)
-  active        Boolean  @default(true)
-  features      String   @default("[]") // JSON: string[] (marketing)
-  entitlements  String   @default("[]") // JSON: string[] (feature keys)
-  limits        String   @default("{}") // JSON: { maxSites, storageBytes, aiWords, aiArticles, automationRuns }
-  badgeVariant  String   @default("") // maps to client badge styling
-  sortOrder     Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  planId               String   @unique // 'free' | 'plus' | 'pro' | 'max' | custom
+  name                 String
+  priceMonthly         Int      @default(0) // major currency units (49 = 49 CHF)
+  priceYearly          Int      @default(0)
+  currency             String   @default("CHF")
+  interval             String   @default("monthly") // monthly | yearly — default cadence; client can pick
+  isFree               Boolean  @default(false)
+  freePlanDurationDays Int? // null = unlimited; positive N = trial duration in days for free plans
+  stripePriceIdMonthly String? // Stripe Price ID for monthly billing; null = not yet wired
+  stripePriceIdYearly  String? // Stripe Price ID for yearly billing; null = not yet wired
+  active               Boolean  @default(true)
+  features             String   @default("[]") // JSON: string[] (marketing)
+  entitlements         String   @default("[]") // JSON: string[] (feature keys)
+  limits               String   @default("{}") // JSON: { maxSites, storageBytes, aiWords, aiArticles, automationRuns }
+  badgeVariant         String   @default("") // maps to client badge styling
+  sortOrder            Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  subscriptions Subscription[]
 
   @@index([active])
   @@index([sortOrder])
+}
+
+// Real customer subscription state. The source of truth for the Client
+// Billing dashboard, entitlements, usage limits, and renewal dates. One
+// row per user (enforced by @@unique([userId])). Updated by Stripe
+// webhooks when Stripe is configured; otherwise created by the free-plan
+// flow and the admin-assigned-plan flow.
+//
+// `status` is one of: 'active' | 'trial' | 'past_due' | 'cancelled' |
+// 'expired'. Calendar-based periods: monthly = addMonths(1), yearly =
+// addYears(1) — never +30 days.
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique // one active subscription per user
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId               String // references PlanConfig.planId (loose ref; lookup via plan-config cache)
+  plan                 PlanConfig? @relation(fields: [planId], references: [planId], onDelete: Restrict)
+  billingInterval     String    @default("monthly") // monthly | yearly — chosen cadence for THIS subscription
+  status               String    @default("active") // active | trial | past_due | cancelled | expired
+  startDate            DateTime  @default(now()) // when this subscription started
+  currentPeriodEnd     DateTime? // next billing/expiration date; null = no renewal (cancelled)
+  trialEnd             DateTime? // for free trial / paid trial; null = not a trial
+  cancelAt             DateTime? // scheduled cancellation; null = no scheduled cancellation
+  freePlanDurationDays Int? // copied from PlanConfig at subscription time; null = unlimited free
+  stripeCustomerId     String? // Stripe Customer ID
+  stripeSubscriptionId String? // Stripe Subscription ID
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  payments Payment[]
+
+  @@index([planId])
+  @@index([status])
+  @@index([currentPeriodEnd])
+}
+
+// Real payment / invoice record. Stripe is the source of truth when
+// configured; in dev (no Stripe keys) only free / no-charge payments are
+// recorded. Never fake a 'paid' status — checkout returns 503 if Stripe
+// is not configured and the plan has a positive price.
+model Payment {
+  id              String       @id @default(cuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionId  String?
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  planId          String
+  amount          Int          @default(0) // major currency units
+  currency        String       @default("CHF")
+  status          String       @default("pending") // pending | paid | failed | refunded
+  method          String?
+  invoiceNumber   String?
+  stripeInvoiceId String?
+  paidAt          DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([planId])
 }
 
 model Coupon {

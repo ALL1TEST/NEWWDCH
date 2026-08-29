@@ -3,7 +3,7 @@ import { requirePlatformAdmin, ok, fail, getClientIp } from '@/lib/platform/plat
 import { changeCustomerPlan, getCustomer, type PlanId } from '@/lib/platform/platform-data';
 import { logAdminAction } from '@/lib/platform/audit';
 
-const VALID: PlanId[] = ['beta', 'pro', 'max'];
+const VALID: PlanId[] = ['free', 'plus', 'pro', 'max'];
 
 export async function POST(request: NextRequest) {
   const auth = await requirePlatformAdmin(request);
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => ({}))) as { planId?: PlanId };
   const planId = body.planId;
   if (!planId || !VALID.includes(planId)) {
-    return fail('VALIDATION_ERROR', 'A valid planId (beta|pro|max) is required.', 400);
+    return fail('VALIDATION_ERROR', 'A valid planId (free|plus|pro|max) is required.', 400);
   }
   const before = getCustomer(id);
   const updated = changeCustomerPlan(id, planId, auth.user.email);

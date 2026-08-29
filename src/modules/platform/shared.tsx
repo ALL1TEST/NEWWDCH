@@ -102,13 +102,15 @@ export function PlatformKpi({
 
 // -------------------- Badges --------------------
 
-export function PlanBadge({ planId }: { planId: 'beta' | 'pro' | 'max' }) {
+export function PlanBadge({ planId }: { planId: 'free' | 'plus' | 'pro' | 'max' }) {
   const map: Record<string, string> = {
-    beta: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+    free: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+    plus: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200 dark:border-amber-800',
     pro: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300 border-violet-200 dark:border-violet-800',
-    max: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+    max: 'bg-pink-100 text-pink-800 dark:bg-pink-950 dark:text-pink-300 border-pink-200 dark:border-pink-800',
   };
-  const name = planId === 'beta' ? 'Beta' : planId === 'pro' ? 'Pro' : 'Max';
+  const name =
+    planId === 'free' ? 'Free' : planId === 'plus' ? 'Plus' : planId === 'pro' ? 'Pro' : planId === 'max' ? 'Max' : planId;
   return <Badge variant="outline" className={cn('text-[10px] font-semibold capitalize', map[planId])}>{name}</Badge>;
 }
 

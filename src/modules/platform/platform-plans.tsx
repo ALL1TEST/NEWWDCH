@@ -86,11 +86,13 @@ type PlanPatch = Partial<PlanConfigData>;
 // -------------------- helpers --------------------
 
 /** Resolve the badge id for the shared PlanBadge component. Falls
- *  back to 'beta' for any unknown plan id so future plans still
+ *  back to 'free' for any unknown plan id so future plans still
  *  render with a sensible neutral badge. */
-function getPlanBadgeId(planId: string): 'beta' | 'pro' | 'max' {
-  if (planId === 'beta' || planId === 'pro' || planId === 'max') return planId;
-  return 'beta';
+function getPlanBadgeId(planId: string): 'free' | 'plus' | 'pro' | 'max' {
+  if (planId === 'free' || planId === 'plus' || planId === 'pro' || planId === 'max') return planId;
+  // Legacy 'beta' plan id (pre-migration) → render as 'plus' badge.
+  if (planId === 'beta') return 'plus';
+  return 'free';
 }
 
 // -------------------- Plan summary tile --------------------
@@ -109,9 +111,11 @@ function PlanSummaryTile({ label, value }: { label: string; value: number }) {
 function PlanSummaryCard({
   plan,
   canEdit,
+  billingInterval,
 }: {
   plan: PlanConfigData;
   canEdit: boolean;
+  billingInterval: 'monthly' | 'yearly';
 }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -176,11 +180,26 @@ function PlanSummaryCard({
           </div>
         </div>
 
-        {/* Price — main monthly price only (yearly price intentionally omitted on the card) */}
+        {/* Price — reflects the global billing-interval selector (Monthly / Yearly).
+             Free plan always shows "Free" regardless of the selector. */}
         <div className="mt-8">
           {plan.isFree ? (
             <div className="flex items-baseline gap-2">
               <span className="text-5xl font-semibold tracking-tight text-foreground">Free</span>
+            </div>
+          ) : billingInterval === 'yearly' ? (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-baseline gap-2">
+                <span className="text-5xl font-semibold tracking-tight text-foreground">
+                  {formatCurrency(plan.priceYearly, plan.currency)}
+                </span>
+                <span className="text-sm text-muted-foreground">/ year</span>
+              </div>
+              {plan.priceYearly > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  ≈ {formatCurrency(Math.round(plan.priceYearly / 12), plan.currency)} / month
+                </span>
+              )}
             </div>
           ) : (
             <div className="flex items-baseline gap-2">
@@ -259,7 +278,32 @@ function EditPlanDialog({
   const [features, setFeatures] = useState(plan.features.join('\n'));
   const [entitlements, setEntitlements] = useState<string[]>(plan.entitlements);
   const [limits, setLimits] = useState<PlanLimits>(plan.limits);
+  // New (Task 64): free-trial duration + Stripe Price IDs.
+  const [freePlanDurationDays, setFreePlanDurationDays] = useState<string>(
+    plan.freePlanDurationDays == null ? '' : String(plan.freePlanDurationDays),
+  );
+  const [stripePriceIdMonthly, setStripePriceIdMonthly] = useState(plan.stripePriceIdMonthly ?? '');
+  const [stripePriceIdYearly, setStripePriceIdYearly] = useState(plan.stripePriceIdYearly ?? '');
   const [clientDisplayOpen, setClientDisplayOpen] = useState(false);
+  const [stripeOpen, setStripeOpen] = useState(false);
+
+  // Fetch the supported currency list from CountryPricing so the
+  // currency field is a Select (not a free-text input).
+  const currenciesQuery = useQuery({
+    queryKey: ['platform-currencies'],
+    queryFn: async () => {
+      const res = await fetch('/api/platform/admin/countries', { credentials: 'include' });
+      const json = await res.json();
+      const rows = Array.isArray(json) ? json : (json.data ?? []);
+      const list = (rows as { currency?: string }[])
+        .map((r) => r.currency)
+        .filter((c): c is string => Boolean(c) && typeof c === 'string');
+      const unique = Array.from(new Set(list));
+      return unique.length > 0 ? unique : ['CHF', 'USD', 'EUR', 'MAD'];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const currencies = currenciesQuery.data ?? ['CHF'];
 
   // EditPlanDialog is conditionally rendered by the parent (mounted
   // fresh each time the user opens it), so the useState initializers
@@ -277,6 +321,9 @@ function EditPlanDialog({
     setFeatures(plan.features.join('\n'));
     setEntitlements(plan.entitlements);
     setLimits(plan.limits);
+    setFreePlanDurationDays(plan.freePlanDurationDays == null ? '' : String(plan.freePlanDurationDays));
+    setStripePriceIdMonthly(plan.stripePriceIdMonthly ?? '');
+    setStripePriceIdYearly(plan.stripePriceIdYearly ?? '');
   };
 
   const saveMutation = useMutation({
@@ -297,20 +344,29 @@ function EditPlanDialog({
     },
   });
 
-  const buildPatch = (): PlanPatch => ({
-    name,
-    priceMonthly: Number(priceMonthly) || 0,
-    priceYearly: Number(priceYearly) || 0,
-    currency,
-    interval,
-    active,
-    features: features
-      .split('\n')
-      .map((f) => f.trim())
-      .filter(Boolean),
-    entitlements,
-    limits: { ...limits, storageBytes: Number(limits.storageBytes) || 0 },
-  });
+  const buildPatch = (): PlanPatch => {
+    const monthly = Number(priceMonthly) || 0;
+    const yearly = Number(priceYearly) || 0;
+    const isFreeDerived = monthly === 0 && yearly === 0;
+    return {
+      name,
+      priceMonthly: monthly,
+      priceYearly: yearly,
+      currency,
+      interval,
+      isFree: isFreeDerived,
+      freePlanDurationDays: isFreeDerived ? (freePlanDurationDays.trim() === '' ? null : Number(freePlanDurationDays) || null) : null,
+      stripePriceIdMonthly: stripePriceIdMonthly.trim() === '' ? null : stripePriceIdMonthly.trim(),
+      stripePriceIdYearly: stripePriceIdYearly.trim() === '' ? null : stripePriceIdYearly.trim(),
+      active,
+      features: features
+        .split('\n')
+        .map((f) => f.trim())
+        .filter(Boolean),
+      entitlements,
+      limits: { ...limits, storageBytes: Number(limits.storageBytes) || 0 },
+    };
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -359,11 +415,18 @@ function EditPlanDialog({
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Currency</Label>
-                <Input
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  className="h-9"
-                />
+                <Select value={currency} onValueChange={setCurrency}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencies.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -396,7 +459,76 @@ function EditPlanDialog({
                 />
               </div>
             </div>
+            {/* Free plan trial duration — shown only when both prices are 0
+                (i.e. this is a free plan). Empty = unlimited. */}
+            {Number(priceMonthly) === 0 && Number(priceYearly) === 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Free Access Duration (days)</Label>
+                  <Input
+                    type="number"
+                    value={freePlanDurationDays}
+                    onChange={(e) => setFreePlanDurationDays(e.target.value)}
+                    className="h-9"
+                    placeholder="empty = unlimited"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Server-side enforced: when set, the user&apos;s free trial expires N days after activation.
+                    Empty = unlimited free access.
+                  </p>
+                </div>
+              </div>
+            )}
           </section>
+
+          {/* -------------------- Stripe Billing (optional) -------------------- */}
+          <Collapsible open={stripeOpen} onOpenChange={setStripeOpen}>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center justify-between w-full rounded-md hover:bg-accent/30 px-2 py-1.5 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">Stripe Billing</span>
+                  <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                    optional
+                  </Badge>
+                </div>
+                <ChevronDown
+                  className={`h-4 w-4 text-muted-foreground transition-transform ${
+                    stripeOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-2 pt-2">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Wire this plan to Stripe for real recurring billing. Leave empty to keep the plan
+                manageable in Platform Admin without Stripe — checkout will refuse to fake a
+                successful payment in that case.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Stripe Price ID — Monthly</Label>
+                  <Input
+                    value={stripePriceIdMonthly}
+                    onChange={(e) => setStripePriceIdMonthly(e.target.value)}
+                    className="h-9 font-mono text-xs"
+                    placeholder="price_…"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Stripe Price ID — Yearly</Label>
+                  <Input
+                    value={stripePriceIdYearly}
+                    onChange={(e) => setStripePriceIdYearly(e.target.value)}
+                    className="h-9 font-mono text-xs"
+                    placeholder="price_…"
+                  />
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           <Separator />
 
@@ -575,6 +707,36 @@ function CreatePlanDialog({
   const [entitlements, setEntitlements] = useState<string[]>([]);
   const [limits, setLimits] = useState<PlanLimits>(EMPTY_LIMITS);
   const [clientDisplayOpen, setClientDisplayOpen] = useState(false);
+  const [stripeOpen, setStripeOpen] = useState(false);
+  // New (Task 64): free-trial duration + Stripe Price IDs.
+  const [freePlanDurationDays, setFreePlanDurationDays] = useState('');
+  const [stripePriceIdMonthly, setStripePriceIdMonthly] = useState('');
+  const [stripePriceIdYearly, setStripePriceIdYearly] = useState('');
+
+  // Fetch the supported currency list + existing plan IDs (for uniqueness
+  // validation) from the backend so the form is data-driven.
+  const currenciesQuery = useQuery({
+    queryKey: ['platform-currencies'],
+    queryFn: async () => {
+      const res = await fetch('/api/platform/admin/countries', { credentials: 'include' });
+      const json = await res.json();
+      const rows = Array.isArray(json) ? json : (json.data ?? []);
+      const list = (rows as { currency?: string }[])
+        .map((r) => r.currency)
+        .filter((c): c is string => Boolean(c) && typeof c === 'string');
+      const unique = Array.from(new Set(list));
+      return unique.length > 0 ? unique : ['CHF', 'USD', 'EUR', 'MAD'];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const currencies = currenciesQuery.data ?? ['CHF'];
+
+  // Existing plan IDs — for live uniqueness validation.
+  const existingPlansQuery = useQuery({
+    queryKey: ['platform-plans'],
+    queryFn: () => getApi<PlanConfigData[]>('/api/platform/admin/plans'),
+  });
+  const existingPlanIds = (existingPlansQuery.data ?? []).map((p) => p.planId);
 
   // EditPlanDialog is conditionally rendered by the parent, so its
   // useState initializers run on each mount. CreatePlanDialog is
@@ -583,11 +745,13 @@ function CreatePlanDialog({
 
   // Auto-derive planId from name unless the owner has manually edited it.
   const effectivePlanId = planIdTouched ? planId : derivePlanId(name);
+  const planIdTaken = effectivePlanId.length > 0 && existingPlanIds.includes(effectivePlanId);
 
   const createMutation = useMutation({
     mutationFn: () => {
       const monthly = Number(priceMonthly) || 0;
       const yearly = Number(priceYearly) || 0;
+      const isFree = monthly === 0 && yearly === 0;
       return postApi<PlanConfigData>('/api/platform/admin/plans', {
         planId: effectivePlanId,
         name,
@@ -597,7 +761,10 @@ function CreatePlanDialog({
         interval,
         // isFree is derived from price so the Client Billing page
         // renders "Free" correctly when monthly === 0.
-        isFree: monthly === 0 && yearly === 0,
+        isFree,
+        freePlanDurationDays: isFree && freePlanDurationDays.trim() !== '' ? Number(freePlanDurationDays) || null : null,
+        stripePriceIdMonthly: stripePriceIdMonthly.trim() === '' ? null : stripePriceIdMonthly.trim(),
+        stripePriceIdYearly: stripePriceIdYearly.trim() === '' ? null : stripePriceIdYearly.trim(),
         active,
         features: features
           .split('\n')
@@ -623,7 +790,11 @@ function CreatePlanDialog({
     },
   });
 
-  const canCreate = name.trim().length > 0 && effectivePlanId.length > 0 && !createMutation.isPending;
+  const canCreate =
+    name.trim().length > 0 &&
+    effectivePlanId.length > 0 &&
+    !planIdTaken &&
+    !createMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -671,11 +842,18 @@ function CreatePlanDialog({
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Currency</Label>
-                <Input
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  className="h-9"
-                />
+                <Select value={currency} onValueChange={setCurrency}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencies.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -687,12 +865,18 @@ function CreatePlanDialog({
                     setPlanId(e.target.value);
                     setPlanIdTouched(true);
                   }}
-                  className="h-9 font-mono text-xs"
+                  className={`h-9 font-mono text-xs ${planIdTaken ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                   placeholder="auto-derived from name"
                 />
-                <p className="text-[10px] text-muted-foreground">
-                  Lowercase, hyphenated. Used as the unique key in the shared plan cache.
-                </p>
+                {planIdTaken ? (
+                  <p className="text-[10px] text-red-600 font-medium">
+                    Plan ID &quot;{effectivePlanId}&quot; is already taken. Choose a unique ID.
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground">
+                    Lowercase, hyphenated. Used as the unique key in the shared plan cache.
+                  </p>
+                )}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Billing Interval</Label>
@@ -723,7 +907,76 @@ function CreatePlanDialog({
                 </div>
               </div>
             </div>
+            {/* Free plan trial duration — shown only when both prices are 0
+                (i.e. this is a free plan). Empty = unlimited. */}
+            {Number(priceMonthly) === 0 && Number(priceYearly) === 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Free Access Duration (days)</Label>
+                  <Input
+                    type="number"
+                    value={freePlanDurationDays}
+                    onChange={(e) => setFreePlanDurationDays(e.target.value)}
+                    className="h-9"
+                    placeholder="empty = unlimited"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Server-side enforced: when set, the user&apos;s free trial expires N days
+                    after activation. Empty = unlimited free access.
+                  </p>
+                </div>
+              </div>
+            )}
           </section>
+
+          {/* -------------------- Stripe Billing (optional) -------------------- */}
+          <Collapsible open={stripeOpen} onOpenChange={setStripeOpen}>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center justify-between w-full rounded-md hover:bg-accent/30 px-2 py-1.5 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">Stripe Billing</span>
+                  <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                    optional
+                  </Badge>
+                </div>
+                <ChevronDown
+                  className={`h-4 w-4 text-muted-foreground transition-transform ${
+                    stripeOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-2 pt-2">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Wire this plan to Stripe for real recurring billing. Leave empty to keep the plan
+                manageable in Platform Admin without Stripe — checkout will refuse to fake a
+                successful payment in that case.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Stripe Price ID — Monthly</Label>
+                  <Input
+                    value={stripePriceIdMonthly}
+                    onChange={(e) => setStripePriceIdMonthly(e.target.value)}
+                    className="h-9 font-mono text-xs"
+                    placeholder="price_…"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Stripe Price ID — Yearly</Label>
+                  <Input
+                    value={stripePriceIdYearly}
+                    onChange={(e) => setStripePriceIdYearly(e.target.value)}
+                    className="h-9 font-mono text-xs"
+                    placeholder="price_…"
+                  />
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           <Separator />
 
@@ -865,6 +1118,10 @@ export function PlatformPlansModule() {
   const user = useAuthStore((s) => s.user);
   const isOwner = user?.role === 'OWNER';
   const [showCreate, setShowCreate] = useState(false);
+  // Billing interval selector — drives the price displayed on every plan
+  // card. Monthly is the default. Switching to Yearly shows the yearly
+  // price + a small monthly-equivalent.
+  const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
 
 
   const plansQuery = useQuery({
@@ -903,6 +1160,34 @@ export function PlatformPlansModule() {
             Create Plan
           </Button>
         ) : null}
+      </div>
+
+      {/* Billing interval selector — Monthly / Yearly */}
+      <div className="flex items-center gap-2">
+        <div className="inline-flex items-center rounded-full border bg-muted/40 p-1">
+          <button
+            type="button"
+            onClick={() => setBillingInterval('monthly')}
+            className={`h-8 rounded-full px-5 text-sm font-medium transition-colors ${
+              billingInterval === 'monthly'
+                ? 'bg-foreground text-background'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Monthly
+          </button>
+          <button
+            type="button"
+            onClick={() => setBillingInterval('yearly')}
+            className={`h-8 rounded-full px-5 text-sm font-medium transition-colors ${
+              billingInterval === 'yearly'
+                ? 'bg-foreground text-background'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Yearly
+          </button>
+        </div>
       </div>
 
       {!isOwner && (
@@ -956,7 +1241,7 @@ export function PlatformPlansModule() {
       ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {plansQuery.data.map((plan) => (
-            <PlanSummaryCard key={plan.planId} plan={plan} canEdit={isOwner} />
+            <PlanSummaryCard key={plan.planId} plan={plan} canEdit={isOwner} billingInterval={billingInterval} />
           ))}
         </div>
       )}

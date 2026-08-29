@@ -5,7 +5,7 @@ import { clientCancelSubscription } from '@/lib/platform/platform-data';
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
   if ('response' in auth) return auth.response;
-  const state = clientCancelSubscription(auth.user);
+  const state = await clientCancelSubscription(auth.user);
   if (!state) return fail('NOT_FOUND', 'No customer record for this account.', 404);
   return ok(state);
 }

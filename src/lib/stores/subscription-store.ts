@@ -52,18 +52,39 @@ export interface SubscriptionState {
 
 export const PLANS: Plan[] = [
   {
-    id: 'beta',
-    name: 'Beta',
+    id: 'free',
+    name: 'Free',
     price: 0,
     currency: 'CHF',
     interval: 'month',
     features: [
       'Up to 3 sites',
       'Basic analytics',
-      'Email support',
+      'Community support',
       '1 GB storage',
     ],
-    badgeVariant: 'beta',
+    badgeVariant: 'free',
+    badgeStyle: {
+      avatar: 'bg-emerald-500 text-white',
+      soft: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+      ring: 'ring-emerald-500',
+      cardBorder: 'border-emerald-200 dark:border-emerald-800',
+    },
+  },
+  {
+    id: 'plus',
+    name: 'Plus',
+    price: 9,
+    currency: 'CHF',
+    interval: 'month',
+    features: [
+      'Up to 5 sites',
+      'Advanced analytics',
+      'Email support',
+      '5 GB storage',
+      'AI content tools',
+    ],
+    badgeVariant: 'plus',
     badgeStyle: {
       avatar: 'bg-amber-500 text-white',
       soft: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200 dark:border-amber-800',
@@ -112,10 +133,10 @@ export const PLANS: Plan[] = [
     ],
     badgeVariant: 'max',
     badgeStyle: {
-      avatar: 'bg-emerald-500 text-white',
-      soft: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
-      ring: 'ring-emerald-500',
-      cardBorder: 'border-emerald-200 dark:border-emerald-800',
+      avatar: 'bg-pink-500 text-white',
+      soft: 'bg-pink-100 text-pink-800 dark:bg-pink-950 dark:text-pink-300 border-pink-200 dark:border-pink-800',
+      ring: 'ring-pink-500',
+      cardBorder: 'border-pink-200 dark:border-pink-800',
     },
   },
 ];
@@ -151,7 +172,7 @@ function saveToStorage(data: StoredSubscription) {
 
 export const useSubscriptionStore = create<SubscriptionState>((set, get) => {
   const stored = loadFromStorage();
-  const initialPlanId = stored?.currentPlanId ?? 'beta';
+  const initialPlanId = stored?.currentPlanId ?? 'free';
 
   const currentPlan = PLANS.find((p) => p.id === initialPlanId) ?? PLANS[0];
   const otherPlans = PLANS.filter((p) => p.id !== initialPlanId);

@@ -12,6 +12,7 @@ import {
   createPlanConfig,
   type PlanConfigInput,
 } from '@/lib/platform/plan-config';
+import { validatePlanConfigInput } from '@/lib/platform/subscription-data';
 import { logAdminAction } from '@/lib/platform/audit';
 
 export async function GET(request: NextRequest) {
@@ -43,6 +44,12 @@ export async function POST(request: NextRequest) {
   if (existing) {
     return fail('CONFLICT', `A plan with id "${planId}" already exists.`, 409);
   }
+  // Validate the input — surfaces clear errors for invalid prices, negative
+  // limits (except -1), invalid intervals / currencies / feature keys.
+  const errors = validatePlanConfigInput(body);
+  if (errors.length > 0) {
+    return fail('VALIDATION_ERROR', errors.join(' '), 400);
+  }
   try {
     const created = await createPlanConfig({
       planId,
@@ -52,6 +59,9 @@ export async function POST(request: NextRequest) {
       currency: body.currency,
       interval: body.interval,
       isFree: body.isFree,
+      freePlanDurationDays: body.freePlanDurationDays,
+      stripePriceIdMonthly: body.stripePriceIdMonthly,
+      stripePriceIdYearly: body.stripePriceIdYearly,
       active: body.active,
       features: body.features,
       entitlements: body.entitlements,

@@ -16,6 +16,8 @@ import {
   Clock,
   Loader2,
   AlertCircle,
+  Calendar,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   PLANS as STORE_PLANS,
@@ -53,6 +55,8 @@ export function BillingPage() {
     queryFn: () => getApi<ClientBillingState>('/api/platform/billing/me'),
   });
 
+  // Change-plan mutation — only used for FREE plans now. Paid plans go
+  // through the checkoutMutation (Stripe Checkout Session).
   const changePlanMutation = useMutation<
     ClientBillingState,
     Error,
@@ -65,8 +69,67 @@ export function BillingPage() {
       queryClient.invalidateQueries({ queryKey: ['platform-overview'] });
       toast.success(vars.isUpgrade ? `Upgraded to ${vars.planName}` : `Changed to ${vars.planName}`);
     },
-    onError: () => {
-      toast.error('Unable to change plan. Please try again.');
+    onError: (err: unknown) => {
+      const e = err as { error?: { code?: string; message?: string }; message?: string };
+      const code = e?.error?.code;
+      if (code === 'CHECKOUT_REQUIRED') {
+        toast.error('Paid plans require Stripe checkout. Please use the Upgrade button.');
+      } else if (code === 'PLAN_NOT_AVAILABLE') {
+        toast.error('This plan is no longer available. Please choose another plan.');
+      } else {
+        toast.error(e?.error?.message ?? e?.message ?? 'Unable to change plan. Please try again.');
+      }
+    },
+  });
+
+  // Checkout mutation — for PAID plans. Creates a Stripe Checkout Session
+  // and redirects to Stripe. Returns 503 when Stripe is not configured and
+  // 424 when the plan's Stripe Price ID is not wired.
+  const checkoutMutation = useMutation<
+    { url: string; sessionId: string },
+    Error,
+    { planId: PlanId; planName: string; interval: 'monthly' | 'yearly' }
+  >({
+    mutationFn: ({ planId, interval }) => {
+      const res = fetch('/api/billing/checkout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId, interval }),
+      }).then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          const err = new Error(body?.error?.message ?? 'Checkout failed') as Error & {
+            code?: string;
+            status?: number;
+          };
+          err.code = body?.error?.code;
+          err.status = r.status;
+          throw err;
+        }
+        return r.json();
+      });
+      return res.then((j) => j.data as { url: string; sessionId: string });
+    },
+    onSuccess: (data) => {
+      // Redirect to Stripe Checkout.
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    },
+    onError: (err: unknown) => {
+      const e = err as { code?: string; message?: string; status?: number };
+      if (e?.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
+        toast.error(
+          'Stripe is not configured on this platform. The admin must set STRIPE_SECRET_KEY in .env to enable real checkout. Free plans can still be selected directly.',
+        );
+      } else if (e?.code === 'STRIPE_PRICE_NOT_CONFIGURED') {
+        toast.error(
+          'This plan does not have a Stripe Price ID configured. An admin must wire it via Platform Admin → Edit Plan → Stripe Price ID.',
+        );
+      } else {
+        toast.error(e?.message ?? 'Unable to start checkout. Please try again.');
+      }
     },
   });
 
@@ -220,12 +283,18 @@ export function BillingPage() {
   const otherPlans = billingState.allPlans.filter((p) => p.id !== currentPlan.id);
   const status = billingState.status;
   const trialEnd = billingState.trialEnd;
+  const currentPeriodEnd = billingState.currentPeriodEnd ?? billingState.nextBillingAt;
+  const freeTrialExpiresAt = billingState.freeTrialExpiresAt;
+  const freeTrialExpired = billingState.freeTrialExpired;
   const isCancelled = status === 'cancelled';
+  // Use the subscription's billing interval when present, otherwise the plan default.
+  const currentInterval = billingState.billingInterval ?? currentPlan.interval;
 
   const currentStorePlan = getStorePlan(currentPlan.id);
 
   const isHigherPlan = (plan: { price: number }) => plan.price > currentPlan.price;
-  const getActionLabel = (plan: { price: number }) => {
+  const getActionLabel = (plan: { price: number; isFree: boolean }) => {
+    if (plan.isFree) return t('billing.changePlan');
     if (isHigherPlan(plan)) return t('billing.upgrade');
     if (plan.price < currentPlan.price) return t('billing.downgrade');
     return t('billing.changePlan');
@@ -237,6 +306,26 @@ export function BillingPage() {
     }
   };
 
+  // Handle a plan change / upgrade:
+  //   - Free plan → direct change-plan API (no Stripe needed)
+  //   - Paid plan → checkout API (Stripe Checkout Session) — if Stripe is
+  //     not configured, the mutation onError surfaces a clear message.
+  const handleSelectPlan = (plan: { id: PlanId; name: string; price: number; isFree: boolean }) => {
+    if (plan.isFree) {
+      changePlanMutation.mutate({
+        planId: plan.id,
+        planName: plan.name,
+        isUpgrade: isHigherPlan(plan),
+      });
+    } else {
+      checkoutMutation.mutate({
+        planId: plan.id,
+        planName: plan.name,
+        interval: currentInterval,
+      });
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Page Header */}
@@ -244,6 +333,23 @@ export function BillingPage() {
         <h1 className="text-xl font-bold tracking-tight text-foreground">{t('billing.title')}</h1>
         <p className="text-sm text-muted-foreground mt-1">{t('billing.description')}</p>
       </div>
+
+      {/* Free-trial-expired banner — surfaces server-side enforcement */}
+      {freeTrialExpired && freeTrialExpiresAt && (
+        <Card className="border-amber-500/40 bg-amber-50 dark:bg-amber-950/40">
+          <CardContent className="flex items-start gap-3 py-4">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="text-sm">
+              <p className="font-semibold text-amber-700 dark:text-amber-300">
+                Free trial expired
+              </p>
+              <p className="text-muted-foreground">
+                Your free access expired on {formatDate(freeTrialExpiresAt)}. Upgrade to a paid plan to continue using gated features.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Current Subscription */}
       <Card>
@@ -266,7 +372,7 @@ export function BillingPage() {
               <p className="text-sm text-muted-foreground ml-7">
                 {currentPlan.price === 0
                   ? t('billing.free')
-                  : `${currentPlan.price} ${currentPlan.currency}/${normalizeInterval(currentPlan.interval)}`}
+                  : `${currentPlan.price} ${currentPlan.currency}/${normalizeInterval(currentInterval)}`}
               </p>
             </div>
             <Badge
@@ -276,6 +382,16 @@ export function BillingPage() {
               {status}
             </Badge>
           </div>
+
+          {/* Current period end / next billing date (DB Subscription source of truth) */}
+          {currentPeriodEnd && !isCancelled && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-md p-3">
+              <Calendar className="h-4 w-4 shrink-0" />
+              <span>
+                Next billing: <span className="font-medium text-foreground">{formatDate(currentPeriodEnd)}</span>
+              </span>
+            </div>
+          )}
 
           {trialEnd && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-md p-3">
@@ -325,8 +441,9 @@ export function BillingPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {otherPlans.map((plan) => {
             const storePlan = getStorePlan(plan.id);
-            const isLoadingThisPlan =
-              changePlanMutation.isPending && changePlanMutation.variables?.planId === plan.id;
+            const isBusy =
+              (changePlanMutation.isPending && changePlanMutation.variables?.planId === plan.id) ||
+              (checkoutMutation.isPending && checkoutMutation.variables?.planId === plan.id);
             return (
               <Card
                 key={plan.id}
@@ -366,16 +483,10 @@ export function BillingPage() {
                   <Button
                     className="w-full"
                     variant={isHigherPlan(plan) ? 'default' : 'outline'}
-                    disabled={isLoadingThisPlan}
-                    onClick={() =>
-                      changePlanMutation.mutate({
-                        planId: plan.id,
-                        planName: plan.name,
-                        isUpgrade: isHigherPlan(plan),
-                      })
-                    }
+                    disabled={isBusy}
+                    onClick={() => handleSelectPlan(plan)}
                   >
-                    {isLoadingThisPlan ? (
+                    {isBusy ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     ) : null}
                     {getActionLabel(plan)}

@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
   // owns 3 sites is blocked here with an actionable upgrade message.
   const auth = await requireAuth(request);
   if ('response' in auth) return auth.response;
-  const limit = checkLimit(auth.user, 'sites', 1);
+  const limit = await checkLimit(auth.user, 'sites', 1);
   if (!limit.ok) return limitExceededResponse(limit);
   try {
     const body = await request.json();

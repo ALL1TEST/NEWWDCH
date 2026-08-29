@@ -109,8 +109,8 @@ const DEMO_COUPONS: Array<{
 }> = [
   // Welcome — 10% off all plans, popular, limited
   { code: 'WELCOME10', type: 'percent', value: 10, currency: 'CHF', applicablePlans: [], startsAt: daysAgo(30), expiresAt: daysAhead(60), maxRedemptions: 100, perCustomerLimit: 1, active: true, timesRedeemed: 23 },
-  // Beta launch — 50% off Beta only, short window
-  { code: 'BETA50', type: 'percent', value: 50, currency: 'CHF', applicablePlans: ['beta'], startsAt: daysAgo(15), expiresAt: daysAhead(15), maxRedemptions: null, perCustomerLimit: 1, active: true, timesRedeemed: 8 },
+  // Plus launch — 50% off Plus only, short window
+  { code: 'PLUS50', type: 'percent', value: 50, currency: 'CHF', applicablePlans: ['plus'], startsAt: daysAgo(15), expiresAt: daysAhead(15), maxRedemptions: null, perCustomerLimit: 1, active: true, timesRedeemed: 8 },
   // Pro upgrade — 25% off Pro, evergreen
   { code: 'PRO25', type: 'percent', value: 25, currency: 'CHF', applicablePlans: ['pro'], startsAt: daysAgo(10), expiresAt: null, maxRedemptions: 500, perCustomerLimit: null, active: true, timesRedeemed: 41 },
   // Max fixed discount — CHF 100 off Max
@@ -166,6 +166,81 @@ async function seedCoupons() {
   console.log(`  ✓ seeded ${DEMO_COUPONS.length} demo coupons`);
 }
 
+/**
+ * Migrate existing coupon + country pricing rows that reference the legacy
+ * 'beta' / 'enterprise' plan ids to the new canonical ids ('plus' / 'max').
+ * Idempotent — only touches rows whose JSON-encoded plan arrays contain the
+ * old ids. Existing rows that already use the new ids are not touched.
+ *
+ * This is run on EVERY bootstrap, so even if the DB has stale rows from an
+ * earlier version of the platform they get normalized.
+ */
+async function migrateLegacyPlanReferences() {
+  // Coupons: migrate applicablePlans arrays.
+  const coupons = await db.coupon.findMany();
+  let couponMigrations = 0;
+  for (const c of coupons) {
+    let arr: string[] = [];
+    try {
+      arr = JSON.parse(c.applicablePlans || '[]');
+    } catch {
+      arr = [];
+    }
+    if (!Array.isArray(arr) || arr.length === 0) continue;
+    let changed = false;
+    const next = arr.map((p) => {
+      if (p === 'beta') {
+        changed = true;
+        return 'plus';
+      }
+      if (p === 'enterprise') {
+        changed = true;
+        return 'max';
+      }
+      return p;
+    });
+    if (changed) {
+      await db.coupon.update({
+        where: { id: c.id },
+        data: { applicablePlans: JSON.stringify(next) },
+      });
+      couponMigrations++;
+    }
+  }
+  if (couponMigrations > 0) {
+    console.log(`  ✓ migrated ${couponMigrations} coupon(s) referencing legacy plan ids`);
+  }
+
+  // Country pricing: migrate regionalPrices map keys.
+  const countries = await db.countryPricing.findMany();
+  let countryMigrations = 0;
+  for (const cp of countries) {
+    let map: Record<string, unknown> = {};
+    try {
+      map = JSON.parse(cp.regionalPrices || '{}');
+    } catch {
+      map = {};
+    }
+    if (!map || typeof map !== 'object') continue;
+    const keys = Object.keys(map);
+    if (!keys.includes('beta') && !keys.includes('enterprise')) continue;
+    const next: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(map)) {
+      const newKey = k === 'beta' ? 'plus' : k === 'enterprise' ? 'max' : k;
+      // Don't overwrite an existing newKey.
+      if (!(newKey in next)) next[newKey] = v;
+    }
+    await db.countryPricing.update({
+      where: { id: cp.id },
+      data: { regionalPrices: JSON.stringify(next) },
+    });
+    countryMigrations++;
+  }
+  if (countryMigrations > 0) {
+    console.log(`  ✓ migrated ${countryMigrations} country pricing row(s) referencing legacy plan ids`);
+  }
+}
+
 async function main() {
   console.log('\n🚀 Bootstrapping platform config...\n');
   await ensureOwner();
@@ -181,6 +256,8 @@ async function main() {
   console.log(`  ✓ maintenance config initialized`);
   await seedCoupons();
   console.log(`  ✓ coupons seeded (${(await db.coupon.count())} rows)`);
+  await migrateLegacyPlanReferences();
+  console.log(`  ✓ legacy plan references migrated`);
   console.log('\n✅ Platform bootstrap complete.\n');
   console.log('   Owner login:        owner@example.com / owner123');
   console.log('   Platform Admin:     platform@example.com / platform123');

@@ -3,19 +3,30 @@
 // ============================================================
 // hasFeature(user, feature) is the SINGLE function every page and
 // API checks. It enforces, in priority order:
-//   1. OWNER role or billingMode INTERNAL/EXEMPT  → grant all (owner bypass)
+//   1. OWNER role or billingMode INTERNAL/EXEMPT → grant all (owner bypass)
 //   2. Per-customer override (CustomerEntitlementOverride) → honor grant/revoke + expiry
-//   3. Plan entitlements (PlanConfig.entitlements) → grant if the customer's plan includes the feature
-//   4. Otherwise deny
+//   3. DB Subscription → if the user has an active subscription row, use its planId
+//      AND verify the free-trial hasn't expired (free plan with limited duration
+//      and past trialEnd → deny gated features).
+//   4. In-memory customer (CUSTOMER_SEED) → fallback planId for legacy demo data
+//   5. Plan entitlements (PlanConfig.entitlements) → grant if the customer's plan includes the feature
+//   6. Otherwise deny
 //
 // This is enforced SERVER-SIDE on every feature route (/api/automations,
-// /api/ai, …). Hiding the sidebar item is cosmetic only; a Beta user
+// /api/ai, …). Hiding the sidebar item is cosmetic only; a Free user
 // hitting /automation or the API directly is still denied.
+//
+// Free trial expiration is enforced here: when a user's subscription
+// is on a Free plan (isFree=true) with trialEnd < now, all gated
+// features return false (the user must renew / upgrade). The Client
+// Billing dashboard surfaces this via `freeTrialExpired` in the
+// billing state.
 // ============================================================
 
 import { db } from '@/lib/db';
 import { getPlanConfigSync, getPlanEntitlements, ENTITLEMENT_KEYS, type EntitlementKey } from './plan-config';
 import { getCustomerByEmailSync } from './platform-data';
+import { getUserSubscription } from './subscription-data';
 
 export interface EntitlementUser {
   id: string;
@@ -31,12 +42,57 @@ export function hasBillingBypass(user: { role?: string; billingMode?: string } |
   return user.billingMode === 'INTERNAL' || user.billingMode === 'EXEMPT';
 }
 
-/** Resolve the effective plan id for a user. INTERNAL/EXEMPT users get a
- *  synthetic 'internal' plan with every entitlement. */
+/**
+ * Resolve the effective plan id for a user. INTERNAL/EXEMPT users get a
+ * synthetic 'internal' plan with every entitlement. Otherwise:
+ *   - If a DB Subscription row exists for the user → use its planId.
+ *   - Else fallback to the in-memory customer's planId (legacy demo).
+ *   - Else 'free' (the default tier).
+ *
+ * NOTE: This is the SYNC variant that does NOT check free-trial expiry.
+ * The full async check is in `hasFeature()` and `listEntitlementsForUser()`,
+ * which call `getUserSubscription()` and apply the trial-expiration rule.
+ */
 export function getEffectivePlanId(user: EntitlementUser): string {
   if (hasBillingBypass(user)) return 'internal';
   const customer = getCustomerByEmailSync(user.email);
-  return customer?.planId ?? 'beta';
+  return customer?.planId ?? 'free';
+}
+
+/**
+ * Resolve the effective plan id ASYNC, preferring the DB Subscription row
+ * over the legacy in-memory customer. Also returns the free-trial-expired
+ * flag so callers can short-circuit.
+ */
+export async function getEffectivePlanIdAsync(
+  user: EntitlementUser,
+): Promise<{ planId: string; freeTrialExpired: boolean }> {
+  if (hasBillingBypass(user)) return { planId: 'internal', freeTrialExpired: false };
+
+  // Prefer the real DB Subscription row.
+  const sub = await getUserSubscription(user.id);
+  if (sub) {
+    const plan = getPlanConfigSync(sub.planId);
+    // Free-trial expiration check.
+    if (
+      plan.isFree &&
+      sub.trialEnd !== null &&
+      sub.trialEnd < new Date() &&
+      sub.status !== 'cancelled'
+    ) {
+      // Free trial expired → user reverts to no plan (Free without entitlements).
+      return { planId: 'free', freeTrialExpired: true };
+    }
+    // Cancelled subscription → user reverts to Free plan.
+    if (sub.status === 'cancelled') {
+      return { planId: 'free', freeTrialExpired: false };
+    }
+    return { planId: sub.planId, freeTrialExpired: false };
+  }
+
+  // Fallback: legacy in-memory customer.
+  const customer = getCustomerByEmailSync(user.email);
+  return { planId: customer?.planId ?? 'free', freeTrialExpired: false };
 }
 
 /** The full set of entitlement keys the user currently has access to.
@@ -44,13 +100,17 @@ export function getEffectivePlanId(user: EntitlementUser): string {
 export async function listEntitlementsForUser(user: EntitlementUser): Promise<string[]> {
   if (hasBillingBypass(user)) return [...ENTITLEMENT_KEYS];
 
-  const planId = getEffectivePlanId(user);
+  const { planId, freeTrialExpired } = await getEffectivePlanIdAsync(user);
+  if (freeTrialExpired) return []; // free trial expired → no gated features
   const granted = new Set<string>(planId === 'internal' ? ENTITLEMENT_KEYS : getPlanEntitlements(planId));
 
-  // Apply per-customer overrides (grant or revoke).
-  const overrides = await db.customerEntitlementOverride.findMany({
-    where: { customerEmail: { equals: user.email, mode: 'insensitive' } },
-  });
+  // Apply per-customer overrides (grant or revoke). SQLite doesn't
+  // support `mode: 'insensitive'`; we filter case-insensitively in JS
+  // (the table is small — per-customer overrides are rare).
+  const allOverrides = await db.customerEntitlementOverride.findMany({});
+  const overrides = allOverrides.filter(
+    (o) => o.customerEmail.toLowerCase() === user.email.toLowerCase(),
+  );
   const now = new Date();
   for (const o of overrides) {
     const expired = o.grantedUntil ? o.grantedUntil < now : false;
@@ -60,7 +120,7 @@ export async function listEntitlementsForUser(user: EntitlementUser): Promise<st
   return [...granted];
 }
 
-/** The core server-side check. Async because of override DB lookup. */
+/** The core server-side check. Async because of override + subscription DB lookup. */
 export async function hasFeature(user: EntitlementUser, feature: string): Promise<boolean> {
   // 1. Owner / billing bypass → all features.
   if (hasBillingBypass(user)) return true;
@@ -75,16 +135,20 @@ export async function hasFeature(user: EntitlementUser, feature: string): Promis
     if (!expired) return override.granted;
   }
 
-  // 3. Plan entitlements.
-  const planId = getEffectivePlanId(user);
+  // 3. DB Subscription + free-trial-expiration check.
+  const { planId, freeTrialExpired } = await getEffectivePlanIdAsync(user);
+  if (freeTrialExpired) return false; // free trial expired → block gated features
   if (planId === 'internal') return true;
+
+  // 4. Plan entitlements.
   const planEntitlements = getPlanEntitlements(planId);
   return planEntitlements.includes(feature);
 }
 
-/** Sync variant: only checks owner bypass + plan entitlements (NOT overrides).
- *  Use only for cosmetic UI gating where an async call is impractical; the
- *  authoritative check is the async hasFeature() on the server. */
+/** Sync variant: only checks owner bypass + plan entitlements (NOT overrides
+ *  or DB Subscription — used only for cosmetic UI gating where an async call
+ *  is impractical). The authoritative check is the async hasFeature() on the
+ *  server. */
 export function hasFeatureSyncQuick(user: EntitlementUser, feature: string): boolean {
   if (hasBillingBypass(user)) return true;
   const planId = getEffectivePlanId(user);
@@ -100,6 +164,21 @@ export function forbiddenResponse(feature: string) {
         code: 'FEATURE_NOT_AVAILABLE',
         message: `Your plan does not include "${feature}". Upgrade to access this feature.`,
         feature,
+      },
+    },
+    { status: 403 },
+  );
+}
+
+/** 403 response for an expired free trial — different code so the client
+ *  can surface a specific "trial expired" message. */
+export function trialExpiredResponse() {
+  return Response.json(
+    {
+      error: {
+        code: 'FREE_TRIAL_EXPIRED',
+        message:
+          'Your free trial has expired. Upgrade to a paid plan or renew your free access to continue using this feature.',
       },
     },
     { status: 403 },

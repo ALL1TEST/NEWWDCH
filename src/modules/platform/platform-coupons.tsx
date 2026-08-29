@@ -45,7 +45,7 @@ interface CouponRow {
   createdAt: string;
 }
 
-const PLANS = ['beta', 'pro', 'max'] as const;
+const PLANS = ['free', 'plus', 'pro', 'max'] as const;
 type PlanId = (typeof PLANS)[number];
 
 // A small reusable inline-error text that only renders when `message`

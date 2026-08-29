@@ -10,7 +10,17 @@
 //
 // The cache is hydrated from the PlanConfig table on startup and after
 // every mutation. If the table is empty on first hydrate, the DEFAULT
-// configs are seeded so the platform is never without plans.
+// configs are seeded so the platform is never without plans. If the
+// table contains the LEGACY catalog (Beta/Pro/Max/Enterprise), the
+// migration runs automatically: Enterprise is removed (only when no
+// active subscription references it), Beta is renamed to Plus, and a
+// Free plan is inserted at sortOrder 0.
+//
+// Final canonical catalog:
+//   1. Free  (planId='free',  isFree=true,  priceMonthly=0)
+//   2. Plus  (planId='plus',  isFree=false, priceMonthly=0 or 9)
+//   3. Pro   (planId='pro',   priceMonthly=49)
+//   4. Max   (planId='max',   priceMonthly=99)
 // ============================================================
 
 import { db } from '@/lib/db';
@@ -27,14 +37,22 @@ export interface PlanLimits {
   automationRuns: number;
 }
 
+export type BillingInterval = 'monthly' | 'yearly';
+
 export interface PlanConfigData {
   planId: string;
   name: string;
   priceMonthly: number;
   priceYearly: number;
   currency: string;
-  interval: 'monthly' | 'yearly';
+  /** Default cadence; the client can pick monthly/yearly per subscription. */
+  interval: BillingInterval;
   isFree: boolean;
+  /** null = unlimited free access; positive N = trial duration in days for free plans. */
+  freePlanDurationDays: number | null;
+  /** Stripe Price IDs. null = Stripe not yet wired; checkout will refuse to fake success. */
+  stripePriceIdMonthly: string | null;
+  stripePriceIdYearly: string | null;
   active: boolean;
   features: string[];
   entitlements: string[];
@@ -49,19 +67,46 @@ const GB = 1024 * 1024 * 1024;
 
 export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
   {
-    planId: 'beta',
-    name: 'Beta',
+    planId: 'free',
+    name: 'Free',
     priceMonthly: 0,
     priceYearly: 0,
     currency: 'CHF',
     interval: 'monthly',
     isFree: true,
+    freePlanDurationDays: null, // unlimited
+    stripePriceIdMonthly: null,
+    stripePriceIdYearly: null,
     active: true,
-    features: ['Up to 3 sites', 'Basic analytics', 'Email support', '1 GB storage'],
+    features: ['Up to 3 sites', 'Basic analytics', 'Community support', '1 GB storage'],
     entitlements: [],
     limits: { maxSites: 3, storageBytes: 1 * GB, aiWords: 0, aiArticles: 0, automationRuns: 0 },
-    badgeVariant: 'beta',
+    badgeVariant: 'free',
     sortOrder: 0,
+  },
+  {
+    planId: 'plus',
+    name: 'Plus',
+    priceMonthly: 9,
+    priceYearly: 90,
+    currency: 'CHF',
+    interval: 'monthly',
+    isFree: false,
+    freePlanDurationDays: null,
+    stripePriceIdMonthly: null,
+    stripePriceIdYearly: null,
+    active: true,
+    features: [
+      'Up to 5 sites',
+      'Advanced analytics',
+      'Email support',
+      '5 GB storage',
+      'AI content tools',
+    ],
+    entitlements: ['ai_content', 'advanced_analytics', 'newsletter'],
+    limits: { maxSites: 5, storageBytes: 5 * GB, aiWords: 20_000, aiArticles: 20, automationRuns: 200 },
+    badgeVariant: 'plus',
+    sortOrder: 1,
   },
   {
     planId: 'pro',
@@ -71,6 +116,9 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     currency: 'CHF',
     interval: 'monthly',
     isFree: false,
+    freePlanDurationDays: null,
+    stripePriceIdMonthly: null,
+    stripePriceIdYearly: null,
     active: true,
     features: [
       'Up to 10 sites',
@@ -83,7 +131,7 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     entitlements: ['ai_content', 'advanced_analytics', 'custom_domains', 'automation', 'newsletter'],
     limits: { maxSites: 10, storageBytes: 10 * GB, aiWords: 50_000, aiArticles: 50, automationRuns: 1000 },
     badgeVariant: 'pro',
-    sortOrder: 1,
+    sortOrder: 2,
   },
   {
     planId: 'max',
@@ -93,6 +141,9 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     currency: 'CHF',
     interval: 'monthly',
     isFree: false,
+    freePlanDurationDays: null,
+    stripePriceIdMonthly: null,
+    stripePriceIdYearly: null,
     active: true,
     features: [
       'Unlimited sites',
@@ -118,13 +169,18 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     ],
     limits: { maxSites: -1, storageBytes: 100 * GB, aiWords: 500_000, aiArticles: -1, automationRuns: 10_000 },
     badgeVariant: 'max',
-    sortOrder: 2,
+    sortOrder: 3,
   },
 ];
 
 // -------------------- Cache --------------------
 
-let _cache: PlanConfigData[] = DEFAULT_PLAN_CONFIGS.map((p) => ({ ...p, features: [...p.features], entitlements: [...p.entitlements], limits: { ...p.limits } }));
+let _cache: PlanConfigData[] = DEFAULT_PLAN_CONFIGS.map((p) => ({
+  ...p,
+  features: [...p.features],
+  entitlements: [...p.entitlements],
+  limits: { ...p.limits },
+}));
 let _hydrated = false;
 let _hydrating: Promise<void> | null = null;
 const _subscribers = new Set<() => void>();
@@ -156,7 +212,8 @@ export function getPlanConfigsSync(): PlanConfigData[] {
 }
 
 export function getPlanConfigSync(planId: string): PlanConfigData {
-  return getPlanConfigsSync().find((p) => p.planId === planId) ?? getPlanConfigsSync()[0];
+  const list = getPlanConfigsSync();
+  return list.find((p) => p.planId === planId) ?? list[0];
 }
 
 export function getActivePlanConfigsSync(): PlanConfigData[] {
@@ -173,9 +230,10 @@ export function getPlanLimits(planId: string): PlanLimits {
   return getPlanConfigSync(planId).limits;
 }
 
-// -------------------- DB hydration + self-seed --------------------
+// -------------------- DB hydration + self-seed + legacy migration --------------------
 
-function rowToData(row: {
+type PlanConfigRow = {
+  id: string;
   planId: string;
   name: string;
   priceMonthly: number;
@@ -183,13 +241,18 @@ function rowToData(row: {
   currency: string;
   interval: string;
   isFree: boolean;
+  freePlanDurationDays: number | null;
+  stripePriceIdMonthly: string | null;
+  stripePriceIdYearly: string | null;
   active: boolean;
   features: string;
   entitlements: string;
   limits: string;
   badgeVariant: string;
   sortOrder: number;
-}): PlanConfigData {
+};
+
+function rowToData(row: PlanConfigRow): PlanConfigData {
   let features: string[] = [];
   let entitlements: string[] = [];
   let limits: PlanLimits = { maxSites: 0, storageBytes: 0, aiWords: 0, aiArticles: 0, automationRuns: 0 };
@@ -214,8 +277,11 @@ function rowToData(row: {
     priceMonthly: row.priceMonthly,
     priceYearly: row.priceYearly,
     currency: row.currency,
-    interval: (row.interval === 'yearly' ? 'yearly' : 'monthly') as 'monthly' | 'yearly',
+    interval: (row.interval === 'yearly' ? 'yearly' : 'monthly') as BillingInterval,
     isFree: row.isFree,
+    freePlanDurationDays: row.freePlanDurationDays,
+    stripePriceIdMonthly: row.stripePriceIdMonthly,
+    stripePriceIdYearly: row.stripePriceIdYearly,
     active: row.active,
     features,
     entitlements,
@@ -234,6 +300,9 @@ function dataToRow(d: PlanConfigData) {
     currency: d.currency,
     interval: d.interval,
     isFree: d.isFree,
+    freePlanDurationDays: d.freePlanDurationDays,
+    stripePriceIdMonthly: d.stripePriceIdMonthly,
+    stripePriceIdYearly: d.stripePriceIdYearly,
     active: d.active,
     features: JSON.stringify(d.features),
     entitlements: JSON.stringify(d.entitlements),
@@ -243,8 +312,125 @@ function dataToRow(d: PlanConfigData) {
   };
 }
 
+/**
+ * Migrate the legacy catalog to the new Free/Plus/Pro/Max shape. Idempotent.
+ *
+ * Legacy catalog (created by older bootstrap):
+ *   beta (free, active=false), pro, max, enterprise (stub)
+ *
+ * Migration steps (each guarded, can be re-run safely):
+ *  1. If `enterprise` exists AND no active subscription references it → delete it.
+ *     (Active subs that reference enterprise are preserved — the migration will
+ *      not break them; the plan row stays if needed. In practice, the demo
+ *      dataset has no DB subscriptions yet, so this is a clean delete.)
+ *  2. If `beta` exists → rename to `plus` (planId, name, badgeVariant) and
+ *     re-enable it (legacy `beta` was active=false in the demo DB). Also
+ *     shift sortOrder to 1 (Free takes 0).
+ *  3. If `free` does NOT exist → insert the Free plan at sortOrder 0.
+ *  4. Renumber sortOrder to match the canonical order: free=0, plus=1, pro=2, max=3.
+ *
+ * Returns a short report string for the bootstrap log.
+ */
+export async function migrateLegacyPlans(): Promise<string> {
+  const notes: string[] = [];
+
+  try {
+    // Step 1: delete Enterprise if safe
+    const enterprise = await db.planConfig.findUnique({ where: { planId: 'enterprise' } });
+    if (enterprise) {
+      const subCount = await db.subscription.count({ where: { planId: 'enterprise' } });
+      if (subCount === 0) {
+        await db.planConfig.delete({ where: { planId: 'enterprise' } });
+        notes.push('deleted enterprise plan (0 active subscriptions)');
+      } else {
+        notes.push(`kept enterprise plan (${subCount} active subscriptions reference it)`);
+      }
+    }
+
+    // Step 2: rename beta → plus (and refresh to a real paid tier)
+    const beta = await db.planConfig.findUnique({ where: { planId: 'beta' } });
+    if (beta) {
+      // Don't overwrite an existing plus row — if both exist, prefer the
+      // plus row and just delete the beta stub.
+      const plus = await db.planConfig.findUnique({ where: { planId: 'plus' } });
+      if (!plus) {
+        // Rename beta → plus AND refresh the data to the real DEFAULT
+        // Plus tier (paid plan with real entitlements + limits, not the
+        // legacy free-tier Beta stub). The old Beta was active=false and
+        // had no real customers, so this is a safe refresh.
+        const plusDefault = DEFAULT_PLAN_CONFIGS.find((p) => p.planId === 'plus')!;
+        await db.planConfig.update({
+          where: { planId: 'beta' },
+          data: {
+            ...dataToRow(plusDefault),
+            // Keep the original createdAt for continuity.
+            // (updatedAt is auto.)
+          },
+        });
+        notes.push('renamed + refreshed beta → plus (real paid tier)');
+      } else {
+        // Both beta and plus exist — delete the beta stub (migrate any
+        // legacy subscriptions on beta to plus first).
+        const betaSubs = await db.subscription.count({ where: { planId: 'beta' } });
+        if (betaSubs > 0) {
+          await db.subscription.updateMany({ where: { planId: 'beta' }, data: { planId: 'plus' } });
+          notes.push(`migrated ${betaSubs} beta subscription(s) → plus`);
+        }
+        await db.planConfig.delete({ where: { planId: 'beta' } });
+        notes.push('deleted legacy beta stub (plus already exists)');
+      }
+    }
+
+    // Step 3: insert Free if missing
+    const free = await db.planConfig.findUnique({ where: { planId: 'free' } });
+    if (!free) {
+      const freeDefault = DEFAULT_PLAN_CONFIGS.find((p) => p.planId === 'free')!;
+      await db.planConfig.create({ data: dataToRow(freeDefault) });
+      notes.push('inserted free plan');
+    } else {
+      // Ensure free plan is properly flagged
+      if (!free.isFree || free.badgeVariant !== 'free' || free.sortOrder !== 0) {
+        await db.planConfig.update({
+          where: { planId: 'free' },
+          data: { isFree: true, badgeVariant: 'free', sortOrder: 0 },
+        });
+        notes.push('normalized free plan flags');
+      }
+    }
+
+    // Step 4: normalize sortOrder for all canonical plans
+    const canonicalOrder: Record<string, number> = { free: 0, plus: 1, pro: 2, max: 3 };
+    for (const [pid, order] of Object.entries(canonicalOrder)) {
+      const row = await db.planConfig.findUnique({ where: { planId: pid } });
+      if (row && row.sortOrder !== order) {
+        await db.planConfig.update({ where: { planId: pid }, data: { sortOrder: order } });
+      }
+    }
+
+    // Also migrate legacy subscriptions on 'beta' or 'enterprise' planId
+    // to the new ids (beta → plus, enterprise → max) so historical subs
+    // don't reference a missing plan.
+    const legacyBetaSubs = await db.subscription.count({ where: { planId: 'beta' } });
+    if (legacyBetaSubs > 0) {
+      await db.subscription.updateMany({ where: { planId: 'beta' }, data: { planId: 'plus' } });
+      notes.push(`migrated ${legacyBetaSubs} legacy beta subscription(s) → plus`);
+    }
+    const legacyEnterpriseSubs = await db.subscription.count({ where: { planId: 'enterprise' } });
+    if (legacyEnterpriseSubs > 0) {
+      await db.subscription.updateMany({ where: { planId: 'enterprise' }, data: { planId: 'max' } });
+      notes.push(`migrated ${legacyEnterpriseSubs} legacy enterprise subscription(s) → max`);
+    }
+  } catch (err) {
+    notes.push(`migration error (non-fatal): ${(err as Error).message}`);
+  }
+
+  return notes.length > 0 ? notes.join('; ') : 'no migration needed';
+}
+
 /** Load all plan configs from the DB into the cache. Self-seeds the
- *  DEFAULT_PLAN_CONFIGS when the table is empty. Safe to call repeatedly. */
+ *  DEFAULT_PLAN_CONFIGS when the table is empty. Runs the legacy
+ *  migration when the catalog still contains 'beta' or 'enterprise'.
+ *  Safe to call repeatedly. */
 export async function hydrate(): Promise<void> {
   if (_hydrating) return _hydrating;
   _hydrating = (async () => {
@@ -253,9 +439,24 @@ export async function hydrate(): Promise<void> {
       if (rows.length === 0) {
         // Self-seed so the platform is never without plans.
         await db.planConfig.createMany({ data: DEFAULT_PLAN_CONFIGS.map(dataToRow) });
-        _cache = DEFAULT_PLAN_CONFIGS.map((p) => ({ ...p, features: [...p.features], entitlements: [...p.entitlements], limits: { ...p.limits } }));
+        _cache = DEFAULT_PLAN_CONFIGS.map((p) => ({
+          ...p,
+          features: [...p.features],
+          entitlements: [...p.entitlements],
+          limits: { ...p.limits },
+        }));
       } else {
-        _cache = rows.map(rowToData);
+        // Check for legacy catalog (beta / enterprise) and migrate.
+        const hasLegacy =
+          rows.some((r) => r.planId === 'beta' || r.planId === 'enterprise') ||
+          !rows.some((r) => r.planId === 'free');
+        if (hasLegacy) {
+          await migrateLegacyPlans();
+          const migratedRows = await db.planConfig.findMany({ orderBy: { sortOrder: 'asc' } });
+          _cache = migratedRows.map(rowToData);
+        } else {
+          _cache = rows.map(rowToData);
+        }
       }
       _hydrated = true;
       notify();
@@ -277,8 +478,11 @@ export interface PlanConfigInput {
   priceMonthly?: number;
   priceYearly?: number;
   currency?: string;
-  interval?: 'monthly' | 'yearly';
+  interval?: BillingInterval;
   isFree?: boolean;
+  freePlanDurationDays?: number | null;
+  stripePriceIdMonthly?: string | null;
+  stripePriceIdYearly?: string | null;
   active?: boolean;
   features?: string[];
   entitlements?: string[];
@@ -300,6 +504,9 @@ export async function savePlanConfig(planId: string, patch: PlanConfigInput): Pr
     currency: patch.currency ?? current.currency,
     interval: patch.interval ?? current.interval,
     isFree: patch.isFree ?? current.isFree,
+    freePlanDurationDays: patch.freePlanDurationDays ?? current.freePlanDurationDays,
+    stripePriceIdMonthly: patch.stripePriceIdMonthly ?? current.stripePriceIdMonthly,
+    stripePriceIdYearly: patch.stripePriceIdYearly ?? current.stripePriceIdYearly,
     active: patch.active ?? current.active,
     features: patch.features ?? current.features,
     entitlements: patch.entitlements ?? current.entitlements,
@@ -313,7 +520,9 @@ export async function savePlanConfig(planId: string, patch: PlanConfigInput): Pr
 }
 
 /** Create a new plan config. */
-export async function createPlanConfig(input: PlanConfigInput & { planId: string; name: string }): Promise<PlanConfigData> {
+export async function createPlanConfig(
+  input: PlanConfigInput & { planId: string; name: string },
+): Promise<PlanConfigData> {
   const maxOrder = await db.planConfig.count();
   const data: PlanConfigData = {
     planId: input.planId,
@@ -323,10 +532,20 @@ export async function createPlanConfig(input: PlanConfigInput & { planId: string
     currency: input.currency ?? 'CHF',
     interval: input.interval ?? 'monthly',
     isFree: input.isFree ?? false,
+    freePlanDurationDays: input.freePlanDurationDays ?? null,
+    stripePriceIdMonthly: input.stripePriceIdMonthly ?? null,
+    stripePriceIdYearly: input.stripePriceIdYearly ?? null,
     active: input.active ?? true,
     features: input.features ?? [],
     entitlements: input.entitlements ?? [],
-    limits: { maxSites: 0, storageBytes: 0, aiWords: 0, aiArticles: 0, automationRuns: 0, ...(input.limits ?? {}) },
+    limits: {
+      maxSites: 0,
+      storageBytes: 0,
+      aiWords: 0,
+      aiArticles: 0,
+      automationRuns: 0,
+      ...(input.limits ?? {}),
+    },
     badgeVariant: input.badgeVariant ?? input.planId,
     sortOrder: input.sortOrder ?? maxOrder,
   };
@@ -335,16 +554,31 @@ export async function createPlanConfig(input: PlanConfigInput & { planId: string
   return data;
 }
 
-/** Delete a plan config (cannot delete the last plan). */
-export async function deletePlanConfig(planId: string): Promise<boolean> {
+/**
+ * Delete a plan config. Refuses if:
+ *  - it's the last remaining plan, OR
+ *  - any Subscription still references this planId (would orphan the sub).
+ *
+ * Returns `{ ok: boolean, reason?: string }` describing the outcome.
+ */
+export async function deletePlanConfig(
+  planId: string,
+): Promise<{ ok: boolean; reason?: string }> {
   const count = await db.planConfig.count();
-  if (count <= 1) return false;
+  if (count <= 1) return { ok: false, reason: 'Cannot delete the last plan.' };
+  const subCount = await db.subscription.count({ where: { planId } });
+  if (subCount > 0) {
+    return {
+      ok: false,
+      reason: `Cannot delete plan "${planId}" — ${subCount} active subscription(s) reference it. Migrate them first.`,
+    };
+  }
   try {
     await db.planConfig.delete({ where: { planId } });
     await hydrate();
-    return true;
-  } catch {
-    return false;
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: (err as Error).message };
   }
 }
 
