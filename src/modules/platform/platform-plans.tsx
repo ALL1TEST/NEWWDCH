@@ -195,82 +195,92 @@ function PlanSummaryCard({
           plan.active ? '' : 'opacity-60'
         }`}
       >
-        {/* Header: plan name + INLINE price on the SAME LINE — in BOTH
-             Monthly and Yearly modes. The row breaks out with -mx-6 into
-             the card padding (p-8 → 8px gutter from the card edge) so the
-             Yearly layout ($X.XX / month   $X / year) fits on ONE line
-             alongside the name in BOTH modes — same row width, same
-             one-line layout, same card height. Only the price VALUES
-             change between Monthly and Yearly; the position, font size,
-             spacing, alignment, and structure are IDENTICAL.
+        {/* Header: plan name (LARGEST typographic element on the card).
+             The price sits BELOW the name on its own row (see price
+             block below), not on the same line — so the name has the
+             full card width and reads as the clear card heading. Same
+             typography (text-5xl font-bold) on Free / Plus / Pro / Max. */}
+        <div className="min-w-0">
+          <h3 className="text-5xl font-bold tracking-tight text-foreground">{plan.name}</h3>
+        </div>
+
+        {/* Price — sits BELOW the plan name on its own row. Reflects
+             the global billing-interval selector (Monthly / Yearly).
+             The row breaks out with -mx-6 into the card padding (p-8 →
+             8px gutter from the card edge) so the Yearly layout ($X.XX
+             / month   $X / year) fits on ONE line alongside Monthly —
+             same row width, same one-line layout, same card height in
+             both modes. Only the price VALUES change between Monthly
+             and Yearly.
 
              Typography (IDENTICAL in both modes, same on all 4 cards):
-               - Plan name:  text-5xl font-bold (48px) — LARGEST
-               - Main price: text-2xl font-semibold (24px) — slightly
-                 smaller than the name, still clearly larger than the
-                 labels (so the monthly-equiv reads as the MAIN price)
-               - /month, /year: text-xs text-muted-foreground (12px) —
+               - Main price: text-4xl font-semibold (36px) — slightly
+                 smaller than the plan name (text-5xl = 48px), still
+                 clearly larger than the labels (so the monthly-equiv
+                 reads as the MAIN price)
+               - /month, /year: text-sm text-muted-foreground (14px) —
                  small muted (the yearly total is smaller/muted beside
                  the main monthly-equiv price)
-
-             Width budget (measured): card content with -mx-6 breakout
-             ≈ 345px. Widest case = Max Yearly: name(108) + gap-x-2(8)
-             + $82.50(89) + gap-2(8) + /month(47) + gap-2(8) +
-             $990/year(69) = 337px → fits with ~8px margin. All other
-             cards / Monthly have more margin. The gap between the
-             monthly-equiv group and the yearly-total group is the
-             same gap-2 (8px) as between the large number and its
-             "/ month" label — uniform 8px gutters throughout the
-             price row so the layout stays compact and identical in
-             both modes. shrink-0 + whitespace-nowrap + leading-none
-             on each price span keep the internals from breaking
-             across lines; flex-wrap is a safety net (content is
-             sized to fit one line in the -mx-6 breakout width, so
-             wrapping should never trigger). */}
-        <div className="-mx-6 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <h3 className="text-5xl font-bold tracking-tight text-foreground">{plan.name}</h3>
+               - Free:    $0
+               - Monthly: $X / month
+               - Yearly:  $X.XX / month   $X / year
+             For Yearly, the monthly equivalent (priceYearly / 12,
+             computed dynamically, never hardcoded) is the LARGE primary
+             price; the actual yearly total is shown smaller and muted
+             beside it on the same line. "/ month" belongs to the large
+             monthly price; "/ year" belongs to the small yearly total.
+             Width budget (measured): -mx-6 breakout ≈ 345px. Widest
+             case = Max Yearly: $82.50(134) + gap-2(8) + /month(55) +
+             gap-2(8) + ml-2(8) + $990/year(81) = 294px → fits with ~51px
+             margin. shrink-0 + whitespace-nowrap + leading-none on
+             each price span keep the internals from breaking across
+             lines; ml-2 widens the gap between the monthly-equiv group
+             and the yearly-total group vs. the gap between the large
+             number and its "/ month" label. */}
+        <div className="-mx-6 mt-6">
           {plan.isFree ? (
-            <span className="shrink-0 whitespace-nowrap text-2xl font-semibold leading-none tracking-tight text-foreground">
-              {formatPriceSymbol(0, plan.currency)}
-            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
+                {formatPriceSymbol(0, plan.currency)}
+              </span>
+            </div>
           ) : billingInterval === 'yearly' ? (
-            // Yearly — INLINE on the SAME LINE as the name (same row,
-            // same height as Monthly): [main $X.XX] [small / month]
+            // Yearly — INLINE: [LARGE $X.XX] [small / month]
             // [small $X / year]. The monthly equivalent (priceYearly /
-            // 12) is the MAIN price; the real yearly total is shown
-            // smaller/muted beside it on the same line.
+            // 12) is the dominant large price; the real yearly total
+            // stays small/muted beside it.
             //   e.g. Plus →  $7.50 / month   $90 / year
             //        Pro  →  $40.83 / month  $490 / year
             //        Max  →  $82.50 / month  $990 / year
-            <span className="flex shrink-0 items-baseline gap-2">
-              <span className="shrink-0 whitespace-nowrap text-2xl font-semibold leading-none tracking-tight text-foreground">
+            <div className="flex items-baseline gap-2">
+              <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
                 {formatPriceSymbolMonthlyEquiv(plan.priceYearly / 12, plan.currency)}
               </span>
-              <span className="whitespace-nowrap text-xs text-muted-foreground">/ month</span>
-              <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+              <span className="whitespace-nowrap text-sm text-muted-foreground">/ month</span>
+              <span className="ml-2 shrink-0 whitespace-nowrap text-sm text-muted-foreground">
                 {formatPriceSymbol(plan.priceYearly, plan.currency)} / year
               </span>
-            </span>
+            </div>
           ) : (
-            <span className="flex shrink-0 items-baseline gap-2">
-              <span className="shrink-0 whitespace-nowrap text-2xl font-semibold leading-none tracking-tight text-foreground">
+            <div className="flex items-baseline gap-2">
+              <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
                 {formatPriceSymbol(plan.priceMonthly, plan.currency)}
               </span>
-              <span className="whitespace-nowrap text-xs text-muted-foreground">/ month</span>
-            </span>
+              <span className="whitespace-nowrap text-sm text-muted-foreground">/ month</span>
+            </div>
           )}
         </div>
 
         {/* Thin horizontal divider between the price section and the features section.
              Equidistant from the price above and the feature list below (mt-6 both
              sides) for a consistent, compact vertical rhythm on every card. The
-             divider breaks out with -mx-6 to align with the name + price row above
+             divider breaks out with -mx-6 to align with the price row above
              (same starting point, same ending point) — identical in both modes. */}
         <div className="-mx-6 mt-6 h-px bg-border" aria-hidden />
 
         {/* Feature items (section label omitted). Same typography on every card:
              text-[15px] leading-normal so features read as a clear medium-size
-             block — visibly subordinate to the text-5xl plan name and text-2xl
+             block — visibly subordinate to the text-5xl plan name and text-4xl
              price, never competing with them. Check icon is h-4 w-4 with mt-0.5
              so its optical center aligns with the first line of feature text;
              gap-2.5 keeps a consistent icon↔text column gutter; items-start

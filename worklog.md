@@ -7152,3 +7152,44 @@ Stage Summary:
 - Width budget: Max Yearly (widest case) = 337px, fits in 345px with 8px margin; all other cards have more margin
 - No changes to: pricing/plan logic, Monthly/Yearly toggle logic, plan data, features content, card dimensions, create/edit dialog logic, backend/API/DB, toggle position (still bottom-right next to Edit Plan)
 - Lint baseline unchanged (4 errors + 3 warnings, none in platform-plans.tsx); browser-verified clean render; precise DOM measurement + VLM both confirm identical layout in both modes
+
+---
+Task ID: 71
+Agent: main (orchestrator)
+Task: Move price to BELOW the plan name (stacked, not same line) on all plan cards; keep features below the price. Revert the "same line" layout from Tasks 69-70. Apply to Free/Plus/Pro/Max. No logic/data changes.
+
+Work Log:
+- Read worklog (Task 69: name+price on SAME LINE with toggle relocated to bottom; Task 70: shrunk price to text-2xl=24px + text-xs=12px labels to fit Yearly on one line alongside the name)
+- Re-read current src/modules/platform/platform-plans.tsx card section (lines 191-335) — header was `-mx-6 flex flex-wrap items-baseline gap-x-2` containing h3 name + inline 3-branch price (text-2xl + text-xs)
+- User wants: price BELOW the name (stacked vertical layout), features below the price. This reverts the "same line" change from Task 69
+- Since the price is on its own row now (not sharing a line with the name), it can be LARGER again — no width constraint from the name. Reverted price typography to Task 68 sizing: text-4xl font-semibold (36px), labels text-sm text-muted-foreground (14px)
+- Calculated Yearly fit at text-4xl + text-sm + -mx-6 breakout (345px): Max Yearly = $82.50(134) + gap-2(8) + /month(55) + gap-2(8) + ml-2(8) + $990/year(81) = 294px → fits with 51px margin ✓ (much more comfortable than Task 70's 8px margin)
+- Applied MultiEdit (visual-only, no data/logic):
+  1. Replaced the combined header+price row with TWO separate sections:
+     - Header: `<div className="min-w-0"><h3 className="text-5xl font-bold tracking-tight">{plan.name}</h3></div>` (name only, full card width)
+     - Price: `<div className="-mx-6 mt-6">` containing the 3-branch price logic (Free/Yearly/Monthly), text-4xl font-semibold price, text-sm text-muted-foreground labels, ml-2 between monthly-equiv and yearly-total groups, shrink-0 + whitespace-nowrap + leading-none on price spans
+  2. Kept divider: `-mx-6 mt-6 h-px bg-border` (aligns with price row above)
+  3. Kept features: `mt-6` with `text-[15px] leading-normal` (unchanged)
+  4. Kept Edit + toggle at bottom: `mt-auto flex items-center gap-3 pt-8` with flex-1 Edit button + shrink-0 toggle group (from Task 69, unchanged)
+  5. Updated comments: header comment (name is LARGEST, price sits BELOW on its own row), price comment (text-4xl=36px slightly smaller than name text-5xl=48px, text-sm=14px labels, -mx-6 breakout, width budget Max Yearly=294px fits with 51px margin), divider comment (aligns with price row), feature comment (text-4xl price reference)
+- Kept: Monthly/Yearly toggle logic (priceYearly/12 dynamic, never hardcoded); plan data; features content; card p-8 padding; rounded-3xl border; hover:border-foreground/20; opacity-60 when inactive; check icons h-4 w-4 with mt-0.5; create/edit dialog logic; backend/API/DB; toggle at bottom-right next to Edit Plan (from Task 69, user didn't ask to move it)
+- bun run lint: 4 errors + 3 warnings — NONE in platform-plans.tsx (all in data-table.tsx / storage-page.tsx / content-create-page.tsx / content-edit-page.tsx); baseline count unchanged (4+3)
+- Browser verification (agent-browser, 1440x900, Platform Admin):
+  - Monthly mode screenshot + VLM: confirmed for Free/Plus/Pro/Max — plan name on its OWN LINE (top), price on a SEPARATE LINE below it (Free $0, Plus $9 / month, Pro $49 / month, Max $99 / month); feature list below the price (separated by divider); plan name visually LARGER and bolder than the price ✓
+  - Yearly mode screenshot + VLM: confirmed for Free/Plus/Pro — name on top, price below on separate line (Free $0, Plus $7.50 / month $90 / year, Pro $40.83 / month $490 / year); features below price; price fully visible on ONE line (no clipping/wrapping) ✓
+  - Max Yearly scrolled into view + targeted screenshot + VLM: confirmed "Max $82.50 / month $990 / year" — name on own line (top), price below on separate line, fully visible on ONE line; $82.50 is main/larger (bold), $990/year is smaller/muted beside it; feature list below the price ✓
+  - PRECISE DOM measurement: all 4 cards — onSeparateLines=true (priceTop > nameBottom, confirming the price is below the name on a separate line); price text correct per card ($0, $7.50, $40.83, $82.50 in Yearly mode)
+  - Browser console: clean (only React DevTools info + HMR connected), no errors/hydration warnings
+
+Stage Summary:
+- Stacked layout RESTORED per user request (reverts Tasks 69-70 "same line" change):
+  - Plan name: text-5xl font-bold (48px) — on its OWN LINE at the top of the card, full card width
+  - Price: text-4xl font-semibold (36px) — on a SEPARATE LINE directly below the name; text-sm text-muted-foreground (14px) labels
+  - Features: below the price (separated by a thin divider)
+  - Edit Plan + Active toggle: at the bottom of the card (kept from Task 69)
+- Same stacked structure on all 4 cards (Free/Plus/Pro/Max) in both Monthly and Yearly modes
+- Yearly layout: monthly-equiv (priceYearly/12, dynamic) = main/larger price; yearly-total = smaller/muted beside it on the same line as the monthly-equiv; fits comfortably in the -mx-6 breakout (Max Yearly = 294px in 345px, 51px margin)
+- Price typography upgraded from Task 70's text-2xl=24px back to text-4xl=36px (more prominent, "slightly smaller" than the name text-5xl=48px per Task 68 spec) — possible because the price no longer shares a line with the name
+- Labels upgraded from Task 70's text-xs=12px back to text-sm=14px (more readable)
+- No changes to: pricing/plan logic, Monthly/Yearly toggle logic, plan data, features content, card dimensions, toggle position (still bottom-right next to Edit), create/edit dialog logic, backend/API/DB
+- Lint baseline unchanged (4 errors + 3 warnings, none in platform-plans.tsx); browser-verified clean render on Monthly + Yearly + Free + Max; VLM + DOM both confirm stacked layout (name on top, price below, features below price)
