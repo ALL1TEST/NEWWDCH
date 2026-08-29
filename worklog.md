@@ -7193,3 +7193,31 @@ Stage Summary:
 - Labels upgraded from Task 70's text-xs=12px back to text-sm=14px (more readable)
 - No changes to: pricing/plan logic, Monthly/Yearly toggle logic, plan data, features content, card dimensions, toggle position (still bottom-right next to Edit), create/edit dialog logic, backend/API/DB
 - Lint baseline unchanged (4 errors + 3 warnings, none in platform-plans.tsx); browser-verified clean render on Monthly + Yearly + Free + Max; VLM + DOM both confirm stacked layout (name on top, price below, features below price)
+
+---
+Task ID: 72
+Agent: main (orchestrator)
+Task: Verify that the currency symbol "$" is positioned and styled consistently across all 4 plan cards (Free/Plus/Pro/Max), including the $0 on the Free card, in both Monthly and Yearly modes. User asked: "Make the currency symbol '$' appear in the exact same position and with the same styling as the other prices, including the $0 price. The '$' should be consistently aligned and formatted across all plans." (preceded by: "change the place icon price '$' to under txt free, do like this in other plans").
+
+Work Log:
+- Read /home/z/my-project/worklog.md (Tasks 0-71 history); last completed task was Task 71 which placed the price BELOW the plan name on its own row (stacked layout) on all 4 cards
+- Verified file src/modules/platform/platform-plans.tsx already has Task 71 layout: header div with just <h3>name</h3> (text-5xl font-bold), then a separate price div below with -mx-6 mt-6 containing the 3-branch price logic (Free/Yearly/Monthly), all using text-4xl font-semibold for the price span + text-sm text-muted-foreground for the /month and /year labels
+- Logged into Platform Admin (agent-browser): clicked "Platform Admin (Staff)" quick-sign-in shortcut via JS-dispatched PointerEvent/PointerEvent/MouseEvent, then clicked "Sign in" via submit button JS events
+- Navigated to Plans & Pricing page via sidebar JS event dispatch
+- Took Monthly-mode screenshot /tmp/ab/plans_monthly_fresh.png and queried VLM: confirmed (1) plan name on its own line at top of every card, (2) price positioned BELOW the plan name on a separate line, (3) '$' styled identically across all 4 cards (same size/weight/color/position), (4) NO visual inconsistency between Free's '$' and paid cards' '$'
+- Ran agent-browser eval to get precise DOM measurements on Monthly mode: all 4 cards (Free/Plus/Pro/Max) → mainPrice fontSize=36px, fontWeight=600, priceLeft at SAME relative offset (9px from card left edge, via -mx-6 breakout), priceTop=400 (24px below name at nameBottom=376 — uniform mt-6 gap). All identical.
+- Switched to Yearly mode (JS click on Yearly toggle) and re-ran DOM measurement: all 4 cards → mainPrice fontSize=36px, fontWeight=600, priceLeft at SAME 9px offset, priceTop=400. All identical to Monthly.
+- Took Yearly-mode screenshot /tmp/ab/plans_yearly_fresh.png and queried VLM: confirmed (1) plan name on own line, (2) price below name on separate line, (3) '$' consistent across all cards, (4) NO inconsistency between Free $0 and paid $7.50/$40.83/$82.50
+- Did NOT modify any code — the existing implementation already satisfies the user's requirement (Tasks 68-71 set this up: Task 68 established typography hierarchy name>price>labels, Task 69-70 kept anti-wrap guards + uniform -mx-6 breakout, Task 71 stacked the price below the name on its own row)
+- Verified the helpers: currencySymbol() maps USD/EUR/GBP/JPY/CNY→$/€/£/¥/¥ with unknown→'$' default; formatPriceSymbol(amount, currency) = symbol + integer (used for $0, $9, $49, $99, $90/yr, $490/yr, $990/yr); formatPriceSymbolMonthlyEquiv(amount, currency) = symbol + 2-decimal (used for $7.50, $40.83, $82.50). All three return the SAME '$' symbol character at the START of the string, rendered inside the SAME span class (text-4xl font-semibold leading-none tracking-tight text-foreground shrink-0 whitespace-nowrap) on every card. So the '$' glyph itself is identical everywhere by construction.
+
+Stage Summary:
+- User's request is ALREADY SATISFIED by the existing Task 71 implementation — no code changes were needed
+- Verification (DOM + VLM, both Monthly and Yearly modes) confirms:
+  - The '$' currency symbol appears in the EXACT SAME position (9px from card left edge via -mx-6 breakout, 24px below the plan name via mt-6) on ALL 4 plan cards
+  - The '$' is styled identically (text-4xl=36px, font-semibold=weight 600, text-foreground color, leading-none, tracking-tight) on ALL 4 plan cards
+  - The '$' on the Free card ($0) is IDENTICAL to the '$' on Plus/Pro/Max ($9/$49/$99 Monthly; $7.50/$40.83/$82.50 Yearly) — same glyph, same size, same weight, same color, same x-position, same y-position
+  - Plan name on its own line at top of card; price on a separate line below the name; features below the price (separated by divider); Edit + Active toggle at bottom — same vertical structure on all 4 cards in both modes
+- The only contextual difference (not a styling difference) is that the Free card shows just "$0" while paid Monthly cards show "$X / month" and paid Yearly cards show "$X.XX / month $X / year" — but the '$' glyph itself is rendered identically
+- No changes to: pricing/plan logic, Monthly/Yearly toggle logic, plan data, features content, card dimensions, toggle position, create/edit dialog logic, backend/API/DB
+- Lint baseline unchanged (4 errors + 3 warnings, none in platform-plans.tsx)
