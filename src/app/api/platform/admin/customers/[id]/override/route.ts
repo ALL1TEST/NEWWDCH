@@ -12,8 +12,9 @@ export async function GET(request: NextRequest) {
   if ('response' in auth) return auth.response;
   const id = request.nextUrl.pathname.split('/').filter(Boolean).at(-2)!;
   // id here is the customer id; we need the email for overrides (keyed by email).
+  // NOTE: getCustomer is async (Task 78-D) — awaits the real DB user + sub.
   const { getCustomer } = await import('@/lib/platform/platform-data');
-  const customer = getCustomer(id);
+  const customer = await getCustomer(id);
   if (!customer) return fail('NOT_FOUND', 'Customer not found.', 404);
   return ok({ overrides: await listOverrides(customer.email), available: [...ENTITLEMENT_KEYS] });
 }
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
   };
   if (!body.feature) return fail('VALIDATION_ERROR', 'feature is required.', 400);
   const { getCustomer } = await import('@/lib/platform/platform-data');
-  const customer = getCustomer(id);
+  const customer = await getCustomer(id);
   if (!customer) return fail('NOT_FOUND', 'Customer not found.', 404);
 
   if (body.action === 'delete') {

@@ -719,6 +719,8 @@ model User {
   // Billing (real subscription + payment records — DB-backed source of truth)
   subscription      Subscription?
   payments          Payment[]
+  // Per-customer coupon redemptions — back-relation for CouponRedemption.
+  couponRedemptions CouponRedemption[]
 
   @@index([email])
   @@index([role])
@@ -2174,6 +2176,12 @@ model Payment {
   paymentMethodType      String? // 'card' | 'ach_debit' | 'sepa_debit' | 'link' | ...
   paymentMethodDetails   String? // JSON: { brand, last4, expMonth, expYear, funding, country, wallet }
   description            String? // optional memo / failure reason / line description
+  // ---- Coupon snapshot (mirrored from the Stripe Invoice's discount, if any).
+  // Stored as the coupon CODE (string), not a foreign key — the local coupon
+  // row may be deleted; we keep the code for audit. discountAmount is the
+  // discount applied (major currency units). Both null when no coupon. ----
+  couponCode             String?
+  discountAmount         Int?    // major currency units
   paidAt          DateTime?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -2183,6 +2191,7 @@ model Payment {
   @@index([planId])
   @@index([stripeInvoiceId])        // webhook dedup: find by invoice
   @@index([stripePaymentIntentId])  // webhook dedup: find by payment intent
+  @@index([couponCode])
 }
 
 model Coupon {
@@ -2198,11 +2207,73 @@ model Coupon {
   perCustomerLimit Int?
   active           Boolean   @default(true)
   timesRedeemed    Int       @default(0)
+  // Stripe mirror IDs — populated when this local coupon is pushed to Stripe
+  // as a Stripe Coupon + Promotion Code (so Stripe Checkout can apply it).
+  // null = not yet mirrored; the checkout route lazy-creates the mirror and
+  // caches the IDs here. Cleared to null when the local coupon is mutated
+  // so the next checkout re-creates a fresh Stripe mirror.
+  stripeCouponId        String?
+  stripePromotionCodeId String?
+  // Per-customer redemption rows. Used to enforce perCustomerLimit (count
+  // rows where couponId=X AND userId=Y) and to keep an audit trail of every
+  // redemption (Stripe webhook writes one row per confirmed redemption).
+  redemptions      CouponRedemption[]
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   @@index([active])
   @@index([code])
+  @@index([stripeCouponId])
+}
+
+// Per-customer coupon redemption audit + per-customer-limit enforcement.
+// One row per (coupon, user, checkout) redemption — populated by the Stripe
+// webhook when a checkout.session.completed / invoice.paid event confirms
+// the coupon was actually applied. count(couponId, userId) is the
+// per-customer redemption count.
+model CouponRedemption {
+  id              String   @id @default(cuid())
+  couponId        String
+  coupon          Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Stripe event + object IDs that confirmed the redemption — idempotent
+  // dedup so a retried webhook event never double-counts a redemption.
+  stripeEventId   String?
+  stripeCheckoutId String? // cs_...
+  stripeInvoiceId  String? // in_...
+  stripeSubscriptionId String? // sub_...
+  amountOff       Int      @default(0) // discount applied, major currency units
+  currency        String   @default("CHF")
+  redeemedAt      DateTime @default(now())
+
+  @@index([couponId])
+  @@index([userId])
+  @@index([couponId, userId])
+  @@index([stripeEventId])
+  @@index([stripeCheckoutId])
+  @@index([stripeInvoiceId])
+}
+
+// Idempotency ledger for Stripe webhook events. Stripe retries events up
+// to 3 days; we MUST NOT process the same event id twice. The webhook
+// handler inserts a row at the start of processing (unique on stripeEventId);
+// if the insert fails with a unique-violation, the event was already
+// processed → return 200 and skip. outcome stores 'processed' | 'skipped'
+// | 'error' for debugging.
+model WebhookEvent {
+  id              String   @id @default(cuid())
+  stripeEventId   String   @unique // evt_...
+  eventType       String   // checkout.session.completed, charge.refunded, etc.
+  apiVersion      String?
+  objectId        String?  // The Stripe object id (cs_..., in_..., pi_..., ch_...)
+  outcome         String   @default("processed") // 'processed' | 'skipped_duplicate' | 'error'
+  errorMessage    String?
+  processedAt     DateTime @default(now())
+
+  @@index([eventType])
+  @@index([processedAt])
+  @@index([objectId])
 }
 
 model CountryPricing {

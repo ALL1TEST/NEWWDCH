@@ -8,6 +8,11 @@
 // ============================================================
 
 import { db } from '@/lib/db';
+import {
+  isStripeConfigured,
+  getStripeClient,
+  clearStripeCouponMirror,
+} from '@/lib/stripe';
 
 export type CouponType = 'percent' | 'fixed';
 
@@ -116,6 +121,13 @@ export async function createCoupon(input: CouponInput): Promise<CouponRow> {
 }
 
 export async function updateCoupon(id: string, input: CouponInput): Promise<CouponRow | null> {
+  // Fetch the existing row BEFORE the update so we can invalidate the Stripe
+  // mirror (using the OLD mirror IDs) when a material field changes or the
+  // coupon is deactivated. Without this, stale Stripe Coupons would keep
+  // applying the old discount at checkout.
+  const existing = await db.coupon.findUnique({ where: { id } }).catch(() => null);
+  if (!existing) return null;
+
   const row = await db.coupon
     .update({
       where: { id },
@@ -133,11 +145,63 @@ export async function updateCoupon(id: string, input: CouponInput): Promise<Coup
       },
     })
     .catch(() => null);
-  return row ? rowToCoupon(row) : null;
+  if (!row) return null;
+
+  // Invalidate the Stripe mirror if any material field changed OR the coupon
+  // was deactivated. Best-effort — swallow Stripe errors (the local row is
+  // still authoritative; next checkout will re-create a fresh mirror).
+  const materialChanged =
+    input.value !== undefined ||
+    input.type !== undefined ||
+    input.currency !== undefined ||
+    input.expiresAt !== undefined ||
+    input.maxRedemptions !== undefined;
+  const deactivated = input.active === false;
+  const hasMirror = Boolean(existing.stripeCouponId || existing.stripePromotionCodeId);
+  if ((materialChanged || deactivated) && hasMirror && isStripeConfigured()) {
+    try {
+      const stripe = getStripeClient();
+      await clearStripeCouponMirror(
+        stripe,
+        existing.stripeCouponId,
+        existing.stripePromotionCodeId,
+      );
+    } catch {
+      // best-effort — mirror cleanup is not authoritative
+    }
+    await db.coupon
+      .update({
+        where: { id },
+        data: { stripeCouponId: null, stripePromotionCodeId: null },
+      })
+      .catch(() => null);
+  }
+
+  return rowToCoupon(row);
 }
 
 export async function deleteCoupon(id: string): Promise<boolean> {
   try {
+    // Fetch the existing row so we can invalidate the Stripe mirror before
+    // deleting the local row (after delete, the mirror IDs are gone and
+    // would leak as orphan Stripe Coupons/Promotion Codes).
+    const existing = await db.coupon.findUnique({ where: { id } });
+    if (
+      existing &&
+      isStripeConfigured() &&
+      (existing.stripeCouponId || existing.stripePromotionCodeId)
+    ) {
+      try {
+        const stripe = getStripeClient();
+        await clearStripeCouponMirror(
+          stripe,
+          existing.stripeCouponId,
+          existing.stripePromotionCodeId,
+        );
+      } catch {
+        // best-effort — proceed with the local delete regardless
+      }
+    }
     await db.coupon.delete({ where: { id } });
     return true;
   } catch {
@@ -172,10 +236,30 @@ export async function validateCoupon(
   if (coupon.maxRedemptions !== null && coupon.timesRedeemed >= coupon.maxRedemptions) {
     return { ok: false, coupon, discountAmount: 0, finalPrice: basePrice, currency: coupon.currency, message: 'Coupon redemption limit reached.' };
   }
-  if (coupon.perCustomerLimit !== null && coupon.perCustomerLimit > 0) {
-    // Per-customer redemption tracking is out of scope for the mock; the
-    // server is the authority — the integration point is here.
-    // A real implementation would count redemptions per customer.
+  // Per-customer redemption limit enforcement. Counts the number of
+  // CouponRedemption rows already written for this (coupon, user) pair —
+  // the Stripe webhook writes one row per confirmed checkout. If the count
+  // has reached the limit, refuse to apply the coupon again.
+  if (coupon.perCustomerLimit !== null && coupon.perCustomerLimit > 0 && customerEmail) {
+    const user = await db.user.findUnique({
+      where: { email: customerEmail },
+      select: { id: true },
+    });
+    if (user) {
+      const count = await db.couponRedemption.count({
+        where: { couponId: coupon.id, userId: user.id },
+      });
+      if (count >= coupon.perCustomerLimit) {
+        return {
+          ok: false,
+          coupon,
+          discountAmount: 0,
+          finalPrice: basePrice,
+          currency: coupon.currency,
+          message: 'Coupon redemption limit reached for this account.',
+        };
+      }
+    }
   }
 
   let discount = 0;

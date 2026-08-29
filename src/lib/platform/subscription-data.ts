@@ -456,26 +456,59 @@ export async function activateSubscriptionFromStripe(params: {
 }
 
 /**
- * Mark a subscription as cancelled. Called by:
- *   - The Stripe webhook when `customer.subscription.deleted` fires.
- *   - The client cancel endpoint (sets status + clears currentPeriodEnd).
+ * Mark a subscription as cancelled. This is the SINGLE local mutator that
+ * the Stripe webhook (`customer.subscription.deleted`), the client cancel
+ * endpoint, and the admin cancel endpoint converge on.
+ *
+ * Idempotency:
+ *   - If the Subscription row does not exist → return null.
+ *   - If the row is already `cancelled` → return it as-is (no-op). This
+ *     lets the webhook retry `customer.subscription.deleted` safely and
+ *     also lets the cancel routes be called more than once.
+ *
+ * The `immediatelyUnlinkStripe` flag:
+ *   - `true` (DEFAULT) → set `currentPeriodEnd = null` AND
+ *     `stripeSubscriptionId = null`. Use this when the Stripe subscription
+ *     has actually been deleted (i.e. the Stripe sub object no longer
+ *     exists). This is what the `customer.subscription.deleted` webhook
+ *     passes — and what the cancel routes pass when Stripe is NOT
+ *     configured (local-only cancellation of free/non-Stripe plans).
+ *   - `false` → KEEP `currentPeriodEnd` AND `stripeSubscriptionId`. Use
+ *     this when the cancellation is SCHEDULED at period end (Stripe's
+ *     `cancel_at_period_end: true`) — the Stripe sub still exists, the
+ *     customer keeps access until the period ends, and the
+ *     `customer.subscription.deleted` webhook will fire later and call
+ *     this function again with the default flag to finalize the row.
  *
  * The Subscription row is NOT deleted — historical records are preserved
  * for audit / re-activation. After cancellation, the user reverts to the
  * Free plan automatically (enforced in entitlements.ts via the
  * 'no subscription row → free plan' fallback).
  */
-export async function cancelSubscription(userId: string): Promise<SubscriptionRow | null> {
+export async function cancelSubscription(
+  userId: string,
+  opts?: { immediatelyUnlinkStripe?: boolean },
+): Promise<SubscriptionRow | null> {
   const existing = await db.subscription.findUnique({ where: { userId } });
   if (!existing) return null;
+  // Idempotent: already cancelled → no-op, return the existing row.
+  if (existing.status === 'cancelled') return rowToSubscription(existing);
+
+  const immediatelyUnlinkStripe = opts?.immediatelyUnlinkStripe !== false;
   const now = new Date();
   const updated = await db.subscription.update({
     where: { userId },
     data: {
       status: 'cancelled',
-      currentPeriodEnd: null,
       cancelAt: now,
-      stripeSubscriptionId: null, // unlink from Stripe
+      // When the Stripe sub is truly gone, null out the period end + the
+      // Stripe link so the dashboard shows "no future billing". When the
+      // cancel is only scheduled (period end), keep both so the dashboard
+      // can keep showing the renewal/cancel date until the webhook
+      // finalizes.
+      ...(immediatelyUnlinkStripe
+        ? { currentPeriodEnd: null, stripeSubscriptionId: null }
+        : {}),
     },
   });
   return rowToSubscription(updated);

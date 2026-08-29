@@ -155,7 +155,7 @@ export interface PlatformAlert {
 // change propagates to the client billing page and to MRR on the next read.
 // The PLANS array below is a live view re-spliced whenever the config changes.
 
-import { getPlanConfigsSync, subscribe as subscribePlanConfig, type PlanConfigData } from './plan-config';
+import { getPlanConfigsSync, getPlanConfigSync, subscribe as subscribePlanConfig, type PlanConfigData } from './plan-config';
 
 function toPlan(d: PlanConfigData): Plan {
   return {
@@ -489,6 +489,64 @@ function appendAudit(entry: Omit<AuditEntry, 'id' | 'timestamp'>): void {
 
 // -------------------- Public read API --------------------
 
+/** Resolve the storageBytes limit for a plan id from the live plan
+ *  config cache. Returns Number.MAX_SAFE_INTEGER for unlimited (-1)
+ *  so the UI's progress-bar math never divides by zero. */
+function storageLimitBytesForPlan(planId: string): number {
+  const cfg = getPlanConfigSync(planId);
+  const v = cfg?.limits?.storageBytes ?? 0;
+  return v === -1 ? Number.MAX_SAFE_INTEGER : v;
+}
+
+/** Map a real DB User (+ their Subscription row, when present) to the
+ *  public Customer interface the Platform Admin UI consumes. The shape
+ *  matches the legacy mock Customer exactly so the UI is unchanged —
+ *  only the data source switched from the in-memory seed to the DB.
+ *  Company / country default to placeholders since the User table has
+ *  no such columns (kept on the legacy mock customer only). */
+function mapUserToCustomer(
+  user: {
+    id: string;
+    name: string | null;
+    email: string;
+    status: string;
+    billingMode: string;
+    createdAt: Date;
+  },
+  sub: {
+    planId: string;
+    status: string;
+    billingInterval: string;
+    startDate: Date;
+    currentPeriodEnd: Date | null;
+    trialEnd: Date | null;
+  } | null,
+): Customer {
+  const planId = (sub && ['free', 'plus', 'pro', 'max'].includes(sub.planId) ? sub.planId : 'free') as PlanId;
+  const subscriptionStatus = (sub && ['active', 'trial', 'past_due', 'cancelled', 'expired'].includes(sub.status)
+    ? sub.status
+    : 'active') as SubscriptionStatus;
+  const billingInterval: BillingInterval = sub && sub.billingInterval === 'yearly' ? 'yearly' : 'monthly';
+  const userStatus: CustomerStatus =
+    user.status === 'SUSPENDED' ? 'SUSPENDED' : user.status === 'DEACTIVATED' ? 'DEACTIVATED' : 'ACTIVE';
+  return {
+    id: user.id,
+    name: user.name ?? user.email,
+    email: user.email,
+    status: userStatus,
+    planId,
+    subscriptionStatus,
+    billingInterval,
+    createdAt: user.createdAt.toISOString(),
+    subscriptionStart: sub ? sub.startDate.toISOString() : user.createdAt.toISOString(),
+    nextBillingAt: sub?.currentPeriodEnd?.toISOString() ?? null,
+    trialEnd: sub?.trialEnd?.toISOString() ?? null,
+    company: null,
+    country: '—',
+    storageLimitBytes: storageLimitBytesForPlan(planId),
+  };
+}
+
 export interface PlatformOverview {
   totalCustomers: number;
   activeSubscriptions: number;
@@ -505,52 +563,114 @@ export interface PlatformOverview {
   systemHealth: SystemHealthItem[];
 }
 
-export function getOverview(): PlatformOverview {
-  const s = store();
-  const customers = s.customers;
+// REAL DB-backed (replaces the in-memory store() derivation). Reads
+//  the live User + Subscription + Payment tables so the Platform Admin
+//  Dashboard overview always agrees with the Customers / Subscriptions /
+//  Payments pages — same rows, same counts, same MRR. The legacy mock
+//  store() is now ONLY used by the sync `getPlatformEvents()` (which
+//  derives the platform notifications feed from mock data) and by the
+//  sync `getClientBilling()` fallback path (legacy demo customers).
+export async function getOverview(): Promise<PlatformOverview> {
+  const { db } = await import('@/lib/db');
 
-  const totalCustomers = customers.length;
-  const activeSubscriptions = customers.filter((c) => c.subscriptionStatus === 'active').length;
+  // Customers = EXTERNAL users WITH a subscription row (paying customers).
+  const customerUsers = await db.user.findMany({
+    where: {
+      billingMode: 'EXTERNAL',
+      deletedAt: null,
+      subscription: { isNot: null },
+    },
+    include: { subscription: true },
+  });
+  const totalCustomers = customerUsers.length;
+
+  // All subs — used for plan distribution + status counts + MRR.
+  const allSubs = await db.subscription.findMany();
+  const activeSubs = allSubs.filter((s) => s.status === 'active');
+  const activeSubscriptions = activeSubs.length;
 
   let mrr = 0;
-  for (const c of customers) {
-    if (c.subscriptionStatus === 'active' && c.planId !== 'free') {
-      mrr += monthlyPrice(getPlan(c.planId), c.billingInterval);
+  for (const s of activeSubs) {
+    if (s.planId !== 'free') {
+      mrr += monthlyPrice(
+        getPlan(s.planId as PlanId),
+        s.billingInterval === 'yearly' ? 'yearly' : 'monthly',
+      );
     }
   }
 
-  const totalSites = s.sites.length;
+  // No real Sites-per-customer table populated; keep 0 (UI handles).
+  const totalSites = 0;
 
   const planDistribution = PLANS.map((p) => ({
     planId: p.id,
     planName: p.name,
-    count: customers.filter((c) => c.planId === p.id).length,
+    count: allSubs.filter((s) => s.planId === p.id).length,
     color: p.id === 'free' ? '#10b981' : p.id === 'plus' ? '#f59e0b' : p.id === 'pro' ? '#8b5cf6' : '#ec4899',
   }));
 
   const statuses: SubscriptionStatus[] = ['active', 'trial', 'past_due', 'cancelled', 'expired'];
   const statusCounts = statuses
-    .map((status) => ({ status, count: customers.filter((c) => c.subscriptionStatus === status).length }))
+    .map((status) => ({ status, count: allSubs.filter((s) => s.status === status).length }))
     .filter((x) => x.count > 0);
 
-  const recentCustomers = [...customers]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  const recentCustomers = [...customerUsers]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .slice(0, 6)
-    .map((c) => ({ ...c, siteCount: s.sites.filter((si) => si.customerId === c.id).length }));
+    .map((u) => ({ ...mapUserToCustomer(u, u.subscription), siteCount: 0 }));
 
-  const recentPayments = [...s.payments]
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 6)
-    .map((p) => ({ ...p, customerName: customers.find((c) => c.id === p.customerId)?.name ?? '—' }));
+  // Real recent payments — already DB-backed (Task 75).
+  const recentPayments = await getRecentPaymentsReal(6);
 
   const usage: PlatformUsage = {
     totalSites,
-    totalArticles: s.sites.reduce((a, si) => a + si.articles, 0),
-    aiArticlesGenerated: Math.round(s.sites.reduce((a, si) => a + si.articles, 0) * 0.28),
-    aiWordsGenerated: Math.round(s.sites.reduce((a, si) => a + si.articles, 0) * 0.28 * 1850),
-    mediaStorageBytes: s.sites.reduce((a, si) => a + si.storageBytes, 0),
-    automationRuns: 1284,
+    totalArticles: 0,
+    aiArticlesGenerated: 0,
+    aiWordsGenerated: 0,
+    mediaStorageBytes: 0,
+    automationRuns: 1284, // mock — no real automation-runs table populated
   };
+
+  // Alerts — derived from the real DB state (failed payments, past-due
+  // subs, new customers this week). The legacy storage-limit alert is
+  // skipped because no real storage tracking exists yet.
+  const alerts: PlatformAlert[] = [];
+  const failedCount = await db.payment.count({ where: { status: 'failed' } });
+  if (failedCount > 0) {
+    alerts.push({
+      id: 'alert-failed-payments',
+      severity: 'critical',
+      title: 'Failed payments',
+      message: `${failedCount} payment${failedCount === 1 ? '' : 's'} failed and need attention`,
+      action: { label: 'View Payments', module: 'platform-payments' },
+      time: 'recent',
+    });
+  }
+  const pastDueCount = await db.subscription.count({ where: { status: 'past_due' } });
+  if (pastDueCount > 0) {
+    alerts.push({
+      id: 'alert-past-due',
+      severity: 'warning',
+      title: 'Past-due subscriptions',
+      message: `${pastDueCount} subscription${pastDueCount === 1 ? '' : 's'} past due`,
+      action: { label: 'View Customers', module: 'platform-customers' },
+      time: 'recent',
+    });
+  }
+  const weekAgo = new Date(Date.now() - 7 * 24 * 3600_000);
+  const newCustomersCount = await db.user.count({
+    where: { billingMode: 'EXTERNAL', createdAt: { gt: weekAgo } },
+  });
+  if (newCustomersCount > 0) {
+    alerts.push({
+      id: 'alert-new-customers',
+      severity: 'info',
+      title: 'New customers',
+      message: `${newCustomersCount} new customer${newCustomersCount === 1 ? '' : 's'} registered this week`,
+      action: { label: 'View Customers', module: 'platform-customers' },
+      time: 'recent',
+    });
+  }
 
   return {
     totalCustomers,
@@ -564,7 +684,7 @@ export function getOverview(): PlatformOverview {
     recentCustomers,
     recentPayments,
     usage,
-    alerts: getAlerts(),
+    alerts,
     // Placeholder — the overview API route overlays the real
     // (live) health summary here before returning, so that this
     // module does not pull server-only deps (fs, db) into the
@@ -573,12 +693,75 @@ export function getOverview(): PlatformOverview {
   };
 }
 
-export function listCustomers(opts?: { search?: string; planId?: PlanId | 'all'; status?: SubscriptionStatus | 'all' }): (Customer & { siteCount: number })[] {
+// REAL DB-backed (replaces the in-memory CUSTOMER_SEED mock). The
+//  admin Customers table now reads the live User + Subscription tables.
+//  Only EXTERNAL users WITH a subscription row are paying customers.
+//  Server-side filtering: search → name/email contains; planId/status →
+//  filters via the Subscription relation. Returns the SAME shape the UI
+//  has always consumed (Customer & { siteCount }) so the Customers page
+//  is unchanged — only the data source switched to the real DB.
+export async function listCustomers(opts?: {
+  search?: string;
+  planId?: PlanId | 'all';
+  status?: SubscriptionStatus | 'all';
+}): Promise<(Customer & { siteCount: number })[]> {
+  const { db } = await import('@/lib/db');
+
+  // Build the subscription relation filter (planId / status). For
+  // Prisma's nullable 1:1 relation filter:
+  //   - default (no plan/status filters): { isNot: null } → "user has any sub"
+  //   - with plan/status filters: { is: { planId?, status? } } → "user has
+  //     a sub matching these fields" (is implies the relation is present).
+  let subFilter: Record<string, unknown>;
+  if ((opts?.planId && opts.planId !== 'all') || (opts?.status && opts.status !== 'all')) {
+    const inner: Record<string, string> = {};
+    if (opts?.planId && opts.planId !== 'all') inner.planId = opts.planId;
+    if (opts?.status && opts.status !== 'all') inner.status = opts.status;
+    subFilter = { is: inner };
+  } else {
+    subFilter = { isNot: null };
+  }
+
+  const where: any = {
+    billingMode: 'EXTERNAL',
+    deletedAt: null,
+    subscription: subFilter,
+  };
+  if (opts?.search) {
+    const q = opts.search;
+    where.OR = [{ name: { contains: q } }, { email: { contains: q } }];
+  }
+
+  const users = await db.user.findMany({
+    where,
+    include: { subscription: true },
+    orderBy: { createdAt: 'desc' },
+    take: 500,
+  });
+
+  return users.map((u) => ({ ...mapUserToCustomer(u, u.subscription), siteCount: 0 }));
+}
+
+/** SYNC mock-store version of listCustomers — kept private so the
+ *  sync `getPlatformEvents()` (which powers /api/platform/admin/
+ *  notifications) can keep deriving the platform events feed from the
+ *  deterministic in-memory seed without making the notifications route
+ *  async. The public `listCustomers` is now async + DB-backed. */
+function listCustomersMockSync(opts?: {
+  search?: string;
+  planId?: PlanId | 'all';
+  status?: SubscriptionStatus | 'all';
+}): (Customer & { siteCount: number })[] {
   const s = store();
   let list = [...s.customers];
   if (opts?.search) {
     const q = opts.search.toLowerCase();
-    list = list.filter((c) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || (c.company ?? '').toLowerCase().includes(q));
+    list = list.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q) ||
+        (c.company ?? '').toLowerCase().includes(q),
+    );
   }
   if (opts?.planId && opts.planId !== 'all') {
     list = list.filter((c) => c.planId === opts.planId);
@@ -598,19 +781,107 @@ export interface CustomerDetail extends Customer {
   recentActivity: AuditEntry[];
 }
 
-export function getCustomer(id: string): CustomerDetail | null {
-  const s = store();
-  const customer = s.customers.find((c) => c.id === id);
-  if (!customer) return null;
-  const sites = s.sites.filter((si) => si.customerId === id);
-  const payments = s.payments
-    .filter((p) => p.customerId === id)
+// REAL DB-backed (replaces the in-memory store() lookup). Looks up
+//  the user (must be EXTERNAL) + their Subscription + their Payment
+//  rows (most recent 50). Returns the SAME CustomerDetail shape the
+//  UI consumes — only the data source switched from the mock seed to
+//  the real DB. `id` here is the User.id (the customer-detail page
+//  navigates by passing the real user id, since listCustomers now
+//  returns real User.ids as `id`).
+export async function getCustomer(id: string): Promise<CustomerDetail | null> {
+  const { db } = await import('@/lib/db');
+  const user = await db.user.findUnique({
+    where: { id },
+    include: {
+      subscription: true,
+      payments: { orderBy: { createdAt: 'desc' }, take: 50 },
+    },
+  });
+  if (!user || user.billingMode !== 'EXTERNAL') return null;
+
+  const customer = mapUserToCustomer(user, user.subscription);
+
+  // No real Sites-per-customer table populated — return empty (UI
+  // handles with EmptyState). siteCount stays 0 to match.
+  const sites: PlatformSite[] = [];
+  const siteCount = 0;
+
+  // Real Payment rows — synthesize the user field so the existing
+  // mapper works, then strip the customerName/customerEmail extras
+  // (CustomerDetail.payments is the public Payment shape only).
+  const synthUser = { id: user.id, name: user.name, email: user.email };
+  const payments: Payment[] = user.payments
+    .map((r) => mapPaymentRowForCustomer({ ...r, user: synthUser }))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const recentActivity = s.audit.filter((a) => a.target.includes(customer.name)).slice(0, 6);
-  return { ...customer, siteCount: sites.length, sites, payments, recentActivity };
+
+  // Recent activity — derived from the mock audit log (no real
+  // per-customer audit row yet). Filter by customer name; [] when no
+  // match (UI handles with empty state).
+  const recentActivity = store()
+    .audit.filter((a) => a.target.includes(customer.name))
+    .slice(0, 6);
+
+  return { ...customer, siteCount, sites, payments, recentActivity };
 }
 
-export function listSubscriptions(opts?: { status?: SubscriptionStatus | 'all'; planId?: PlanId | 'all' }): (Customer & { planName: string; monthlyPrice: number })[] {
+// REAL DB-backed (replaces the in-memory store() derivation). Reads
+//  the live User + Subscription tables so the admin Subscriptions page
+//  shows the same rows the Customers page shows. Returns the SAME
+//  shape the UI consumes (Customer & { planName; monthlyPrice }) so the
+//  Subscriptions page is unchanged — only the data source switched to
+//  the real DB. Sorted by subscription start date desc.
+export async function listSubscriptions(opts?: {
+  status?: SubscriptionStatus | 'all';
+  planId?: PlanId | 'all';
+}): Promise<(Customer & { planName: string; monthlyPrice: number })[]> {
+  const { db } = await import('@/lib/db');
+
+  // Build the subscription relation filter (same pattern as listCustomers).
+  let subFilter: Record<string, unknown>;
+  if ((opts?.planId && opts.planId !== 'all') || (opts?.status && opts.status !== 'all')) {
+    const inner: Record<string, string> = {};
+    if (opts?.planId && opts.planId !== 'all') inner.planId = opts.planId;
+    if (opts?.status && opts.status !== 'all') inner.status = opts.status;
+    subFilter = { is: inner };
+  } else {
+    subFilter = { isNot: null };
+  }
+
+  const where: any = {
+    billingMode: 'EXTERNAL',
+    deletedAt: null,
+    subscription: subFilter,
+  };
+
+  const users = await db.user.findMany({
+    where,
+    include: { subscription: true },
+    orderBy: { createdAt: 'desc' },
+    take: 500,
+  });
+
+  return users
+    .map((u) => {
+      const c = mapUserToCustomer(u, u.subscription);
+      const plan = getPlan(c.planId);
+      return {
+        ...c,
+        planName: plan.name,
+        monthlyPrice: monthlyPrice(plan, c.billingInterval),
+      };
+    })
+    .sort((a, b) => new Date(b.subscriptionStart).getTime() - new Date(a.subscriptionStart).getTime());
+}
+
+/** SYNC mock-store version of listSubscriptions — kept private so the
+ *  sync `getPlatformEvents()` can keep deriving the platform events feed
+ *  from the deterministic in-memory seed without making the
+ *  notifications route async. The public `listSubscriptions` is now
+ *  async + DB-backed. */
+function listSubscriptionsMockSync(opts?: {
+  status?: SubscriptionStatus | 'all';
+  planId?: PlanId | 'all';
+}): (Customer & { planName: string; monthlyPrice: number })[] {
   const s = store();
   let list = [...s.customers];
   if (opts?.status && opts.status !== 'all') {
@@ -621,7 +892,43 @@ export function listSubscriptions(opts?: { status?: SubscriptionStatus | 'all'; 
   }
   return list
     .sort((a, b) => new Date(b.subscriptionStart).getTime() - new Date(a.subscriptionStart).getTime())
-    .map((c) => ({ ...c, planName: getPlan(c.planId).name, monthlyPrice: monthlyPrice(getPlan(c.planId), c.billingInterval) }));
+    .map((c) => ({
+      ...c,
+      planName: getPlan(c.planId).name,
+      monthlyPrice: monthlyPrice(getPlan(c.planId), c.billingInterval),
+    }));
+}
+
+/** SYNC mock-store version of listPayments — kept private so the
+ *  sync `getPlatformEvents()` (which powers /api/platform/admin/
+ *  notifications) can keep deriving the platform events feed from the
+ *  deterministic in-memory PAYMENT_SEED without making the notifications
+ *  route async. The public `listPayments` is async + DB-backed. */
+function listPaymentsMockSync(opts?: {
+  status?: PaymentStatus | 'all';
+  search?: string;
+}): (Payment & { customerName: string; customerEmail: string })[] {
+  const s = store();
+  let list = [...s.payments];
+  if (opts?.status && opts.status !== 'all') {
+    list = list.filter((p) => p.status === opts.status);
+  }
+  if (opts?.search) {
+    const q = opts.search.toLowerCase();
+    list = list.filter(
+      (p) =>
+        p.id.toLowerCase().includes(q) ||
+        p.invoiceNumber.toLowerCase().includes(q) ||
+        (s.customers.find((c) => c.id === p.customerId)?.name ?? '').toLowerCase().includes(q),
+    );
+  }
+  return list
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .map((p) => ({
+      ...p,
+      customerName: s.customers.find((c) => c.id === p.customerId)?.name ?? '—',
+      customerEmail: s.customers.find((c) => c.id === p.customerId)?.email ?? '—',
+    }));
 }
 
 export async function listPayments(opts?: { status?: PaymentStatus | 'all'; search?: string }): Promise<(Payment & { customerName: string; customerEmail: string })[]> {
@@ -644,7 +951,7 @@ export async function listPayments(opts?: { status?: PaymentStatus | 'all'; sear
   // client-side from this array by the Payments page (already dynamic).
   const { db } = await import('@/lib/db');
 
-  const where: { status?: string; OR?: unknown[] } = {};
+  const where: any = {};
   if (opts?.status && opts.status !== 'all') {
     where.status = opts.status;
   }
@@ -667,7 +974,7 @@ export async function listPayments(opts?: { status?: PaymentStatus | 'all'; sear
     take: 500,
   });
 
-  const mapped = rows.map((r) => mapPaymentRow(r));
+  const mapped = rows.map((r) => mapPaymentRowForCustomer(r));
   // Precise effective-date sort (paidAt ?? createdAt desc) so pending /
   // failed rows (paidAt null) interleave by their createdAt.
   mapped.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -677,8 +984,14 @@ export async function listPayments(opts?: { status?: PaymentStatus | 'all'; sear
 /** Normalize a Prisma Payment row (with user included) to the public
  *  Payment interface the admin UI consumes. The shape is identical to
  *  the legacy mock Payment so the UI is unchanged; only the data source
- *  switched to the real DB. */
-function mapPaymentRow(r: {
+ *  switched to the real DB. The `user` field is the resolved customer
+ *  ({ id, name, email }) — passed in by listPayments / getRecentPayments-
+ *  Real via Prisma's `include: { user: { select: ... } }`, and
+ *  synthesized in `getCustomer` for the customer-detail Recent Payments
+ *  list. Returns the enriched shape (Payment & { customerName,
+ *  customerEmail }); CustomerDetail strips the extras when composing
+ *  `payments: Payment[]`. */
+function mapPaymentRowForCustomer(r: {
   id: string;
   userId: string;
   planId: string;
@@ -694,7 +1007,7 @@ function mapPaymentRow(r: {
   paymentMethodDetails: string | null;
   paidAt: Date | null;
   createdAt: Date;
-  user: { id: string; name: string | null; email: string } | null;
+  user?: { id: string; name: string | null; email: string } | null;
 }): Payment & { customerName: string; customerEmail: string } {
   const planId = (['free', 'plus', 'pro', 'max'].includes(r.planId) ? r.planId : 'free') as PlanId;
   const status = (['paid', 'pending', 'failed', 'refunded'].includes(r.status)
@@ -754,7 +1067,7 @@ export async function getRecentPaymentsReal(limit = 6): Promise<(Payment & { cus
     orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
     take: limit,
   });
-  const mapped = rows.map((r) => mapPaymentRow(r));
+  const mapped = rows.map((r) => mapPaymentRowForCustomer(r));
   mapped.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   return mapped;
 }
@@ -856,41 +1169,78 @@ export function getAuditLog(limit = 50): AuditEntry[] {
 
 // -------------------- Public mutation API --------------------
 
-export function changeCustomerPlan(customerId: string, newPlanId: PlanId, actor: string): Customer | null {
-  const s = store();
-  const c = s.customers.find((cu) => cu.id === customerId);
-  if (!c) return null;
-  const oldPlan = getPlan(c.planId).name;
-  c.planId = newPlanId;
-  c.subscriptionStatus = 'active';
-  c.trialEnd = null;
-  c.subscriptionStart = new Date().toISOString();
-  const plan = getPlan(newPlanId);
-  c.nextBillingAt = isoDaysAhead(30);
+// REAL DB-backed (replaces the in-memory mock mutation). Looks up the
+//  user by id + their Subscription row; updates the Subscription's
+//  planId (+ billingInterval='monthly' + status='active' + trialEnd=null
+//  when changing to FREE). Stripe-side price swap / immediate cancel
+//  is the dedicated change-plan route's responsibility — it does that
+//  BEFORE calling this helper. This function only writes the local
+//  DB Subscription row + best-effort audit-logs to the in-memory
+//  store (which still feeds the `getPlatformEvents` notifications feed).
+//
+//  Returns the refreshed Customer (built from the updated user+sub) or
+//  null when the user / sub row can't be found. NOTE: `clientChangePlan`
+//  also calls this for legacy demo customers (mock ids like `cus_001`)
+//  — those calls resolve to null here, which is fine because
+//  `clientChangePlan` already wrote the authoritative DB row via
+//  `subscribeToFreePlan` before calling this. The legacy mock store
+//  is no longer mutated (it's now read-only demo data for
+//  `getPlatformEvents` + the `getClientBilling` fallback path).
+export async function changeCustomerPlan(
+  customerId: string,
+  newPlanId: PlanId,
+  actor: string,
+): Promise<Customer | null> {
+  const { db } = await import('@/lib/db');
+  const user = await db.user.findUnique({
+    where: { id: customerId },
+    include: { subscription: true },
+  });
+  if (!user || !user.subscription) return null;
 
-  if (!plan.isFree) {
-    const amount = c.billingInterval === 'yearly' ? plan.price * 12 : plan.price;
-    s.payments.unshift({
-      id: nextPaymentId(),
-      customerId: c.id,
-      planId: newPlanId,
-      amount,
-      currency: 'CHF',
-      status: 'paid',
-      method: c.email.includes('example') ? 'Visa ••4242' : 'Invoice',
-      date: new Date().toISOString(),
-      invoiceNumber: `INV-2026-${String(1000 + _paymentCounter)}`,
+  const oldPlanId = user.subscription.planId as PlanId;
+  const oldPlanName = getPlan(oldPlanId).name;
+  const newPlan = getPlan(newPlanId);
+
+  // Update the Subscription row. For FREE: also reset billingInterval +
+  // status='active' + trialEnd=null (the user is on the free tier now).
+  // For PAID: keep the existing interval + status (the dedicated route
+  // handles the Stripe price swap before calling here).
+  const data: {
+    planId: string;
+    billingInterval?: string;
+    status?: string;
+    trialEnd?: Date | null;
+  } = { planId: newPlanId };
+  if (newPlan.isFree) {
+    data.billingInterval = 'monthly';
+    data.status = 'active';
+    data.trialEnd = null;
+  }
+  await db.subscription.update({ where: { userId: customerId }, data });
+
+  // Best-effort in-memory audit log entry (for the `getPlatformEvents`
+  // notifications feed; the route ALSO writes a DB AuditLog row via
+  // `logAdminAction`).
+  try {
+    appendAudit({
+      actor,
+      action: 'changed plan',
+      target: `Customer: ${user.name ?? user.email}`,
+      detail: `${oldPlanName} → ${newPlan.name}`,
+      severity: 'info',
     });
+  } catch {
+    // best-effort — never block the mutation
   }
 
-  appendAudit({
-    actor,
-    action: 'changed plan',
-    target: `Customer: ${c.name}`,
-    detail: `${oldPlan} → ${plan.name}`,
-    severity: 'info',
+  // Re-fetch so the returned Customer reflects the updated row.
+  const refreshed = await db.user.findUnique({
+    where: { id: customerId },
+    include: { subscription: true },
   });
-  return c;
+  if (!refreshed || !refreshed.subscription) return null;
+  return mapUserToCustomer(refreshed, refreshed.subscription);
 }
 
 export function cancelSubscription(customerId: string, actor: string): Customer | null {
@@ -909,35 +1259,90 @@ export function cancelSubscription(customerId: string, actor: string): Customer 
   return c;
 }
 
-export function suspendCustomer(customerId: string, actor: string): Customer | null {
-  const s = store();
-  const c = s.customers.find((cu) => cu.id === customerId);
-  if (!c) return null;
-  c.status = 'SUSPENDED';
-  appendAudit({
-    actor,
-    action: 'suspended',
-    target: `Customer: ${c.name}`,
-    detail: 'Account suspended by admin',
-    severity: 'critical',
+// REAL DB-backed (replaces the in-memory mock mutation). Sets
+//  User.status to SUSPENDED. Best-effort audit-logs to the in-memory
+//  store (the route ALSO writes a DB AuditLog row via `logAdminAction`).
+//  Returns the refreshed Customer (built from the user+sub) or null
+//  when the user can't be found.
+export async function suspendCustomer(customerId: string, actor: string): Promise<Customer | null> {
+  const { db } = await import('@/lib/db');
+  const user = await db.user.findUnique({
+    where: { id: customerId },
+    include: { subscription: true },
   });
-  return c;
+  if (!user) return null;
+
+  await db.user.update({
+    where: { id: customerId },
+    data: { status: 'SUSPENDED' },
+  });
+
+  try {
+    appendAudit({
+      actor,
+      action: 'suspended',
+      target: `Customer: ${user.name ?? user.email}`,
+      detail: 'Account suspended by admin',
+      severity: 'critical',
+    });
+  } catch {
+    // best-effort — never block the mutation
+  }
+
+  return mapUserToCustomer({ ...user, status: 'SUSPENDED' }, user.subscription);
 }
 
-export function reactivateCustomer(customerId: string, actor: string): Customer | null {
-  const s = store();
-  const c = s.customers.find((cu) => cu.id === customerId);
-  if (!c) return null;
-  c.status = 'ACTIVE';
-  if (c.subscriptionStatus === 'cancelled') c.subscriptionStatus = 'active';
-  appendAudit({
-    actor,
-    action: 'reactivated',
-    target: `Customer: ${c.name}`,
-    detail: 'Account reactivated by admin',
-    severity: 'info',
+// REAL DB-backed (replaces the in-memory mock mutation). Sets
+//  User.status to ACTIVE. Best-effort: if the user's subscription was
+//  cancelled, set the Subscription.status back to 'active' (so the
+//  customer regains plan access immediately). Best-effort audit-logs
+//  to the in-memory store (the route ALSO writes a DB AuditLog row).
+//  Returns the refreshed Customer or null when the user can't be found.
+export async function reactivateCustomer(customerId: string, actor: string): Promise<Customer | null> {
+  const { db } = await import('@/lib/db');
+  const user = await db.user.findUnique({
+    where: { id: customerId },
+    include: { subscription: true },
   });
-  return c;
+  if (!user) return null;
+
+  await db.user.update({
+    where: { id: customerId },
+    data: { status: 'ACTIVE' },
+  });
+
+  // Best-effort: revive the subscription if it was cancelled.
+  if (user.subscription && user.subscription.status === 'cancelled') {
+    try {
+      await db.subscription.update({
+        where: { userId: customerId },
+        data: { status: 'active' },
+      });
+    } catch {
+      // best-effort — never block reactivation
+    }
+  }
+
+  // Re-fetch so the returned Customer reflects the updated sub status.
+  const refreshed = await db.user.findUnique({
+    where: { id: customerId },
+    include: { subscription: true },
+  });
+  if (!refreshed) return null;
+
+  try {
+    appendAudit({
+      actor,
+      action: 'reactivated',
+      target: `Customer: ${refreshed.name ?? refreshed.email}`,
+      detail: 'Account reactivated by admin',
+      severity: 'info',
+    });
+  } catch {
+    // best-effort — never block the mutation
+  }
+
+  return mapUserToCustomer(refreshed, refreshed.subscription);
 }
 
 // -------------------- Sync helpers (used by entitlements + usage-limits) --------------------
@@ -1214,11 +1619,14 @@ export async function clientChangePlan(
     return null;
   }
 
-  // Also mutate the in-memory demo customer (if one exists for this email)
-  // so the Platform Admin Customers page stays consistent with the new state.
-  const s = store();
-  const c = s.customers.find((cu) => cu.email.toLowerCase() === user.email.toLowerCase());
-  if (c) changeCustomerPlan(c.id, newPlanId, user.email);
+  // NOTE: the legacy in-memory `changeCustomerPlan(c.id, ...)` mutation
+  // used to also update the demo mock customer so the (mock-data)
+  // Customers page stayed consistent. With listCustomers now DB-backed,
+  // the Customers page reads from the DB directly — the mock store is
+  // no longer mutated. The DB write above (subscribeToFreePlan) is the
+  // authoritative source. Mock demo customers (cus_001...) would
+  // resolve to null in `changeCustomerPlan` anyway.
+  void store();
 
   return getClientBillingAsync(user);
 }
@@ -1289,14 +1697,19 @@ function alertTimestamp(alertId: string): string {
   }
 }
 
-/** Derive the unified platform events feed. Reads from listCustomers,
- *  listPayments, listSubscriptions, getAuditLog, getAlerts — all of
- *  which already exist and power the rest of the Platform Admin. */
+/** Derive the unified platform events feed. Reads from the SYNC mock-store
+ *  helpers (listCustomersMockSync / listPaymentsMockSync / listSubscriptionsMockSync)
+ *  + getAuditLog + getAlerts. The public `listCustomers` / `listPayments` /
+ *  `listSubscriptions` are now async + DB-backed (Task 78-D), but this
+ *  function stays SYNC because /api/platform/admin/notifications calls it
+ *  synchronously and isn't in this task's file list. The mock store is the
+ *  deterministic seed (no Math.random) so the derived events are stable
+ *  across renders. */
 export function getPlatformEvents(): PlatformEvent[] {
   const events: PlatformEvent[] = [];
 
   // 1. Customer registrations — INFO "New customer registered"
-  for (const c of listCustomers()) {
+  for (const c of listCustomersMockSync()) {
     events.push({
       id: `evt-cust-${c.id}`,
       type: 'INFO',
@@ -1308,7 +1721,7 @@ export function getPlatformEvents(): PlatformEvent[] {
   }
 
   // 2. Payments — SUCCESS / ERROR / WARNING / INFO by status
-  for (const p of listPayments()) {
+  for (const p of listPaymentsMockSync()) {
     let type: PlatformEventType = 'INFO';
     let title = 'Payment update';
     if (p.status === 'paid') {
@@ -1335,7 +1748,7 @@ export function getPlatformEvents(): PlatformEvent[] {
   }
 
   // 3. Subscriptions — INFO created, WARNING cancelled, ACTION_REQUIRED trial ending
-  for (const s of listSubscriptions()) {
+  for (const s of listSubscriptionsMockSync()) {
     const plan = getPlan(s.planId);
     events.push({
       id: `evt-sub-${s.id}`,

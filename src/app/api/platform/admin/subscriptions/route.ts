@@ -9,5 +9,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const status = (searchParams.get('status') as SubscriptionStatus | 'all' | null) ?? 'all';
   const planId = (searchParams.get('planId') as PlanId | 'all' | null) ?? 'all';
-  return ok(listSubscriptions({ status, planId }));
+  // listSubscriptions is now async + DB-backed (Task 78-D) — reads the
+  // live User + Subscription tables.
+  return ok(await listSubscriptions({ status, planId }));
 }

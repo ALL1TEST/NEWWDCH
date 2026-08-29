@@ -10,12 +10,18 @@
 //     (mark active, set currentPeriodEnd from Stripe's subscription
 //     period end, record the Stripe customer + subscription IDs, write
 //     a FULLY-relational Payment row: Invoice ID, PaymentIntent ID,
-//     Charge ID, + payment-method metadata).
+//     Charge ID, + payment-method metadata). Also best-effort copies the
+//     session-level discount snapshot onto the just-created Payment row
+//     (the invoice.paid handler will overwrite it with the authoritative
+//     value).
 //   - customer.subscription.updated      → refresh status + currentPeriodEnd.
+//   - customer.subscription.created      → refresh status + currentPeriodEnd.
 //   - customer.subscription.deleted      → cancel the subscription
 //     (preserve the row for audit; future access reverts to Free).
 //   - invoice.paid                      → record a new Payment row with
-//     the full Stripe relational + payment-method metadata.
+//     the full Stripe relational + payment-method metadata, AND record
+//     the coupon applied (CouponRedemption audit row + Coupon.timesRedeemed
+//     increment + Payment.couponCode/discountAmount snapshot).
 //   - invoice.payment_failed            → mark the subscription past_due
 //     + record a failed Payment row with the failure reason.
 //   - payment_intent.succeeded           → record a one-time / orphan
@@ -23,6 +29,9 @@
 //     an invoice.paid / checkout row for the same PI).
 //   - payment_intent.payment_failed      → record a failed one-time
 //     Payment with the failure reason.
+//   - charge.refunded                    → mark the existing Payment row
+//     as 'refunded' (full) or annotate 'Partial refund processed: ...'
+//     (partial). Deduped by stripeChargeId, falling back to PI id.
 //
 // Every Payment row written here carries: userId (Customer), planId
 // (Plan), subscriptionId (Subscription), stripeInvoiceId (Invoice),
@@ -33,6 +42,13 @@
 // rows; Plans & Pricing reads PlanConfig; the webhook keeps them in
 // sync with Stripe.
 //
+// IDEMPOTENCY: Stripe retries events up to 3 days. Before dispatching
+// any handler, this route inserts a row into the WebhookEvent ledger
+// (unique on stripeEventId). If the insert returns false (duplicate),
+// the event is ack'd and skipped — never re-processed. If a handler
+// throws after the ledger insert succeeds, the ledger row is updated
+// to outcome='error' + errorMessage (best-effort). Stripe will retry.
+//
 // When Stripe is NOT configured (no STRIPE_SECRET_KEY), this route
 // returns 503 — no events are processed. The platform's free-plan flow
 // does not require this webhook.
@@ -41,7 +57,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { activateSubscriptionFromStripe, cancelSubscription } from '@/lib/platform/subscription-data';
-import { isStripeConfigured, verifyStripeWebhook, getStripeClient } from '@/lib/stripe';
+import {
+  isStripeConfigured,
+  verifyStripeWebhook,
+  getStripeClient,
+  markWebhookEventProcessed,
+  extractInvoiceCoupon,
+} from '@/lib/stripe';
 import type Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
@@ -61,6 +83,31 @@ export async function POST(request: NextRequest) {
       { error: { code: 'INVALID_SIGNATURE', message: 'Webhook signature verification failed.' } },
       { status: 400 },
     );
+  }
+
+  // -------------------- Idempotency ledger --------------------
+  // Stripe retries events up to 3 days; we MUST NOT process the same
+  // evt_... twice. Insert a WebhookEvent row (unique on stripeEventId)
+  // BEFORE dispatching the handler. If the insert returns false, the
+  // event was already processed → ack and skip. The ledger insert
+  // happens BEFORE processing so a crash mid-processing doesn't cause
+  // a re-process on retry.
+  const stripeEventId = event.id;
+  const eventType = event.type;
+  const apiVersion = event.api_version ?? null;
+  const objectId =
+    (event.data.object as unknown as { id?: string | null } | null)?.id ?? null;
+
+  const isNewEvent = await markWebhookEventProcessed({
+    stripeEventId,
+    eventType,
+    apiVersion,
+    objectId,
+    outcome: 'processed',
+  });
+  if (!isNewEvent) {
+    // Duplicate event — already processed on a previous delivery.
+    return NextResponse.json({ received: true, type: event.type, duplicate: true });
   }
 
   try {
@@ -94,6 +141,10 @@ export async function POST(request: NextRequest) {
         await handlePaymentIntentFailed(event);
         break;
       }
+      case 'charge.refunded': {
+        await handleChargeRefunded(event);
+        break;
+      }
       default:
         // Unhandled event types are silently ignored (no DB changes).
         break;
@@ -102,6 +153,21 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     // Don't leak the error message to the client — Stripe will retry.
     console.error('Stripe webhook handler error:', err);
+    // Best-effort: mark the ledger row as errored so we can see it in
+    // the admin ledger view. Never mask the original error — if the
+    // update itself fails, log it and continue.
+    try {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      await db.webhookEvent.update({
+        where: { stripeEventId },
+        data: {
+          outcome: 'error',
+          errorMessage: errorMessage.slice(0, 1000),
+        },
+      });
+    } catch (ledgerErr) {
+      console.error('Stripe webhook: failed to mark ledger row as errored:', ledgerErr);
+    }
     return NextResponse.json(
       { error: { code: 'WEBHOOK_HANDLER_ERROR', message: 'Internal handler error.' } },
       { status: 500 },
@@ -226,6 +292,164 @@ async function findExistingPayment(stripeInvoiceId?: string | null, stripePaymen
   return null;
 }
 
+// -------------------- Coupon helpers --------------------
+
+/** Best-effort: extract the discount applied to a Checkout Session's
+ *  `total_details.discount`. Returns { couponCode, discountAmount } or null
+ *  when the session had no discount.
+ *
+ *  The Stripe API exposes the discount as a Discount object whose `coupon`
+ *  carries the Stripe Coupon id (e.g. "kUW0yO9r") — NOT the customer-facing
+ *  code. We try to resolve the local customer-facing code from the Coupon
+ *  table by stripeCouponId; if not found, we fall back to the Stripe coupon
+ *  id. The authoritative coupon snapshot is set by the invoice.paid handler
+ *  (which has the richer invoice-level discount) — this is a best-effort
+ *  pre-population that gets overwritten. */
+async function extractSessionDiscount(
+  session: Stripe.Checkout.Session,
+): Promise<{ couponCode: string | null; discountAmount: number | null } | null> {
+  try {
+    const totalDetails = session.total_details as unknown as {
+      discount?: {
+        coupon?: {
+          id?: string;
+          name?: string | null;
+          percent_off?: number | null;
+          amount_off?: number | null;
+          currency?: string | null;
+        } | null;
+      } | null;
+    } | null;
+    const coupon = totalDetails?.discount?.coupon;
+    if (!coupon?.id) return null;
+
+    // Try to resolve the local customer-facing coupon code from the
+    // Coupon table by stripeCouponId. (stripeCouponId is not unique in
+    // the local schema — it's an index — so we use findFirst.)
+    let couponCode: string | null = coupon.id;
+    try {
+      const local = await db.coupon.findFirst({
+        where: { stripeCouponId: coupon.id },
+        select: { code: true },
+      });
+      if (local?.code) couponCode = local.code;
+    } catch {
+      // ignore — fall back to Stripe coupon id (best-effort).
+    }
+
+    return {
+      couponCode,
+      discountAmount: coupon.amount_off ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Record the coupon applied to an invoice onto the Payment + the local
+ *  Coupon/CouponRedemption tables. Called from `handleInvoicePaid` AFTER
+ *  the Payment row is created (or, when the payment row already exists
+ *  from a previous event, against that existing row id).
+ *
+ *  Steps (all best-effort, never throws — the core payment-row creation
+ *  is already done by the time this runs):
+ *    1. extractInvoiceCoupon(invoice) → { couponCode, stripeCouponId, discountAmount }
+ *    2. db.payment.update → set couponCode + discountAmount on the Payment row.
+ *    3. db.coupon.findUnique({ where: { code } }) → resolve the local Coupon.
+ *    4. Idempotency check: only increment timesRedeemed if no CouponRedemption
+ *       row exists for this (couponId, userId, stripeEventId) tuple.
+ *    5. db.coupon.update → increment timesRedeemed (idempotent).
+ *    6. db.couponRedemption.create → audit row. Wrap in try/catch —
+ *       unique-violation on stripeEventId means a parallel event already
+ *       created the row; skip silently. */
+async function recordInvoiceCoupon(
+  event: Stripe.Event,
+  invoice: Stripe.Invoice,
+  paymentId: string,
+  userId: string,
+): Promise<void> {
+  try {
+    const couponInfo = extractInvoiceCoupon(invoice);
+    if (!couponInfo || !couponInfo.couponCode) return;
+
+    // 1. Set couponCode + discountAmount on the Payment row.
+    try {
+      await db.payment.update({
+        where: { id: paymentId },
+        data: {
+          couponCode: couponInfo.couponCode,
+          discountAmount: couponInfo.discountAmount ?? null,
+        },
+      });
+    } catch (e) {
+      console.error('Stripe webhook: failed to set coupon snapshot on Payment row:', e);
+    }
+
+    // 2. Resolve the local Coupon row by code.
+    let coupon: { id: string } | null = null;
+    try {
+      coupon = await db.coupon.findUnique({
+        where: { code: couponInfo.couponCode },
+        select: { id: true },
+      });
+    } catch (e) {
+      console.error('Stripe webhook: failed to look up local Coupon by code:', e);
+    }
+    if (!coupon) return; // no local Coupon to increment — best-effort, skip.
+
+    // 3. Idempotency: only increment timesRedeemed if no CouponRedemption
+    //    row exists for this (couponId, userId, stripeEventId) tuple.
+    const stripeEventId = event.id;
+    let alreadyRedeemed = false;
+    try {
+      const existingRedemption = await db.couponRedemption.findFirst({
+        where: { couponId: coupon.id, userId, stripeEventId },
+        select: { id: true },
+      });
+      alreadyRedeemed = !!existingRedemption;
+    } catch (e) {
+      console.error('Stripe webhook: failed to check existing CouponRedemption:', e);
+    }
+
+    if (!alreadyRedeemed) {
+      try {
+        await db.coupon.update({
+          where: { id: coupon.id },
+          data: { timesRedeemed: { increment: 1 } },
+        });
+      } catch (e) {
+        console.error('Stripe webhook: failed to increment Coupon.timesRedeemed:', e);
+      }
+    }
+
+    // 4. Create the CouponRedemption audit row. Unique-violation on
+    //    stripeEventId (a parallel event already created the row) is
+    //    swallowed — log and skip. Never block the payment row.
+    try {
+      await db.couponRedemption.create({
+        data: {
+          couponId: coupon.id,
+          userId,
+          stripeEventId,
+          stripeInvoiceId: invoice.id,
+          stripeSubscriptionId:
+            typeof invoice.subscription === 'string' ? invoice.subscription : null,
+          amountOff: couponInfo.discountAmount ?? 0,
+          currency: invoice.currency ?? 'usd',
+        },
+      });
+    } catch (e) {
+      console.error(
+        'Stripe webhook: CouponRedemption insert failed (likely duplicate event — swallowed):',
+        e,
+      );
+    }
+  } catch (e) {
+    // Best-effort — never let coupon recording break the webhook.
+    console.error('Stripe webhook: coupon recording failed (best-effort, swallowed):', e);
+  }
+}
+
 // -------------------- Event handlers --------------------
 
 async function handleCheckoutCompleted(event: Stripe.Event) {
@@ -284,6 +508,38 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
           }
         : undefined,
   });
+
+  // Best-effort: pass the session-level discount snapshot along to the
+  // just-created Payment row. We do NOT write a CouponRedemption row
+  // here — the coupon snapshot lives on the invoice that fires
+  // `invoice.paid`, and that handler will set the authoritative value
+  // (which overwrites whatever we set here).
+  if (session.amount_total && session.amount_total > 0) {
+    try {
+      const sessionDiscount = await extractSessionDiscount(session);
+      if (sessionDiscount && sessionDiscount.couponCode) {
+        // Find the just-created Payment row by invoice / PI id.
+        const justCreated = await findExistingPayment(
+          typeof session.invoice === 'string' ? session.invoice : null,
+          piId,
+        );
+        if (justCreated) {
+          await db.payment.update({
+            where: { id: justCreated.id },
+            data: {
+              couponCode: sessionDiscount.couponCode,
+              discountAmount: sessionDiscount.discountAmount ?? null,
+            },
+          });
+        }
+      }
+    } catch (e) {
+      console.error(
+        'Stripe webhook: failed to set session-discount snapshot on Payment row (best-effort):',
+        e,
+      );
+    }
+  }
 }
 
 async function handleSubscriptionUpdated(event: Stripe.Event) {
@@ -354,7 +610,13 @@ async function handleInvoicePaid(event: Stripe.Event) {
   // fire `invoice.paid` + `payment_intent.succeeded` for the same charge).
   // Dedup by invoice id OR payment-intent id.
   const existing = await findExistingPayment(invoice.id, piId);
-  if (existing) return;
+  if (existing) {
+    // Even when the payment row already exists (e.g. from a previous
+    // event for the same underlying charge), record the coupon snapshot
+    // + redemption audit if the invoice had a discount.
+    await recordInvoiceCoupon(event, invoice, existing.id, userId);
+    return;
+  }
 
   // Fetch the payment-method metadata for the full relational record.
   const stripe = getStripeClient();
@@ -362,7 +624,7 @@ async function handleInvoicePaid(event: Stripe.Event) {
 
   // Find the user's subscription row.
   const sub = await db.subscription.findUnique({ where: { userId } });
-  await db.payment.create({
+  const payment = await db.payment.create({
     data: {
       userId,
       subscriptionId: sub?.id ?? null,
@@ -380,6 +642,12 @@ async function handleInvoicePaid(event: Stripe.Event) {
       paidAt: new Date(),
     },
   });
+
+  // Coupon recording — best-effort, never blocks the payment row creation
+  // (the row was already created above). Sets couponCode/discountAmount on
+  // the just-created Payment row, increments the local Coupon.timesRedeemed
+  // (idempotent), and creates a CouponRedemption audit row (idempotent).
+  await recordInvoiceCoupon(event, invoice, payment.id, userId);
 }
 
 async function handleInvoiceFailed(event: Stripe.Event) {
@@ -527,4 +795,57 @@ async function handlePaymentIntentFailed(event: Stripe.Event) {
       description: failureReason,
     },
   });
+}
+
+/** charge.refunded — updates the existing Payment row to reflect a refund.
+ *  Full refund → status='refunded'. Partial refund → keep current status
+ *  but annotate 'Partial refund processed: <amount_refunded> <currency>'.
+ *  Deduped by stripeChargeId, falling back to PI id. Never creates a
+ *  duplicate Payment row — the original row is updated in place. If no
+ *  Payment row exists for the charge (orphan charge that never created
+ *  one), returns silently. */
+async function handleChargeRefunded(event: Stripe.Event) {
+  const charge = event.data.object as Stripe.Charge;
+
+  // Find the existing Payment row by charge id, falling back to PI id.
+  let payment = await db.payment.findFirst({ where: { stripeChargeId: charge.id } });
+  if (!payment) {
+    const piId = typeof charge.payment_intent === 'string' ? charge.payment_intent : null;
+    if (piId) {
+      payment = await db.payment.findFirst({ where: { stripePaymentIntentId: piId } });
+    }
+  }
+  if (!payment) {
+    // Orphan charge (no Payment row ever created) — silently ignore.
+    return;
+  }
+
+  // The Stripe SDK 2026-08-26.dahlia type may not expose `refunded` /
+  // `amount_refunded` on Charge in all API versions; cast to access
+  // them safely.
+  const chargeAny = charge as unknown as {
+    refunded?: boolean;
+    amount_refunded?: number;
+    amount?: number;
+    currency?: string;
+  };
+  const fullyRefunded = chargeAny.refunded === true;
+  const amountRefunded = chargeAny.amount_refunded ?? 0;
+  const currency = (chargeAny.currency ?? charge.currency ?? 'usd').toUpperCase();
+
+  if (fullyRefunded) {
+    await db.payment.update({
+      where: { id: payment.id },
+      data: { status: 'refunded' },
+    });
+  } else {
+    // Partial refund — keep current status but record a memo so the
+    // admin Payments table can show "Partial refund processed: …".
+    await db.payment.update({
+      where: { id: payment.id },
+      data: {
+        description: `Partial refund processed: ${amountRefunded} ${currency}`,
+      },
+    });
+  }
 }

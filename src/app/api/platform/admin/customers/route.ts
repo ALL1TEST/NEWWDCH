@@ -10,5 +10,7 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get('search') ?? undefined;
   const planId = (searchParams.get('planId') as PlanId | 'all' | null) ?? 'all';
   const status = (searchParams.get('status') as SubscriptionStatus | 'all' | null) ?? 'all';
-  return ok(listCustomers({ search, planId, status }));
+  // listCustomers is now async + DB-backed (Task 78-D) — reads the live
+  // User + Subscription tables (EXTERNAL users WITH a subscription row).
+  return ok(await listCustomers({ search, planId, status }));
 }
