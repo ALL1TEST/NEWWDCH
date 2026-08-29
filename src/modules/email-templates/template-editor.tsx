@@ -125,22 +125,21 @@ interface VariableGroup {
 //
 // The Dynamic Variables panel shown in the template editor sidebar is
 // scope-aware so the platform Email Templates page only exposes
-// variables relevant to platform-wide system emails (customer, site,
-// subscription, platform-level, system URLs). The client Email
+// variables relevant to platform-wide system emails (customer,
+// subscription, payment, platform-level, system URLs). The client Email
 // Templates page keeps the broader set (including CMS-only Article /
-// Comment / Newsletter groups) since client templates legitimately
-// cover article / comment notifications.
+// Comment / Newsletter groups and a Site group) since client templates
+// legitimately cover article / comment notifications and are sent in
+// the context of a specific CMS site.
 //
 // IMPORTANT: only variables that the backend / template renderer can
-// actually resolve are listed. The platform renderer (see
-// src/modules/email-templates/template-preview.tsx `DUMMY_DATA` and
-// the seeded templates in src/app/api/email-templates/seed/route.ts)
-// defines the canonical resolver surface — anything not present there
-// is NOT invented here. In particular the platform.* / payment.* /
-// subscription.billing_interval / subscription.next_billing variables
-// are intentionally omitted because no resolver currently exists for
-// them; the platform.* concept is represented via the existing
-// company.* keys which the renderer does support.
+// actually resolve are listed. The renderer (see DUMMY_DATA in
+// src/modules/email-templates/template-preview.tsx, which is the
+// canonical replacement surface for both the preview pane and the
+// mock send-test path) defines every key exposed here. The platform
+// scope uses the canonical platform.* keys (not company.*), and the
+// subscription / payment groups expose only fields the renderer truly
+// resolves — no invented/demo variables.
 
 const CLIENT_VARIABLE_GROUPS: VariableGroup[] = [
   {
@@ -235,13 +234,14 @@ const CLIENT_VARIABLE_GROUPS: VariableGroup[] = [
 ];
 
 // Platform-scope variable groups — strict subset that excludes
-// CMS-only groups (Article / Comment / Newsletter) and consolidates
-// the platform / company / user concepts into the canonical platform
-// email contexts: CUSTOMER, SITE, SUBSCRIPTION, PLATFORM, SYSTEM.
-// Every key here is resolvable by the template-preview renderer
-// (`DUMMY_DATA` in template-preview.tsx) so the admin can write a
-// platform template using only these variables and see them replaced
-// in the preview pane.
+// CMS-only groups (Article / Comment / Newsletter) and the Site group
+// (SITE variables are only relevant for emails sent in the context of a
+// customer's specific CMS site, not for platform-wide system emails).
+// The platform concept is exposed via the canonical platform.* keys
+// (not company.*) for consistency. Every key here is resolvable by the
+// template-preview renderer (`DUMMY_DATA` in template-preview.tsx) so
+// the admin can write a platform template using only these variables
+// and see them replaced in the preview pane.
 const PLATFORM_VARIABLE_GROUPS: VariableGroup[] = [
   {
     label: 'Customer',
@@ -253,28 +253,32 @@ const PLATFORM_VARIABLE_GROUPS: VariableGroup[] = [
     ],
   },
   {
-    label: 'Site',
-    icon: <Code2 className="h-3.5 w-3.5" />,
-    variables: [
-      { key: 'site.name', description: 'Site / platform name' },
-      { key: 'site.url', description: 'Site / platform URL' },
-    ],
-  },
-  {
     label: 'Subscription',
     icon: <Send className="h-3.5 w-3.5" />,
     variables: [
       { key: 'subscription.plan', description: 'Subscription plan name' },
       { key: 'subscription.status', description: 'Subscription status' },
+      { key: 'subscription.billing_interval', description: 'Billing interval (monthly / yearly)' },
+      { key: 'subscription.next_billing', description: 'Next billing date' },
+    ],
+  },
+  {
+    label: 'Payment',
+    icon: <Mail className="h-3.5 w-3.5" />,
+    variables: [
+      { key: 'payment.amount', description: 'Payment amount' },
+      { key: 'payment.currency', description: 'Payment currency' },
+      { key: 'payment.status', description: 'Payment status' },
+      { key: 'payment.date', description: 'Payment date' },
     ],
   },
   {
     label: 'Platform',
     icon: <Mail className="h-3.5 w-3.5" />,
     variables: [
-      { key: 'company.name', description: 'Platform name' },
-      { key: 'company.url', description: 'Platform URL' },
-      { key: 'company.support_email', description: 'Platform support email' },
+      { key: 'platform.name', description: 'Platform name' },
+      { key: 'platform.url', description: 'Platform URL' },
+      { key: 'platform.support_email', description: 'Platform support email' },
     ],
   },
   {

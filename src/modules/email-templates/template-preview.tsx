@@ -92,6 +92,11 @@ const DUMMY_DATA: Record<string, string> = {
   '{{company.name}}': 'RankBolt',
   '{{company.url}}': 'https://rankbolt.com',
   '{{company.support_email}}': 'support@rankbolt.com',
+  // Platform-canonical aliases (preferred for platform-wide system emails;
+  // kept company.* above for backward compatibility with existing templates).
+  '{{platform.name}}': 'RankBolt',
+  '{{platform.url}}': 'https://rankbolt.com',
+  '{{platform.support_email}}': 'support@rankbolt.com',
   '{{article.title}}': '10 Best Travel Destinations for 2025',
   '{{article.url}}': 'https://travelblog.com/best-travel-destinations',
   '{{article.excerpt}}': 'Discover the top travel destinations that should be on your radar for 2025...',
@@ -113,6 +118,17 @@ const DUMMY_DATA: Record<string, string> = {
   '{{subscription.status}}': 'Active',
   '{{subscription.amount}}': '$99.00',
   '{{subscription.billing_cycle}}': 'monthly',
+  // Platform-canonical subscription fields (billing_interval is the
+  // platform-facing alias of billing_cycle; next_billing is the upcoming
+  // renewal date resolved from the real subscription when sent).
+  '{{subscription.billing_interval}}': 'monthly',
+  '{{subscription.next_billing}}': new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+  // Payment context (resolved from the real payment/invoice when an email
+  // is triggered by a successful/failed payment).
+  '{{payment.amount}}': '$99.00',
+  '{{payment.currency}}': 'CHF',
+  '{{payment.status}}': 'succeeded',
+  '{{payment.date}}': new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
   '{{backup.name}}': 'daily-backup-2025-01-15',
   '{{backup.size}}': '2.4 GB',
   '{{backup.status}}': 'completed',
