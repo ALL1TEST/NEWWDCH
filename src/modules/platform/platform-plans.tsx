@@ -195,10 +195,13 @@ function PlanSummaryCard({
           plan.active ? '' : 'opacity-60'
         }`}
       >
-        {/* Header: plan name (clean text label) + quick active toggle */}
+        {/* Header: plan name (clean text label) + quick active toggle.
+            The plan name is the LARGEST typographic element on the card
+            (text-5xl font-bold) so it is clearly larger than the main
+            price below it. Same typography on Free / Plus / Pro / Max. */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-3xl font-bold tracking-tight text-foreground">{plan.name}</h3>
+            <h3 className="text-5xl font-bold tracking-tight text-foreground">{plan.name}</h3>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Label
@@ -217,13 +220,13 @@ function PlanSummaryCard({
         </div>
 
         {/* Price — reflects the global billing-interval selector
-             (Monthly / Yearly). The MAIN price uses the SAME large
-             typography (text-5xl font-semibold) on every card so the
-             visual hierarchy is consistent across Free / Plus / Pro /
-             Max and the main price is clearly larger than the plan name
-             (text-3xl). The currency is shown as a SYMBOL ($ / € / £)
-             — never the ISO text code — per the Plans & Pricing visual
-             spec.
+             (Monthly / Yearly). The MAIN price uses the SAME typography
+             (text-4xl font-semibold) on every card so the visual
+             hierarchy is consistent across Free / Plus / Pro / Max and
+             the main price stays slightly smaller than the plan name
+             (text-5xl) while still clearly prominent. The currency is
+             shown as a SYMBOL ($ / € / £) — never the ISO text code —
+             per the Plans & Pricing visual spec.
                - Free:    $0
                - Monthly: $X / month
                - Yearly:  $X.XX / month   $X / year
@@ -244,7 +247,7 @@ function PlanSummaryCard({
         <div className="-mx-6 mt-6">
           {plan.isFree ? (
             <div className="flex items-baseline gap-2">
-              <span className="shrink-0 whitespace-nowrap text-5xl font-semibold leading-none tracking-tight text-foreground">
+              <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
                 {formatPriceSymbol(0, plan.currency)}
               </span>
             </div>
@@ -257,7 +260,7 @@ function PlanSummaryCard({
             //        Pro  →  $40.83 / month  $490 / year
             //        Max  →  $82.50 / month  $990 / year
             <div className="flex items-baseline gap-2">
-              <span className="shrink-0 whitespace-nowrap text-5xl font-semibold leading-none tracking-tight text-foreground">
+              <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
                 {formatPriceSymbolMonthlyEquiv(plan.priceYearly / 12, plan.currency)}
               </span>
               <span className="whitespace-nowrap text-sm text-muted-foreground">/ month</span>
@@ -267,7 +270,7 @@ function PlanSummaryCard({
             </div>
           ) : (
             <div className="flex items-baseline gap-2">
-              <span className="shrink-0 whitespace-nowrap text-5xl font-semibold leading-none tracking-tight text-foreground">
+              <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
                 {formatPriceSymbol(plan.priceMonthly, plan.currency)}
               </span>
               <span className="whitespace-nowrap text-sm text-muted-foreground">/ month</span>
@@ -282,8 +285,8 @@ function PlanSummaryCard({
 
         {/* Feature items (section label omitted). Same typography on every card:
              text-[15px] leading-normal so features read as a clear medium-size
-             block — visibly subordinate to the text-5xl price and text-3xl plan
-             name, never competing with them. Check icon is h-4 w-4 with mt-0.5
+             block — visibly subordinate to the text-5xl plan name and text-4xl
+             price, never competing with them. Check icon is h-4 w-4 with mt-0.5
              so its optical center aligns with the first line of feature text;
              gap-2.5 keeps a consistent icon↔text column gutter; items-start
              pins the icon to the first line even when a feature wraps to 2

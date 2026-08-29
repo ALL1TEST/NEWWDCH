@@ -7036,3 +7036,37 @@ Stage Summary:
   7. Card consistency: same p-8 padding, -mx-6 divider/price breakout, feature-row spacing (space-y-2.5), divider treatment, Edit button mt-auto bottom-aligned
   8. No changes to plan names/prices/features/data/limits/toggles/monthly-yearly logic/create-edit logic/backend/API/DB
 - Lint baseline unchanged; browser-verified clean render; precise DOM measurement numerically confirms equidistant divider + consistent typography + aligned icons across all 4 cards
+
+---
+Task ID: 68
+Agent: main (orchestrator)
+Task: Fix price hierarchy inside all Plans & Pricing cards — PLAN NAME must be visually larger than the price (currently price > name). Increase plan-name font size, reduce main price font size slightly, keep /month & /year small muted. Same typography across all 4 cards. No logic/data changes.
+
+Work Log:
+- Read worklog (Task 66: price=text-5xl=48px, name=text-3xl=30px — price was LARGER than name; Task 67: features polished, hierarchy unchanged)
+- Re-read src/modules/platform/platform-plans.tsx price block (lines 193-280) + plan name (line 201)
+- Confirmed current hierarchy INVERTED vs spec: plan name text-3xl (30px) < main price text-5xl (48px); user requires plan name > price
+- Applied MultiEdit (visual-only, no data/logic):
+  1. Plan name h3: `text-3xl font-bold tracking-tight` → `text-5xl font-bold tracking-tight` (30px → 48px, clearly larger)
+  2. Three price spans (Free, Yearly monthly-equiv, Monthly): `text-5xl font-semibold leading-none tracking-tight` → `text-4xl font-semibold leading-none tracking-tight` (48px → 36px, slightly smaller, still prominent)
+  3. Updated 3 comments to reflect new hierarchy: header comment ("plan name is the LARGEST typographic element"), price block comment ("text-4xl font-semibold ... stays slightly smaller than the plan name (text-5xl)"), feature comment ("subordinate to the text-5xl plan name and text-4xl price")
+- Kept all anti-wrap guards: shrink-0 + whitespace-nowrap + leading-none on price spans (unchanged); -mx-6 breakout for width (unchanged); gap-2 / ml-2 layout (unchanged); items-baseline (unchanged)
+- Kept: /month & /year at text-sm text-muted-foreground (14px); card p-8 padding; divider mt-6 equidistant; features mt-6; Edit Plan button mt-auto; Monthly/Yearly toggle logic; plan data; create/edit logic; backend/API/DB
+- bun run lint: 4 errors + 3 warnings — ALL pre-existing in content-edit-page.tsx / seo-broken-links-page.tsx, NONE in platform-plans.tsx (baseline unchanged)
+- Browser verification (agent-browser, 1440x900, Platform Admin via #platform-overview session, plans page):
+  - Monthly mode screenshot + VLM: confirmed on ALL 4 cards — plan name ("Free"/"Plus"/"Pro"/"Max") visually LARGER than price ("$0"/"$9"/"$49"/"$99"); /month small muted (~14px); everything fully visible (no clipping)
+  - Yearly mode screenshot + VLM: confirmed on Free/Plus/Pro — plan name visually LARGER than large primary monthly-equiv price ("$0"/"$7.50"/"$40.83"); "/ month" small muted; "$90 / year" / "$490 / year" small muted; nothing clipped
+  - Max Yearly scrolled into view + targeted screenshot + VLM: confirmed plan name "Max" visually LARGER than "$82.50"; "$990 / year" fully visible, no clipping
+  - PRECISE DOM measurement (Yearly mode): all 4 cards — name 48px weight 700; price 36px weight 600; 48 > 36 ✓ → PLAN NAME clearly LARGER than PRICE on every card; identical typography hierarchy across all 4 cards
+  - PRECISE DOM measurement (Monthly mode): all 4 cards — name 48px weight 700; price 36px weight 600; identical to Yearly typography ✓
+  - Browser console: clean (only React DevTools info + HMR/Fast Refresh logs), no errors/hydration warnings
+
+Stage Summary:
+- Price hierarchy FIXED per spec on all 4 plan cards (Free/Plus/Pro/Max):
+  - PLAN NAME = text-5xl font-bold (48px) — LARGEST (was text-3xl=30px, smaller than price)
+  - PRICE = text-4xl font-semibold (36px) — slightly smaller than name, still prominent (was text-5xl=48px)
+  - /month & /year = text-sm text-muted-foreground (14px) — small muted (unchanged)
+  - Final ratio: 48 > 36 > 14 — PLAN NAME clearly LARGER than PRICE, PRICE clearly LARGER than /month/year
+- Same typography hierarchy applied identically to all 4 cards (shared component)
+- No changes to: pricing/plan logic, Monthly/Yearly toggle, features, buttons, card dimensions, card padding, anti-wrap guards, -mx-6 breakout, divider equidistance, Edit Plan button placement, create/edit dialog logic, backend/API/DB
+- Lint baseline unchanged (4 errors + 3 warnings, all pre-existing); browser-verified clean render on Monthly + Yearly + Free + Max; precise DOM numerically confirms 48>36 on every card in both modes
