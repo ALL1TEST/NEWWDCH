@@ -25,7 +25,13 @@
 
 // -------------------- Types --------------------
 
-export type PlanId = 'free' | 'plus' | 'pro' | 'max';
+// PlanId is a plain string, NOT a fixed union. The PlanConfig table is the
+// source of truth — custom plans created via Platform Admin must flow
+// through every consumer (checkout, change-plan, admin change-plan,
+// billing page, MRR, entitlements). Callers validate plan ids against
+// the DB via `ensurePlanAssignable()` (subscription-data.ts), not
+// against a hardcoded TypeScript union.
+export type PlanId = string;
 export type SubscriptionStatus = 'active' | 'trial' | 'past_due' | 'cancelled' | 'expired';
 export type BillingInterval = 'monthly' | 'yearly';
 export type CustomerStatus = 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED';
@@ -45,13 +51,12 @@ export interface Plan {
   features: string[];
   /** Authoritative feature keys granted by this plan (checked by hasFeature). */
   entitlements: string[];
-  /** Plan usage limits. -1 = unlimited. */
+  /** Plan usage limits. -1 = unlimited. Only limits with REAL server-side
+   *  enforcement are tracked (maxSites, storageBytes). AI Words / AI Articles /
+   *  Automation Runs were removed because no real usage-tracking system exists. */
   limits: {
     maxSites: number;
     storageBytes: number;
-    aiWords: number;
-    aiArticles: number;
-    automationRuns: number;
   };
 }
 
@@ -522,7 +527,7 @@ function mapUserToCustomer(
     trialEnd: Date | null;
   } | null,
 ): Customer {
-  const planId = (sub && ['free', 'plus', 'pro', 'max'].includes(sub.planId) ? sub.planId : 'free') as PlanId;
+  const planId = (sub && sub.planId ? sub.planId : 'free') as PlanId;
   const subscriptionStatus = (sub && ['active', 'trial', 'past_due', 'cancelled', 'expired'].includes(sub.status)
     ? sub.status
     : 'active') as SubscriptionStatus;
@@ -1037,7 +1042,7 @@ function mapPaymentRowForCustomer(r: {
   createdAt: Date;
   user?: { id: string; name: string | null; email: string } | null;
 }): Payment & { customerName: string; customerEmail: string } {
-  const planId = (['free', 'plus', 'pro', 'max'].includes(r.planId) ? r.planId : 'free') as PlanId;
+  const planId = (r.planId ? r.planId : 'free') as PlanId;
   const status = (['paid', 'pending', 'failed', 'refunded'].includes(r.status)
     ? r.status
     : 'pending') as PaymentStatus;
@@ -1385,29 +1390,24 @@ export function getCustomerByEmailSync(email: string): Customer | null {
 export interface CustomerUsage {
   sites: number;
   storageBytes: number;
-  aiWords: number;
-  aiArticles: number;
-  automationRuns: number;
 }
 
-/** Current resource usage for a customer (sync). Derived from the same
- *  centralized dataset as the admin overview — never an independent number. */
+/** Current resource usage for a customer (sync). `sites` and `storageBytes`
+ *  are the only metrics with a real backing table (Site, Media). AI Words /
+ *  AI Articles / Automation Runs were removed because no real usage-tracking
+ *  system exists — the previous implementation returned a fake formula
+ *  (`aiArticles = totalArticles * 0.28`, `aiWords = aiArticles * 1850`). */
 export function getCustomerUsageSync(email: string): CustomerUsage {
   const s = store();
   const customer = s.customers.find((c) => c.email.toLowerCase() === email.toLowerCase());
   if (!customer) {
-    return { sites: 0, storageBytes: 0, aiWords: 0, aiArticles: 0, automationRuns: 0 };
+    return { sites: 0, storageBytes: 0 };
   }
   const sites = s.sites.filter((si) => si.customerId === customer.id);
-  const totalArticles = sites.reduce((a, si) => a + si.articles, 0);
   const storageBytes = sites.reduce((a, si) => a + si.storageBytes, 0);
-  const aiArticles = Math.round(totalArticles * 0.28);
   return {
     sites: sites.length,
     storageBytes,
-    aiWords: aiArticles * 1850,
-    aiArticles,
-    automationRuns: 0, // not tracked per-customer in the demo dataset
   };
 }
 
@@ -1457,7 +1457,7 @@ const INTERNAL_PLAN: Plan = {
   active: true,
   features: ['Full platform access', 'All features enabled', 'Billing bypass', 'Not counted in MRR'],
   entitlements: ['automation', 'ai_content', 'advanced_analytics', 'custom_domains', 'api_access', 'white_label', 'audit_log', 'advanced_seo', 'newsletter'],
-  limits: { maxSites: -1, storageBytes: -1, aiWords: -1, aiArticles: -1, automationRuns: -1 },
+  limits: { maxSites: -1, storageBytes: -1 },
 };
 
 interface BillingUser {

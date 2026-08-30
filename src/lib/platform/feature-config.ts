@@ -45,15 +45,18 @@ export const ENTITLEMENT_DESCRIPTIONS: Record<EntitlementKey, string> = {
   newsletter: 'Subscriber management + campaigns',
 };
 
-export const LIMIT_KEYS = ['maxSites', 'storageBytes', 'aiWords', 'aiArticles', 'automationRuns'] as const;
+// Only limits that have a REAL, server-side enforcement system are listed
+// here. AI Words / AI Articles / Automation Runs were removed because no
+// real usage-tracking system exists for them — exposing them in the plan
+// editor would have implied enforcement that never happened (fake limits).
+// maxSites and storageBytes are backed by real tables (Site, Media) and
+// are the only usage limits the platform actually tracks.
+export const LIMIT_KEYS = ['maxSites', 'storageBytes'] as const;
 export type LimitKey = (typeof LIMIT_KEYS)[number];
 
 export const LIMIT_LABELS: Record<LimitKey, string> = {
   maxSites: 'Max Sites',
   storageBytes: 'Storage (bytes)',
-  aiWords: 'AI Words',
-  aiArticles: 'AI Articles',
-  automationRuns: 'Automation Runs',
 };
 
 /** -1 is the convention for "unlimited". */

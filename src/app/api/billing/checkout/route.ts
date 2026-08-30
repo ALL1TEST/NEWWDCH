@@ -67,9 +67,13 @@ export async function POST(request: NextRequest) {
   const couponCodeRaw = body.couponCode ? String(body.couponCode) : '';
   const couponCode = couponCodeRaw.trim();
 
-  // Validate plan id (whitelist of canonical plan ids).
-  if (!['free', 'plus', 'pro', 'max'].includes(planId)) {
-    return fail('VALIDATION_ERROR', 'A valid planId (free|plus|pro|max) is required.', 400);
+  // The plan must exist as a non-empty string. The actual validity (exists
+  // in DB, is active) is checked below via `ensurePlanAssignable` — we do
+  // NOT hardcode a whitelist of plan ids. Custom plans created via the
+  // Platform Admin UI must flow through checkout just like the canonical
+  // free/plus/pro/max ids.
+  if (!planId) {
+    return fail('VALIDATION_ERROR', 'A valid planId is required.', 400);
   }
   if (planId === 'free') {
     return fail(

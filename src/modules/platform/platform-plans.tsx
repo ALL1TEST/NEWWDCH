@@ -375,7 +375,13 @@ function EditPlanDialog({
   const [name, setName] = useState(plan.name);
   const [priceMonthly, setPriceMonthly] = useState(String(plan.priceMonthly));
   const [priceYearly, setPriceYearly] = useState(String(plan.priceYearly));
-  const [currency, setCurrency] = useState(plan.currency);
+  // Currency is NOT admin-editable per-plan — it is derived from the
+  // platform's default country (CountryPricing). We display it as
+  // read-only so the admin knows what currency the prices are in, but
+  // never send it in the patch (the backend keeps the plan's stored
+  // currency). This keeps currency handling consistent between the
+  // plan, checkout, client billing page, and Stripe.
+  const currency = plan.currency;
   const [interval, setInterval] = useState<'monthly' | 'yearly'>(plan.interval);
   const [active, setActive] = useState(plan.active);
   const [features, setFeatures] = useState(plan.features.join('\n'));
@@ -390,25 +396,7 @@ function EditPlanDialog({
   const [clientDisplayOpen, setClientDisplayOpen] = useState(false);
   const [stripeOpen, setStripeOpen] = useState(false);
 
-  // Fetch the supported currency list from CountryPricing so the
-  // currency field is a Select (not a free-text input).
-  const currenciesQuery = useQuery({
-    queryKey: ['platform-currencies'],
-    queryFn: async () => {
-      const res = await fetch('/api/platform/admin/countries', { credentials: 'include' });
-      const json = await res.json();
-      const rows = Array.isArray(json) ? json : (json.data ?? []);
-      const list = (rows as { currency?: string }[])
-        .map((r) => r.currency)
-        .filter((c): c is string => Boolean(c) && typeof c === 'string');
-      const unique = Array.from(new Set(list));
-      return unique.length > 0 ? unique : ['CHF', 'USD', 'EUR', 'MAD'];
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-  const currencies = currenciesQuery.data ?? ['CHF'];
-
-  // EditPlanDialog is conditionally rendered by the parent (mounted
+  // The EditPlanDialog is conditionally rendered by the parent (mounted
   // fresh each time the user opens it), so the useState initializers
   // above already seed local state from the latest server snapshot.
   // No useEffect sync is needed — that would just trigger cascading
@@ -418,7 +406,6 @@ function EditPlanDialog({
     setName(plan.name);
     setPriceMonthly(String(plan.priceMonthly));
     setPriceYearly(String(plan.priceYearly));
-    setCurrency(plan.currency);
     setInterval(plan.interval);
     setActive(plan.active);
     setFeatures(plan.features.join('\n'));
@@ -492,7 +479,9 @@ function EditPlanDialog({
       name,
       priceMonthly: monthly,
       priceYearly: yearly,
-      currency,
+      // currency is intentionally NOT sent — the backend keeps the plan's
+      // stored currency (derived from the platform default country). The
+      // admin never manually chooses currency per plan.
       interval,
       isFree: isFreeDerived,
       freePlanDurationDays: isFreeDerived ? (freePlanDurationDays.trim() === '' ? null : Number(freePlanDurationDays) || null) : null,
@@ -555,18 +544,13 @@ function EditPlanDialog({
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Currency</Label>
-                <Select value={currency} onValueChange={setCurrency}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currencies.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3">
+                  <span className="text-sm font-medium tabular-nums">{currency}</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">platform</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Auto-resolved from the platform default country. Edit countries in Pricing.
+                </p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -854,9 +838,6 @@ function EditPlanDialog({
 const EMPTY_LIMITS: PlanLimits = {
   maxSites: 0,
   storageBytes: 0,
-  aiWords: 0,
-  aiArticles: 0,
-  automationRuns: 0,
 };
 
 /** Derive a planId from a name: lowercase, hyphenated, ASCII-only.
@@ -883,7 +864,6 @@ function CreatePlanDialog({
   const [planIdTouched, setPlanIdTouched] = useState(false);
   const [priceMonthly, setPriceMonthly] = useState('0');
   const [priceYearly, setPriceYearly] = useState('0');
-  const [currency, setCurrency] = useState('CHF');
   const [interval, setInterval] = useState<'monthly' | 'yearly'>('monthly');
   const [active, setActive] = useState(true);
   const [features, setFeatures] = useState('');
@@ -896,23 +876,27 @@ function CreatePlanDialog({
   const [stripePriceIdMonthly, setStripePriceIdMonthly] = useState('');
   const [stripePriceIdYearly, setStripePriceIdYearly] = useState('');
 
-  // Fetch the supported currency list + existing plan IDs (for uniqueness
-  // validation) from the backend so the form is data-driven.
-  const currenciesQuery = useQuery({
-    queryKey: ['platform-currencies'],
+  // Currency is NOT admin-editable per-plan — it is derived from the
+  // platform's default country (CountryPricing). We fetch the default
+  // so the admin can SEE the currency the new plan's prices will be
+  // denominated in, but never send it in the create payload (the backend
+  // resolves it from the platform default on save).
+  const currencyQuery = useQuery({
+    queryKey: ['platform-default-currency'],
     queryFn: async () => {
       const res = await fetch('/api/platform/admin/countries', { credentials: 'include' });
       const json = await res.json();
       const rows = Array.isArray(json) ? json : (json.data ?? []);
-      const list = (rows as { currency?: string }[])
-        .map((r) => r.currency)
-        .filter((c): c is string => Boolean(c) && typeof c === 'string');
-      const unique = Array.from(new Set(list));
-      return unique.length > 0 ? unique : ['CHF', 'USD', 'EUR', 'MAD'];
+      const list = (rows as { currency?: string; isDefault?: boolean }[])
+        .filter((r) => r && typeof r === 'object');
+      const def = list.find((r) => r.isDefault);
+      if (def?.currency) return def.currency;
+      const any = list.find((r) => r.currency);
+      return any?.currency ?? 'CHF';
     },
     staleTime: 5 * 60 * 1000,
   });
-  const currencies = currenciesQuery.data ?? ['CHF'];
+  const currency = currencyQuery.data ?? 'CHF';
 
   // Existing plan IDs — for live uniqueness validation.
   const existingPlansQuery = useQuery({
@@ -940,10 +924,9 @@ function CreatePlanDialog({
         name,
         priceMonthly: monthly,
         priceYearly: yearly,
-        currency,
+        // currency is intentionally NOT sent — the backend resolves it
+        // from the platform default country (CountryPricing) on create.
         interval,
-        // isFree is derived from price so the Client Billing page
-        // renders "Free" correctly when monthly === 0.
         isFree,
         freePlanDurationDays: isFree && freePlanDurationDays.trim() !== '' ? Number(freePlanDurationDays) || null : null,
         stripePriceIdMonthly: stripePriceIdMonthly.trim() === '' ? null : stripePriceIdMonthly.trim(),
@@ -1025,18 +1008,13 @@ function CreatePlanDialog({
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Currency</Label>
-                <Select value={currency} onValueChange={setCurrency}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currencies.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3">
+                  <span className="text-sm font-medium tabular-nums">{currency}</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">platform</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Auto-resolved from the platform default country. Edit countries in Pricing.
+                </p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

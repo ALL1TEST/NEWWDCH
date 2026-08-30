@@ -4,7 +4,6 @@ import {
   changeCustomerPlan,
   getCustomer,
   getPlan,
-  type PlanId,
 } from '@/lib/platform/platform-data';
 import { logAdminAction } from '@/lib/platform/audit';
 import {
@@ -15,6 +14,7 @@ import {
   resolveStripePriceId,
 } from '@/lib/stripe';
 import { db } from '@/lib/db';
+import { ensurePlanAssignable } from '@/lib/platform/subscription-data';
 
 // ============================================================
 // PLATFORM ADMIN → CHANGE CUSTOMER PLAN.
@@ -51,16 +51,24 @@ import { db } from '@/lib/db';
 //   6. Return the refreshed `await getCustomer(id)`.
 // ============================================================
 
-const VALID: PlanId[] = ['free', 'plus', 'pro', 'max'];
+// Plan ids are validated dynamically against the PlanConfig table via
+// ensurePlanAssignable() below — custom plans created via Platform Admin
+// flow through this route just like free/plus/pro/max.
 
 export async function POST(request: NextRequest) {
   const auth = await requirePlatformAdmin(request);
   if ('response' in auth) return auth.response;
   const id = request.nextUrl.pathname.split('/').filter(Boolean).at(-2)!;
-  const body = (await request.json().catch(() => ({}))) as { planId?: PlanId };
-  const planId = body.planId;
-  if (!planId || !VALID.includes(planId)) {
-    return fail('VALIDATION_ERROR', 'A valid planId (free|plus|pro|max) is required.', 400);
+  const body = (await request.json().catch(() => ({}))) as { planId?: string };
+  const planId = body.planId ? String(body.planId) : '';
+  if (!planId) {
+    return fail('VALIDATION_ERROR', 'A valid planId is required.', 400);
+  }
+  // Validate against the DB (exists + active). Custom plans created via
+  // Platform Admin must flow through here just like the canonical ids.
+  const assignable = await ensurePlanAssignable(planId);
+  if (!assignable.ok) {
+    return fail('PLAN_NOT_AVAILABLE', assignable.reason ?? 'Plan is not available.', 403);
   }
 
   const before = await getCustomer(id);

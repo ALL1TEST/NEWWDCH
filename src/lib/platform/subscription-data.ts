@@ -531,9 +531,6 @@ export function validatePlanConfigInput(input: {
   limits?: Partial<{
     maxSites: number;
     storageBytes: number;
-    aiWords: number;
-    aiArticles: number;
-    automationRuns: number;
   }>;
   entitlements?: string[];
 }): string[] {

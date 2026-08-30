@@ -218,3 +218,26 @@ export async function deleteCountry(id: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Resolve the platform's default billing currency. The currency is NOT
+ * chosen per-plan in the admin editor — it is derived from the default
+ * country configured in the CountryPricing table (the "billing
+ * configuration" the platform already uses). Falls back to 'CHF' when
+ * no default country is configured (e.g. fresh DB before bootstrap).
+ *
+ * This keeps currency handling consistent between the plan, checkout,
+ * client billing page, and Stripe: every plan stores its prices in the
+ * platform default currency, the Stripe Prices are created in that same
+ * currency, and the client billing page displays that same currency —
+ * the admin never manually picks a currency per plan.
+ */
+export async function getPlatformDefaultCurrency(): Promise<string> {
+  const def = await getDefaultCountry();
+  if (def?.currency && def.currency.trim().length > 0) return def.currency.trim().toUpperCase();
+  // Fallback: any active country's currency, then 'CHF' (schema default).
+  await ensureSeeded();
+  const any = await db.countryPricing.findFirst({ where: { active: true } });
+  if (any?.currency && any.currency.trim().length > 0) return any.currency.trim().toUpperCase();
+  return 'CHF';
+}

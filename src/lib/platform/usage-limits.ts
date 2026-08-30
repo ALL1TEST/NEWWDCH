@@ -22,7 +22,11 @@ import { getCustomerByEmailSync, getCustomerUsageSync } from './platform-data';
 import { hasBillingBypass, getEffectivePlanIdAsync, type EntitlementUser } from './entitlements';
 import { getUserSubscription } from './subscription-data';
 
-export type LimitResource = 'sites' | 'storageBytes' | 'aiWords' | 'aiArticles' | 'automationRuns';
+// Only resources with a REAL, server-side enforcement system are listed.
+// AI Words / AI Articles / Automation Runs were removed because no real
+// usage-tracking system exists for them — exposing them as limit resources
+// would have implied enforcement that never happened.
+export type LimitResource = 'sites' | 'storageBytes';
 
 export interface LimitCheck {
   ok: boolean;
@@ -40,7 +44,7 @@ export interface LimitCheck {
  */
 export async function getEffectiveLimitsAsync(user: EntitlementUser): Promise<PlanLimits> {
   if (hasBillingBypass(user)) {
-    return { maxSites: -1, storageBytes: -1, aiWords: -1, aiArticles: -1, automationRuns: -1 };
+    return { maxSites: -1, storageBytes: -1 };
   }
   const { planId } = await getEffectivePlanIdAsync(user);
   return getPlanConfigSync(planId).limits;
@@ -50,7 +54,7 @@ export async function getEffectiveLimitsAsync(user: EntitlementUser): Promise<Pl
  *  impractical (e.g. initial render). The async version is authoritative. */
 export function getEffectiveLimits(user: EntitlementUser): PlanLimits {
   if (hasBillingBypass(user)) {
-    return { maxSites: -1, storageBytes: -1, aiWords: -1, aiArticles: -1, automationRuns: -1 };
+    return { maxSites: -1, storageBytes: -1 };
   }
   const customer = getCustomerByEmailSync(user.email);
   const planId = customer?.planId ?? 'free';
@@ -122,12 +126,6 @@ export function limitLabel(resource: LimitResource): string {
       return 'sites';
     case 'storageBytes':
       return 'storage';
-    case 'aiWords':
-      return 'AI words';
-    case 'aiArticles':
-      return 'AI articles';
-    case 'automationRuns':
-      return 'automation runs';
   }
 }
 

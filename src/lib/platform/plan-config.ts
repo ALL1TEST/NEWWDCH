@@ -28,13 +28,13 @@ import { db } from '@/lib/db';
 export { ENTITLEMENT_KEYS, ENTITLEMENT_LABELS } from './feature-config';
 export type { EntitlementKey } from './feature-config';
 
+// Only limits with REAL server-side enforcement are tracked here.
+// AI Words / AI Articles / Automation Runs were removed because no real
+// usage-tracking system exists for them — they would have been fake limits.
 export interface PlanLimits {
   /** -1 = unlimited */
   maxSites: number;
   storageBytes: number;
-  aiWords: number;
-  aiArticles: number;
-  automationRuns: number;
 }
 
 export type BillingInterval = 'monthly' | 'yearly';
@@ -80,7 +80,7 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     active: true,
     features: ['Up to 3 sites', 'Basic analytics', 'Community support', '1 GB storage'],
     entitlements: [],
-    limits: { maxSites: 3, storageBytes: 1 * GB, aiWords: 0, aiArticles: 0, automationRuns: 0 },
+    limits: { maxSites: 3, storageBytes: 1 * GB },
     badgeVariant: 'free',
     sortOrder: 0,
   },
@@ -104,7 +104,7 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
       'AI content tools',
     ],
     entitlements: ['ai_content', 'advanced_analytics', 'newsletter'],
-    limits: { maxSites: 5, storageBytes: 5 * GB, aiWords: 20_000, aiArticles: 20, automationRuns: 200 },
+    limits: { maxSites: 5, storageBytes: 5 * GB },
     badgeVariant: 'plus',
     sortOrder: 1,
   },
@@ -129,7 +129,7 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
       'Custom domains',
     ],
     entitlements: ['ai_content', 'advanced_analytics', 'custom_domains', 'automation', 'newsletter'],
-    limits: { maxSites: 10, storageBytes: 10 * GB, aiWords: 50_000, aiArticles: 50, automationRuns: 1000 },
+    limits: { maxSites: 10, storageBytes: 10 * GB },
     badgeVariant: 'pro',
     sortOrder: 2,
   },
@@ -167,13 +167,27 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
       'advanced_seo',
       'newsletter',
     ],
-    limits: { maxSites: -1, storageBytes: 100 * GB, aiWords: 500_000, aiArticles: -1, automationRuns: 10_000 },
+    limits: { maxSites: -1, storageBytes: 100 * GB },
     badgeVariant: 'max',
     sortOrder: 3,
   },
 ];
 
 // -------------------- Cache --------------------
+
+/** Resolve the platform's default billing currency via a LAZY import of
+ *  country-pricing (which itself imports `getPlanConfigSync` from here).
+ *  The lazy `await import()` breaks the static circular dependency —
+ *  this module never statically imports country-pricing, so both load.
+ *  Falls back to 'CHF' (the schema default) if anything fails. */
+async function resolvePlatformDefaultCurrency(): Promise<string> {
+  try {
+    const { getPlatformDefaultCurrency } = await import('./country-pricing');
+    return await getPlatformDefaultCurrency();
+  } catch {
+    return 'CHF';
+  }
+}
 
 let _cache: PlanConfigData[] = DEFAULT_PLAN_CONFIGS.map((p) => ({
   ...p,
@@ -255,7 +269,6 @@ type PlanConfigRow = {
 function rowToData(row: PlanConfigRow): PlanConfigData {
   let features: string[] = [];
   let entitlements: string[] = [];
-  let limits: PlanLimits = { maxSites: 0, storageBytes: 0, aiWords: 0, aiArticles: 0, automationRuns: 0 };
   try {
     features = JSON.parse(row.features || '[]');
   } catch {
@@ -266,8 +279,18 @@ function rowToData(row: PlanConfigRow): PlanConfigData {
   } catch {
     entitlements = [];
   }
+  // Explicitly pick only the known limit fields. Older DB rows may still
+  // carry stale `aiWords` / `aiArticles` / `automationRuns` keys in the
+  // limits JSON (those were removed because no real enforcement exists).
+  // Picking only the known fields prevents the stale keys from leaking
+  // back into the cache and being re-serialized on the next save.
+  let limits: PlanLimits = { maxSites: 0, storageBytes: 0 };
   try {
-    limits = { ...limits, ...(JSON.parse(row.limits || '{}') as Partial<PlanLimits>) };
+    const parsed = JSON.parse(row.limits || '{}') as Partial<PlanLimits>;
+    limits = {
+      maxSites: typeof parsed.maxSites === 'number' ? parsed.maxSites : 0,
+      storageBytes: typeof parsed.storageBytes === 'number' ? parsed.storageBytes : 0,
+    };
   } catch {
     // keep defaults
   }
@@ -601,12 +624,22 @@ export async function createPlanConfig(
   input: PlanConfigInput & { planId: string; name: string },
 ): Promise<PlanConfigData> {
   const maxOrder = await db.planConfig.count();
+  // Currency is NOT chosen per-plan in the admin editor — it is derived
+  // from the platform's default country (CountryPricing table). When the
+  // caller omits `currency`, resolve it from the platform default so a
+  // newly-created plan immediately matches the platform's billing
+  // configuration. When the caller explicitly provides a currency (e.g.
+  // a migration script), honor it.
+  const currency =
+    input.currency && input.currency.trim().length > 0
+      ? input.currency
+      : await resolvePlatformDefaultCurrency();
   const data: PlanConfigData = {
     planId: input.planId,
     name: input.name,
     priceMonthly: input.priceMonthly ?? 0,
     priceYearly: input.priceYearly ?? 0,
-    currency: input.currency ?? 'CHF',
+    currency,
     interval: input.interval ?? 'monthly',
     isFree: input.isFree ?? false,
     freePlanDurationDays: input.freePlanDurationDays ?? null,
@@ -618,9 +651,6 @@ export async function createPlanConfig(
     limits: {
       maxSites: 0,
       storageBytes: 0,
-      aiWords: 0,
-      aiArticles: 0,
-      automationRuns: 0,
       ...(input.limits ?? {}),
     },
     badgeVariant: input.badgeVariant ?? input.planId,
