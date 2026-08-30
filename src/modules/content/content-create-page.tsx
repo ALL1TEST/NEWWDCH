@@ -844,8 +844,8 @@ export function ContentCreatePage() {
         {/* LEFT: Editor Area — uses viewport height minus header + topbar + padding.
             The exact offset accounts for: topbar (3.5rem) + main padding (3rem) +
             header row (3rem) + gap (1rem) = ~10.5rem. */}
-        <div className="lg:col-span-8 h-[calc(100vh-10.5rem)] min-h-[400px]">
-          <div className="relative h-full border rounded-lg overflow-hidden">
+        <div className="lg:col-span-8 lg:self-start">
+          <div className="relative border rounded-lg overflow-hidden">
             {/* Tiptap Rich Text Editor */}
             <TiptapEditor
               ref={editorRef}

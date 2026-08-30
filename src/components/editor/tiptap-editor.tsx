@@ -1036,7 +1036,7 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
     editable: isEditable,
     editorProps: {
       attributes: {
-        class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[60vh] editor-content',
+        class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none editor-content',
       },
       // Fix #8: Toggle Block — clicking the toggle's first child toggles expansion
       handleClickOn(view, pos, node, nodePos, event, direct) {

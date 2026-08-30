@@ -861,8 +861,8 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
       {/* Main Grid: Editor (8 cols) + Sidebar (4 cols) — SAME as Create page */}
       <div className={cn('grid grid-cols-1 lg:grid-cols-12 gap-4 transition-all', previewOpen ? 'hidden' : '')}>
         {/* LEFT: Editor Area — uses viewport height minus header + topbar + padding. */}
-        <div className="lg:col-span-8 h-[calc(100vh-10.5rem)] min-h-[400px]">
-          <div className="relative h-full border rounded-lg overflow-hidden">
+        <div className="lg:col-span-8 lg:self-start">
+          <div className="relative border rounded-lg overflow-hidden">
             {/* Tiptap Rich Text Editor */}
             <TiptapEditor
               ref={editorRef}

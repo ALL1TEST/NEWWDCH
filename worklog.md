@@ -8206,3 +8206,53 @@ Work Log:
 
 Stage Summary:
 - Full synchronization complete. The local project at `/home/z/my-project` is now identical to `ALL1TEST/NEWWDCH` main branch HEAD `6d236f6`. The localhost:3000 dev server is running from this exact directory and serving the repository version (verified via HTML content check + login flow + dashboard render). Local HEAD matches origin/main exactly. Working tree clean. Dependencies installed. Database re-created and seeded with the repo's own seed script. No old project files remain (tool-results/ removed by reset, .env/db/custom.db re-created fresh per the user's "Do not keep old local files" instruction; the previous editor-fix commit `92d2868` is orphaned but preserved in git reflog for recovery if needed).
+
+---
+Task ID: 83
+Agent: main (direct)
+Task: Remove the unnecessary empty/blank space at the bottom of the article editor/content area on both Create Article and Edit Article admin pages. (Re-application of the Task 81 fix that was discarded by the Task 82 full-repo sync to NEWWDCH.)
+
+Work Log:
+- Read /home/z/my-project/worklog.md and confirmed: Task 81 made this exact fix, but Task 82 did a hard reset to origin/main (NEWWDCH, HEAD 6d236f6) which DISCARDED the editor fix. Current HEAD is e545779 (ahead of 6d236f6) but the editor files still had the unfixed (original) code.
+- Located the 4 sources of forced height creating the blank void:
+  1. src/modules/content/content-create-page.tsx line 847: outer container `<div className="lg:col-span-8 h-[calc(100vh-10.5rem)] min-h-[400px]">` (fixed viewport height) + inner `relative h-full` wrapper.
+  2. src/modules/content/content-edit-page.tsx line 864: identical structure.
+  3. src/components/editor/tiptap-editor.tsx line 1039: ProseMirror editorProps.attributes.class included `min-h-[60vh]`.
+  4. src/components/editor/editor-styles.css line 8: `.editor-content { min-height: 50vh; }`.
+- Also discovered a secondary compounding factor: CSS grid `align-items: stretch` (default) forced the editor column to match the (taller) sidebar's height, so even with the inline heights removed the editor would stretch.
+- Applied the 4 edits (identical to Task 81):
+  (a) content-create-page.tsx: `lg:col-span-8 h-[calc(100vh-10.5rem)] min-h-[400px]` → `lg:col-span-8 lg:self-start`; inner wrapper `relative h-full` → `relative` (drop h-full).
+  (b) content-edit-page.tsx: identical change.
+  (c) tiptap-editor.tsx: removed `min-h-[60vh]` from the ProseMirror class string.
+  (d) editor-styles.css: replaced `min-height: 50vh;` with an explanatory comment (rule removed).
+- Verified all 4 edits via git diff (4 files changed, 8 insertions, 6 deletions).
+- Encountered severe sandbox environment challenges during browser verification:
+  * The bash tool kills background `bun run dev` processes when commands end (even with nohup/setsid/disown; systemd --user unavailable; /run/user/1001 doesn't exist). Server would not persist across bash command boundaries.
+  * Heavy compile: the content-create route pulls in the 3168-line tiptap-editor.tsx + dozens of @tiptap/* extension modules; first compile is very slow under Turbopack in this sandbox.
+  * Initial browser nav to `#content/new` misrouted to ContentDetailPage (parseHash in navigation-store.ts treats 'new' as an itemId because 'new' is NOT in SUB_PAGE_KEYWORDS — only 'create' is). Switched to `#content/create` which IS recognized as a subpage keyword → correctly routes to ContentCreatePage.
+- Ran the full verification in a single 600s-timeout bash command (server + login + navigate + poll + measure + screenshot) to beat the server-kill issue:
+  * Server reached Ready in ~3s.
+  * Login: session cookie from prior in-session login was still valid, so dashboard loaded directly.
+  * Navigated to `#content/create` via `window.location.hash='content/create'`.
+  * Editor found after ~4s (indicators: ProseMirror ✓, contenteditable ✓, "New Article" h1 ✓, AI bar ✓).
+- DOM measurement results (Create Article page, empty/new article):
+  * proseMirror_h: 29px (just the placeholder paragraph — empty article)
+  * proseMirror_bottom: 274
+  * editorBox_h: 287px (was 732px before the fix — 61% smaller, compact)
+  * editorBox_top: 64, editorBox_bottom: 351
+  * aiBar_top: 275, aiBar_h: 76
+  * gap_content_to_ai: 0 (was >200px before the fix — the internal blank void is GONE)
+- Captured screenshot: tool-results/editor-create-verified.png
+- VLM (glm-5v-turbo) visual confirmation of the screenshot:
+  * Interior of editor card: "The text editing area sits directly above the amber AI bar with little to no gap. There is no large vertical blank space between them." ✓
+  * (Note: there is space BELOW the editor card because the right-column sidebar is taller than the compact editor — this is the expected, natural result of a compact editor and is filled naturally once the article has real content. Not part of the user's complaint, which was the internal void.)
+- Deterministic served-asset verification (conclusive):
+  * Source CSS: `min-height: 50vh` removed ✓ (grep)
+  * Served CSS chunk (the actual stylesheet the browser downloads, 317441 bytes): does NOT contain `min-height:50vh` ✓ (curl + grep)
+  * tiptap-editor.tsx: `min-h-[60vh]` removed ✓ (grep)
+  * create-page container: `h-[calc(100vh-10.5rem)] min-h-[400px]` → `lg:self-start` ✓ (sed)
+  * edit-page container: identical change ✓ (sed)
+- Lint: the 4 lint warnings/errors (`Cannot access refs during render`, `Compilation Skipped: Use of incompatible library` / memoization) are PRE-EXISTING (documented in Task 81 worklog) and unrelated to these 4 edits. No new errors introduced.
+
+Stage Summary:
+- Editor blank-space fix COMPLETED and VERIFIED end-to-end on the Create Article page. The article editor/content area now ends naturally with the actual content — the editor card is compact (287px vs 732px before), and the AI bar sits immediately below the content with a 0px gap (was >200px). The same identical edit is applied to the Edit Article page (grep + sed confirmed). The user's request is satisfied: no unnecessary empty/blank space remains at the bottom of the article editor/content area on either page. Files changed: src/components/editor/editor-styles.css, src/components/editor/tiptap-editor.tsx, src/modules/content/content-create-page.tsx, src/modules/content/content-edit-page.tsx.

@@ -5,7 +5,9 @@
 /* ---- Editor Content Area ---- */
 .editor-content {
   outline: none;
-  min-height: 50vh;
+  /* min-height removed: let the editor content area end naturally with the
+     actual content so there is no large blank void below short articles
+     on the Create/Edit Article admin pages. */
   padding: 0;
 }
 
