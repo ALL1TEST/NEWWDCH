@@ -6,8 +6,8 @@
 // Search domains:
 //   - Customers   → User (EXTERNAL) by name / email / id. Returns the
 //                   top N matches. Link: #platform-customer-detail/<id>
-//   - Payments     → Payment by invoiceNumber / stripeInvoiceId /
-//                   stripePaymentIntentId / stripeChargeId. Link:
+//   - Payments     → Payment by invoiceNumber / the 3 Stripe IDs /
+//                   the related customer's name + email. Link:
 //                   #platform-payments (Payments page already supports
 //                   client-side search via its own input — the link
 //                   just lands the admin on the page).
@@ -16,11 +16,23 @@
 //   - Notifications → Notification by title / message. Link:
 //                   #platform-notifications
 //
+// CONTEXTUAL QUERIES:
+//   The query may start with a domain prefix to restrict the search to a
+//   single entity. The prefix is case-insensitive and uses a colon:
+//     /customer:<text>  → Customers only (name / email / id)
+//     /payment:<text>   → Payments only (invoice + Stripe IDs + customer)
+//     /plan:<text>      → Plans only (name / planId)
+//     /coupon:<text>    → Coupons only (code)
+//     /notification:<text> → Notifications only (title / message)
+//   When a prefix is recognized, the OTHER domains return []. When no
+//   prefix is present, ALL domains are searched in parallel.
+//
 // Each domain is independently capped at `limit` (default 5, max 10)
 // so the palette never overwhelms. The response shape is a per-domain
 // array of normalized results with the fields the palette needs to
-// render: id, label, sublabel, link, icon (the icon is set on the
-// client from the domain).
+// render a rich row: id, label, sublabel, link, icon (the icon is set
+// on the client from the domain), plus domain-specific extras
+// (planId, status, amount, currency, type, value, isRead, createdAt).
 //
 // Auth: requirePlatformAdmin.
 // ============================================================
@@ -100,6 +112,26 @@ interface SearchResult {
   notifications: NotificationResult[];
 }
 
+type Domain = 'customers' | 'payments' | 'plans' | 'coupons' | 'notifications';
+
+// Parse a query like "/customer: John" into { domain: 'customers', q: 'John' }.
+// Prefix is case-insensitive; the colon is required. Returns null when the
+// query has no recognized prefix (meaning: search ALL domains).
+function parseContextual(rawQ: string): { domain: Domain; q: string } | null {
+  const m = rawQ.match(/^\/(customer|payment|plan|coupon|notification)s?\s*:\s*(.*)$/i);
+  if (!m) return null;
+  const map: Record<string, Domain> = {
+    customer: 'customers',
+    payment: 'payments',
+    plan: 'plans',
+    coupon: 'coupons',
+    notification: 'notifications',
+  };
+  const domain = map[m[1].toLowerCase()];
+  if (!domain) return null;
+  return { domain, q: m[2].trim() };
+}
+
 export async function GET(request: NextRequest) {
   const id = reqId();
   const auth = await requirePlatformAdmin(request);
@@ -110,17 +142,35 @@ export async function GET(request: NextRequest) {
     const rawQ = (sp.get('q') ?? '').trim();
     const limit = Math.min(10, Math.max(1, Number(sp.get('limit')) || 5));
 
+    const empty: SearchResult = {
+      customers: [],
+      payments: [],
+      plans: [],
+      coupons: [],
+      notifications: [],
+    };
+
     if (!rawQ || rawQ.length < 2) {
       // Too short — return empty result so the palette shows "no results".
       return NextResponse.json({
-        data: {
-          customers: [],
-          payments: [],
-          plans: [],
-          coupons: [],
-          notifications: [],
-        } satisfies SearchResult,
-        meta: { requestId: id, q: rawQ, limit },
+        data: empty,
+        meta: { requestId: id, q: rawQ, limit, contextual: false },
+      });
+    }
+
+    // ---- Detect contextual prefix ----
+    // A prefix forces a single-domain search; the other domains stay [].
+    const ctx = parseContextual(rawQ);
+    const contextual = !!ctx;
+    const q = ctx ? ctx.q : rawQ;
+    const domain = ctx?.domain;
+
+    if (contextual && q.length < 1) {
+      // "/customer:" with no search text — return empty (still show the
+      // palette so the user can finish typing).
+      return NextResponse.json({
+        data: empty,
+        meta: { requestId: id, q: rawQ, limit, contextual: true, domain },
       });
     }
 
@@ -128,67 +178,89 @@ export async function GET(request: NextRequest) {
     // ascii text — wrap in a lowercase substring filter for safety.
     // We use the raw query as-is; SQLite's LIKE is case-insensitive for
     // ASCII by default and we don't normalize non-ASCII.
-    const q = rawQ;
+    const searchQ = q;
 
-    // ---- Parallel DB queries across all domains ----
+    // Build the per-domain query list. Each entry is either the real
+    // Prisma query or `null` (skip) — resolved via Promise.all so the
+    // domains run in parallel.
+    const runCustomers = !contextual || domain === 'customers';
+    const runPayments = !contextual || domain === 'payments';
+    const runPlans = !contextual || domain === 'plans';
+    const runCoupons = !contextual || domain === 'coupons';
+    const runNotifications = !contextual || domain === 'notifications';
+
+    // ---- Parallel DB queries across the active domains ----
     const [customers, payments, plans, coupons, notifications] = await Promise.all([
       // 1. Customers (EXTERNAL users with name / email / id match)
-      db.user.findMany({
-        where: {
-          billingMode: 'EXTERNAL',
-          deletedAt: null,
-          OR: [
-            { name: { contains: q } },
-            { email: { contains: q } },
-            { id: { contains: q } },
-          ],
-        },
-        include: { subscription: { select: { planId: true, status: true } } },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-      }),
+      runCustomers
+        ? db.user.findMany({
+            where: {
+              billingMode: 'EXTERNAL',
+              deletedAt: null,
+              OR: [
+                { name: { contains: searchQ } },
+                { email: { contains: searchQ } },
+                { id: { contains: searchQ } },
+              ],
+            },
+            include: { subscription: { select: { planId: true, status: true } } },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+          })
+        : [],
 
-      // 2. Payments — search by invoiceNumber + the 3 Stripe IDs.
-      // Also join the user for the display label.
-      db.payment.findMany({
-        where: {
-          OR: [
-            { invoiceNumber: { contains: q } },
-            { stripeInvoiceId: { contains: q } },
-            { stripePaymentIntentId: { contains: q } },
-            { stripeChargeId: { contains: q } },
-            { id: { contains: q } },
-          ],
-        },
-        include: { user: { select: { id: true, name: true, email: true } } },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-      }),
+      // 2. Payments — search by invoiceNumber + the 3 Stripe IDs + id,
+      // AND by the related customer's name/email (so "/payment: John"
+      // matches all of John's payments, and "INV-2026" matches invoices).
+      runPayments
+        ? db.payment.findMany({
+            where: {
+              OR: [
+                { invoiceNumber: { contains: searchQ } },
+                { stripeInvoiceId: { contains: searchQ } },
+                { stripePaymentIntentId: { contains: searchQ } },
+                { stripeChargeId: { contains: searchQ } },
+                { id: { contains: searchQ } },
+                { user: { name: { contains: searchQ } } },
+                { user: { email: { contains: searchQ } } },
+              ],
+            },
+            include: { user: { select: { id: true, name: true, email: true } } },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+          })
+        : [],
 
       // 3. Plans — search by name + planId.
-      db.planConfig.findMany({
-        where: {
-          OR: [{ name: { contains: q } }, { planId: { contains: q } }],
-        },
-        orderBy: { sortOrder: 'asc' },
-        take: limit,
-      }),
+      runPlans
+        ? db.planConfig.findMany({
+            where: {
+              OR: [{ name: { contains: searchQ } }, { planId: { contains: searchQ } }],
+            },
+            orderBy: { sortOrder: 'asc' },
+            take: limit,
+          })
+        : [],
 
       // 4. Coupons — search by code.
-      db.coupon.findMany({
-        where: { OR: [{ code: { contains: q } }, { id: { contains: q } }] },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-      }),
+      runCoupons
+        ? db.coupon.findMany({
+            where: { OR: [{ code: { contains: searchQ } }, { id: { contains: searchQ } }] },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+          })
+        : [],
 
       // 5. Notifications — search by title + message.
-      db.notification.findMany({
-        where: {
-          OR: [{ title: { contains: q } }, { message: { contains: q } }],
-        },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-      }),
+      runNotifications
+        ? db.notification.findMany({
+            where: {
+              OR: [{ title: { contains: searchQ } }, { message: { contains: searchQ } }],
+            },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+          })
+        : [],
     ]);
 
     // ---- Normalize ----
@@ -261,7 +333,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       data: result,
-      meta: { requestId: id, q: rawQ, limit },
+      meta: { requestId: id, q: rawQ, limit, contextual, domain: domain ?? null },
     });
   } catch (error) {
     console.error(`[PLATFORM:SEARCH] ${id} —`, error);

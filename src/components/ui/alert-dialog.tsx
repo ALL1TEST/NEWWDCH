@@ -44,17 +44,29 @@ function AlertDialogOverlay({
   )
 }
 
+// `overlayClassName` / `contentClassName` let a caller bump this dialog
+// above an open popover/dropdown that sits at a higher z-index than the
+// shadcn-standard `z-50` (e.g. the notification bell dropdown is `z-[60]`).
+// Pass `z-[70]` to both to establish the hierarchy
+// popover (z-[60]) < modal (z-[70]) so the modal + its backdrop render
+// cleanly above the dropdown instead of visually overlapping it.
 function AlertDialogContent({
   className,
+  overlayClassName,
+  contentClassName,
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
+}: React.ComponentProps<typeof AlertDialogPrimitive.Content> & {
+  overlayClassName?: string;
+  contentClassName?: string;
+}) {
   return (
     <AlertDialogPortal>
-      <AlertDialogOverlay />
+      <AlertDialogOverlay className={overlayClassName} />
       <AlertDialogPrimitive.Content
         data-slot="alert-dialog-content"
         className={cn(
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
+          contentClassName,
           className
         )}
         {...props}

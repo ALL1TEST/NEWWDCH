@@ -44,6 +44,7 @@ import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { getApi } from '@/lib/api-client';
+import { formatRelativeTime } from '@/lib/utils';
 
 // -------------------- Types --------------------
 
@@ -155,13 +156,16 @@ const ACTION_ITEMS: CommandItemDef[] = [
 // platformModuleRegistry.
 
 const PLATFORM_NAV_ITEMS: CommandItemDef[] = [
-  { id: 'plat-overview', label: 'Platform Overview', icon: LayoutDashboard, module: 'platform-overview' },
+  { id: 'plat-overview', label: 'Overview', icon: LayoutDashboard, module: 'platform-overview' },
   { id: 'plat-customers', label: 'Customers', icon: Users, module: 'platform-customers' },
   { id: 'plat-payments', label: 'Payments', icon: Receipt, module: 'platform-payments' },
   { id: 'plat-plans', label: 'Plans & Pricing', icon: Tag, module: 'platform-plans' },
   { id: 'plat-coupons', label: 'Coupons', icon: Ticket, module: 'platform-coupons' },
   { id: 'plat-stripe-settings', label: 'Stripe Settings', icon: CreditCard, module: 'platform-stripe-settings' },
-  { id: 'plat-notifications', label: 'Platform Notifications', icon: Bell, module: 'platform-notifications' },
+  { id: 'plat-notifications', label: 'Notifications', icon: Bell, module: 'platform-notifications' },
+  { id: 'plat-email-templates', label: 'Email Templates', icon: Mail, module: 'platform-email-templates' },
+  { id: 'plat-smtp', label: 'SMTP Settings', icon: Settings, module: 'platform-smtp' },
+  { id: 'plat-backups', label: 'Backups', icon: Database, module: 'platform-backups' },
 ];
 
 // -------------------- Recent Items (in-memory) --------------------
@@ -174,6 +178,83 @@ function addRecent(item: CommandItemDef) {
 }
 
 // -------------------- Component --------------------
+
+// Render a rich, domain-specific sublabel for a search result row. The
+// label (primary text) is rendered by the CommandItem itself; this helper
+// renders the SECONDARY line — the contextual details that make the result
+// actionable: a customer's email + plan, a payment's amount + customer, a
+// plan's price, a coupon's discount, a notification's preview + age.
+//
+// Each branch returns a compact, muted-foreground line so the palette stays
+// scannable; status/active badges get a colored pill so they pop without
+// overwhelming the row.
+function renderSearchRowSub(
+  row: CustomerResult | PaymentResult | PlanResult | CouponResult | NotificationResult,
+): React.ReactNode {
+  const badge = (text: string, cls: string) => (
+    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${cls}`}>
+      {text}
+    </span>
+  );
+  const muted = (text: string, extra = '') => (
+    <span className={`text-[11px] text-muted-foreground truncate ${extra}`}>{text}</span>
+  );
+
+  switch (row.kind) {
+    case 'customer': {
+      const c = row as CustomerResult;
+      return (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          {muted(c.email)}
+          {c.planId && badge(c.planId, 'bg-primary/10 text-primary')}
+          {c.status && badge(c.status, c.status === 'active' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400')}
+        </div>
+      );
+    }
+    case 'payment': {
+      const p = row as PaymentResult;
+      const amountStr = `${p.currency} ${(p.amount ?? 0).toFixed(2)}`;
+      return (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          {muted(`${p.customerName} · ${amountStr}`)}
+          {badge(p.status, p.status === 'paid' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : p.status === 'refunded' ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400')}
+        </div>
+      );
+    }
+    case 'plan': {
+      const p = row as PlanResult;
+      return (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          {muted(`${p.planId} · ${p.isFree ? 'Free' : `${p.currency} ${p.priceMonthly.toFixed(2)}/mo`}`)}
+          {!p.active && badge('inactive', 'bg-muted text-muted-foreground')}
+        </div>
+      );
+    }
+    case 'coupon': {
+      const c = row as CouponResult;
+      const valStr = c.type === 'percent' ? `${c.value}% off` : `${c.currency} ${c.value.toFixed(2)} off`;
+      return (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          {muted(valStr)}
+          {c.active ? badge('active', 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400') : badge('inactive', 'bg-muted text-muted-foreground')}
+        </div>
+      );
+    }
+    case 'notification': {
+      const n = row as NotificationResult;
+      return (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          {muted(n.message, 'max-w-[280px]')}
+          {badge(n.type, 'bg-primary/10 text-primary')}
+          {!n.isRead && badge('unread', 'bg-blue-500/10 text-blue-600 dark:text-blue-400')}
+          {muted(formatRelativeTime(n.createdAt))}
+        </div>
+      );
+    }
+    default:
+      return null;
+  }
+}
 
 export function CommandPalette() {
   const isOpen = useCommandPaletteStore((s) => s.isOpen);
@@ -266,8 +347,14 @@ export function CommandPalette() {
   // CommandItemDef via a hidden `searchLink` field on the def — this
   // avoids a separate CommandItem type and keeps the rendering loop
   // single-source-of-truth.
-  const groups: (CommandGroupDef & { searchLinks?: Record<string, string> })[] = useMemo(() => {
-    const result: (CommandGroupDef & { searchLinks?: Record<string, string> })[] = [];
+  const groups: (CommandGroupDef & {
+    searchLinks?: Record<string, string>;
+    searchRows?: Record<string, CustomerResult | PaymentResult | PlanResult | CouponResult | NotificationResult>;
+  })[] = useMemo(() => {
+    const result: (CommandGroupDef & {
+      searchLinks?: Record<string, string>;
+      searchRows?: Record<string, CustomerResult | PaymentResult | PlanResult | CouponResult | NotificationResult>;
+    })[] = [];
 
     // Search results (only when there's an actual query and the
     // backend returned matches). When shouldSearch is true but the
@@ -276,20 +363,24 @@ export function CommandPalette() {
     if (shouldSearch && searchResults) {
       const s = searchResults;
       const searchLinks: Record<string, string> = {};
+      const searchRows: Record<string, CustomerResult | PaymentResult | PlanResult | CouponResult | NotificationResult> = {};
       const items: CommandItemDef[] = [];
-      // Customers
+      // Customers — label = name; the renderer pulls email + plan +
+      // status from the attached `searchRows[id]` raw result.
       for (const c of s.customers) {
         const id = `search-customer-${c.id}`;
         searchLinks[id] = c.link;
+        searchRows[id] = c;
         items.push({ id, label: c.name, icon: Users, module: 'platform-customer-detail' });
       }
-      // Payments
+      // Payments — label = the most specific identifier available.
       for (const p of s.payments) {
         const id = `search-payment-${p.id}`;
         searchLinks[id] = p.link;
+        searchRows[id] = p;
         items.push({
           id,
-          label: p.invoiceNumber ?? p.stripeInvoiceId ?? p.stripePaymentIntentId ?? p.id,
+          label: p.invoiceNumber ?? p.stripeInvoiceId ?? p.stripePaymentIntentId ?? p.stripeChargeId ?? p.id,
           icon: Receipt,
           module: 'platform-payments',
         });
@@ -298,18 +389,21 @@ export function CommandPalette() {
       for (const p of s.plans) {
         const id = `search-plan-${p.id}`;
         searchLinks[id] = p.link;
-        items.push({ id, label: `${p.name} (${p.planId})`, icon: Tag, module: 'platform-plans' });
+        searchRows[id] = p;
+        items.push({ id, label: p.name, icon: Tag, module: 'platform-plans' });
       }
       // Coupons
       for (const c of s.coupons) {
         const id = `search-coupon-${c.id}`;
         searchLinks[id] = c.link;
+        searchRows[id] = c;
         items.push({ id, label: c.code, icon: Ticket, module: 'platform-coupons' });
       }
       // Notifications
       for (const n of s.notifications) {
         const id = `search-notification-${n.id}`;
         searchLinks[id] = n.link;
+        searchRows[id] = n;
         items.push({ id, label: n.title, icon: Bell, module: 'platform-notifications' });
       }
       // Split into per-domain groups (preserves the per-domain
@@ -319,6 +413,7 @@ export function CommandPalette() {
           heading: 'Customers',
           items: items.filter((i) => i.id.startsWith('search-customer-')),
           searchLinks,
+          searchRows,
         });
       }
       if (s.payments.length > 0) {
@@ -326,6 +421,7 @@ export function CommandPalette() {
           heading: 'Payments',
           items: items.filter((i) => i.id.startsWith('search-payment-')),
           searchLinks,
+          searchRows,
         });
       }
       if (s.plans.length > 0) {
@@ -333,6 +429,7 @@ export function CommandPalette() {
           heading: 'Plans',
           items: items.filter((i) => i.id.startsWith('search-plan-')),
           searchLinks,
+          searchRows,
         });
       }
       if (s.coupons.length > 0) {
@@ -340,6 +437,7 @@ export function CommandPalette() {
           heading: 'Coupons',
           items: items.filter((i) => i.id.startsWith('search-coupon-')),
           searchLinks,
+          searchRows,
         });
       }
       if (s.notifications.length > 0) {
@@ -347,23 +445,29 @@ export function CommandPalette() {
           heading: 'Notifications',
           items: items.filter((i) => i.id.startsWith('search-notification-')),
           searchLinks,
+          searchRows,
         });
       }
       return result;
     }
 
-    // No active search → show navigation + actions.
+    // No active search → show navigation. Platform staff see ONLY the
+    // Platform Admin nav cluster (Overview, Customers, Payments, Plans &
+    // Pricing, Coupons, Stripe Settings, Notifications, Email Templates,
+    // SMTP Settings, Backups) — the client CMS items (Content, Media,
+    // AI, AI Providers, Prompt Library, AI Jobs, etc.) are NOT relevant
+    // for a platform admin's role and are filtered out. Client roles
+    // (admin/editor/author) keep the full CMS nav + actions.
     if (recentItems.length > 0) {
       result.push({ heading: 'Recent', items: recentItems });
     }
 
-    // Platform admins get the platform-admin nav cluster FIRST
-    // (most relevant for their role), then the client CMS nav.
     if (isPlatformStaff) {
       result.push({ heading: 'Platform Admin', items: PLATFORM_NAV_ITEMS });
+    } else {
+      result.push({ heading: 'Navigation', items: NAV_ITEMS });
+      result.push({ heading: 'Actions', items: ACTION_ITEMS });
     }
-    result.push({ heading: 'Navigation', items: NAV_ITEMS });
-    result.push({ heading: 'Actions', items: ACTION_ITEMS });
 
     return result;
   }, [shouldSearch, searchResults, isPlatformStaff]);
@@ -399,18 +503,27 @@ export function CommandPalette() {
               className="pointer-events-auto w-full max-w-[640px] max-h-[480px] overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-2xl"
             >
               <Command className="rounded-lg" shouldFilter={shouldFilter}>
-                <div className="flex items-center border-b px-3 relative">
-                  <Search className="h-4 w-4 shrink-0 opacity-50 mr-2" />
+                {/*
+                  Search input row. CommandInput already renders its own
+                  leading Search icon + a `border-b px-3` wrapper — so we
+                  do NOT add a second <Search> here (that produced the
+                  duplicate-icon bug). The only extra element layered on
+                  top is the debounced-search spinner, positioned
+                  absolutely at the right edge of the relative wrapper.
+                  Placeholder is the simple "Search..." for both roles
+                  (platform staff + client) per the requested change.
+                */}
+                <div className="relative">
                   <CommandInput
                     ref={inputRef}
-                    placeholder={isPlatformStaff ? 'Search customers, payments, plans, coupons, notifications…' : 'Type a command or search...'}
+                    placeholder="Search..."
                     className="h-12 text-sm"
                     autoFocus
                     value={query}
                     onValueChange={setQuery}
                   />
                   {isSearching && (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground absolute right-3" />
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   )}
                 </div>
                 <CommandList className="max-h-[380px]">
@@ -428,6 +541,7 @@ export function CommandPalette() {
                           // link hash. Static nav items: navigate via the
                           // module/subPage fields.
                           const searchLink = group.searchLinks?.[item.id];
+                          const searchRow = group.searchRows?.[item.id];
                           return (
                             <CommandItem
                               key={item.id}
@@ -439,11 +553,18 @@ export function CommandPalette() {
                                   handleSelect(item);
                                 }
                               }}
-                              className="cursor-pointer"
+                              className="cursor-pointer items-start"
                             >
-                              <item.icon className="h-4 w-4" />
-                              <span>{item.label}</span>
-                              {item.shortcut && (
+                              <item.icon className="h-4 w-4 mt-0.5" />
+                              {/* Search rows render label + a rich
+                                  domain-specific sublabel (email, amount,
+                                  plan, status badges, etc.); static nav
+                                  rows render just the label. */}
+                              <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                                <span className="truncate font-medium">{item.label}</span>
+                                {searchRow && renderSearchRowSub(searchRow)}
+                              </div>
+                              {item.shortcut && !searchRow && (
                                 <CommandShortcut>{item.shortcut}</CommandShortcut>
                               )}
                             </CommandItem>

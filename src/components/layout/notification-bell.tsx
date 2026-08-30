@@ -17,7 +17,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { ConfirmDialog } from '@/components/patterns';
-import { getApi, postApi } from '@/lib/api-client';
+import { getApi, postApi, deleteApi } from '@/lib/api-client';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { getNotificationDestination, parseHashRoute } from '@/lib/notifications/links';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
@@ -162,6 +162,54 @@ export function NotificationBell({
     },
   });
 
+  // Delete ALL notifications — platform-admin mode hits the real
+  // DELETE /api/platform/admin/notifications endpoint (persists across
+  // refreshes/sessions). Client mode (admin/editor/author) has no
+  // delete-all endpoint, so it falls back to a local dismiss-from-view
+  // (the rows stay on the full Notifications page).
+  const deleteAllMutation = useMutation({
+    mutationFn: () => (isPlatformAdmin ? deleteApi(listEndpoint) : Promise.resolve()),
+    onSuccess: () => {
+      if (isPlatformAdmin) {
+        // Real delete — clear the local dismissed-IDs set so the
+        // refetched list (which may include scan-re-derived
+        // notifications) displays cleanly. The server is the source of
+        // truth here, so there's nothing to locally hide.
+        setDismissedIds(new Set());
+      } else {
+        // Client mode (no delete endpoint) — locally dismiss the
+        // currently-fetched rows so the dropdown empties instantly.
+        setDismissedIds(new Set(allNotifications.map((n) => n.id)));
+      }
+      // Force both the bell list + the unread-count badge to re-fetch
+      // from the server so the badge + dropdown reflect the real state
+      // immediately.
+      const qKey = [...(isPlatformAdmin ? ['platform-admin'] : ['client']), 'notifications'];
+      queryClient.invalidateQueries({ queryKey: qKey });
+      // Platform-admin mode race fix: the unread-count endpoint runs the
+      // platform scan which re-derives notifications from real platform
+      // events (new signups, payments, …). The bell list endpoint runs
+      // with `scan=false`, so its parallel refetch can land BEFORE the
+      // scan has re-inserted rows → badge shows N (post-scan) while the
+      // dropdown briefly shows empty. Schedule a second list refetch
+      // ~1.5s later so the dropdown syncs with the badge immediately
+      // (well within the bell's 5s staleTime).
+      if (isPlatformAdmin) {
+        setTimeout(() => {
+          queryClient.refetchQueries({
+            queryKey: [...(isPlatformAdmin ? ['platform-admin'] : ['client']), 'notifications', 'bell'],
+          });
+        }, 1500);
+      }
+      setClearAllDialogOpen(false);
+      setOpen(false);
+      toast.success(isPlatformAdmin ? 'All notifications deleted' : 'Notifications cleared from dropdown');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to clear notifications');
+    },
+  });
+
   // Click a notification → dismiss from dropdown + mark read + navigate
   const handleNotificationClick = useCallback((notification: NotificationItem) => {
     // Dismiss from dropdown view so it disappears immediately
@@ -194,12 +242,13 @@ export function NotificationBell({
   }, [navigate, closeMobile, isPlatformAdmin]);
 
   const handleClearAllConfirm = () => {
-    setDismissedIds(new Set(allNotifications.map((n) => n.id)));
-    setClearAllDialogOpen(false);
-    setOpen(false);
-    toast.success('Notifications cleared from dropdown');
+    deleteAllMutation.mutate();
   };
 
+  // Open the centered confirmation modal ABOVE the open dropdown. The
+  // dropdown is intentionally left open so it stays visible BEHIND the
+  // modal — see the ConfirmDialog's `overlayClassName`/`contentClassName`
+  // z-index layering below (modal z-[70] > dropdown z-[60]).
   const handleClearAllClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setClearAllDialogOpen(true);
@@ -345,11 +394,42 @@ export function NotificationBell({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <ConfirmDialog open={clearAllDialogOpen} onOpenChange={setClearAllDialogOpen}
-        title="Clear Notifications"
-        description="This will dismiss all notifications from this dropdown view. They will still be available on the full Notifications page. Use Delete All on that page to permanently remove them."
-        confirmLabel="Clear" variant="destructive"
-        onConfirm={handleClearAllConfirm} isLoading={false} />
+      {/*
+        Clear-All confirmation modal.
+
+        LAYERING: the bell dropdown above renders at `z-[60]` (popover
+        layer). The shadcn AlertDialog defaults to `z-50`, which would
+        place this modal BEHIND the open dropdown — causing the visual
+        overlap the user saw. Passing `overlayClassName="z-[70]"` +
+        `contentClassName="z-[70]"` establishes a clean, documented
+        hierarchy: popover (z-[60]) < modal (z-[70]). The modal + its
+        `bg-black/50` backdrop now render ABOVE the dropdown, the
+        backdrop covers the dropdown so it can't be clicked while the
+        modal is open (background interaction blocked), and the dropdown
+        stays visible behind the translucent backdrop. No arbitrary
+        offsets — just a single, consistent z-index step.
+
+        The dropdown is intentionally left OPEN when Clear All is clicked
+        (see handleClearAllClick) so the user keeps the bell context
+        visible behind the modal. Cancel closes the modal only; Clear
+        triggers the real DELETE + invalidates the unread-count badge.
+      */}
+      <ConfirmDialog
+        open={clearAllDialogOpen}
+        onOpenChange={setClearAllDialogOpen}
+        title={isPlatformAdmin ? 'Delete All Notifications' : 'Clear Notifications'}
+        description={
+          isPlatformAdmin
+            ? 'This permanently deletes ALL platform notifications. The unread count badge will update immediately. This action cannot be undone.'
+            : 'This will dismiss all notifications from this dropdown view. They will still be available on the full Notifications page.'
+        }
+        confirmLabel={isPlatformAdmin ? 'Delete All' : 'Clear'}
+        variant="destructive"
+        onConfirm={handleClearAllConfirm}
+        isLoading={deleteAllMutation.isPending}
+        overlayClassName="z-[70]"
+        contentClassName="z-[70]"
+      />
     </>
   );
 }

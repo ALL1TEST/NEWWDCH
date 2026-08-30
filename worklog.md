@@ -8306,3 +8306,57 @@ Stage Summary:
 - Recurrence note: this will keep happening whenever the DB is reset. The two scripts must be run in order after any `db:push` / `db:reset` / fresh DB:
     1. `bun run src/lib/seed.ts`            (CMS demo data + admin/editor/author users)
     2. `bun run src/lib/platform/bootstrap.ts`  (platform owner accounts + platform config)
+
+---
+Task ID: NOTIF-SEARCH-FIX-1
+Agent: main (Z.ai Code)
+Task: Fix (1) Notifications dropdown UI + delete-all confirmation modal layering, and (2) the global Platform Admin search.
+
+Work Log:
+- Read notification-bell.tsx, confirm-dialog.tsx, alert-dialog.tsx, platform-notifications.tsx, topbar.tsx, sidebar.tsx, command-palette.tsx, ui/command.tsx, module-registry.tsx, platform/index.tsx, prisma schema (User/Payment/PlanConfig/Coupon), and the existing /api/platform/admin/search/route.ts to understand the current implementation.
+
+- ROOT CAUSE (notifications modal): the bell dropdown content uses `z-[60]` (popover layer) but the shadcn AlertDialog overlay+content default to `z-50` (modal layer). So when Clear All opened the ConfirmDialog, it rendered BEHIND the open dropdown → visual overlap. Also `handleClearAllConfirm` only did a local `setDismissedIds` + toast — it never hit the real DELETE endpoint, so the unread badge never dropped.
+
+- ROOT CAUSE (search): (a) command-palette.tsx added an explicit `<Search>` icon AND CommandInput internally renders its own `<SearchIcon>` → two icons side-by-side. (b) the placeholder was "Search customers, payments, plans, coupons, notifications…" instead of "Search…". (c) the platform-staff branch showed PLATFORM_NAV_ITEMS AND the full client CMS NAV_ITEMS (Content, Media, AI, AI Providers, Prompt Library, AI Jobs, …) — not filtered to platform-only. (d) PLATFORM_NAV_ITEMS was missing 3 of the 10 sidebar pages (Email Templates, SMTP Settings, Backups). (e) the backend search already existed and searched customers/payments/plans/coupons/notifications, but had no contextual `/customer:` `/payment:` `/plan:` `/coupon:` prefix support and didn't match payments by customer name/email. (f) search-result rows only rendered the label (name/code) — no email, amount, plan, status, etc.
+
+- FIX (notifications modal layering):
+  - Extended `AlertDialogContent` (ui/alert-dialog.tsx) to accept optional `overlayClassName` + `contentClassName` props, threaded to the overlay + content. Backward-compatible (all other ConfirmDialog usages unchanged).
+  - Extended `ConfirmDialog` (patterns/confirm-dialog.tsx) to pass those two props through.
+  - In notification-bell.tsx, the Clear All ConfirmDialog now passes `overlayClassName="z-[70]"` + `contentClassName="z-[70]"`, establishing a clean documented hierarchy: popover (z-[60]) < modal (z-[70]). The modal + its `bg-black/50` backdrop now render ABOVE the open dropdown; the dropdown stays visible behind the translucent backdrop; background clicks are blocked by the backdrop.
+  - The dropdown is intentionally left OPEN when Clear All is clicked (handleClearAllClick no longer closes it) so the user keeps bell context behind the modal.
+
+- FIX (notifications real delete):
+  - Added a `deleteAllMutation` in notification-bell.tsx that calls `DELETE /api/platform/admin/notifications` for platform-admin mode (real persisted delete) and falls back to a no-op for client mode (no delete-all endpoint exists for client roles).
+  - onSuccess: clears `dismissedIds` (platform mode) so the refetched list displays cleanly; invalidates the notifications query cluster (badge + list); schedules a delayed (1.5s) refetch of the bell list query to fix the platform-scan race (the unread-count endpoint runs the scan that re-derives notifications from real platform events; the list endpoint runs with scan=false, so its parallel refetch can land before the scan re-inserts rows → badge shows N while dropdown briefly shows empty).
+  - Title/description/confirmLabel now differ per mode: platform = "Delete All Notifications" / "Delete All" (real delete), client = "Clear Notifications" / "Clear" (local dismiss).
+  - Loading state wired to `deleteAllMutation.isPending`.
+
+- FIX (search UI):
+  - Removed the explicit `<Search>` icon + outer wrapper in command-palette.tsx; now uses CommandInput's built-in single icon. Loader2 spinner repositioned absolutely at the input's right edge.
+  - Placeholder changed to "Search…" for both roles.
+  - PLATFORM_NAV_ITEMS expanded from 7 → 10 (added Email Templates, SMTP Settings, Backups) to match the sidebar exactly. Labels normalized ("Platform Overview" → "Overview", "Platform Notifications" → "Notifications").
+  - The non-search branch of the groups useMemo now filters: platform staff see ONLY Platform Admin nav (+ Recent); client roles keep the full CMS nav + Actions. Content/Media/AI/AI Providers/Prompt Library/AI Jobs/etc. are no longer shown to platform staff.
+
+- FIX (search backend — contextual queries + payment-by-customer):
+  - Rewrote /api/platform/admin/search/route.ts to parse contextual prefixes: `/customer:<text>`, `/payment:<text>`, `/plan:<text>`, `/coupon:<text>`, `/notification:<text>` (case-insensitive, colon required). When a prefix is present, only that domain is queried; the others return []. No prefix → all 5 domains run in parallel (existing behavior).
+  - Payment search now ALSO matches the related customer's name + email (`user.name` / `user.email` contains), so "/payment: John" finds John's payments.
+  - Response meta now includes `contextual` + `domain` for debugging.
+
+- FIX (search richer results):
+  - command-palette.tsx now threads the raw API result object for each search row through a `searchRows` map (parallel to the existing `searchLinks` map).
+  - Added a `renderSearchRowSub(row)` helper that renders a domain-specific sublabel: customer → email + planId badge + status badge; payment → customerName + amount + status badge; plan → planId + price (or Free) + inactive badge; coupon → discount (10% off / CHF 25.00 off) + active/inactive badge; notification → message preview + type badge + unread badge + relative time.
+  - CommandItem for search rows now stacks label + sublabel (flex-col); static nav rows keep the simple single-line layout.
+
+- VERIFICATION (Agent Browser, logged in as platform@example.com):
+  - Search UI: opened the command palette via the sidebar search button (direct DOM .click() — the synthetic keyboard event didn't reach the document listener). VLM confirmed: ONE search icon (duplicate removed), placeholder "Search…", and the nav list contains ONLY the 10 platform pages (Overview, Customers, Payments, Plans & Pricing, Coupons, Stripe Settings, Notifications, Email Templates, SMTP Settings, Backups) — no Content/Media/AI/AI Providers/Prompt Library/AI Jobs.
+  - Search rich results: typed "SUMMER" → returned the SUMMER20 coupon with sublabel "20% off" + green "active" badge. Typed "/coupon:WELCOME" → returned ONLY the WELCOME10 coupon (no Customers/Payments/Plans/Notifications sections), with "10% off" + "active" badge. Clicking the WELCOME10 result navigated to http://localhost:3000/#platform-coupons (the Coupons page).
+  - Notifications modal layering: opened the bell dropdown (5 notifications, 4 unread, Clear All button visible). Clicked Clear All → a centered "Delete All Notifications" modal appeared ABOVE the dropdown, with a dark backdrop covering the screen, the dropdown visible (dimmed) behind, title + description + Cancel/Delete All buttons, properly layered (VLM confirmed no overlap/breakage).
+  - Cancel: clicked Cancel → modal closed, bell badge still showed 3 unread (nothing deleted).
+  - Delete All: clicked Delete All → DELETE /api/platform/admin/notifications ran (DB went 3→0, then the platform scan re-derived 3 from real new-signup events). Badge updated immediately to 3. Reopening the bell (after the 1.5s delayed refetch) showed 3 notification rows in sync with the badge (3) and the DB (3 total, 3 unread). The earlier race (badge=3, dropdown=empty) is fixed.
+
+- Lint: no new errors in the changed files (notification-bell.tsx, command-palette.tsx, confirm-dialog.tsx, alert-dialog.tsx, search/route.ts). The 7 pre-existing lint problems (content-edit-page.tsx, seo-broken-links-page.tsx) were not touched.
+
+Stage Summary:
+- Notifications dropdown + Clear All modal: the modal now renders centered ABOVE the open dropdown with a proper backdrop, correct z-index (modal z-[70] > popover z-[60]), no overlap. Cancel is non-destructive; Delete All hits the real DELETE endpoint and updates the badge + dropdown immediately (including a delayed refetch to sync with the platform-scan re-derivation).
+- Platform Admin search: filtered to the 10 platform pages only (no CMS items), single search icon, "Search…" placeholder, real backend search with contextual `/customer:` `/payment:` `/plan:` `/coupon:` `/notification:` prefixes, payment-by-customer matching, and rich result rows (email/amount/plan/status/discount badges). Clicking a result opens the corresponding record/page.
+- Files changed: src/components/layout/notification-bell.tsx, src/components/patterns/command-palette.tsx, src/components/patterns/confirm-dialog.tsx, src/components/ui/alert-dialog.tsx, src/app/api/platform/admin/search/route.ts. No unrelated UI/functionality touched.
