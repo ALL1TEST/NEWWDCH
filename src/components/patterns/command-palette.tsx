@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard,
   FileText,
@@ -11,21 +12,22 @@ import {
   MessageSquare,
   Mail,
   Search,
-  Navigation as NavigationIcon,
   BarChart3,
   Bell,
   Sparkles,
-  Webhook,
   Settings,
   Shield,
   Database,
   Activity,
-  Key,
   Upload,
   Plus,
   Clock,
   RotateCcw,
   ScrollText,
+  Receipt,
+  CreditCard,
+  Ticket,
+  Loader2,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -40,7 +42,8 @@ import {
 } from '@/components/ui/command';
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
-import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/lib/stores/auth-store';
+import { getApi } from '@/lib/api-client';
 
 // -------------------- Types --------------------
 
@@ -58,7 +61,39 @@ interface CommandGroupDef {
   items: CommandItemDef[];
 }
 
-// -------------------- Navigation Items --------------------
+// -------------------- Search result (from API) --------------------
+
+interface CustomerResult {
+  id: string; name: string; email: string; planId: string | null;
+  status: string | null; link: string; kind: 'customer';
+}
+interface PaymentResult {
+  id: string; invoiceNumber: string | null;
+  stripeInvoiceId: string | null; stripePaymentIntentId: string | null;
+  stripeChargeId: string | null; customerName: string; customerEmail: string;
+  amount: number; currency: string; status: string; link: string; kind: 'payment';
+}
+interface PlanResult {
+  id: string; planId: string; name: string; priceMonthly: number;
+  currency: string; isFree: boolean; active: boolean; link: string; kind: 'plan';
+}
+interface CouponResult {
+  id: string; code: string; type: string; value: number; currency: string;
+  active: boolean; link: string; kind: 'coupon';
+}
+interface NotificationResult {
+  id: string; title: string; message: string; type: string; isRead: boolean;
+  createdAt: string; link: string; kind: 'notification';
+}
+interface SearchResult {
+  customers: CustomerResult[];
+  payments: PaymentResult[];
+  plans: PlanResult[];
+  coupons: CouponResult[];
+  notifications: NotificationResult[];
+}
+
+// -------------------- Client CMS Navigation Items --------------------
 
 const NAV_ITEMS: CommandItemDef[] = [
   { id: 'nav-dashboard', label: 'Dashboard', icon: LayoutDashboard, shortcut: 'G D', module: 'dashboard' },
@@ -112,6 +147,23 @@ const ACTION_ITEMS: CommandItemDef[] = [
   { id: 'act-create-tag', label: 'Create Tag', icon: Plus, module: 'tags', subPage: 'create' },
 ];
 
+// -------------------- Platform Admin Navigation Items --------------------
+// Shown ONLY when the signed-in user is PLATFORM_ADMIN or OWNER.
+// These mirror the platform-admin sidebar (PLATFORM_NAV_ITEMS in
+// sidebar.tsx) so the command palette navigates to the same pages
+// the sidebar exposes. Each module corresponds to a key in
+// platformModuleRegistry.
+
+const PLATFORM_NAV_ITEMS: CommandItemDef[] = [
+  { id: 'plat-overview', label: 'Platform Overview', icon: LayoutDashboard, module: 'platform-overview' },
+  { id: 'plat-customers', label: 'Customers', icon: Users, module: 'platform-customers' },
+  { id: 'plat-payments', label: 'Payments', icon: Receipt, module: 'platform-payments' },
+  { id: 'plat-plans', label: 'Plans & Pricing', icon: Tag, module: 'platform-plans' },
+  { id: 'plat-coupons', label: 'Coupons', icon: Ticket, module: 'platform-coupons' },
+  { id: 'plat-stripe-settings', label: 'Stripe Settings', icon: CreditCard, module: 'platform-stripe-settings' },
+  { id: 'plat-notifications', label: 'Platform Notifications', icon: Bell, module: 'platform-notifications' },
+];
+
 // -------------------- Recent Items (in-memory) --------------------
 
 let recentItems: CommandItemDef[] = [];
@@ -127,7 +179,11 @@ export function CommandPalette() {
   const isOpen = useCommandPaletteStore((s) => s.isOpen);
   const close = useCommandPaletteStore((s) => s.close);
   const navigate = useNavigationStore((s) => s.navigate);
+  const user = useAuthStore((s) => s.user);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState('');
+
+  const isPlatformStaff = user?.role === 'PLATFORM_ADMIN' || user?.role === 'OWNER';
 
   // Global keyboard listener for Cmd/Ctrl+K and Escape.
   // Escape MUST close the palette: without it the z-50 backdrop stays up
@@ -147,27 +203,176 @@ export function CommandPalette() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Wrap close() so the search query resets whenever the palette is
+  // dismissed. Doing this in the close handler (instead of a useEffect)
+  // avoids the "setState in effect" anti-pattern that triggers cascading
+  // renders — the reset is now tied to the user's dismiss action, not to
+  // an isOpen prop change.
+  const handleClose = useCallback(() => {
+    setQuery('');
+    close();
+  }, [close, setQuery]);
+
+  // ---- Real backend search (debounced) ----
+  // Only fires when the user is a platform admin AND the query is at
+  // least 2 characters. The query is debounced by 250ms so the API
+  // isn't called on every keystroke. The endpoint is auth-guarded
+  // (requirePlatformAdmin) and returns empty results when q is too
+  // short — the palette then renders the static navigation instead.
+  const debouncedQuery = useDebouncedValue(query, 250);
+  const shouldSearch = isPlatformStaff && debouncedQuery.length >= 2;
+
+  const { data: searchResults, isFetching: isSearching } = useQuery({
+    queryKey: ['platform-admin', 'search', debouncedQuery],
+    queryFn: () => getApi<SearchResult>('/api/platform/admin/search', { q: debouncedQuery, limit: 5 }),
+    enabled: shouldSearch,
+    staleTime: 10_000, // cache results for 10s — typing the same query again won't re-fetch.
+  });
+
   const handleSelect = useCallback(
     (item: CommandItemDef) => {
       navigate(item.module, null, item.subPage);
       addRecent(item);
-      close();
+      handleClose();
     },
-    [navigate, close],
+    [navigate, handleClose],
   );
 
-  const groups: CommandGroupDef[] = useMemo(() => {
-    const result: CommandGroupDef[] = [];
+  // Navigate to a search result via its `link` (a hash like
+  // #platform-customer-detail/<id>). The link is parsed into a
+  // module + itemId + subPage triple — exactly what navigate() takes.
+  // For customer results, itemId is the user id so the customer-detail
+  // page renders. For payments/plans/coupons/notifications, the link
+  // is just a module hash (e.g. #platform-payments) so itemId is null
+  // and the page renders its own list view (which has its own client-
+  // side search if the admin wants to filter further).
+  const handleSelectSearchResult = useCallback(
+    (link: string) => {
+      const path = link.replace(/^#\/?/, '').trim() || 'dashboard';
+      const segments = path.split('/');
+      const mod = segments[0] || 'dashboard';
+      const itemId = segments[1] ?? null;
+      const subPage = segments[2] ?? null;
+      navigate(mod, itemId ?? undefined, subPage ?? undefined);
+      handleClose();
+    },
+    [navigate, handleClose],
+  );
 
+  // -------------------- Build groups --------------------
+  // The groups array carries CommandItemDef items for STATIC navigation,
+  // but search-result items carry their own `link` (a hash route) that
+  // the click handler uses to navigate. We attach the link to the
+  // CommandItemDef via a hidden `searchLink` field on the def — this
+  // avoids a separate CommandItem type and keeps the rendering loop
+  // single-source-of-truth.
+  const groups: (CommandGroupDef & { searchLinks?: Record<string, string> })[] = useMemo(() => {
+    const result: (CommandGroupDef & { searchLinks?: Record<string, string> })[] = [];
+
+    // Search results (only when there's an actual query and the
+    // backend returned matches). When shouldSearch is true but the
+    // backend returned no matches, the CommandEmpty placeholder
+    // handles the empty state — these groups aren't rendered.
+    if (shouldSearch && searchResults) {
+      const s = searchResults;
+      const searchLinks: Record<string, string> = {};
+      const items: CommandItemDef[] = [];
+      // Customers
+      for (const c of s.customers) {
+        const id = `search-customer-${c.id}`;
+        searchLinks[id] = c.link;
+        items.push({ id, label: c.name, icon: Users, module: 'platform-customer-detail' });
+      }
+      // Payments
+      for (const p of s.payments) {
+        const id = `search-payment-${p.id}`;
+        searchLinks[id] = p.link;
+        items.push({
+          id,
+          label: p.invoiceNumber ?? p.stripeInvoiceId ?? p.stripePaymentIntentId ?? p.id,
+          icon: Receipt,
+          module: 'platform-payments',
+        });
+      }
+      // Plans
+      for (const p of s.plans) {
+        const id = `search-plan-${p.id}`;
+        searchLinks[id] = p.link;
+        items.push({ id, label: `${p.name} (${p.planId})`, icon: Tag, module: 'platform-plans' });
+      }
+      // Coupons
+      for (const c of s.coupons) {
+        const id = `search-coupon-${c.id}`;
+        searchLinks[id] = c.link;
+        items.push({ id, label: c.code, icon: Ticket, module: 'platform-coupons' });
+      }
+      // Notifications
+      for (const n of s.notifications) {
+        const id = `search-notification-${n.id}`;
+        searchLinks[id] = n.link;
+        items.push({ id, label: n.title, icon: Bell, module: 'platform-notifications' });
+      }
+      // Split into per-domain groups (preserves the per-domain
+      // headings the previous version had).
+      if (s.customers.length > 0) {
+        result.push({
+          heading: 'Customers',
+          items: items.filter((i) => i.id.startsWith('search-customer-')),
+          searchLinks,
+        });
+      }
+      if (s.payments.length > 0) {
+        result.push({
+          heading: 'Payments',
+          items: items.filter((i) => i.id.startsWith('search-payment-')),
+          searchLinks,
+        });
+      }
+      if (s.plans.length > 0) {
+        result.push({
+          heading: 'Plans',
+          items: items.filter((i) => i.id.startsWith('search-plan-')),
+          searchLinks,
+        });
+      }
+      if (s.coupons.length > 0) {
+        result.push({
+          heading: 'Coupons',
+          items: items.filter((i) => i.id.startsWith('search-coupon-')),
+          searchLinks,
+        });
+      }
+      if (s.notifications.length > 0) {
+        result.push({
+          heading: 'Notifications',
+          items: items.filter((i) => i.id.startsWith('search-notification-')),
+          searchLinks,
+        });
+      }
+      return result;
+    }
+
+    // No active search → show navigation + actions.
     if (recentItems.length > 0) {
       result.push({ heading: 'Recent', items: recentItems });
     }
 
+    // Platform admins get the platform-admin nav cluster FIRST
+    // (most relevant for their role), then the client CMS nav.
+    if (isPlatformStaff) {
+      result.push({ heading: 'Platform Admin', items: PLATFORM_NAV_ITEMS });
+    }
     result.push({ heading: 'Navigation', items: NAV_ITEMS });
     result.push({ heading: 'Actions', items: ACTION_ITEMS });
 
     return result;
-  }, []);
+  }, [shouldSearch, searchResults, isPlatformStaff]);
+
+  // When the user is searching, override Command's default filter
+  // (we already have backend results — don't client-side filter them
+  // out). When NOT searching, let Command filter the static nav
+  // items by the typed query (legacy behavior).
+  const shouldFilter = !shouldSearch;
 
   return (
     <AnimatePresence>
@@ -181,7 +386,7 @@ export function CommandPalette() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             className="fixed inset-0 z-50 bg-black/50"
-            onClick={close}
+            onClick={handleClose}
           />
           {/* Palette */}
           <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] pointer-events-none">
@@ -193,36 +398,57 @@ export function CommandPalette() {
               transition={{ duration: 0.2, ease: 'easeOut' }}
               className="pointer-events-auto w-full max-w-[640px] max-h-[480px] overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-2xl"
             >
-              <Command className="rounded-lg" shouldFilter={true}>
-                <div className="flex items-center border-b px-3">
+              <Command className="rounded-lg" shouldFilter={shouldFilter}>
+                <div className="flex items-center border-b px-3 relative">
                   <Search className="h-4 w-4 shrink-0 opacity-50 mr-2" />
                   <CommandInput
                     ref={inputRef}
-                    placeholder="Type a command or search..."
+                    placeholder={isPlatformStaff ? 'Search customers, payments, plans, coupons, notifications…' : 'Type a command or search...'}
                     className="h-12 text-sm"
                     autoFocus
+                    value={query}
+                    onValueChange={setQuery}
                   />
+                  {isSearching && (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground absolute right-3" />
+                  )}
                 </div>
                 <CommandList className="max-h-[380px]">
-                  <CommandEmpty>No results found.</CommandEmpty>
+                  <CommandEmpty>
+                    {shouldSearch
+                      ? (isSearching ? 'Searching…' : 'No matching customers, payments, plans, coupons or notifications.')
+                      : 'No results found.'}
+                  </CommandEmpty>
                   {groups.map((group, groupIdx) => (
                     <React.Fragment key={group.heading}>
                       {groupIdx > 0 && <CommandSeparator />}
                       <CommandGroup heading={group.heading}>
-                        {group.items.map((item) => (
-                          <CommandItem
-                            key={item.id}
-                            value={`${item.label} ${item.module}`}
-                            onSelect={() => handleSelect(item)}
-                            className="cursor-pointer"
-                          >
-                            <item.icon className="h-4 w-4" />
-                            <span>{item.label}</span>
-                            {item.shortcut && (
-                              <CommandShortcut>{item.shortcut}</CommandShortcut>
-                            )}
-                          </CommandItem>
-                        ))}
+                        {group.items.map((item) => {
+                          // Search-result items: navigate via the API-provided
+                          // link hash. Static nav items: navigate via the
+                          // module/subPage fields.
+                          const searchLink = group.searchLinks?.[item.id];
+                          return (
+                            <CommandItem
+                              key={item.id}
+                              value={`${item.label} ${item.module}${item.subPage ? ' ' + item.subPage : ''}`}
+                              onSelect={() => {
+                                if (searchLink) {
+                                  handleSelectSearchResult(searchLink);
+                                } else {
+                                  handleSelect(item);
+                                }
+                              }}
+                              className="cursor-pointer"
+                            >
+                              <item.icon className="h-4 w-4" />
+                              <span>{item.label}</span>
+                              {item.shortcut && (
+                                <CommandShortcut>{item.shortcut}</CommandShortcut>
+                              )}
+                            </CommandItem>
+                          );
+                        })}
                       </CommandGroup>
                     </React.Fragment>
                   ))}
@@ -234,4 +460,15 @@ export function CommandPalette() {
       )}
     </AnimatePresence>
   );
+}
+
+// -------------------- Hook: debounced value --------------------
+
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState<T>(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
 }

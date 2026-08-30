@@ -1,40 +1,37 @@
 // ============================================================
-// PLATFORM ADMIN NOTIFICATIONS — derived, unified event feed.
+// PLATFORM ADMIN NOTIFICATIONS — persisted, real notification rows.
 // ============================================================
 // GET    /api/platform/admin/notifications
 //   Query:  type=<INFO|SUCCESS|WARNING|ERROR|ACTION_REQUIRED>
 //           isRead=<true|false>
+//           relatedEntityType=<customer|payment|subscription|coupon|plan|stripe|webhook|system>
 //           page=<1-based, default 1>
 //           pageSize=<1..100, default 25>
-//   Returns: { data: PlatformEvent[], meta: { pagination: { page, pageSize, total, totalPages } } }
+//           scan=<true|false>  — when true (default), refreshes the
+//                                derived platform-scan notifications
+//                                BEFORE returning the list. Set
+//                                scan=false for pure read-only fetches.
+//   Returns: { data: NotificationRow[], meta: { pagination, scan? } }
 //
 // POST   /api/platform/admin/notifications     { notificationIds: string[] }
-//   Mark-as-read no-op. The platform event feed is DERIVED from
-//   platform-data.ts (customers, payments, subscriptions, audit
-//   log, alerts) on every request — there is no persisted
-//   Notification row to mutate. Returns 200 OK with `{ updated: 0 }`
-//   so the Client Notifications UI's mutation flow can be reused
-//   verbatim. In a real implementation, persist read-state in a
-//   separate `platform_event_read` table keyed by event id + admin
-//   user id; the derived feed would then left-join that table.
+//   Mark-as-read (real, persisted). Idempotent.
 //
-// DELETE /api/platform/admin/notifications
-//   Delete-all no-op (same rationale: derived, not persisted).
-//   Returns 200 OK.
+// POST   /api/platform/admin/notifications/mark-all-read
+//   Mark ALL notifications as read.
 //
-// Auth: requirePlatformAdmin — accepts PLATFORM_ADMIN or OWNER
-// (the file calls this "platform admin OR owner"; the helper is
-// named requirePlatformAdmin in platform-auth.ts). This is the
-// same guard the rest of /api/platform/admin/* uses.
+// Auth: requirePlatformAdmin — accepts PLATFORM_ADMIN or OWNER.
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
 import {
-  getPlatformEvents,
-  type PlatformEvent,
-} from '@/lib/platform/platform-data';
+  listNotifications,
+  markNotificationsRead,
+  markAllNotificationsRead,
+  scanPlatformForNotifications,
+} from '@/lib/notifications';
 import type { NotificationType, PaginationMeta } from '@/shared/types';
+import { z } from 'zod/v4';
 
 const VALID_TYPES = new Set<NotificationType>([
   'INFO',
@@ -44,12 +41,23 @@ const VALID_TYPES = new Set<NotificationType>([
   'ACTION_REQUIRED',
 ]);
 
+const VALID_ENTITY_TYPES = new Set([
+  'customer',
+  'payment',
+  'subscription',
+  'coupon',
+  'plan',
+  'stripe',
+  'webhook',
+  'system',
+]);
+
 function reqId(): string {
   return `req_platnotif_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 // =====================================================================
-// GET — list (paginated + filtered)
+// GET — list (paginated + filtered) — REAL persisted rows
 // =====================================================================
 
 export async function GET(request: NextRequest) {
@@ -72,27 +80,41 @@ export async function GET(request: NextRequest) {
     const isRead =
       rawIsRead === 'true' ? true : rawIsRead === 'false' ? false : undefined;
 
-    // Derive fresh on every call — no caching, no persistence.
-    let list: PlatformEvent[] = getPlatformEvents();
-    if (type) list = list.filter((e) => e.type === type);
-    if (isRead !== undefined) list = list.filter((e) => e.isRead === isRead);
+    const rawEntityType = sp.get('relatedEntityType');
+    const relatedEntityType =
+      rawEntityType && VALID_ENTITY_TYPES.has(rawEntityType)
+        ? rawEntityType
+        : undefined;
 
-    const total = list.length;
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    const safePage = Math.min(page, totalPages);
-    const start = (safePage - 1) * pageSize;
-    const data = list.slice(start, start + pageSize);
+    // Run the periodic platform scan first so the list always reflects
+    // the latest past-due subs / failed payments / new customers.
+    // Idempotent (dedupeKey-protected) — running it on every GET is
+    // cheap. Skip when scan=false is explicitly passed (for the
+    // bell's quick unread-count path which calls the scan in the
+    // unread-count route instead).
+    let scanSummary: { created: number; pastDue: number; failedPayments: number; newCustomers: number } | undefined;
+    if (sp.get('scan') !== 'false') {
+      scanSummary = await scanPlatformForNotifications();
+    }
+
+    const result = await listNotifications({
+      page,
+      pageSize,
+      type,
+      isRead,
+      relatedEntityType,
+    });
 
     const pagination: PaginationMeta = {
-      page: safePage,
-      pageSize,
-      total,
-      totalPages,
+      page: result.page,
+      pageSize: result.pageSize,
+      total: result.total,
+      totalPages: result.totalPages,
     };
 
     return NextResponse.json({
-      data,
-      meta: { requestId: id, pagination },
+      data: result.items,
+      meta: { requestId: id, pagination, scan: scanSummary },
     });
   } catch (error) {
     console.error(`[PLATFORM:NOTIFICATIONS:LIST] ${id} —`, error);
@@ -110,33 +132,61 @@ export async function GET(request: NextRequest) {
 }
 
 // =====================================================================
-// POST — mark-as-read (no-op, derived feed)
+// POST — mark-as-read (REAL, persisted, idempotent)
+// Body: { notificationIds: string[] }
 // =====================================================================
+
+const markReadSchema = z.object({
+  notificationIds: z.array(z.string().min(1)).min(1, 'At least one notification ID is required'),
+});
 
 export async function POST(request: NextRequest) {
   const id = reqId();
   const auth = await requirePlatformAdmin(request);
   if ('response' in auth) return auth.response;
 
-  // Body is accepted for API parity with /api/notifications but is
-  // ignored — there is no persisted row to update.
   try {
-    await request.json().catch(() => null);
-  } catch {
-    // swallow — body is irrelevant for a no-op
-  }
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: { code: 'INVALID_JSON', message: 'Request body must be valid JSON' }, meta: { requestId: id } },
+        { status: 400 },
+      );
+    }
 
-  return NextResponse.json({
-    data: {
-      updated: 0,
-      note: 'Platform events are derived fresh on each request — read-state is not persisted. See route header comment for the production design.',
-    },
-    meta: { requestId: id },
-  });
+    const parsed = markReadSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: parsed.error.issues[0]?.message ?? 'Invalid input data',
+            details: parsed.error.issues.map((i) => ({ field: i.path.join('.'), message: i.message })),
+          },
+          meta: { requestId: id },
+        },
+        { status: 400 },
+      );
+    }
+
+    const updated = await markNotificationsRead(parsed.data.notificationIds);
+    return NextResponse.json({
+      data: { updated },
+      meta: { requestId: id },
+    });
+  } catch (error) {
+    console.error(`[PLATFORM:NOTIFICATIONS:MARK_READ] ${id} —`, error);
+    return NextResponse.json(
+      { error: { code: 'INTERNAL_ERROR', message: 'Failed to mark notifications as read' }, meta: { requestId: id } },
+      { status: 500 },
+    );
+  }
 }
 
 // =====================================================================
-// DELETE — delete-all (no-op, derived feed)
+// DELETE — delete-all (REAL, persisted)
 // =====================================================================
 
 export async function DELETE(request: NextRequest) {
@@ -144,11 +194,25 @@ export async function DELETE(request: NextRequest) {
   const auth = await requirePlatformAdmin(request);
   if ('response' in auth) return auth.response;
 
-  return NextResponse.json({
-    data: {
-      deleted: 0,
-      note: 'Platform events are derived fresh on each request — there is nothing to delete. See route header comment for the production design.',
-    },
-    meta: { requestId: id },
-  });
+  try {
+    // Delete-all endpoint — there's no body to parse, but we still
+    // accept one for API parity with the existing DELETE shape.
+    await request.json().catch(() => null);
+
+    // Inline the delete-all (avoids importing deleteAllNotifications
+    // for a one-off — but the helper exists in /lib/notifications.ts
+    // for other callers). The Prisma call is the source of truth.
+    const { db } = await import('@/lib/db');
+    const result = await db.notification.deleteMany({});
+    return NextResponse.json({
+      data: { deleted: result.count },
+      meta: { requestId: id },
+    });
+  } catch (error) {
+    console.error(`[PLATFORM:NOTIFICATIONS:DELETE_ALL] ${id} —`, error);
+    return NextResponse.json(
+      { error: { code: 'INTERNAL_ERROR', message: 'Failed to delete notifications' }, meta: { requestId: id } },
+      { status: 500 },
+    );
+  }
 }

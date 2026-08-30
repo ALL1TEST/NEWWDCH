@@ -1,42 +1,37 @@
 'use client';
 
 // ============================================================
-// PLATFORM NOTIFICATIONS — derived, unified platform event feed.
+// PLATFORM NOTIFICATIONS — persisted, real-time, derived from the
+// Notification table (populated by the Stripe webhook + the periodic
+// platform-scan).
 // ============================================================
-// Redesigned for a clean, modern, premium SaaS admin look that
-// matches the rest of the Platform Admin dashboard (same Card /
-// Badge / Button / spacing / typography as platform-overview,
-// platform-customers, etc.).
+// This module renders the SAME UI/layout as the previous derived-feed
+// version (card + filter tabs + search + date grouping + per-row
+// hover actions + Delete All confirmation dialog). The difference is
+// the data source: every read / mutation now hits the REAL persisted
+// Notification rows via /api/platform/admin/notifications/* endpoints.
 //
-// UX improvements (UI-only — no API/data changes):
-//   - Category filter toolbar (All / Unread / System / Customers /
-//     Payments / Subscriptions / Security) derived from the event
-//     id prefix (evt-aud- / evt-cust- / evt-pay- / evt-sub- /
-//     evt-alert-). The API only filters by type/isRead, so the
-//     category filter is applied client-side on the fetched list.
-//   - Client-side search (title + message contains).
-//   - Date grouping: Today / Yesterday / Earlier this week / Older.
-//   - Compact notification rows in a single Card with a left accent
-//     bar + dot for unread, type-colored icon avatar, title, message
-//     and relative timestamp.
-//   - Per-row hover actions: Mark as read/unread + Delete (these
-//     reuse the EXISTING local-override pattern — the derived feed
-//     always reports isRead=false, so read-state is already a client
-//     Set; mark-unread removes from that Set, delete hides the row in
-//     a separate hidden Set, mirroring how delete-all is a no-op on
-//     the derived feed). No new API endpoints.
+// Behaviors preserved verbatim:
+//   - GET  /api/platform/admin/notifications   (paginated infinite query)
+//   - POST /api/platform/admin/notifications   (mark-as-read, REAL)
+//   - POST /api/platform/admin/notifications/mark-all-read (REAL)
+//   - DELETE /api/platform/admin/notifications  (delete-all, REAL)
+//   - PATCH /api/platform/admin/notifications/[id] (mark read/unread, REAL)
+//   - DELETE /api/platform/admin/notifications/[id] (delete single, REAL)
 //
-// Underlying behavior preserved verbatim:
-//   - GET /api/platform/admin/notifications (paginated infinite query)
-//   - POST (mark-as-read no-op) + local override
-//   - DELETE (delete-all no-op) + clear local override + refetch
-//   - Mark All Read, Delete All with ConfirmDialog
-//   - Notification counts, read/unread state, filtering, auth,
-//     permissions — all unchanged.
+// New behaviors (UI-unchanged):
+//   - Category filter tabs use the `relatedEntityType` field on the
+//     Notification row to map a notification to its category (no more
+//     derived id prefix parsing).
+//   - Mark-read / mark-unread / delete / delete-all are now server-
+//     persisted — the UI reflects the real state across refreshes and
+//     sessions.
+//   - The page subtitle shows the real unread count from the API (no
+//     local-override arithmetic).
 // ============================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Info,
   CheckCircle2,
@@ -56,7 +51,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/patterns';
-import { getApi, postApi, deleteApi } from '@/lib/api-client';
+import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { NotificationType, ApiResponse } from '@/shared/types';
@@ -71,9 +66,15 @@ interface NotificationItem {
   message: string;
   isRead: boolean;
   createdAt: string;
+  link?: string | null;
+  relatedEntityType?: string | null;
+  relatedEntityId?: string | null;
+  createdBy?: string | null;
 }
 
-// Category filter — derived client-side from the event id prefix.
+// Category filter — derived from the `relatedEntityType` field on the
+// Notification row. The API filters server-side when relatedEntityType
+// is passed as a query param.
 type NotificationCategory =
   | 'all'
   | 'unread'
@@ -130,15 +131,26 @@ const FILTER_TABS: { value: NotificationCategory; label: string }[] = [
   { value: 'security', label: 'Security' },
 ];
 
-// Map an event id to its category (derived from the id prefix the
-// centralized platform-data.ts generator uses — see getPlatformEvents).
-function eventCategory(id: string): NotificationCategory {
-  if (id.startsWith('evt-cust-')) return 'customers';
-  if (id.startsWith('evt-pay-')) return 'payments';
-  if (id.startsWith('evt-sub-')) return 'subscriptions';
-  if (id.startsWith('evt-aud-')) return 'system';
-  if (id.startsWith('evt-alert-')) return 'security';
-  return 'system';
+// Map the API `relatedEntityType` to the UI category. 'security' is
+// a synthetic UI bucket — the API stores 'webhook'/'stripe' entities,
+// which the UI shows under Security.
+function mapEntityCategory(entityType: string | null | undefined): NotificationCategory {
+  switch (entityType) {
+    case 'customer':
+      return 'customers';
+    case 'payment':
+      return 'payments';
+    case 'subscription':
+      return 'subscriptions';
+    case 'webhook':
+    case 'stripe':
+      return 'security';
+    case 'coupon':
+    case 'plan':
+    case 'system':
+    default:
+      return 'system';
+  }
 }
 
 const PAGE_SIZE = 25;
@@ -175,59 +187,44 @@ export function PlatformNotificationsModule() {
   const [search, setSearch] = useState('');
   const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
 
-  // Local read-state override (existing pattern) — the derived feed
-  // always reports isRead=false; this Set is what makes items render
-  // as read after the user marks them.
-  const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
-  // Locally-hidden (per-row "delete") ids — mirrors the delete-all
-  // no-op pattern on the derived feed. Hidden items don't render
-  // until the next refetch (which returns the same derived events).
-  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
+  // ---- Server-side filter params (real API) ----
+  // The filter tabs map to either an `isRead=false` query (Unread) or
+  // a `relatedEntityType=<bucket>` query (Customers / Payments /
+  // Subscriptions / System / Security). The "All" tab has no filter.
+  const queryParams = useMemo(() => {
+    const params: Record<string, string | number> = { pageSize: PAGE_SIZE };
+    if (activeFilter === 'unread') {
+      params.isRead = 'false';
+    } else if (activeFilter !== 'all') {
+      // Map UI category back to the API entity type.
+      const entityTypeMap: Record<string, string> = {
+        customers: 'customer',
+        payments: 'payment',
+        subscriptions: 'subscription',
+        system: 'system',
+        security: 'webhook', // primary entity type for the Security bucket
+      };
+      params.relatedEntityType = entityTypeMap[activeFilter] ?? 'system';
+    }
+    return params;
+  }, [activeFilter]);
 
-  const markReadLocally = useCallback((id: string) => {
-    setReadIds((prev) => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-  }, []);
-
-  const markUnreadLocally = useCallback((id: string) => {
-    setReadIds((prev) => {
-      if (!prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-
-  const hideLocally = useCallback((id: string) => {
-    setHiddenIds((prev) => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-  }, []);
-
-  // No server-side type/isRead params — the new filters are category +
-  // read-state + search, all applied client-side on the fetched list.
-  const queryParams = useMemo(() => ({ pageSize: PAGE_SIZE }), []);
-
-  // Infinite scroll query (existing architecture).
+  // Infinite scroll query — REAL persisted rows from the Notification
+  // table (populated by the Stripe webhook + the periodic platform-scan
+  // in /api/platform/admin/notifications/unread-count).
   const {
     data,
     isLoading,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    refetch,
   } = useInfiniteQuery({
     queryKey: ['platform-notifications', queryParams],
     queryFn: ({ pageParam = 1 }) =>
       getApi<ApiResponse<NotificationItem[]>>(
         '/api/platform/admin/notifications',
-        { ...queryParams, page: pageParam },
+        { ...queryParams, page: pageParam, scan: 'false' },
         { raw: true },
       ),
     initialPageParam: 1,
@@ -241,21 +238,32 @@ export function PlatformNotificationsModule() {
     refetchOnMount: true,
   });
 
-  // Flatten all pages, apply local read override, drop locally-hidden.
-  const allNotifications = useMemo(() => {
-    const list = data?.pages.flatMap((p) => p?.data ?? []) ?? [];
-    return list
-      .filter((n) => !hiddenIds.has(n.id))
-      .map((n) => (readIds.has(n.id) ? { ...n, isRead: true } : n));
-  }, [data, readIds, hiddenIds]);
+  // Unread count from the real API (also runs the periodic platform-scan
+  // server-side so the bell + this page subtitle stay in sync).
+  const { data: unreadCountData } = useQuery({
+    queryKey: ['platform-admin', 'notifications', 'unread-count'],
+    queryFn: () => getApi<{ count: number }>('/api/platform/admin/notifications/unread-count'),
+    staleTime: 5_000,
+    refetchInterval: 30_000,
+  });
 
-  // Apply the active filter + search (client-side).
+  // Flatten all pages.
+  const allNotifications = useMemo(() => {
+    return data?.pages.flatMap((p) => p?.data ?? []) ?? [];
+  }, [data]);
+
+  // Apply the active filter (for non-API-supported categories like
+  // 'security' which maps to multiple entity types) + search
+  // (client-side).
   const displayNotifications = useMemo(() => {
     let list = allNotifications;
-    if (activeFilter === 'unread') {
-      list = list.filter((n) => !n.isRead);
-    } else if (activeFilter !== 'all') {
-      list = list.filter((n) => eventCategory(n.id) === activeFilter);
+    if (activeFilter === 'security') {
+      // The API only filters by ONE relatedEntityType at a time, so the
+      // Security bucket (webhook + stripe) is applied client-side.
+      list = list.filter((n) => {
+        const cat = mapEntityCategory(n.relatedEntityType);
+        return cat === 'security';
+      });
     }
     const q = search.trim().toLowerCase();
     if (q) {
@@ -287,36 +295,119 @@ export function PlatformNotificationsModule() {
   }, [displayNotifications]);
 
   const totalItems = data?.pages[0]?.meta?.pagination?.total ?? 0;
-  const unreadCount = Math.max(0, totalItems - readIds.size - hiddenIds.size);
+  const unreadCount = unreadCountData?.count ?? 0;
 
-  // ---- Mutations (all preserved from the original) ----
+  // ---- Mutations (all REAL, server-persisted) ----
 
-  // Mark single as read — POST is a no-op on the server; optimistic
-  // local override.
+  // Mark single as read — POST /api/platform/admin/notifications
   const markReadMutation = useMutation({
     mutationFn: (id: string) =>
       postApi('/api/platform/admin/notifications', { notificationIds: [id] }),
-    onSuccess: (_data, id) => {
-      markReadLocally(id);
+    onMutate: (id: string) => {
+      // Optimistic update: flip the local row to isRead=true so the
+      // UI feels instant. The server call follows; if it fails the
+      // next refetch reconciles.
+      queryClient.setQueryData(['platform-notifications', queryParams], (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((p: any) => ({
+            ...p,
+            data: (p?.data ?? []).map((n: NotificationItem) =>
+              n.id === id ? { ...n, isRead: true } : n,
+            ),
+          })),
+        };
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['platform-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-admin', 'notifications'] });
     },
   });
 
-  // Mark all as read — POST is a no-op on the server; locally mark
-  // every currently-visible notification as read.
-  const markAllReadMutation = useMutation({
-    mutationFn: () => {
-      const ids = allNotifications
-        .filter((n) => !n.isRead)
-        .map((n) => n.id);
-      return postApi('/api/platform/admin/notifications', { notificationIds: ids });
+  // Mark single as unread — PATCH /api/platform/admin/notifications/[id]
+  const markUnreadMutation = useMutation({
+    mutationFn: (id: string) =>
+      patchApi(`/api/platform/admin/notifications/${id}`, { isRead: false }),
+    onMutate: (id: string) => {
+      queryClient.setQueryData(['platform-notifications', queryParams], (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((p: any) => ({
+            ...p,
+            data: (p?.data ?? []).map((n: NotificationItem) =>
+              n.id === id ? { ...n, isRead: false } : n,
+            ),
+          })),
+        };
+      });
     },
     onSuccess: () => {
-      setReadIds((prev) => {
-        const next = new Set(prev);
-        for (const n of allNotifications) next.add(n.id);
-        return next;
+      queryClient.invalidateQueries({ queryKey: ['platform-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-admin', 'notifications'] });
+    },
+  });
+
+  // Mark all as read — POST /api/platform/admin/notifications/mark-all-read
+  const markAllReadMutation = useMutation({
+    mutationFn: () =>
+      postApi('/api/platform/admin/notifications/mark-all-read'),
+    onMutate: () => {
+      queryClient.setQueryData(['platform-notifications', queryParams], (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((p: any) => ({
+            ...p,
+            data: (p?.data ?? []).map((n: NotificationItem) => ({ ...n, isRead: true })),
+          })),
+        };
       });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['platform-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-admin', 'notifications'] });
       toast.success('All platform notifications marked as read');
+    },
+  });
+
+  // Delete single notification — DELETE /api/platform/admin/notifications/[id]
+  const deleteSingleMutation = useMutation({
+    mutationFn: (id: string) =>
+      deleteApi(`/api/platform/admin/notifications/${id}`),
+    onMutate: (id: string) => {
+      // Optimistic update: remove the row from the local cache.
+      queryClient.setQueryData(['platform-notifications', queryParams], (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((p: any) => ({
+            ...p,
+            data: (p?.data ?? []).filter((n: NotificationItem) => n.id !== id),
+          })),
+        };
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['platform-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-admin', 'notifications'] });
+      toast.success('Notification deleted');
+    },
+  });
+
+  // Delete ALL notifications — DELETE /api/platform/admin/notifications
+  const deleteAllMutation = useMutation({
+    mutationFn: () => deleteApi('/api/platform/admin/notifications'),
+    onSuccess: () => {
+      toast.success('All platform notifications deleted');
+      queryClient.invalidateQueries({ queryKey: ['platform-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-admin', 'notifications'] });
+      setDeleteAllDialogOpen(false);
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete notifications');
     },
   });
 
@@ -325,41 +416,15 @@ export function PlatformNotificationsModule() {
     [markReadMutation],
   );
 
-  // Mark a single notification unread (local-only — the derived feed
-  // has no mark-unread endpoint; mirrors the local read override).
   const handleMarkUnread = useCallback(
-    (id: string) => {
-      markUnreadLocally(id);
-    },
-    [markUnreadLocally],
+    (id: string) => markUnreadMutation.mutate(id),
+    [markUnreadMutation],
   );
 
-  // Per-row delete (local-only hide — mirrors how delete-all is a
-  // no-op on the derived feed).
   const handleDeleteSingle = useCallback(
-    (id: string) => {
-      hideLocally(id);
-      toast.success('Notification removed (derived feed — will reappear on refresh)');
-    },
-    [hideLocally],
+    (id: string) => deleteSingleMutation.mutate(id),
+    [deleteSingleMutation],
   );
-
-  // Delete ALL notifications — DELETE is a no-op on the server
-  // (derived feed, nothing to delete). Clear the local overrides so
-  // the unread dot reappears on the next refetch.
-  const deleteAllMutation = useMutation({
-    mutationFn: () => deleteApi('/api/platform/admin/notifications'),
-    onSuccess: () => {
-      setReadIds(new Set());
-      setHiddenIds(new Set());
-      toast.success('Platform notifications cleared (derived feed — events will reappear on refresh)');
-      queryClient.invalidateQueries({ queryKey: ['platform-notifications'] });
-      setDeleteAllDialogOpen(false);
-    },
-    onError: (err: Error) => {
-      toast.error(err.message || 'Failed to clear notifications');
-    },
-  });
 
   // Intersection observer for infinite scroll (existing pattern).
   const observerRef = useCallback(
@@ -542,7 +607,7 @@ export function PlatformNotificationsModule() {
         open={deleteAllDialogOpen}
         onOpenChange={setDeleteAllDialogOpen}
         title="Delete All Platform Notifications"
-        description="Are you sure you want to clear all platform notifications? Since this feed is derived from live platform data, events will reappear on the next refresh."
+        description="Are you sure you want to permanently delete all platform notifications? This action cannot be undone. New notifications will be created when the next platform event occurs (Stripe webhook, failed payment, past-due subscription, etc.)."
         confirmLabel="Delete All"
         variant="destructive"
         onConfirm={() => deleteAllMutation.mutate()}

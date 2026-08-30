@@ -1868,7 +1868,19 @@ model Notification {
   siteId      String?
   isRead      Boolean           @default(false)
   link        String?
+  // ---- Platform-admin notification extension (Task 81) ----
+  // relatedEntityType/relatedEntityId link the notification to the entity
+  // it concerns (customer | payment | subscription | coupon | plan |
+  // stripe | webhook | system). dedupeKey is a stable, unique hash that
+  // prevents the same logical event from being persisted twice (Stripe
+  // retries, periodic platform scans, etc.). createdBy identifies the
+  // originator (system | stripe | platform-scan | <userId>).
+  relatedEntityType String?
+  relatedEntityId   String?
+  dedupeKey         String? @unique
+  createdBy         String?
   createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
   site Site? @relation(fields: [siteId], references: [id])
 
@@ -1876,6 +1888,8 @@ model Notification {
   @@index([isRead])
   @@index([siteId])
   @@index([createdAt])
+  @@index([relatedEntityType])
+  @@index([relatedEntityId])
 }
 
 model UserNotificationPreference {

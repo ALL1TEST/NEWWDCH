@@ -18,11 +18,11 @@ import {
 } from '@/components/ui/tooltip';
 import { ConfirmDialog } from '@/components/patterns';
 import { getApi, postApi } from '@/lib/api-client';
-import { queryKeys } from '@/lib/query-keys';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { getNotificationDestination, parseHashRoute } from '@/lib/notifications/links';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useSidebarStore } from '@/lib/stores/sidebar-store';
+import { useAuthStore } from '@/lib/stores/auth-store';
 import { toast } from 'sonner';
 import type { NotificationType, ApiResponse } from '@/shared/types';
 
@@ -45,6 +45,19 @@ const TYPE_COLOR: Record<NotificationType, string> = {
   ERROR: 'text-red-500 bg-red-500/10',
   ACTION_REQUIRED: 'text-orange-500 bg-orange-500/10',
 };
+
+// -------------------- Platform-admin endpoint helpers --------------------
+// When the signed-in user is PLATFORM_ADMIN or OWNER, the bell reads
+// from /api/platform/admin/notifications/* (real persisted rows). When
+// the user is a CLIENT role (admin/editor/author), the bell keeps the
+// legacy /api/notifications/* behavior (the existing client
+// notifications system — content review, comment, etc.). The
+// `useAuthStore` resolves the role synchronously on the client.
+
+function usePlatformAdminMode(): boolean {
+  const user = useAuthStore((s) => s.user);
+  return user?.role === 'PLATFORM_ADMIN' || user?.role === 'OWNER';
+}
 
 export function NotificationBell({
   side,
@@ -82,18 +95,40 @@ export function NotificationBell({
   const queryClient = useQueryClient();
   const navigate = useNavigationStore((s) => s.navigate);
   const closeMobile = useSidebarStore((s) => s.closeMobile);
+  const isPlatformAdmin = usePlatformAdminMode();
   const [open, setOpen] = useState(false);
   const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
+  // ---- Endpoint selection (platform admin vs client) ----
+  // Platform admins query /api/platform/admin/notifications/* (real
+  // persisted rows from the Notification table, populated by the Stripe
+  // webhook + the platform-scan). Client roles keep the legacy
+  // /api/notifications/* behavior (content review notifications).
+  const listEndpoint = isPlatformAdmin ? '/api/platform/admin/notifications' : '/api/notifications';
+  const unreadCountEndpoint = isPlatformAdmin
+    ? '/api/platform/admin/notifications/unread-count'
+    : '/api/notifications/unread-count';
+
+  // Platform-admin list supports `scan=false` to skip the platform
+  // scan on the bell's list fetch (the scan runs in the unread-count
+  // endpoint instead — single source of truth for the bell's polling).
+  const listParams = isPlatformAdmin
+    ? { pageSize: 5, page: 1, scan: 'false' }
+    : { pageSize: 5, page: 1 };
+
   const { data, isLoading } = useQuery({
-    queryKey: queryKeys.notifications.list({ pageSize: 5, page: 1 }),
-    queryFn: () => getApi<ApiResponse<NotificationItem[]>>('/api/notifications', { pageSize: 5, page: 1 }, { raw: true }),
+    queryKey: [...(isPlatformAdmin ? ['platform-admin'] : ['client']), 'notifications', 'bell', listParams],
+    queryFn: () => getApi<ApiResponse<NotificationItem[]>>(
+      listEndpoint,
+      listParams,
+      { raw: true },
+    ),
     staleTime: 5_000,
   });
   const { data: unreadCountData } = useQuery({
-    queryKey: queryKeys.notifications.unreadCount(),
-    queryFn: () => getApi<{ count: number }>('/api/notifications/unread-count'),
+    queryKey: [...(isPlatformAdmin ? ['platform-admin'] : ['client']), 'notifications', 'unread-count'],
+    queryFn: () => getApi<{ count: number }>(unreadCountEndpoint),
     staleTime: 5_000, refetchInterval: 30_000,
   });
 
@@ -102,16 +137,29 @@ export function NotificationBell({
   const notifications = allNotifications.filter((n) => !dismissedIds.has(n.id));
   const dropdownUnreadCount = notifications.filter((n) => !n.isRead).length;
 
+  // Mark-read endpoint: platform admin POSTs to
+  // /api/platform/admin/notifications (real persisted). Client uses the
+  // existing /api/notifications POST (also real).
   const markReadMutation = useMutation({
-    mutationFn: (id: string) => postApi('/api/notifications', { notificationIds: [id] }),
+    mutationFn: (id: string) => postApi(listEndpoint, { notificationIds: [id] }),
     onMutate: (id: string) => {
-      queryClient.setQueryData(queryKeys.notifications.list({ pageSize: 5, page: 1 }), (old: any) => {
-        if (!old?.data) return old;
-        return { ...old, data: old.data.map((n: NotificationItem) => n.id === id ? { ...n, isRead: true } : n) };
-      });
-      queryClient.setQueryData(queryKeys.notifications.unreadCount(), (old: any) => ({ count: Math.max(0, (old?.count ?? 0) - 1) }));
+      queryClient.setQueryData(
+        [...(isPlatformAdmin ? ['platform-admin'] : ['client']), 'notifications', 'bell', listParams],
+        (old: any) => {
+          if (!old?.data) return old;
+          return { ...old, data: old.data.map((n: NotificationItem) => n.id === id ? { ...n, isRead: true } : n) };
+        },
+      );
+      queryClient.setQueryData(
+        [...(isPlatformAdmin ? ['platform-admin'] : ['client']), 'notifications', 'unread-count'],
+        (old: any) => ({ count: Math.max(0, (old?.count ?? 0) - 1) }),
+      );
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [...(isPlatformAdmin ? ['platform-admin'] : ['client']), 'notifications'],
+      });
+    },
   });
 
   // Click a notification → dismiss from dropdown + mark read + navigate
@@ -137,10 +185,13 @@ export function NotificationBell({
   const handleViewAll = useCallback(() => {
     setOpen(false);
     setTimeout(() => {
-      navigate('notifications');
+      // Platform admins have a dedicated Notifications page in the
+      // Platform Admin shell; client roles land on the legacy
+      // 'notifications' module (rendered by the regular shell).
+      navigate(isPlatformAdmin ? 'platform-notifications' : 'notifications');
       closeMobile();
     }, 50);
-  }, [navigate, closeMobile]);
+  }, [navigate, closeMobile, isPlatformAdmin]);
 
   const handleClearAllConfirm = () => {
     setDismissedIds(new Set(allNotifications.map((n) => n.id)));

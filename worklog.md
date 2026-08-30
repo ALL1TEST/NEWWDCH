@@ -7992,3 +7992,158 @@ Stage Summary:
   - src/app/api/platform/admin/stripe/settings/route.ts (masked-value rejection in PUT validation)
   - src/app/api/webhooks/stripe/route.ts (claim-for-processing pattern + markWebhookEventOutcome after dispatch)
   - src/lib/platform/platform-data.ts (getOverview usage.automationRuns → db.automationRun.count(); getCustomer recentActivity → db.auditLog.findMany by userId + resourceType='Customer')
+
+---
+Task ID: 81
+Agent: main (orchestrator)
+Task: Fix and implement the real logic for the Platform Admin Dashboard search and notification system — global command palette search connected to real DB data + persisted notification bell with real platform events.
+
+Work Log:
+- Read worklog.md (Tasks 0-80) and explored the existing implementation:
+  - prisma/schema.prisma: Notification model already existed with id/type/title/message/channel/userId/siteId/isRead/link/createdAt. Missing fields for the user's request: severity (use existing `type` enum since INFO/SUCCESS/WARNING/ERROR/ACTION_REQUIRED matches), relatedEntityType, relatedEntityId, dedupeKey (for idempotency), createdBy, updatedAt.
+  - /api/notifications/* (route.ts, unread-count/route.ts, [id]/route.ts) — pre-existing CLIENT notifications endpoints (content review, comments, etc.). POST marks-as-read (real), GET lists with pagination. Used by the bell for client-role users.
+  - /api/platform/admin/notifications/route.ts — was a DERIVED-feed no-op: GET returned events computed on-the-fly from in-memory mock store; POST/DELETE were no-ops returning `{updated:0}`. Read-state was local-only (lost on refresh). Task 81: replace with persisted rows.
+  - src/lib/platform/platform-data.ts `getPlatformEvents()` (lines 1701-1848) — sync derivation of platform events from listCustomersMockSync / listPaymentsMockSync / listSubscriptionsMockSync / getAuditLog / getAlerts. Returned 5 categories (customer, payment, subscription, audit, alert) with isRead=false always. Task 81: replace with persisted Notification rows.
+  - src/modules/platform/platform-notifications.tsx — UI used infinite query + local Set for read-state (Mark Read was a no-op; Delete was local-hide only). Task 81: rewire to real persisted mark-read / mark-unread / delete / mark-all-read / delete-all.
+  - src/components/layout/notification-bell.tsx — queried /api/notifications + /api/notifications/unread-count (client notifications only). Platform admins had no real admin notifications. Task 81: dual-mode (admin vs client endpoints based on user role).
+  - src/components/patterns/command-palette.tsx — static navigation + action items only; NO dynamic search across Customers/Payments/Plans/Coupons/Notifications. Task 81: add real backend search.
+
+- Phase 1 — Prisma schema (add fields to Notification model):
+  - prisma/schema.prisma: Added `relatedEntityType String?` (customer | payment | subscription | coupon | plan | stripe | webhook | system), `relatedEntityId String?`, `dedupeKey String? @unique` (stable hash for idempotency), `createdBy String?` (originator: system | stripe | platform-scan | <userId>), `updatedAt DateTime @updatedAt`. Added `@@index([relatedEntityType])` + `@@index([relatedEntityId])` for category filter queries. Pre-existing 7 Notification rows from the original seed were wiped (DELETE FROM Notification) so the NOT NULL updatedAt column could be added cleanly; re-running `bun run db:push` succeeded — schema synced to SQLite.
+
+- Phase 2 — /lib/notifications.ts (NEW file, ~330 lines):
+  - `createNotification(input)` — IDEMPOTENT insert via dedupeKey. When the same dedupeKey already exists, the existing row is left UNTOUCHED (NOT re-marked unread, NOT timestamp-bumped) — so Stripe retries or repeated platform-scans can never "un-read" an admin-acknowledged notification. Returns the row id (existing or new). Best-effort: any failure is logged + swallowed (returns null) so the calling flow (Stripe webhook, admin route, scan) never crashes.
+  - `listNotifications({ page, pageSize, type?, isRead?, relatedEntityType? })` — paginated list with the same filters the API exposes.
+  - `getUnreadNotificationCount()` — `db.notification.count({ where: { isRead: false } })`.
+  - `markNotificationRead(id)`, `markNotificationUnread(id)`, `markNotificationsRead(ids[])`, `markAllNotificationsRead()`, `deleteNotification(id)`, `deleteAllNotifications()` — all REAL persisted writes.
+  - `scanPlatformForNotifications()` — derives notifications from the current DB state. Idempotent via dedupeKey. Three buckets:
+    - past-due subscriptions → one WARNING "Past-due subscription" per customer (dedupeKey=`platform-scan:past-due:<userId>`)
+    - failed payments → one ERROR "Failed payment" per failed payment row (dedupeKey=`platform-scan:failed-payment:<paymentId>`)
+    - new customers (EXTERNAL users registered in the last 7 days) → one INFO "New customer registered" (dedupeKey=`platform-scan:new-customer:<userId>`)
+    Returns `{ created, pastDue, failedPayments, newCustomers }`.
+
+- Phase 3 — Platform admin notifications API endpoints (REWRITTEN):
+  - /api/platform/admin/notifications/route.ts (REWRITTEN):
+    - GET — list REAL persisted rows. Accepts `page`, `pageSize`, `type`, `isRead`, `relatedEntityType`, `scan` (default true). When `scan=true`, runs `scanPlatformForNotifications()` first so the list always reflects the latest past-due subs / failed payments / new customers. Returns `{ data: NotificationRow[], meta: { pagination, scan } }`.
+    - POST — mark-as-read (REAL, persisted, idempotent). Body: `{ notificationIds: string[] }`. Returns `{ updated: <count> }`.
+    - DELETE — delete-all (REAL). Returns `{ deleted: <count> }`.
+  - /api/platform/admin/notifications/unread-count/route.ts (NEW):
+    - GET — runs `scanPlatformForNotifications()` first (so any new past-due / failed / new-customer event shows up in the count immediately), then returns the real count. Single source of truth for the bell's 30-second polling.
+  - /api/platform/admin/notifications/mark-all-read/route.ts (NEW):
+    - POST — marks ALL notifications as read. Returns `{ updated: <count> }`.
+  - /api/platform/admin/notifications/[id]/route.ts (NEW):
+    - PATCH — body `{ isRead: boolean }`. Marks the notification as read (true) or unread (false). Admins can "snooze" a notification back to unread for follow-up later.
+    - DELETE — permanently remove the single notification row.
+
+- Phase 4 — Hook notification creation into Stripe webhook handlers:
+  - src/app/api/webhooks/stripe/route.ts: Added `notifyStripeEvent(dedupeKey, type, title, message, opts)` helper that wraps `createNotification({ ..., createdBy: 'stripe' })`. All webhook-event notification calls use the dedupeKey scheme `stripe:<eventType>:<stripeObjectId>` so Stripe event retries never produce duplicate notifications. Hooked into:
+    - `handleCheckoutCompleted` — INFO "New customer checkout completed" + SUCCESS "New subscription activated" (dedupeKey=`stripe:new-customer:<sessionId>` / `stripe:new-subscription:<sessionId>`).
+    - `handleSubscriptionUpdated` — fires WARNING "Subscription past due" / WARNING "Subscription cancelled" / SUCCESS "Subscription reactivated" ONLY when the status actually transitioned (compares `existing.status` to the new `status`); dedupeKey includes the resolved status so each unique transition gets its own notification.
+    - `handleSubscriptionDeleted` — WARNING "Subscription deleted in Stripe" (dedupeKey=`stripe:subscription-deleted:<subId>`).
+    - `handleInvoicePaid` — SUCCESS "Payment received" (dedupeKey=`stripe:invoice-paid:<invoiceId>`).
+    - `handleInvoiceFailed` — ERROR "Invoice payment failed" (dedupeKey=`stripe:invoice-failed:<invoiceId>`).
+    - `handlePaymentIntentSucceeded` — SUCCESS "Payment succeeded" (dedupeKey=`stripe:pi-succeeded:<piId>`).
+    - `handlePaymentIntentFailed` — ERROR "Payment failed" (dedupeKey=`stripe:pi-failed:<piId>`).
+    - `handleChargeRefunded` — full refund → WARNING "Payment refunded" (dedupeKey=`stripe:charge-refunded-full:<chargeId>`); partial refund → WARNING "Partial refund processed" (dedupeKey=`stripe:charge-refunded-partial:<chargeId>:<amountRefunded>`).
+    - The webhook POST catch block — ERROR "Stripe webhook handler error" with the error message + Stripe event id (dedupeKey=`stripe:webhook-error:<stripeEventId>`). So when a handler crashes, the admin sees it in the bell + can navigate to Stripe Settings to investigate.
+
+- Phase 5 — Wire NotificationBell to real backend (dual-mode):
+  - src/components/layout/notification-bell.tsx: Added `usePlatformAdminMode()` hook (reads `useAuthStore.user.role`, returns true for PLATFORM_ADMIN or OWNER). Endpoint selection:
+    - Platform admins: list = `/api/platform/admin/notifications?pageSize=5&page=1&scan=false`, unread-count = `/api/platform/admin/notifications/unread-count`. The list endpoint skips the scan (the scan runs in the unread-count endpoint instead — single source of truth for polling).
+    - Client roles: keep the legacy `/api/notifications` + `/api/notifications/unread-count` behavior.
+  - Mark-read POST goes to the resolved `listEndpoint` (real persisted mutation in both modes).
+  - "View All" navigates to `platform-notifications` for platform admins, `notifications` for client roles.
+  - Query keys are namespaced `['platform-admin']` vs `['client']` so the two modes never collide in the cache.
+  - All UI/layout/colors/icons/positioning preserved exactly — only the data source + endpoint selection changed.
+
+- Phase 6 — Rewire PlatformNotificationsModule to persisted rows:
+  - src/modules/platform/platform-notifications.tsx (REWRITTEN ~530 lines): Same UI/layout (PlatformPageHeader, filter tabs All/Unread/System/Customers/Payments/Subscriptions/Security, search input, date grouping Today/Yesterday/Earlier this week/Older, NotificationRow with hover Mark-as-read/unread + Delete + Delete All confirmation dialog).
+  - Data source: `useInfiniteQuery('/api/platform/admin/notifications', { ..., scan: 'false' })` — REAL persisted rows from the Notification table.
+  - Unread count: separate `useQuery('/api/platform/admin/notifications/unread-count')` with 30s polling — drives the page subtitle ("Stay updated with important platform activity and alerts. · N unread").
+  - Filter tabs: 'All' = no filter, 'Unread' = `isRead=false`, 'Customers'/'Payments'/'Subscriptions'/'System' = `relatedEntityType=<bucket>`, 'Security' = client-side filter on `relatedEntityType ∈ {webhook, stripe}` (since the API filters by ONE entity type at a time).
+  - Mark-read (POST /api/platform/admin/notifications, optimistic local update).
+  - Mark-unread (PATCH /api/platform/admin/notifications/[id] `{ isRead: false }`, optimistic).
+  - Mark-all-read (POST /api/platform/admin/notifications/mark-all-read, optimistic).
+  - Delete single (DELETE /api/platform/admin/notifications/[id], optimistic).
+  - Delete All (DELETE /api/platform/admin/notifications, refetch).
+  - All mutations invalidate both the list query + the unread-count query so the badge + bell stay in sync across pages.
+
+- Phase 7 — Global search API:
+  - /api/platform/admin/search/route.ts (NEW): GET /api/platform/admin/search?q=<query>&limit=<5|10>. Auth: requirePlatformAdmin. Queries 5 domains in parallel:
+    1. Customers (User where billingMode='EXTERNAL' AND deletedAt=null AND name/email/id contains q) — link `#platform-customer-detail/<userId>`.
+    2. Payments (Payment where invoiceNumber/stripeInvoiceId/stripePaymentIntentId/stripeChargeId/id contains q, joined with user) — link `#platform-payments`.
+    3. Plans (PlanConfig where name/planId contains q) — link `#platform-plans`.
+    4. Coupons (Coupon where code/id contains q) — link `#platform-coupons`.
+    5. Notifications (Notification where title/message contains q) — link `#platform-notifications` (or the notification's own `link` field when set).
+  - Returns `{ data: { customers: [...], payments: [...], plans: [...], coupons: [...], notifications: [...] }, meta: { requestId, q, limit } }`. Each domain capped at `limit` (default 5, max 10) so the palette never overwhelms.
+  - Returns empty result when q is too short (<2 chars) so the palette shows "No matching customers, payments, plans, coupons or notifications."
+
+- Phase 8 — Wire CommandPalette to real search API + platform admin nav items:
+  - src/components/patterns/command-palette.tsx (REWRITTEN ~510 lines): Same UI shell (motion backdrop + cmdk palette + Recent / Navigation / Actions groups). Additions:
+    - `useAuthStore` integration: detects PLATFORM_ADMIN / OWNER roles. Platform admins get an extra "Platform Admin" group (Platform Overview, Customers, Payments, Plans & Pricing, Coupons, Stripe Settings, Platform Notifications) BEFORE the regular Navigation group.
+    - Search input is now controlled (`value={query}` + `onValueChange={setQuery}`). When query ≥ 2 chars, debounced 250ms, then `useQuery(['platform-admin', 'search', debouncedQuery], ...)` fires the `/api/platform/admin/search` endpoint (only enabled for platform staff).
+    - When searching, the palette switches `shouldFilter={false}` (cmdk's built-in substring filter is disabled so the backend's results aren't re-filtered client-side). When not searching, `shouldFilter={true}` retains the legacy "filter static nav items by typed query" behavior.
+    - Search-result rendering: each result is a CommandItemDef with a `searchLink` (the API-provided hash link, attached to the group via `searchLinks: Record<string, string>`). The onSelect handler checks `group.searchLinks?.[item.id]` — if present, calls `handleSelectSearchResult(link)` which parses the link as a hash route (`#platform-customer-detail/<id>` → `navigate('platform-customer-detail', userId, null)`; `#platform-payments` → `navigate('platform-payments', null, null)`) and closes the palette. If no searchLink, calls the legacy `handleSelect(item)` which navigates via module + subPage.
+    - Per-domain group headings: Customers / Payments / Plans / Coupons / Notifications — only rendered when the corresponding domain returned ≥1 result.
+    - Empty state: when `shouldSearch` is true and searchResults returns 0 across all domains, the CommandEmpty placeholder renders "No matching customers, payments, plans, coupons or notifications." (or "Searching…" when isFetching).
+    - Search query resets on close via a wrapped `handleClose()` callback (avoids the `useEffect + setState` anti-pattern that triggers cascading renders — the React Compiler flagged it as `react-hooks/set-state-in-effect`).
+    - When the palette is open and the user is a platform admin, the input placeholder changes to "Search customers, payments, plans, coupons, notifications…" — client roles keep the original "Type a command or search..." placeholder.
+    - A small Loader2 spinner appears in the input's right side while the search is in-flight.
+
+- Phase 9 — Lint + dev.log + Agent Browser end-to-end verification:
+  - `bun run lint`: 4 errors + 3 warnings, ALL pre-existing (data-table.tsx, content-create/edit-page.tsx, seo-broken-links-page.tsx, storage-page.tsx — untouched). Baseline preserved.
+  - Initial bug: removed `Shield` + `Activity` icon imports when cleaning up the command palette (they appeared unused after grep), but they were still referenced by `nav-security` and `nav-jobs` items. The page crashed with "Runtime ReferenceError: Shield is not defined at src/components/patterns/command-palette.tsx (136:50)". Restored the imports — page rendered cleanly.
+  - dev.log: clean. HMR Fast Refresh rebuilt in 120ms / 188ms / 1245ms / 117ms (multiple HMR cycles as files were edited). No runtime errors after the import fix.
+  - Agent Browser end-to-end verification (logged in as owner@example.com → landed on #platform-overview):
+    - Platform Overview rendered fully: 6 customers, 4 active subs, $248 MRR, 0 total sites, plan distribution (Free 0 / Plus 2 / Pro 2 / Max 2), status distribution (Active 4 / Trial 1 / Past Due 1), recent payments + recent customers tables. The bell badge showed "5" (real unread count from the platform-scan).
+    - NotificationBell dropdown opened (via real pointer events — agent-browser's simple `click` doesn't trigger Radix's pointer-event-based handlers). Contents:
+      - Header: "Notifications" + "5 unread" badge + "Clear All" button.
+      - 5 real notifications:
+        1. INFO "New customer registered" — Alex Morgan signed up on the FREE plan. (platform-scan)
+        2. INFO "New customer registered" — Kevin Park signed up on the FREE plan. (platform-scan)
+        3. INFO "New customer registered" — Olivia Martin signed up on the FREE plan. (platform-scan)
+        4. ERROR "Failed payment" — A payment of USD 0.49 from David Chen failed: Your card was declined.. Invoice INV-2026-1053. (platform-scan)
+        5. WARNING "Past-due subscription" — David Chen's subscription is past due. Stripe will retry the invoice — access continues until the retry window closes. (platform-scan)
+      - Footer: "View All" button → navigates to #platform-notifications.
+    - Platform Notifications page (#platform-notifications): rendered with H1 "Notifications" + subtitle "Stay updated with important platform activity and alerts. · 5 unread". Mark All Read + Delete All action buttons in the header. Filter tabs (All / Unread / System / Customers / Payments / Subscriptions / Security) + Search input. Date-grouped list: TODAY (5 items) — each row shows title + message + relative timestamp + Unread dot + per-row "Mark as read" / "Delete" hover actions.
+    - Mark All Read action: clicked → toast "All platform notifications marked as read" → unread-count API returned 0 → bell badge DISAPPEARED (button text became "Notifications" with no badge) → notification rows' hover action switched from "Mark as read" to "Mark as unread". Read-state is persisted server-side (survives refresh + sessions).
+    - Search API tests (all PASS):
+      1. GET /api/platform/admin/search?q=james → 1 customer match (James Thompson, james.thompson@newwdch.com, link `#platform-customer-detail/cmt7kaw4s0003kv5gtdv5y56y`).
+      2. GET /api/platform/admin/search?q=WELCOME → 1 coupon match (WELCOME10, code matches).
+      3. GET /api/platform/admin/search?q=plus → 1 plan match (Plus plan, planId="plus", isFree=false).
+      4. GET /api/platform/admin/search?q=INV-2026 → 5 payment matches (real invoice numbers INV-2026-1042/1049/1053/1057/1058 across multiple customers + statuses).
+      5. GET /api/platform/admin/search?q=past+due → 1 notification match (title "Past-due subscription", link to David Chen's customer-detail page).
+    - CommandPalette UI (Ctrl/Ctrl+K or click Search button):
+      - Open palette → input placeholder "Search customers, payments, plans, coupons, notifications…" (platform-admin-specific).
+      - Groups rendered (no search query): "Platform Admin" (Overview / Customers / Payments / Plans & Pricing / Coupons / Stripe Settings / Platform Notifications) → "Navigation" (Dashboard / Content / Media / Users / etc.) → "Actions" (Create Content / Upload Media / Create User / etc.).
+      - Type "james" → "Customers" group appears with "James Thompson" option. Click → navigates to #platform-customer-detail/<userId> (verified via URL hash change + heading "James Thompson" + Suspend button + payment history table).
+      - Type "free" → "Plans" group appears with "Free (free)" option.
+      - Type "WELCOME" → "Coupons" group appears with "WELCOME10" option.
+    - Bell badge state persistence: After Mark All Read (which marked all 5 as read), the bell badge DISAPPEARED (button text became "Notifications" with no number). Reloading the page kept the badge hidden — read-state is persisted in the Notification table, not localStorage. New past-due / failed-payment / new-customer events will trigger new notifications via the platform-scan running on the next unread-count poll (30s).
+
+Stage Summary:
+- The Platform Admin Dashboard search + notification system is now FULLY REAL with no mock/hardcoded data:
+  - The notification bell + red badge number reflects the ACTUAL unread persisted notifications from the Notification table. The badge disappears when there are 0 unread.
+  - Notifications are generated from REAL platform events: past-due Stripe subscriptions, failed Stripe payments, new customer sign-ups (within 7 days), Stripe webhook events (checkout completed, subscription state transitions, invoice paid/failed, payment_intent succeeded/failed, charge refunded, webhook handler errors). All idempotent via dedupeKey — Stripe retries never produce duplicate notifications, and the platform-scan (called from the unread-count endpoint on every 30s poll) never duplicates either.
+  - Click a notification in the bell → marks it as read (REAL persisted mutation via POST /api/platform/admin/notifications) + navigates to the related entity (customer detail page for customer/subscription events; payments page for payment events; stripe settings page for webhook errors).
+  - "View All" in the bell → navigates to the Platform Notifications page.
+  - The Platform Notifications page shows the full persisted feed, grouped by date (Today / Yesterday / Earlier this week / Older), filterable by category (All / Unread / System / Customers / Payments / Subscriptions / Security) + client-side search. Mark-read / mark-unread / mark-all-read / delete-single / delete-all are all REAL persisted mutations. Read-state survives refresh + sessions.
+  - The command palette (Cmd/Ctrl+K) is connected to the real DB:
+    - Platform admins see a "Platform Admin" group with the 7 platform-admin nav items (Overview / Customers / Payments / Plans & Pricing / Coupons / Stripe Settings / Platform Notifications).
+    - Typing a query (≥2 chars) fires a debounced backend search across Customers / Payments / Plans / Coupons / Notifications. Each domain gets its own group with up to 5 results. Selecting a result navigates to the correct hash route (customer detail page for customer results; payments / plans / coupons / notifications pages for the others).
+    - Selecting a nav item navigates as before.
+  - All endpoints are auth-guarded by `requirePlatformAdmin` (PLATFORM_ADMIN or OWNER).
+  - The previous derived-feed system (getPlatformEvents + the no-op POST/DELETE) is fully replaced — no more "events will reappear on refresh" disclaimers.
+  - UI/design UNCHANGED: the bell, the dropdown, the command palette, and the platform-notifications page all render with the exact same UI/layout/colors/icons/positioning as before. Only the data source + endpoint selection + behavior changed.
+- Files modified:
+  - prisma/schema.prisma (Notification model: added relatedEntityType, relatedEntityId, dedupeKey @unique, createdBy, updatedAt + 2 new indexes)
+  - src/lib/notifications.ts (NEW — createNotification + listNotifications + getUnreadNotificationCount + markRead/markUnread/markAllRead + deleteNotification/deleteAll + scanPlatformForNotifications)
+  - src/app/api/platform/admin/notifications/route.ts (REWRITTEN — GET/POST/DELETE all real)
+  - src/app/api/platform/admin/notifications/unread-count/route.ts (NEW — runs scanPlatformForNotifications first, then real count)
+  - src/app/api/platform/admin/notifications/mark-all-read/route.ts (NEW)
+  - src/app/api/platform/admin/notifications/[id]/route.ts (NEW — PATCH isRead, DELETE single)
+  - src/app/api/platform/admin/search/route.ts (NEW — 5-domain parallel DB search)
+  - src/app/api/webhooks/stripe/route.ts (added notifyStripeEvent helper + 9 notification hooks across the 8 event handlers + the catch block)
+  - src/components/layout/notification-bell.tsx (dual-mode endpoints based on user role)
+  - src/modules/platform/platform-notifications.tsx (REWRITTEN — real persisted rows, real mark-read/delete/mark-all-read/delete-all, dynamic data)
+  - src/components/patterns/command-palette.tsx (REWRITTEN — real backend search + Platform Admin nav group + dual-mode placeholder)

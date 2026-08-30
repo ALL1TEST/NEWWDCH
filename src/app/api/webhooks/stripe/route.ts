@@ -65,7 +65,38 @@ import {
   markWebhookEventOutcome,
   extractInvoiceCoupon,
 } from '@/lib/stripe';
+import { createNotification } from '@/lib/notifications';
 import type Stripe from 'stripe';
+
+// -------------------- Notification helpers --------------------
+// Best-effort: any failure inside createNotification is swallowed
+// inside /lib/notifications.ts (it logs + returns null), so calling
+// it from a webhook handler can NEVER mask the original DB-write flow.
+// The dedupeKey scheme `stripe:<eventType>:<stripeObjectId>` ensures
+// Stripe event retries never produce duplicate notifications.
+
+async function notifyStripeEvent(
+  dedupeKey: string,
+  type: 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR' | 'ACTION_REQUIRED',
+  title: string,
+  message: string,
+  opts: {
+    relatedEntityType?: 'customer' | 'payment' | 'subscription' | 'coupon' | 'plan' | 'stripe' | 'webhook' | 'system';
+    relatedEntityId?: string;
+    link?: string;
+  } = {},
+) {
+  await createNotification({
+    type,
+    title,
+    message,
+    relatedEntityType: opts.relatedEntityType,
+    relatedEntityId: opts.relatedEntityId,
+    dedupeKey,
+    link: opts.link,
+    createdBy: 'stripe',
+  });
+}
 
 export async function POST(request: NextRequest) {
   if (!(await isStripeConfiguredAsync())) {
@@ -166,6 +197,17 @@ export async function POST(request: NextRequest) {
     try {
       const errorMessage = err instanceof Error ? err.message : String(err);
       await markWebhookEventOutcome(stripeEventId, 'error', errorMessage);
+      // Notify the platform admin that a webhook handler failed — Stripe
+      // will retry, but the admin should know the handler crashed so they
+      // can investigate (e.g. a malformed event, a schema drift, a Stripe
+      // API outage). Idempotent via the stripeEventId key.
+      await notifyStripeEvent(
+        `stripe:webhook-error:${stripeEventId}`,
+        'ERROR',
+        'Stripe webhook handler error',
+        `Event ${eventType} (${stripeEventId}) failed: ${errorMessage}. Stripe will retry — check the server logs.`,
+        { relatedEntityType: 'webhook', relatedEntityId: stripeEventId, link: '#platform-stripe-settings' },
+      );
     } catch (ledgerErr) {
       console.error('Stripe webhook: failed to mark ledger row as errored:', ledgerErr);
     }
@@ -541,6 +583,38 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
       );
     }
   }
+
+  // ---- Notifications: new customer + new subscription ----
+  // Two distinct, idempotent notifications keyed on the Stripe session id:
+  //   - INFO  "New customer"      — surfaces in the bell + dashboard
+  //   - SUCCESS "New subscription" — surfaces as the conversion event
+  // Both are deduped per checkout session, so Stripe retries never
+  // produce duplicates. The user record is fetched for a friendly name.
+  try {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true },
+    });
+    const displayName = user?.name || user?.email || userId;
+    const planLabel = String(planId).toUpperCase();
+    const sessionKey = session.id;
+    await notifyStripeEvent(
+      `stripe:new-customer:${sessionKey}`,
+      'INFO',
+      'New customer checkout completed',
+      `${displayName} completed checkout for the ${planLabel} plan (${interval} billing).`,
+      { relatedEntityType: 'customer', relatedEntityId: userId, link: `#platform-customer-detail/${userId}` },
+    );
+    await notifyStripeEvent(
+      `stripe:new-subscription:${sessionKey}`,
+      'SUCCESS',
+      'New subscription activated',
+      `${displayName}'s ${planLabel} subscription is now active. Next billing ${periodEnd.toISOString().slice(0, 10)}.`,
+      { relatedEntityType: 'subscription', relatedEntityId: stripeSub?.id ?? sessionKey, link: `#platform-customer-detail/${userId}` },
+    );
+  } catch (notifyErr) {
+    console.error('Stripe webhook: notification creation failed (best-effort):', notifyErr);
+  }
 }
 
 async function handleSubscriptionUpdated(event: Stripe.Event) {
@@ -584,6 +658,51 @@ async function handleSubscriptionUpdated(event: Stripe.Event) {
       trialEnd: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
     },
   });
+
+  // ---- Notification: subscription state change ----
+  // Only fire when the status actually changed in a meaningful way:
+  //   - past_due  → WARNING "Subscription past due"
+  //   - cancelled → WARNING "Subscription cancelled"
+  //   - active    → SUCCESS "Subscription reactivated" (only when the
+  //                  previous status was past_due / cancelled)
+  // Idempotent per (userId, status, stripeSubscriptionId) — Stripe's
+  // `customer.subscription.updated` is fired on every change, so the
+  // dedupeKey MUST include the resolved status to allow each unique
+  // transition its own notification.
+  try {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true },
+    });
+    const displayName = user?.name || user?.email || userId;
+    if (status === 'past_due' && existing.status !== 'past_due') {
+      await notifyStripeEvent(
+        `stripe:subscription-past-due:${sub.id}:${status}`,
+        'WARNING',
+        'Subscription past due',
+        `${displayName}'s subscription is now past due. Stripe will retry the invoice; access continues until the retry window closes.`,
+        { relatedEntityType: 'subscription', relatedEntityId: sub.id, link: `#platform-customer-detail/${userId}` },
+      );
+    } else if (status === 'cancelled' && existing.status !== 'cancelled') {
+      await notifyStripeEvent(
+        `stripe:subscription-cancelled:${sub.id}:${status}`,
+        'WARNING',
+        'Subscription cancelled',
+        `${displayName}'s subscription was cancelled in Stripe. Access reverts to Free at the end of the current period.`,
+        { relatedEntityType: 'subscription', relatedEntityId: sub.id, link: `#platform-customer-detail/${userId}` },
+      );
+    } else if (status === 'active' && (existing.status === 'past_due' || existing.status === 'cancelled')) {
+      await notifyStripeEvent(
+        `stripe:subscription-reactivated:${sub.id}:${status}`,
+        'SUCCESS',
+        'Subscription reactivated',
+        `${displayName}'s subscription is active again after being ${existing.status}.`,
+        { relatedEntityType: 'subscription', relatedEntityId: sub.id, link: `#platform-customer-detail/${userId}` },
+      );
+    }
+  } catch (notifyErr) {
+    console.error('Stripe webhook: subscription notification failed (best-effort):', notifyErr);
+  }
 }
 
 async function handleSubscriptionDeleted(event: Stripe.Event) {
@@ -591,6 +710,26 @@ async function handleSubscriptionDeleted(event: Stripe.Event) {
   const userId = sub.metadata?.userId;
   if (!userId) return;
   await cancelSubscription(userId);
+
+  // ---- Notification: subscription deleted (Stripe-side cancellation) ----
+  // Idempotent per stripeSubscriptionId — Stripe fires `customer.subscription.deleted`
+  // once per cancellation event, but retries can re-fire it.
+  try {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true },
+    });
+    const displayName = user?.name || user?.email || userId;
+    await notifyStripeEvent(
+      `stripe:subscription-deleted:${sub.id}`,
+      'WARNING',
+      'Subscription deleted in Stripe',
+      `${displayName}'s subscription was deleted in Stripe. The customer's access has been reverted to the Free plan.`,
+      { relatedEntityType: 'subscription', relatedEntityId: sub.id, link: `#platform-customer-detail/${userId}` },
+    );
+  } catch (notifyErr) {
+    console.error('Stripe webhook: subscription-deleted notification failed (best-effort):', notifyErr);
+  }
 }
 
 async function handleInvoicePaid(event: Stripe.Event) {
@@ -649,6 +788,28 @@ async function handleInvoicePaid(event: Stripe.Event) {
   // the just-created Payment row, increments the local Coupon.timesRedeemed
   // (idempotent), and creates a CouponRedemption audit row (idempotent).
   await recordInvoiceCoupon(event, invoice, payment.id, userId);
+
+  // ---- Notification: payment received (invoice paid) ----
+  // Idempotent per stripeInvoiceId — Stripe retries never duplicate.
+  try {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true },
+    });
+    const displayName = user?.name || user?.email || userId;
+    const amount = invoice.amount_paid ?? 0;
+    const major = (amount / 100).toFixed(2);
+    const cur = (invoice.currency ?? 'usd').toUpperCase();
+    await notifyStripeEvent(
+      `stripe:invoice-paid:${invoice.id}`,
+      'SUCCESS',
+      'Payment received',
+      `${displayName} paid ${cur} ${major} for invoice ${invoice.number ?? invoice.id}.`,
+      { relatedEntityType: 'payment', relatedEntityId: payment.id, link: '#platform-payments' },
+    );
+  } catch (notifyErr) {
+    console.error('Stripe webhook: invoice-paid notification failed (best-effort):', notifyErr);
+  }
 }
 
 async function handleInvoiceFailed(event: Stripe.Event) {
@@ -708,6 +869,31 @@ async function handleInvoiceFailed(event: Stripe.Event) {
       description: failureReason,
     },
   });
+
+  // ---- Notification: invoice payment failed ----
+  // Idempotent per stripeInvoiceId — Stripe retries never duplicate.
+  // The subscription was just marked past_due; this notification tells
+  // the admin which customer + invoice + reason.
+  try {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true },
+    });
+    const displayName = user?.name || user?.email || userId;
+    const amount = invoice.amount_due ?? 0;
+    const major = (amount / 100).toFixed(2);
+    const cur = (invoice.currency ?? 'usd').toUpperCase();
+    const reason = failureReason ? ` Reason: ${failureReason}` : '';
+    await notifyStripeEvent(
+      `stripe:invoice-failed:${invoice.id}`,
+      'ERROR',
+      'Invoice payment failed',
+      `${displayName}'s payment of ${cur} ${major} for invoice ${invoice.number ?? invoice.id} failed.${reason}`,
+      { relatedEntityType: 'payment', link: '#platform-payments' },
+    );
+  } catch (notifyErr) {
+    console.error('Stripe webhook: invoice-failed notification failed (best-effort):', notifyErr);
+  }
 }
 
 /** payment_intent.succeeded — captures a one-time / orphan charge that
@@ -754,6 +940,27 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
       paidAt: new Date(),
     },
   });
+
+  // ---- Notification: one-time payment succeeded ----
+  // Idempotent per stripePaymentIntentId.
+  try {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true },
+    });
+    const displayName = user?.name || user?.email || userId;
+    const major = ((pi.amount_received ?? pi.amount ?? 0) / 100).toFixed(2);
+    const cur = (pi.currency ?? 'usd').toUpperCase();
+    await notifyStripeEvent(
+      `stripe:pi-succeeded:${pi.id}`,
+      'SUCCESS',
+      'Payment succeeded',
+      `${displayName}'s one-time payment of ${cur} ${major} succeeded (PaymentIntent ${pi.id}).`,
+      { relatedEntityType: 'payment', link: '#platform-payments' },
+    );
+  } catch (notifyErr) {
+    console.error('Stripe webhook: pi-succeeded notification failed (best-effort):', notifyErr);
+  }
 }
 
 /** payment_intent.payment_failed — records a failed one-time charge with
@@ -796,6 +1003,28 @@ async function handlePaymentIntentFailed(event: Stripe.Event) {
       description: failureReason,
     },
   });
+
+  // ---- Notification: one-time payment failed ----
+  // Idempotent per stripePaymentIntentId.
+  try {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true },
+    });
+    const displayName = user?.name || user?.email || userId;
+    const major = ((pi.amount ?? 0) / 100).toFixed(2);
+    const cur = (pi.currency ?? 'usd').toUpperCase();
+    const reason = failureReason ? ` Reason: ${failureReason}` : '';
+    await notifyStripeEvent(
+      `stripe:pi-failed:${pi.id}`,
+      'ERROR',
+      'Payment failed',
+      `${displayName}'s one-time payment of ${cur} ${major} failed (PaymentIntent ${pi.id}).${reason}`,
+      { relatedEntityType: 'payment', link: '#platform-payments' },
+    );
+  } catch (notifyErr) {
+    console.error('Stripe webhook: pi-failed notification failed (best-effort):', notifyErr);
+  }
 }
 
 /** charge.refunded — updates the existing Payment row to reflect a refund.
@@ -839,6 +1068,28 @@ async function handleChargeRefunded(event: Stripe.Event) {
       where: { id: payment.id },
       data: { status: 'refunded' },
     });
+    // ---- Notification: full refund processed ----
+    // Idempotent per stripeChargeId + 'refunded' status (the dedupeKey
+    // includes 'full' so a partial→full transition can still fire its
+    // own notification if it ever happens).
+    try {
+      const user = await db.user.findUnique({
+        where: { id: payment.userId },
+        select: { id: true, name: true, email: true },
+      });
+      const displayName = user?.name || user?.email || payment.userId;
+      const major = ((chargeAny.amount ?? 0) / 100).toFixed(2);
+      const cur = currency;
+      await notifyStripeEvent(
+        `stripe:charge-refunded-full:${charge.id}`,
+        'WARNING',
+        'Payment refunded',
+        `${displayName}'s payment of ${cur} ${major} was fully refunded (Charge ${charge.id}).`,
+        { relatedEntityType: 'payment', relatedEntityId: payment.id, link: '#platform-payments' },
+      );
+    } catch (notifyErr) {
+      console.error('Stripe webhook: charge-refunded-full notification failed (best-effort):', notifyErr);
+    }
   } else {
     // Partial refund — keep current status but record a memo so the
     // admin Payments table can show "Partial refund processed: …".
@@ -848,5 +1099,25 @@ async function handleChargeRefunded(event: Stripe.Event) {
         description: `Partial refund processed: ${amountRefunded} ${currency}`,
       },
     });
+    // ---- Notification: partial refund processed ----
+    // Idempotent per (chargeId, amountRefunded) — a second partial refund
+    // with a different amount gets its own notification.
+    try {
+      const user = await db.user.findUnique({
+        where: { id: payment.userId },
+        select: { id: true, name: true, email: true },
+      });
+      const displayName = user?.name || user?.email || payment.userId;
+      const major = (amountRefunded / 100).toFixed(2);
+      await notifyStripeEvent(
+        `stripe:charge-refunded-partial:${charge.id}:${amountRefunded}`,
+        'WARNING',
+        'Partial refund processed',
+        `${displayName}'s payment had a partial refund of ${currency} ${major} processed (Charge ${charge.id}).`,
+        { relatedEntityType: 'payment', relatedEntityId: payment.id, link: '#platform-payments' },
+      );
+    } catch (notifyErr) {
+      console.error('Stripe webhook: charge-refunded-partial notification failed (best-effort):', notifyErr);
+    }
   }
 }
