@@ -628,7 +628,11 @@ export async function getOverview(): Promise<PlatformOverview> {
     aiArticlesGenerated: 0,
     aiWordsGenerated: 0,
     mediaStorageBytes: 0,
-    automationRuns: 1284, // mock — no real automation-runs table populated
+    // Real DB count of automation runs (no longer the hardcoded 1284
+    // mock — falls back to 0 when the AutomationRun table is empty,
+    // which is the actual relational state). The admin Overview now
+    // reflects the real platform usage instead of a fabricated number.
+    automationRuns: await db.automationRun.count(),
   };
 
   // Alerts — derived from the real DB state (failed payments, past-due
@@ -814,12 +818,36 @@ export async function getCustomer(id: string): Promise<CustomerDetail | null> {
     .map((r) => mapPaymentRowForCustomer({ ...r, user: synthUser }))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  // Recent activity — derived from the mock audit log (no real
-  // per-customer audit row yet). Filter by customer name; [] when no
-  // match (UI handles with empty state).
-  const recentActivity = store()
-    .audit.filter((a) => a.target.includes(customer.name))
-    .slice(0, 6);
+  // Real per-customer audit log — the most recent 6 AuditLog rows
+  // tagged to this user (the admin routes write AuditLog rows via
+  // `logAdminAction` with `userId` = the acting admin, NOT the
+  // affected customer — so we also include rows whose `resourceType`
+  // is 'Customer' and `resourceId` is the user id). Returns [] when
+  // there is no audit history (the UI handles with empty state).
+  // This replaces the previous mock filter
+  // (`store().audit.filter((a) => a.target.includes(customer.name))`)
+  // which surfaced unrelated global audit entries.
+  const auditRows = await db.auditLog.findMany({
+    where: {
+      OR: [
+        { userId: user.id },
+        { resourceType: 'Customer', resourceId: user.id },
+      ],
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 6,
+  });
+  const recentActivity: AuditEntry[] = auditRows.map((a) => ({
+    id: a.id,
+    timestamp: a.createdAt.toISOString(),
+    actor: 'admin', // AuditLog doesn't store the actor email directly; the
+    // action string carries the semantic context. The UI shows the
+    // action + details, so a generic 'admin' label is sufficient.
+    action: a.action,
+    target: a.resourceType && a.resourceId ? `${a.resourceType}:${a.resourceId}` : a.resourceType ?? a.action,
+    detail: a.details ?? '',
+    severity: a.action.includes('suspend') || a.action.includes('cancel') ? 'warning' : 'info',
+  }));
 
   return { ...customer, siteCount, sites, payments, recentActivity };
 }

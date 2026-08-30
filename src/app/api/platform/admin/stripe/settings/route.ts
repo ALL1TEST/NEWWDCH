@@ -4,6 +4,7 @@ import {
   getStripeSettingsForAdmin,
   saveStripeSettings,
   isStripeConfiguredAsync,
+  isMaskedSecretValue,
   type StripeSettingsInput,
 } from '@/lib/stripe';
 import { logAdminAction } from '@/lib/platform/audit';
@@ -74,6 +75,18 @@ export async function PUT(request: NextRequest) {
   for (const c of checks) {
     if (c.value === undefined || c.value === null) continue; // null = clear, allowed
     if (c.value === '') continue; // empty = leave unchanged, allowed
+    // Reject masked values (admin copy-pasted the masked display form
+    // back into the input). The masked form contains the bullet char
+    // (•, U+2022) used by `maskSecret` — it would be encrypted as the
+    // masked string and silently break every subsequent Stripe API
+    // call with "Invalid API Key provided". Surface a clear error.
+    if (isMaskedSecretValue(c.value)) {
+      return fail(
+        'VALIDATION_ERROR',
+        `${c.label} looks like a masked value (contains the • character). Re-enter the full, real Stripe key — do not copy the masked form.`,
+        400,
+      );
+    }
     if (!c.prefix.some((p) => c.value!.startsWith(p))) {
       return fail(
         'VALIDATION_ERROR',

@@ -192,18 +192,29 @@ function StripeSettingsForm({
   // ---------- Save mutation ----------
   const saveMutation = useMutation({
     mutationFn: async () => {
-      // Empty string = "leave unchanged" for secret keys + webhook secrets.
-      // Publishable keys are written as plaintext (non-secret) — empty
-      // means "clear" since the admin can see the current value.
+      // IMPORTANT: send the actual field values (which may be empty
+      // string). The backend distinguishes:
+      //   - undefined (field omitted from JSON body) → "preserve" (keep existing)
+      //   - null → "clear" (set to null)
+      //   - '' (empty string) → "preserve" (matches the form's "leave empty
+      //     to keep current" placeholder semantics)
+      //   - non-empty string → encrypt + store
+      // We used to convert '' → undefined via `|| undefined`, which made
+      // the backend "clear" the saved secret every time the admin saved
+      // without retyping the key → "Invalid API Key" on the next Test
+      // Connection. Sending the explicit empty string fixes that.
+      // Publishable keys are plaintext and visible — empty string also
+      // means "preserve" (the field is pre-populated with the current
+      // value so the admin can see + edit it directly).
       return putApi<StripeSettingsView>('/api/platform/admin/stripe/settings', {
         mode,
-        secretKeyTest: secretKeyTest || undefined,
-        secretKeyLive: secretKeyLive || undefined,
-        publishableKeyTest: publishableKeyTest || undefined,
-        publishableKeyLive: publishableKeyLive || undefined,
-        webhookSecretTest: webhookSecretTest || undefined,
-        webhookSecretLive: webhookSecretLive || undefined,
-        appUrl: appUrl || undefined,
+        secretKeyTest,
+        secretKeyLive,
+        publishableKeyTest,
+        publishableKeyLive,
+        webhookSecretTest,
+        webhookSecretLive,
+        appUrl,
       });
     },
     onSuccess: () => {
@@ -224,14 +235,19 @@ function StripeSettingsForm({
   });
 
   // ---------- Test connection mutation ----------
-  // Tests the UNSAVED credentials when secret-key fields are populated;
-  // falls back to the saved/stored credentials when they're empty.
+  // Tests the UNSAVED credentials when secret-key fields are populated
+  // (admin just typed a new key); falls back to the saved/stored
+  // credentials when they're empty. Sends the actual field values (not
+  // `|| undefined`) so the backend can distinguish "field omitted"
+  // (fall back to stored) from "field cleared" (use no key). An empty
+  // string is treated the same as omitted for Test Connection (the
+  // backend falls back to the stored value for the selected mode).
   const testMutation = useMutation({
     mutationFn: async () => {
       return postApi<TestResult>('/api/platform/admin/stripe/test-connection', {
         mode,
-        secretKeyTest: secretKeyTest || undefined,
-        secretKeyLive: secretKeyLive || undefined,
+        secretKeyTest,
+        secretKeyLive,
       });
     },
     onSuccess: (res) => {

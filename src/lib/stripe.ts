@@ -27,6 +27,22 @@
 import Stripe from 'stripe';
 import { encrypt, decrypt, maskSecret } from '@/lib/encryption';
 
+/** The Unicode bullet character (U+2022) used by `maskSecret` to mask
+ *  the middle of secret keys. Used to detect when the admin has
+ *  copy-pasted the MASKED form of a secret back into the input —
+ *  storing that would silently break Stripe API calls (Stripe would
+ *  reject the masked string as an "Invalid API Key"). */
+const MASK_BULLET = '\u2022'; // = '•'
+
+/** True when the value looks like a masked secret (contains the mask
+ *  bullet character). Used to reject masked form values at the API
+ *  boundary so an admin can never accidentally persist the masked
+ *  form as the real secret. */
+export function isMaskedSecretValue(value: string): boolean {
+  return typeof value === 'string' && value.includes(MASK_BULLET);
+}
+
+
 // -------------------- DB-backed settings cache --------------------
 // In-memory cache of the StripeSettings singleton row. Re-read on
 // demand (invalidateStripeSettingsCache below) — call after every
@@ -364,6 +380,16 @@ export async function clearStripeCouponMirror(
  * set so they can be discovered later). Reuses existing Stripe Prices
  * / Products where possible. Returns the resolved { monthly, yearly }
  * Stripe Price ids (existing + any newly created).
+ *
+ * PRICE-CHANGE DETECTION: when an existing Stripe Price ID is provided
+ * AND the corresponding local price (priceMonthly / priceYearly)
+ * changed since the last sync, this function retrieves the Stripe
+ * Price, compares its `unit_amount` against the locally-configured
+ * amount, and — on mismatch — creates a NEW Stripe Price with the
+ * updated amount (the OLD Stripe Price is NOT archived — existing
+ * subscriptions may still be on it; Stripe keeps them on the original
+ * price until they upgrade / cancel / prorate). The local plan row
+ * is then updated with the new Stripe Price ID by the caller.
  */
 export async function syncPlanToStripe(
   stripe: Stripe,
@@ -379,14 +405,82 @@ export async function syncPlanToStripe(
 ): Promise<{ stripePriceIdMonthly: string; stripePriceIdYearly: string }> {
   const resolveInterval = async (interval: 'monthly' | 'yearly'): Promise<string> => {
     const existing = interval === 'monthly' ? plan.stripePriceIdMonthly : plan.stripePriceIdYearly;
-    if (existing && existing.trim().length > 0) return existing;
+    const expectedAmount = (interval === 'monthly' ? plan.priceMonthly : plan.priceYearly) * 100;
+
+    if (existing && existing.trim().length > 0) {
+      // PRICE-CHANGE CHECK: retrieve the existing Stripe Price and
+      // compare its unit_amount against the locally-configured amount.
+      // On mismatch (the admin edited the price), create a NEW Stripe
+      // Price with the updated amount. The OLD Stripe Price is kept
+      // active — existing Stripe subscriptions on it stay on the
+      // original price until they renew / prorate / cancel. New
+      // checkouts will use the new Price ID (the local plan row is
+      // updated by the caller with the resolved ID).
+      try {
+        const existingPrice = await stripe.prices.retrieve(existing);
+        const existingAmount = existingPrice.unit_amount ?? 0;
+        if (existingAmount !== expectedAmount) {
+          // Price changed → create a new Stripe Price on the same
+          // Product. Reuse the existing Price's `product` so we don't
+          // create a duplicate Product.
+          const productId =
+            typeof existingPrice.product === 'string'
+              ? existingPrice.product
+              : existingPrice.product && 'id' in existingPrice.product
+              ? existingPrice.product.id
+              : undefined;
+          if (!productId) {
+            // Can't resolve product → keep the existing Price ID.
+            return existing;
+          }
+          const stripeInterval: 'month' | 'year' = interval === 'monthly' ? 'month' : 'year';
+          const newPrice = await stripe.prices.create({
+            unit_amount: expectedAmount,
+            currency: plan.currency.toLowerCase(),
+            recurring: { interval: stripeInterval },
+            product: productId,
+            metadata: { planId: plan.planId, interval },
+          });
+          return newPrice.id;
+        }
+        // Amount matches → keep the existing Stripe Price ID.
+        return existing;
+      } catch {
+        // Retrieval failed (deleted? permission?) → fall through to
+        // the lookup-by-metadata + create branch. The admin can use
+        // the explicit "Sync to Stripe" route to surface real errors.
+      }
+    }
 
     // Try to find an existing active Stripe Price with matching metadata.
     const list = await stripe.prices.list({ active: true, limit: 100 });
     const match = list.data.find(
       (p) => p.metadata?.planId === plan.planId && p.metadata?.interval === interval,
     );
-    if (match) return match.id;
+    if (match) {
+      // Verify the matched Price's amount matches the locally-configured
+      // amount — if not, create a fresh Price (same logic as above).
+      const matchAmount = match.unit_amount ?? 0;
+      if (matchAmount === expectedAmount) return match.id;
+      // Amount mismatch → create new on the same Product.
+      const productId =
+        typeof match.product === 'string'
+          ? match.product
+          : match.product && 'id' in match.product
+          ? match.product.id
+          : undefined;
+      if (productId) {
+        const stripeInterval: 'month' | 'year' = interval === 'monthly' ? 'month' : 'year';
+        const newPrice = await stripe.prices.create({
+          unit_amount: expectedAmount,
+          currency: plan.currency.toLowerCase(),
+          recurring: { interval: stripeInterval },
+          product: productId,
+          metadata: { planId: plan.planId, interval },
+        });
+        return newPrice.id;
+      }
+    }
 
     // Create-or-reuse a Stripe Product tagged with metadata.planId.
     let productId: string | undefined;
@@ -411,7 +505,7 @@ export async function syncPlanToStripe(
     // — map our local 'monthly'/'yearly' terms onto it.
     const stripeInterval: 'month' | 'year' = interval === 'monthly' ? 'month' : 'year';
     const price = await stripe.prices.create({
-      unit_amount: (interval === 'monthly' ? plan.priceMonthly : plan.priceYearly) * 100,
+      unit_amount: expectedAmount,
       currency: plan.currency.toLowerCase(),
       recurring: { interval: stripeInterval },
       product: productId,
@@ -547,16 +641,148 @@ export function extractInvoiceCoupon(invoice: Stripe.Invoice): {
 }
 
 /**
- * Record a Stripe webhook event id in the WebhookEvent idempotency
- * ledger. Returns `true` when the event was newly recorded (i.e. the
- * caller should process it) or `false` when the event was already
- * recorded (a duplicate — the caller MUST skip processing and return
- * 200 to Stripe). Conservative: any error → returns `false` so the
- * webhook skips; the request still returns 200 to Stripe either way
- * (the outer route handler swallows the ledger error).
+ * IDEMPOTENCY LEDGER — claim-for-processing pattern.
+ *
+ * Stripe retries webhook events up to 3 days. We MUST NOT process the
+ * same `evt_...` twice. The flow is:
+ *
+ *   1. claimWebhookEventForProcessing({ stripeEventId, eventType, ... })
+ *      Tries to insert a row with outcome='processing'. Three outcomes:
+ *        - No existing row → insert succeeds → returns 'new' (process now).
+ *        - Existing row with outcome='processed' → returns 'processed' (skip).
+ *        - Existing row with outcome='error' OR stale 'processing'
+ *          (older than 10 min — likely a crashed worker) → re-claim it
+ *          (update to 'processing') → returns 'retry' (process again).
+ *
+ *   2. After the handler dispatch:
+ *      markWebhookEventOutcome(stripeEventId, 'processed')  // success
+ *      markWebhookEventOutcome(stripeEventId, 'error', '...') // failure
+ *
+ * This pattern (vs the old "insert with outcome='processed' BEFORE
+ * dispatch") lets Stripe retries recover from handler failures —
+ * previously, a row was marked 'processed' before the handler ran,
+ * so a crash left the row 'processed' and the retry was silently
+ * dropped, leaving the DB in a partial state.
  *
  * Lazy-imports `@/lib/db` so this file stays safe to import from
  * server-only contexts without forcing Prisma to load eagerly.
+ */
+const STALE_PROCESSING_MS = 10 * 60_000; // 10 min — a worker that crashed mid-process
+
+export type WebhookEventClaim = 'new' | 'retry' | 'processed';
+
+export async function claimWebhookEventForProcessing(params: {
+  stripeEventId: string;
+  eventType: string;
+  apiVersion?: string;
+  objectId?: string;
+}): Promise<WebhookEventClaim> {
+  const { db } = await import('@/lib/db');
+  try {
+    // Try to insert a fresh 'processing' row. If the unique constraint
+    // on stripeEventId rejects the insert, fall through to the existing-row
+    // branch.
+    await db.webhookEvent.create({
+      data: {
+        stripeEventId: params.stripeEventId,
+        eventType: params.eventType,
+        apiVersion: params.apiVersion ?? null,
+        objectId: params.objectId ?? null,
+        outcome: 'processing',
+      },
+    });
+    return 'new';
+  } catch (err: unknown) {
+    const e = (err ?? {}) as { code?: string; message?: string };
+    if (e.code !== 'P2002' && !e.message?.includes('Unique constraint')) {
+      // Any other error → conservative: treat as 'processed' so the
+      // webhook skips (request still returns 200 to Stripe).
+      return 'processed';
+    }
+    // Unique constraint violation — a row already exists. Look it up.
+    try {
+      const existing = await db.webhookEvent.findUnique({
+        where: { stripeEventId: params.stripeEventId },
+        select: { outcome: true, processedAt: true },
+      });
+      if (!existing) return 'processed'; // race: row vanished → skip
+      if (existing.outcome === 'processed') return 'processed'; // already done → skip
+      if (existing.outcome === 'error') {
+        // Re-claim → re-process on retry.
+        await db.webhookEvent.update({
+          where: { stripeEventId: params.stripeEventId },
+          data: {
+            outcome: 'processing',
+            errorMessage: null,
+            processedAt: new Date(),
+          },
+        });
+        return 'retry';
+      }
+      if (existing.outcome === 'processing') {
+        // Stale in-progress row (worker crashed mid-process). Re-claim
+        // only when stale; otherwise skip to avoid double-processing.
+        const age = Date.now() - existing.processedAt.getTime();
+        if (age > STALE_PROCESSING_MS) {
+          await db.webhookEvent.update({
+            where: { stripeEventId: params.stripeEventId },
+            data: {
+              outcome: 'processing',
+              errorMessage: null,
+              processedAt: new Date(),
+            },
+          });
+          return 'retry';
+        }
+        return 'processed'; // still being processed by another worker → skip
+      }
+      return 'processed';
+    } catch {
+      // Lookup failed → conservative: skip.
+      return 'processed';
+    }
+  }
+}
+
+/** Update the outcome of a webhook event row after the handler runs.
+ *  Best-effort — never throws. Called with 'processed' on success or
+ *  'error' on failure (Stripe will retry). */
+export async function markWebhookEventOutcome(
+  stripeEventId: string,
+  outcome: 'processed' | 'error',
+  errorMessage?: string | null,
+): Promise<void> {
+  const { db } = await import('@/lib/db');
+  try {
+    await db.webhookEvent.update({
+      where: { stripeEventId },
+      data: {
+        outcome,
+        errorMessage: errorMessage ? errorMessage.slice(0, 1000) : null,
+        processedAt: new Date(),
+      },
+    });
+    if (outcome === 'processed' || outcome === 'error') {
+      // Invalidate the resolved-settings cache when a webhook succeeds
+      // so subsequent reads pick up any DB changes (e.g., a Payment
+      // row created by the webhook). Best-effort.
+      invalidateStripeSettingsCache();
+    }
+  } catch {
+    // best-effort — never throw from an outcome update
+  }
+}
+
+/**
+ * @deprecated Use `claimWebhookEventForProcessing` + `markWebhookEventOutcome`
+ *   instead. The new 2-step pattern allows Stripe retries to recover from
+ *   handler failures (the old single-step insert marked the row 'processed'
+ *   BEFORE dispatch, so retries were silently dropped).
+ *
+ *   Kept as a backwards-compatible wrapper so callers that haven't migrated
+ *   keep working. Calls `claimWebhookEventForProcessing`; returns true only
+ *   when the claim is 'new' or 'retry' (i.e. the caller should process the
+ *   event). Returns false when the event was already 'processed'.
  */
 export async function markWebhookEventProcessed(params: {
   stripeEventId: string;
@@ -566,29 +792,20 @@ export async function markWebhookEventProcessed(params: {
   outcome: 'processed' | 'skipped_duplicate' | 'error';
   errorMessage?: string;
 }): Promise<boolean> {
-  const { db } = await import('@/lib/db');
-  try {
-    await db.webhookEvent.create({
-      data: {
-        stripeEventId: params.stripeEventId,
-        eventType: params.eventType,
-        apiVersion: params.apiVersion ?? null,
-        objectId: params.objectId ?? null,
-        outcome: params.outcome,
-        errorMessage: params.errorMessage ?? null,
-      },
-    });
-    return true;
-  } catch (err: unknown) {
-    const e = (err ?? {}) as { code?: string; message?: string };
-    if (e.code === 'P2002' || e.message?.includes('Unique constraint')) {
-      // duplicate → already processed
-      return false;
-    }
-    // conservative: any other error → treat as duplicate so the
-    // webhook skips processing (request still returns 200 to Stripe).
-    return false;
+  const claim = await claimWebhookEventForProcessing({
+    stripeEventId: params.stripeEventId,
+    eventType: params.eventType,
+    apiVersion: params.apiVersion,
+    objectId: params.objectId,
+  });
+  if (claim === 'processed') return false;
+  // 'new' or 'retry' — caller will process. If the caller also passed an
+  // outcome, apply it now (for backwards compat with callers that used
+  // the old single-step API to record an outcome at the start).
+  if (params.outcome && params.outcome !== 'processed') {
+    await markWebhookEventOutcome(params.stripeEventId, params.outcome === 'error' ? 'error' : 'processed', params.errorMessage);
   }
+  return true;
 }
 
 // ============================================================
@@ -709,9 +926,19 @@ export async function getStripeSettingsForAdmin(): Promise<StripeSettingsView> {
 
 /** Save (encrypt + upsert) Stripe credentials. Empty-string values
  *  for secret keys mean "leave unchanged" (the existing encrypted
- *  value is preserved); null/undefined means "clear". Publishable
- *  keys are written as plaintext (non-secret). Returns the masked
- *  view. Never returns raw secret values. */
+ *  value is preserved); null means "clear". Omitted (undefined)
+ *  fields also mean "preserve" — this matters because the frontend
+ *  may omit a field entirely from the JSON body when the admin didn't
+ *  touch it. Publishable keys are written as plaintext (non-secret).
+ *  Returns the masked view. Never returns raw secret values.
+ *
+ *  MASKED-VALUE REJECTION: any non-empty secret/publishable/webhook
+ *  value containing the mask bullet character (•) is rejected with a
+ *  thrown Error. This catches the common mistake of copy-pasting the
+ *  masked display form (e.g. `sk_test_••••abcd`) back into the input
+ *  — which would otherwise be encrypted as the masked string and
+ *  silently break every subsequent Stripe API call with
+ *  "Invalid API Key provided". */
 export async function saveStripeSettings(
   input: StripeSettingsInput,
   editorUserId: string,
@@ -719,13 +946,43 @@ export async function saveStripeSettings(
   const { db } = await import('@/lib/db');
   const existing = await readStripeSettingsRow();
 
-  // ---- Secret keys: encrypt when provided; preserve when empty string ----
+  // ---- Masked-value rejection (before any encryption / storage). ----
+  // The admin may have copy-pasted the masked form back into the
+  // input — reject it with a clear, actionable error.
+  const maskedChecks: Array<{ value: string | undefined; label: string }> = [
+    { value: input.secretKeyTest, label: 'Secret Key (Test)' },
+    { value: input.secretKeyLive, label: 'Secret Key (Live)' },
+    { value: input.publishableKeyTest, label: 'Publishable Key (Test)' },
+    { value: input.publishableKeyLive, label: 'Publishable Key (Live)' },
+    { value: input.webhookSecretTest, label: 'Webhook Secret (Test)' },
+    { value: input.webhookSecretLive, label: 'Webhook Secret (Live)' },
+  ];
+  for (const c of maskedChecks) {
+    if (c.value && isMaskedSecretValue(c.value)) {
+      throw new Error(
+        `${c.label} looks like a masked value (contains the • character). ` +
+          `Re-enter the full, real Stripe key — do not copy the masked form.`,
+      );
+    }
+  }
+
+  // ---- Secret keys: encrypt when provided; preserve when empty ----
+  // Semantics (NEW, fixes the "Invalid API Key" bug):
+  //   - undefined  → preserve (admin omitted the field entirely)
+  //   - null       → clear (admin explicitly wants to remove it)
+  //   - ''         → preserve (admin left the input empty — "leave unchanged")
+  //   - non-empty  → encrypt + store
+  // Previously, undefined was treated as "clear", which silently wiped
+  // the saved secret every time the admin saved without retyping the
+  // key. That made the next Test Connection fall back to env (often
+  // empty or wrong) → Stripe returned "Invalid API Key".
   const encryptOrPreserve = async (
-    plaintext: string | undefined,
+    plaintext: string | undefined | null,
     existingEncrypted: string | null | undefined,
   ): Promise<string | null> => {
-    if (plaintext === undefined || plaintext === null) return null; // clear
-    if (plaintext === '') return existingEncrypted ?? null; // preserve
+    if (plaintext === undefined) return existingEncrypted ?? null; // preserve (omitted)
+    if (plaintext === null) return null; // clear
+    if (plaintext === '') return existingEncrypted ?? null; // preserve (empty input)
     return await encrypt(plaintext);
   };
 
@@ -747,10 +1004,14 @@ export async function saveStripeSettings(
   );
 
   // ---- Publishable keys: plaintext (non-secret). Empty string
-  //      preserves existing; null clears. ----
-  const resolvePub = (v: string | undefined, existingVal: string | null): string | null => {
-    if (v === undefined || v === null) return null;
-    if (v === '') return existingVal ?? null;
+  //      preserves existing; null clears; undefined (omitted) preserves. ----
+  const resolvePub = (
+    v: string | undefined | null,
+    existingVal: string | null,
+  ): string | null => {
+    if (v === undefined) return existingVal ?? null; // preserve (omitted)
+    if (v === null) return null; // clear
+    if (v === '') return existingVal ?? null; // preserve (empty input)
     return v;
   };
   const publishableKeyTest = resolvePub(input.publishableKeyTest, existing?.publishableKeyTest ?? null);
@@ -834,6 +1095,18 @@ export async function testStripeConnection(
     return { success: false, mode, code: 'NOT_CONFIGURED', message: msg };
   }
 
+  // Reject masked values outright — the admin copy-pasted the masked
+  // display form (sk_test_••••abcd) instead of the real key. Stripe
+  // would reject the masked string as an "Invalid API Key" — better
+  // to surface the real cause here with a clear, actionable message.
+  if (isMaskedSecretValue(secretKey)) {
+    const msg =
+      'The provided secret key looks like a masked value (contains the • character). ' +
+      'Re-enter the full, real Stripe secret key — do not copy the masked form.';
+    await recordTestOutcome(mode, 'error', msg);
+    return { success: false, mode, code: 'MASKED_VALUE', message: msg };
+  }
+
   // Basic key-shape validation — sk_test_ / sk_live_ / rk_test_ /
   // rk_live_ (restricted keys also work for read-only calls).
   const keyShapeOk =
@@ -845,6 +1118,31 @@ export async function testStripeConnection(
     const msg = 'The secret key does not look like a Stripe secret key (expected sk_test_… or sk_live_…).';
     await recordTestOutcome(mode, 'error', msg);
     return { success: false, mode, code: 'INVALID_KEY_SHAPE', message: msg };
+  }
+
+  // MODE-KEY MISMATCH VALIDATION: verify the key prefix matches the
+  // selected Test/Live mode. Without this, the admin could select
+  // Live mode but provide a sk_test_ key — the Stripe client would
+  // authenticate against the TEST account (since the key is a test
+  // key), silently bypassing the live-account check the admin meant
+  // to perform. Stripe would happily return account info for the
+  // test account, leading the admin to believe the LIVE credentials
+  // were validated when they weren't.
+  const isTestKey = secretKey.startsWith('sk_test_') || secretKey.startsWith('rk_test_');
+  const isLiveKey = secretKey.startsWith('sk_live_') || secretKey.startsWith('rk_live_');
+  if (mode === 'test' && !isTestKey) {
+    const msg =
+      'Mode/key mismatch: Test mode is selected but the secret key is a LIVE key ' +
+      `(starts with ${secretKey.slice(0, 8)}…). Switch to Live mode or paste a Test key (sk_test_…).`;
+    await recordTestOutcome(mode, 'error', msg);
+    return { success: false, mode, code: 'MODE_KEY_MISMATCH', message: msg };
+  }
+  if (mode === 'live' && !isLiveKey) {
+    const msg =
+      'Mode/key mismatch: Live mode is selected but the secret key is a TEST key ' +
+      `(starts with ${secretKey.slice(0, 8)}…). Switch to Test mode or paste a Live key (sk_live_…).`;
+    await recordTestOutcome(mode, 'error', msg);
+    return { success: false, mode, code: 'MODE_KEY_MISMATCH', message: msg };
   }
 
   try {

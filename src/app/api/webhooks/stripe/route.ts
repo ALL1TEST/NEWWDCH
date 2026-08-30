@@ -61,7 +61,8 @@ import {
   isStripeConfiguredAsync,
   verifyStripeWebhook,
   getStripeClient,
-  markWebhookEventProcessed,
+  claimWebhookEventForProcessing,
+  markWebhookEventOutcome,
   extractInvoiceCoupon,
 } from '@/lib/stripe';
 import type Stripe from 'stripe';
@@ -85,28 +86,31 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // -------------------- Idempotency ledger --------------------
+  // -------------------- Idempotency ledger (claim-for-processing) --------------------
   // Stripe retries events up to 3 days; we MUST NOT process the same
-  // evt_... twice. Insert a WebhookEvent row (unique on stripeEventId)
-  // BEFORE dispatching the handler. If the insert returns false, the
-  // event was already processed → ack and skip. The ledger insert
-  // happens BEFORE processing so a crash mid-processing doesn't cause
-  // a re-process on retry.
+  // evt_... twice. The new claim-for-processing pattern:
+  //   - 'new'      → first delivery, no row yet → process now.
+  //   - 'retry'    → existing row with outcome='error' (or stale
+  //                  'processing' older than 10 min — likely a crashed
+  //                  worker) → re-process to recover from a prior failure.
+  //   - 'processed' → row already exists with outcome='processed' (or
+  //                  a fresh 'processing' still in flight) → ack + skip.
+  // After the handler dispatch, we update the row's outcome to
+  // 'processed' (success) or 'error' (failure → Stripe will retry).
   const stripeEventId = event.id;
   const eventType = event.type;
   const apiVersion = event.api_version ?? null;
   const objectId =
     (event.data.object as unknown as { id?: string | null } | null)?.id ?? null;
 
-  const isNewEvent = await markWebhookEventProcessed({
+  const claim = await claimWebhookEventForProcessing({
     stripeEventId,
     eventType,
     apiVersion,
     objectId,
-    outcome: 'processed',
   });
-  if (!isNewEvent) {
-    // Duplicate event — already processed on a previous delivery.
+  if (claim === 'processed') {
+    // Already processed (or being processed by another worker) → ack.
     return NextResponse.json({ received: true, type: event.type, duplicate: true });
   }
 
@@ -149,22 +153,19 @@ export async function POST(request: NextRequest) {
         // Unhandled event types are silently ignored (no DB changes).
         break;
     }
+    // Mark the ledger row as 'processed' so retries don't re-process.
+    await markWebhookEventOutcome(stripeEventId, 'processed');
     return NextResponse.json({ received: true, type: event.type });
   } catch (err) {
     // Don't leak the error message to the client — Stripe will retry.
     console.error('Stripe webhook handler error:', err);
-    // Best-effort: mark the ledger row as errored so we can see it in
-    // the admin ledger view. Never mask the original error — if the
-    // update itself fails, log it and continue.
+    // Mark the ledger row as 'error' so the next Stripe retry re-processes
+    // (the claim-for-processing pattern allows retries on 'error' rows;
+    // previously the row was already 'processed' and the retry was
+    // silently dropped). Best-effort — never mask the original error.
     try {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      await db.webhookEvent.update({
-        where: { stripeEventId },
-        data: {
-          outcome: 'error',
-          errorMessage: errorMessage.slice(0, 1000),
-        },
-      });
+      await markWebhookEventOutcome(stripeEventId, 'error', errorMessage);
     } catch (ledgerErr) {
       console.error('Stripe webhook: failed to mark ledger row as errored:', ledgerErr);
     }
