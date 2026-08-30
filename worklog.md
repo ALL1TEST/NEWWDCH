@@ -8283,3 +8283,26 @@ Stage Summary:
   - platform@example.com / platform123 (OWNER/INTERNAL) ← the one in the user's screenshot
   - owner@example.com / owner123 (OWNER/INTERNAL)
 - Note for future: if the DB is ever re-seeded via src/lib/seed.ts (which wipes users), the bootstrap must be re-run afterwards to restore the platform owner accounts.
+
+---
+Task ID: LOGIN-FIX-2
+Agent: main (Z.ai Code)
+Task: Fix recurring "Invalid email or password" error for platform@example.com / platform123 (DB had been wiped since LOGIN-FIX-1)
+
+Work Log:
+- Read user screenshot via VLM — login screen showing "Invalid email or password" when signing in with platform@example.com.
+- Queried DB directly: 0 users found for all 5 demo emails; total user count = 0. The database had been completely wiped/reset since the previous fix (LOGIN-FIX-1). planConfig still had 4 rows (partial leftover), but user/site/setting/coupon tables were all empty.
+- Ran `bun run src/lib/seed.ts` (full seed) — recreated 3 CMS demo users (admin/editor/author) + 3 author profiles, 2 content types, 5 categories, 6 tags, 2 media folders, 4 media files, 10 content items, 1 navigation, 12 settings, 7 comments, 7 notifications.
+- Ran `bun run src/lib/platform/bootstrap.ts` — created owner@example.com (OWNER/INTERNAL, owner123) and platform@example.com (OWNER/INTERNAL, platform123), plus 4 plan configs, 3 feature flags, 4 country pricing rows, maintenance config, and 9 demo coupons.
+- Verified all 5 demo accounts at the DB level: all return SUCCESS (admin=ADMIN/EXTERNAL, editor=EDITOR/EXTERNAL, author=EDITOR/EXTERNAL, platform=OWNER/INTERNAL, owner=OWNER/INTERNAL).
+- Verified via curl: POST /api/auth/login with platform@example.com / platform123 → HTTP 200 with full user data + session token.
+- Verified end-to-end via Agent Browser: logged out to clear cached session → confirmed login screen rendered → filled platform@example.com / platform123 → clicked "Sign in" → redirected to http://localhost:3000/#platform-overview (Platform Admin dashboard). VLM analysis of the post-login screenshot confirmed the Platform Overview page rendered with the user shown as "Platform Admin" with PLATFORM badge.
+- Started a clean dev server (bun run dev) on port 3000 — confirmed listening and responding with HTTP 200.
+
+Stage Summary:
+- Root cause (same as LOGIN-FIX-1): the platform owner accounts (platform@example.com, owner@example.com) only exist after running the platform bootstrap script. The DB was reset/wiped between sessions, removing all users.
+- Fix: re-ran both the main seed (src/lib/seed.ts) and the platform bootstrap (src/lib/platform/bootstrap.ts). No code changes were required.
+- All 5 demo quick-sign-in credentials now authenticate successfully.
+- Recurrence note: this will keep happening whenever the DB is reset. The two scripts must be run in order after any `db:push` / `db:reset` / fresh DB:
+    1. `bun run src/lib/seed.ts`            (CMS demo data + admin/editor/author users)
+    2. `bun run src/lib/platform/bootstrap.ts`  (platform owner accounts + platform config)
