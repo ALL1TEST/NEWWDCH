@@ -8147,3 +8147,62 @@ Stage Summary:
   - src/components/layout/notification-bell.tsx (dual-mode endpoints based on user role)
   - src/modules/platform/platform-notifications.tsx (REWRITTEN — real persisted rows, real mark-read/delete/mark-all-read/delete-all, dynamic data)
   - src/components/patterns/command-palette.tsx (REWRITTEN — real backend search + Platform Admin nav group + dual-mode placeholder)
+
+---
+Task ID: 81
+Agent: main (direct)
+Task: Remove the unnecessary empty/blank space at the bottom of the article editor/content area on both Create Article and Edit Article pages.
+
+Work Log:
+- Inspected the editor layout in src/modules/content/content-create-page.tsx, src/modules/content/content-edit-page.tsx, src/components/editor/tiptap-editor.tsx, and src/components/editor/editor-styles.css.
+- Identified three compounding min-heights that forced the editor area to fill the viewport regardless of content length: (1) outer container `h-[calc(100vh-10.5rem)] min-h-[400px]` on create/edit pages; (2) inline Tailwind class `min-h-[60vh]` on the ProseMirror contenteditable element in tiptap-editor.tsx; (3) CSS rule `.editor-content { min-height: 50vh; }` in editor-styles.css.
+- Discovered via live DOM measurement (agent-browser + eval) that CSS grid `align-items: stretch` (default) was additionally forcing the editor column to match the (taller) sidebar's height even after removing the inline heights — sidebar was 732px (capped by `max-h-[calc(100vh-10.5rem)]`), so the editor column stretched to 732px too, creating ~190px of blank space inside the editor area below short content.
+- Fixes applied: (a) Removed `h-[calc(100vh-10.5rem)] min-h-[400px]` from the outer container on both create and edit pages; (b) Added `lg:self-start` to the outer container so the editor column no longer stretches to match the sidebar; (c) Removed the inline `min-h-[60vh]` class from the ProseMirror in tiptap-editor.tsx; (d) Replaced `min-height: 50vh` with no min-height (commented out) in editor-styles.css so the editor content area follows its actual content height.
+- Also had to add `export` to `const PLANS` in src/lib/stores/subscription-store.ts to unblock a pre-existing build-breaking import bug in src/modules/billing/billing-page.tsx (which imported `PLANS as STORE_PLANS` from the store; PLANS was never exported). Without this fix the entire `/` route returned HTTP 500, preventing verification.
+- Verified via agent-browser + DOM eval: BEFORE state had a "Very Large (>200px)" blank void between content and AI bar (per VLM analysis of screenshot). AFTER state had a 0.44px gap (essentially zero — AI bar starts immediately after content) on both Create and Edit pages. Editor box height reduced from 732px → 287px (Create, empty) / 336px (Edit, with short content).
+- Lint: no new errors introduced; pre-existing react-hook-form warnings in content-create/edit-page.tsx and seo-broken-links-page.tsx memoization errors untouched.
+
+Stage Summary:
+- Editor blank-space fix completed and verified. The article editor/content area now ends naturally with the actual content on both Create and Edit Article pages, with the AI bar immediately below the content (no large void). NOTE: This fix was DISCARDED in Task 82 (full repo sync) per the user's explicit instruction that the GitHub repository is the source of truth. The fix lives on in commit `92d286848c3fb4836ced66ded5ff3f84265eb282` (preserved in git reflog/backup branch) but is no longer in the working tree after the sync.
+
+---
+Task ID: 82
+Agent: main (direct)
+Task: Full clone/synchronization of the GitHub repository ALL1TEST/NEWWDCH into the current local application. The repo must become the actual project used by the localhost dev server — no separate clone directory.
+
+Work Log:
+- Inspected current state of /home/z/my-project: remote was `https://github.com/ALL1TEST/DCH2.git` (NOT NEWWDCH.git), local HEAD was `92d286848c3fb4836ced66ded5ff3f84265eb282` (the editor-fix commit from Task 81, which also accidentally committed tool-results/ .txt files and a db/custom.db binary modification). Working tree showed only `M db/custom.db`.
+- Stopped old dev server processes on port 3000 (PIDs 22873/22875/22876/22889 — the original 10:41 session processes that had been running for ~1 hour).
+- Changed remote to NEWWDCH: `git remote set-url origin https://github.com/ALL1TEST/NEWWDCH.git`.
+- Fetched origin: `4095dd2..6d236f6  main -> origin/main`.
+- Reset local main to origin/main: `git reset --hard origin/main` — HEAD moved from `92d2868` (editor fix + tool-results) to `6d236f6` ("chore: exclude .env and local SQLite DB from version control"). 643 files updated. Editor fix + tool-results/ files removed from the working tree (they were tracked in `92d2868` but not in `6d236f6`).
+- `git clean -fd` removed no additional files (the reset already removed the tracked-but-not-in-repo files).
+- IMPORTANT: the reset ALSO removed `.env` and `db/custom.db` from disk because they had been tracked in `92d2868` (my editor-fix commit mistakenly tracked them) and were untracked in `6d236f6`. The user explicitly said "Do not keep old local files that are not part of the repository" — so this is per their instruction. However, the app needs `DATABASE_URL` to run (prisma datasource uses `env("DATABASE_URL")`), so I created a fresh minimal `.env`:
+  ```
+  DATABASE_URL=file:/home/z/my-project/db/custom.db
+  STRIPE_SECRET_KEY=
+  STRIPE_PUBLISHABLE_KEY=
+  STRIPE_WEBHOOK_SECRET=
+  ```
+  (Contents recovered from git history `6d236f6~1:.env` — same minimal structure the repo had before excluding it. No secrets — STRIPE_* keys intentionally left blank.)
+- Installed dependencies: `bun install` — 36 packages installed (added @types/qrcode, otplib, qrcode, stripe).
+- Created fresh SQLite database: `bun run db:push` — created `db/custom.db` (2.3MB) with schema in sync with prisma/schema.prisma. Prisma Client regenerated to v6.19.2.
+- Seeded demo data via the repo's own seed script: `bun run src/lib/seed.ts` — created 3 users (admin/editor/author@example.com), 3 author profiles, 2 content types, 5 categories, 6 tags, 2 media folders, 4 media, 10 content items, 1 navigation, 12 settings, 7 comments, 7 notifications. Login: admin@example.com / admin123.
+- Cleared `.next` build cache and `dev.log` to ensure no stale UI remains.
+- Started dev server: `nohup bun run dev > /tmp/dev-run3.log 2>&1 &` from /home/z/my-project. Next.js 16.1.3 (Turbopack) ready in ~1.2s.
+- Verified via curl + agent-browser:
+  * GET http://localhost:3000/ → HTTP 200, 36477 bytes of HTML.
+  * HTML does NOT contain `lg:self-start` (the editor-fix marker) → confirms the repo version (not my editor fix) is being served.
+  * Login screen renders correctly with Email/Password fields + quick-sign-in buttons labeled "Admin", "Editor", "Author", "Platform Admin (Staff)" — note: "Platform Admin (Staff)" label differs from my editor-fix session which had "Platform Admin (SaaS Owner)" — confirming this is a DIFFERENT repo version (the NEWWDCH repo, not DCH2 where my editor fix was committed).
+  * Logged in as Admin (admin@example.com / admin123) — dashboard renders correctly with sidebar items: Dashboard, Articles, Calendar, Media, Users, Comments, Newsletter, SEO, AI, Automation, Settings. "Admin User" profile menu button present. (No PLATFORM_ADMIN sidebar items because the user is ADMIN, not PLATFORM_ADMIN.)
+- Confirmed dev server process working directory: `next-server` PID's cwd is `/home/z/my-project` (the synchronized repo directory, not a separate clone).
+- Final git verification:
+  * remote: `origin https://github.com/ALL1TEST/NEWWDCH.git`
+  * HEAD: `6d236f65752bdaf43a741f7efd8613babfd8e6ab`
+  * origin/main: `6d236f65752bdaf43a741f7efd8613babfd8e6ab`
+  * MATCH: local HEAD == origin/main ✓
+  * status: "On branch main, Your branch is up to date with 'origin/main'. nothing to commit, working tree clean"
+- No application source code, UI, logic, or features were modified during the sync (only: changed remote URL, fetched, hard reset to origin/main, created fresh .env, ran db:push, ran repo's own seed script, cleared caches, started dev server).
+
+Stage Summary:
+- Full synchronization complete. The local project at `/home/z/my-project` is now identical to `ALL1TEST/NEWWDCH` main branch HEAD `6d236f6`. The localhost:3000 dev server is running from this exact directory and serving the repository version (verified via HTML content check + login flow + dashboard render). Local HEAD matches origin/main exactly. Working tree clean. Dependencies installed. Database re-created and seeded with the repo's own seed script. No old project files remain (tool-results/ removed by reset, .env/db/custom.db re-created fresh per the user's "Do not keep old local files" instruction; the previous editor-fix commit `92d2868` is orphaned but preserved in git reflog for recovery if needed).
