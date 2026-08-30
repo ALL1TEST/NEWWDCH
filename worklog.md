@@ -7852,3 +7852,38 @@ Stage Summary:
   - src/app/api/platform/admin/stripe/settings/route.ts (GET + PUT)
   - src/app/api/platform/admin/stripe/test-connection/route.ts (POST)
   - src/app/api/platform/admin/plans/[planId]/sync-stripe/route.ts (POST)
+
+---
+Task ID: 80
+Agent: main (orchestrator)
+Task: Remove "Platform Usage" and "System Health" cards from the Platform Admin Overview dashboard.
+
+Work Log:
+- Read /home/z/my-project/worklog.md (Tasks 0-79). Confirmed Task 79 already built the Stripe Settings admin page + auto-sync plans to Stripe. The Platform Overview page (`src/modules/platform/platform-overview.tsx`) currently renders 6 sections: KPIs → Revenue Overview + Subscription Overview → Recent Customers + Recent Payments → Platform Usage + Admin Alerts (2-col grid) → System Health (full-width).
+- Read the full `src/modules/platform/platform-overview.tsx` (430 lines). Identified the two target cards: Platform Usage card (lines 318-334, sits in the xl:grid-cols-2 grid next to Admin Alerts) and System Health card (lines 364-383, full-width card below). Also identified the `UsageTile` sub-component (lines 390-400) which is ONLY used by Platform Usage — must be removed too.
+- Identified the imports that become unused after removal: lucide `FileText, Sparkles, HardDrive, Cpu, Server` (Platform Usage tiles); shared `HealthBadge, formatBytes` (System Health + Platform Usage Storage tile); recharts `Bar, BarChart, Cell` (pre-existing unused imports in this file, cleaned up opportunistically). Also updated the handleRefresh comment block that enumerated "Platform Usage, Admin Alerts, System Health" to drop those two sections from the list of refreshed components.
+- Edited `src/modules/platform/platform-overview.tsx` via MultiEdit:
+  1. Trimmed the lucide-react import list (dropped Server, FileText, Sparkles, HardDrive, Cpu).
+  2. Trimmed the recharts import list (dropped Bar, BarChart, Cell).
+  3. Trimmed the shared import list (dropped HealthBadge, formatBytes).
+  4. Updated the handleRefresh doc-comment to enumerate only the remaining sections (KPIs, Revenue Overview, Subscription Overview, Recent Customers, Recent Payments, Admin Alerts).
+  5. Replaced the entire `{/* Platform Usage + Admin Alerts */}` 2-column grid + the entire `{/* System Health */}` full-width card with just the Admin Alerts Card (now full-width, no grid wrapper).
+  6. Removed the now-orphaned `UsageTile` sub-component (only Platform Usage used it). Kept the `AlertRow` sub-component unchanged (Admin Alerts still uses it).
+- Ran `bun run lint` → 4 errors + 3 warnings, ALL pre-existing (data-table.tsx, content-create-page.tsx, content-edit-page.tsx, seo-broken-links-page.tsx — untouched by this task). No new lint issues in platform-overview.tsx. Matches the baseline established in Task 79's worklog.
+- Read `dev.log` → clean, no compile errors. HMR Fast Refresh rebuilt in 1136ms.
+- Browser Verification (Agent Browser, dev server on :3000, login owner@example.com/owner123):
+  - Logged in → automatically landed on `http://localhost:3000/#platform-overview`.
+  - Snapshot of the page: H1 "Platform Overview" → 4 KPI cards (Total Customers 6, Active Subscriptions 4, MRR $248, Total Sites 0) → Revenue Overview chart → Subscription Overview (By Plan + By Status) → Recent Customers table (5 rows) → Recent Payments table (6 rows) → Admin Alerts card (3 alert rows with action buttons "View Payments" / "View Customers" / "View Customers").
+  - JS eval on `main` element: `hasPlatformUsage: false`, `hasSystemHealth: false`, `hasAdminAlerts: true`. ✓ Confirms both target cards are gone and Admin Alerts is preserved.
+  - No `System Health` heading, no `Platform Usage` heading, no `UsageTile` content (no Total Sites/Articles/AI Articles/AI Words/Storage/Automation Runs aggregation tile), no `HealthBadge` content (no infrastructure status tiles with latency) anywhere on the page. ✓
+  - Browser console: only React DevTools info + HMR connected + Fast Refresh done in 1136ms. No errors. No warnings. agent-browser errors: empty. ✓
+  - Screenshot saved: `/home/z/my-project/tool-results/overview-pu-sh-removed.png` (full-page).
+  - Footer / sidebar / topbar all render correctly — no layout regression.
+
+Stage Summary:
+- The Platform Admin Overview dashboard no longer shows "Platform Usage" (the 6-tile aggregated-usage card) or "System Health" (the 6-tile infrastructure-status card). The page now ends after the "Admin Alerts" card (which was previously the right tile of the Platform Usage + Admin Alerts 2-col grid; it is now rendered full-width directly).
+- The `UsageTile` sub-component was removed (orphaned). Unused imports cleaned up: `FileText, Sparkles, HardDrive, Cpu, Server` from lucide-react; `Bar, BarChart, Cell` from recharts (pre-existing unused); `HealthBadge, formatBytes` from `./shared`.
+- The backend API (`/api/platform/admin/overview`) still returns `usage` and `systemHealth` fields — only the UI rendering was removed (per the user's instruction to remove them "in Overview"). The API surface is unchanged; existing consumers (none other than this page) are unaffected. No DB schema, no other UI module, and no nav item was touched.
+- Lint baseline preserved (4 pre-existing errors + 3 pre-existing warnings, none in platform-overview.tsx).
+- Files modified:
+  - src/modules/platform/platform-overview.tsx (removed Platform Usage card + System Health card + UsageTile sub-component + unused imports + updated handleRefresh comment)

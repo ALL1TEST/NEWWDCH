@@ -16,18 +16,18 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import {
-  Users, CreditCard, DollarSign, Globe, TrendingUp, Server,
-  HeartPulse, AlertCircle, AlertTriangle, Info, ArrowRight, FileText,
-  Sparkles, HardDrive, Activity, Cpu, Loader2,
+  Users, CreditCard, DollarSign, Globe, TrendingUp,
+  HeartPulse, AlertCircle, AlertTriangle, Info, ArrowRight,
+  Activity, Loader2,
 } from 'lucide-react';
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
+  Area, AreaChart, CartesianGrid,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import {
   PlatformPageHeader, PlatformKpi, KpiGridSkeleton, ErrorState,
-  PlanBadge, SubStatusBadge, PaymentStatusBadge, HealthBadge,
-  usePlatformApi, formatCurrency, formatDate, formatBytes,
+  PlanBadge, SubStatusBadge, PaymentStatusBadge,
+  usePlatformApi, formatCurrency, formatDate,
 } from './shared';
 import type { PlatformOverview } from '@/lib/platform/platform-data';
 
@@ -43,10 +43,10 @@ export function PlatformOverviewModule() {
   // /api/platform/admin/overview. Because every metric, chart, list and
   // alert on this page derives from the single `data` object, one refetch
   // refreshes everything (KPIs, Revenue Overview, Subscription Overview,
-  // Recent Customers, Recent Payments, Platform Usage, Admin Alerts,
-  // System Health). Shows a loading state, prevents duplicate refreshes
-  // while one is in flight, restores the normal button state afterwards
-  // and surfaces errors via toast — without reloading the browser page.
+  // Recent Customers, Recent Payments, Admin Alerts). Shows a loading
+  // state, prevents duplicate refreshes while one is in flight, restores
+  // the normal button state afterwards and surfaces errors via toast —
+  // without reloading the browser page.
   const handleRefresh = async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
@@ -313,72 +313,30 @@ export function PlatformOverviewModule() {
         </Card>
       </div>
 
-      {/* Platform Usage + Admin Alerts */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {/* Platform Usage */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Platform Usage</CardTitle>
-            <CardDescription className="text-xs mt-0.5">Aggregated across all customers</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <UsageTile icon={<Globe className="h-4 w-4" />} label="Total Sites" value={data.usage.totalSites} color="text-sky-600" />
-              <UsageTile icon={<FileText className="h-4 w-4" />} label="Articles" value={data.usage.totalArticles.toLocaleString()} color="text-violet-600" />
-              <UsageTile icon={<Sparkles className="h-4 w-4" />} label="AI Articles" value={data.usage.aiArticlesGenerated.toLocaleString()} color="text-amber-600" />
-              <UsageTile icon={<Cpu className="h-4 w-4" />} label="AI Words" value={data.usage.aiWordsGenerated.toLocaleString()} color="text-emerald-600" />
-              <UsageTile icon={<HardDrive className="h-4 w-4" />} label="Storage" value={formatBytes(data.usage.mediaStorageBytes)} color="text-rose-600" />
-              <UsageTile icon={<Server className="h-4 w-4" />} label="Automation Runs" value={data.usage.automationRuns.toLocaleString()} color="text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Admin Alerts */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-base">Admin Alerts</CardTitle>
-                <CardDescription className="text-xs mt-0.5">Platform-level items needing attention</CardDescription>
-              </div>
-              {data.alerts.length > 0 && (
-                <Badge variant="outline" className="text-xs">{data.alerts.length} active</Badge>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {data.alerts.length > 0 ? (
-              <div className="space-y-2">
-                {data.alerts.map((a) => <AlertRow key={a.id} alert={a} onNavigate={navigate} />)}
-              </div>
-            ) : (
-              <div className="text-center py-10 text-muted-foreground">
-                <HeartPulse className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">All clear — no platform alerts.</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* System Health */}
+      {/* Admin Alerts */}
       <Card>
         <CardHeader className="pb-3">
-          <div>
-            <CardTitle className="text-base">System Health</CardTitle>
-            <CardDescription className="text-xs mt-0.5">Platform infrastructure status</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Admin Alerts</CardTitle>
+              <CardDescription className="text-xs mt-0.5">Platform-level items needing attention</CardDescription>
+            </div>
+            {data.alerts.length > 0 && (
+              <Badge variant="outline" className="text-xs">{data.alerts.length} active</Badge>
+            )}
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {data.systemHealth.map((h) => (
-              <div key={h.key} className="rounded-lg border border-border p-3 text-center">
-                <HealthBadge status={h.status} />
-                <p className="text-xs font-medium mt-2">{h.label}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{h.latencyMs}ms</p>
-              </div>
-            ))}
-          </div>
+          {data.alerts.length > 0 ? (
+            <div className="space-y-2">
+              {data.alerts.map((a) => <AlertRow key={a.id} alert={a} onNavigate={navigate} />)}
+            </div>
+          ) : (
+            <div className="text-center py-10 text-muted-foreground">
+              <HeartPulse className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">All clear — no platform alerts.</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -386,18 +344,6 @@ export function PlatformOverviewModule() {
 }
 
 // -------------------- Sub-components --------------------
-
-function UsageTile({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string | number; color: string }) {
-  return (
-    <div className="rounded-lg border border-border p-3">
-      <div className={`flex items-center gap-1.5 ${color}`}>
-        {icon}
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
-      </div>
-      <p className="text-lg font-bold tracking-tight mt-1">{value}</p>
-    </div>
-  );
-}
 
 function AlertRow({ alert, onNavigate }: { alert: PlatformOverview['alerts'][number]; onNavigate: (mod: string, id?: string | null) => void }) {
   const map = {
