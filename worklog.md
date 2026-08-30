@@ -8256,3 +8256,30 @@ Work Log:
 
 Stage Summary:
 - Editor blank-space fix COMPLETED and VERIFIED end-to-end on the Create Article page. The article editor/content area now ends naturally with the actual content — the editor card is compact (287px vs 732px before), and the AI bar sits immediately below the content with a 0px gap (was >200px). The same identical edit is applied to the Edit Article page (grep + sed confirmed). The user's request is satisfied: no unnecessary empty/blank space remains at the bottom of the article editor/content area on either page. Files changed: src/components/editor/editor-styles.css, src/components/editor/tiptap-editor.tsx, src/modules/content/content-create-page.tsx, src/modules/content/content-edit-page.tsx.
+
+---
+Task ID: LOGIN-FIX-1
+Agent: main (Z.ai Code)
+Task: Fix "Invalid email or password" error when logging in with correct credentials (platform@example.com / platform123 shown in user screenshot)
+
+Work Log:
+- Read /home/z/my-project/upload/pasted_image_1788094944321.png via VLM — identified the user was trying to log in with `platform@example.com` / `platform123` (the "Platform Admin (Staff)" demo quick-fill button) and getting "Invalid email or password".
+- Read login-screen.tsx, auth-store.ts, api-client.ts, and /api/auth/login/route.ts to understand the auth flow. Login route does plain-text password compare (`user.password !== password`) against a DB user found by email.
+- Queried the DB directly for the 5 demo accounts. Found that `admin@example.com`, `editor@example.com`, `author@example.com` existed (created by src/lib/seed.ts), but `platform@example.com` and `owner@example.com` did NOT exist. These two OWNER accounts are created by a separate bootstrap script (src/lib/platform/bootstrap.ts) that had never been run (or was wiped by a re-seed).
+- Root cause: the "Platform Admin (Staff)" quick-fill button fills credentials for a user that doesn't exist in the DB, so the login route returns 401 INVALID_CREDENTIALS → "Invalid email or password".
+- Ran `bun run src/lib/platform/bootstrap.ts` — this created `owner@example.com` (OWNER/INTERNAL, owner123) and `platform@example.com` (OWNER/INTERNAL, platform123), plus seeded coupons, country pricing, feature flags, maintenance config, and plan configs.
+- Re-queried the DB: all 5 demo accounts now present with correct passwords/roles/statuses.
+- Simulated the exact login route logic against the DB for all 5 accounts → all return SUCCESS.
+- Verified end-to-end via curl: POST /api/auth/login with platform@example.com/platform123 → HTTP 200 with full user data + session token.
+- Verified end-to-end via Agent Browser: logged out (to clear cached session), confirmed the login screen rendered, filled platform@example.com / platform123, clicked "Sign in" → redirected to http://localhost:3000/#platform-overview showing the Platform Admin dashboard (sidebar: Overview, Customers, Payments, Plans & Pricing, Coupons, Stripe Settings, etc.) with the user shown as "Platform Admin" with a PLATFORM badge. VLM analysis of the post-login screenshot confirmed the Platform Overview page rendered correctly.
+
+Stage Summary:
+- Root cause: missing DB records. The `platform@example.com` / `platform123` (and `owner@example.com` / `owner123`) OWNER accounts are created by `src/lib/platform/bootstrap.ts`, which had not been run. The regular seed (`src/lib/seed.ts`) only creates the 3 CMS-side accounts (admin/editor/author).
+- Fix applied: ran the platform bootstrap. No code changes were required — the login route, auth store, and login screen all worked correctly once the user records existed.
+- All 5 demo quick-sign-in credentials now authenticate successfully:
+  - admin@example.com / admin123 (ADMIN/EXTERNAL)
+  - editor@example.com / editor123 (EDITOR/EXTERNAL)
+  - author@example.com / author123 (EDITOR/EXTERNAL)
+  - platform@example.com / platform123 (OWNER/INTERNAL) ← the one in the user's screenshot
+  - owner@example.com / owner123 (OWNER/INTERNAL)
+- Note for future: if the DB is ever re-seeded via src/lib/seed.ts (which wipes users), the bootstrap must be re-run afterwards to restore the platform owner accounts.
