@@ -541,6 +541,9 @@ export function validatePlanConfigInput(input: {
   limits?: Partial<{
     maxSites: number;
     storageBytes: number;
+    aiArticlesPerMonth: number;
+    aiWordsPerMonth: number;
+    aiImagesPerMonth: number;
   }>;
   entitlements?: string[];
   features?: string[];
@@ -627,6 +630,16 @@ export function validatePlanConfigInput(input: {
       if (typeof k !== 'string' || !k.trim()) {
         errors.push('Entitlement keys must be non-empty strings.');
       }
+    }
+    // AI Tools — the two modes are mutually exclusive: a plan cannot
+    // have both Platform AI and Client's Own AI API active at once.
+    if (
+      (input.entitlements.includes('ai_platform') || input.entitlements.includes('ai_content')) &&
+      input.entitlements.includes('ai_client')
+    ) {
+      errors.push(
+        "AI Tools: select either Platform AI or Client's Own AI API — the two modes are mutually exclusive.",
+      );
     }
   }
   return errors;

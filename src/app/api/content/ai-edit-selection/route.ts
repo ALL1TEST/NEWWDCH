@@ -6,6 +6,7 @@ import { executeChat } from '@/lib/ai/ai-service';
 import type { ChatMessage } from '@/lib/ai/ai-service';
 import { z } from 'zod/v4';
 import { requireFeature } from '@/lib/platform/platform-auth';
+import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
 
 function reqId() {
   return 'req_' + crypto.randomUUID().slice(0, 8);
@@ -31,6 +32,10 @@ const schema = z.object({
 export async function POST(request: NextRequest) {
   const auth = await requireFeature(request, 'ai_content');
   if ('response' in auth) return auth.response;
+  // Platform AI usage limit — enforced server-side before generating.
+  // Client's Own AI API plans and owner bypass are never counted.
+  const aiLimit = await checkAiLimit(auth.user, { articles: 1 });
+  if (aiLimit && !aiLimit.ok) return aiLimitExceededResponse(aiLimit);
   const id = reqId();
 
   try {
@@ -97,6 +102,9 @@ Apply the action to the selected text and return ONLY the modified text.`;
       messages,
       temperature: 0.5,
       maxTokens: 4000,
+      // Attribute the usage to the user for the Platform AI monthly
+      // usage tracker (AiLog).
+      userId: auth.user.id,
     });
 
     // Strip markdown code block wrappers if present

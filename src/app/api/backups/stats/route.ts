@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { getSiteWhere } from '@/lib/site-context';
-import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+import { requirePlatformAdmin, requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -39,6 +39,10 @@ export async function GET(request: NextRequest) {
       // across all sites.
       siteWhere = {};
     } else {
+      // Client-side backup stats — gated by the plan's Backups feature
+      // entitlement (server-side enforced; owner bypass passes).
+      const featureAuth = await requireFeature(request, 'backups');
+      if ('response' in featureAuth) return featureAuth.response;
       siteWhere = await getSiteWhere(request);
     }
 

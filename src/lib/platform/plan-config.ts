@@ -38,15 +38,124 @@
 import { db } from '@/lib/db';
 // Re-export the shared client-safe vocabulary so existing imports keep working.
 export { ENTITLEMENT_KEYS, ENTITLEMENT_LABELS } from './feature-config';
+export {
+  aiModeOfEntitlements,
+  AI_MODE_PLATFORM,
+  AI_MODE_CLIENT,
+  PLAN_EDITOR_FEATURE_KEYS,
+  type AiMode,
+} from './feature-config';
 export type { EntitlementKey } from './feature-config';
 
-// Only limits with REAL server-side enforcement are tracked here.
-// AI Words / AI Articles / Automation Runs were removed because no real
-// usage-tracking system exists for them — they would have been fake limits.
+import { PLAN_EDITOR_FEATURE_KEYS, aiModeOfEntitlements } from './feature-config';
+
+/** The entitlement keys the Create/Edit Plan modal manages. Keys NOT in
+ *  this set (e.g. 'audit_log') are preserved on merge — they are system
+ *  entitlements outside the plan editor's Feature Access list. */
+const PLAN_EDITOR_KEY_SET = new Set<string>([
+  ...PLAN_EDITOR_FEATURE_KEYS,
+  'ai_platform',
+  'ai_client',
+  'ai_content',
+]);
+
+// USAGE LIMITS — only resources the PLATFORM actually controls.
+//   maxSites / storageBytes — platform infrastructure (Site, Media).
+//   ai*PerMonth — Platform AI usage, enforced against the AiLog usage
+//   tracker. They apply ONLY while the plan uses Platform AI
+//   (entitlements include 'ai_platform'): Client's Own AI API plans
+//   ('ai_client') and AI-disabled plans store 0 and are never checked.
+//   Newsletter / Email Templates / Backups are FEATURE entitlements
+//   only — no usage limits by design.
 export interface PlanLimits {
   /** -1 = unlimited */
   maxSites: number;
+  /** CMS/media storage (uploaded content). NOT backup storage. -1 = unlimited. */
   storageBytes: number;
+  /** Platform AI articles (generations) / month. -1 = unlimited. Only when Platform AI. */
+  aiArticlesPerMonth: number;
+  /** Platform AI words (output tokens) / month. -1 = unlimited. Only when Platform AI. */
+  aiWordsPerMonth: number;
+  /** Platform AI images / month. -1 = unlimited. Only when Platform AI. */
+  aiImagesPerMonth: number;
+}
+
+/** Default limits for plans that never configured them (incl. the
+ *  AI keys — 0 = none allowed, only meaningful with Platform AI). */
+const DEFAULT_LIMITS: PlanLimits = {
+  maxSites: 0,
+  storageBytes: 0,
+  aiArticlesPerMonth: 0,
+  aiWordsPerMonth: 0,
+  aiImagesPerMonth: 0,
+};
+
+// -------------------- Entitlement normalization --------------------
+
+/** Normalize a raw entitlement key list (DB row or API input):
+ *  - legacy 'ai_content' → 'ai_platform' (it predates the two-mode
+ *    split and always meant the platform-provided AI).
+ *  - mutual exclusion: when BOTH AI modes are present (invalid data),
+ *    Platform AI wins and 'ai_client' is dropped.
+ *  - dedupes while preserving order.
+ *  Non-editor keys (e.g. 'audit_log') pass through untouched. */
+export function normalizeEntitlementKeys(keys: readonly string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const hasPlatform = keys.includes('ai_platform') || keys.includes('ai_content');
+  for (const k of keys) {
+    if (typeof k !== 'string' || !k.trim()) continue;
+    if (k === 'ai_content') continue; // legacy → replaced by ai_platform below
+    if (k === 'ai_client' && hasPlatform) continue; // mutually exclusive → platform wins
+    if (k === 'ai_platform' && hasPlatform) {
+      if (!seen.has('ai_platform')) out.push('ai_platform');
+      seen.add('ai_platform');
+      continue;
+    }
+    if (!seen.has(k)) {
+      out.push(k);
+      seen.add(k);
+    }
+  }
+  // Insert the platform AI key at the position where the legacy key
+  // (or an existing 'ai_platform') first appeared — append at the end
+  // when neither was present in the ordered loop above (defensive).
+  if (hasPlatform && !seen.has('ai_platform')) out.push('ai_platform');
+  return out;
+}
+
+/** The AI mode a plan's normalized entitlements resolve to
+ *  ('none' | 'platform' | 'client'). Re-exported from feature-config
+ *  for server callers (single shared implementation). */
+export { aiModeOfEntitlements as aiModeOf };
+
+/** Zero the Platform AI usage limits — used when a plan does NOT use
+ *  Platform AI (Client's Own AI API or AI disabled): the AI limits are
+ *  not configurable in that mode, so they are not part of the saved
+ *  configuration. */
+function zeroAiLimitsIfNotPlatform(limits: PlanLimits, entitlements: readonly string[]): PlanLimits {
+  if (aiModeOfEntitlements(entitlements) === 'platform') return limits;
+  return {
+    ...limits,
+    aiArticlesPerMonth: 0,
+    aiWordsPerMonth: 0,
+    aiImagesPerMonth: 0,
+  };
+}
+
+/** Pick only the known limit fields from an untyped/partial input —
+ *  unknown keys (stale `aiWords` / `automationRuns` from older rows)
+ *  never leak into the cache and are not re-serialized on save. */
+function pickLimits(parsed: unknown): PlanLimits {
+  const p = (parsed ?? {}) as Partial<PlanLimits>;
+  const num = (v: unknown): number => (typeof v === 'number' && !Number.isNaN(v) ? v : 0);
+  return {
+    maxSites: num(p.maxSites),
+    storageBytes: num(p.storageBytes),
+    aiArticlesPerMonth: num(p.aiArticlesPerMonth),
+    aiWordsPerMonth: num(p.aiWordsPerMonth),
+    aiImagesPerMonth: num(p.aiImagesPerMonth),
+  };
 }
 
 export type BillingInterval = 'monthly' | 'yearly';
@@ -201,8 +310,10 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     stripePriceIdYearly: null,
     active: true,
     features: [], // derived from entitlements on the client side
+    // FREE example: AI disabled, Newsletter / Email Templates / Backups
+    // disabled, limited sites + storage. No AI limits (AI is off).
     entitlements: [],
-    limits: { maxSites: 3, storageBytes: 1 * GB },
+    limits: { maxSites: 3, storageBytes: 1 * GB, aiArticlesPerMonth: 0, aiWordsPerMonth: 0, aiImagesPerMonth: 0 },
     badgeVariant: 'free',
     sortOrder: 0,
   },
@@ -224,8 +335,9 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     stripePriceIdYearly: null,
     active: true,
     features: [],
-    entitlements: ['ai_content', 'advanced_analytics', 'newsletter'],
-    limits: { maxSites: 5, storageBytes: 5 * GB },
+    // Plus: Platform AI with modest usage limits.
+    entitlements: ['ai_platform', 'advanced_analytics', 'newsletter'],
+    limits: { maxSites: 5, storageBytes: 5 * GB, aiArticlesPerMonth: 25, aiWordsPerMonth: 50_000, aiImagesPerMonth: 10 },
     badgeVariant: 'plus',
     sortOrder: 1,
   },
@@ -247,8 +359,10 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     stripePriceIdYearly: null,
     active: true,
     features: [],
-    entitlements: ['ai_content', 'advanced_analytics', 'custom_domains', 'automation', 'newsletter'],
-    limits: { maxSites: 10, storageBytes: 10 * GB },
+    // PRO example: Platform AI — 100 articles / 200k words / 50 images
+    // per month — plus Newsletter, Email Templates and Backups enabled.
+    entitlements: ['ai_platform', 'advanced_analytics', 'custom_domains', 'automation', 'newsletter', 'email_templates', 'backups'],
+    limits: { maxSites: 10, storageBytes: 10 * GB, aiArticlesPerMonth: 100, aiWordsPerMonth: 200_000, aiImagesPerMonth: 50 },
     badgeVariant: 'pro',
     sortOrder: 2,
   },
@@ -270,8 +384,11 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     stripePriceIdYearly: null,
     active: true,
     features: [],
+    // ENTERPRISE example: Client's Own AI API — the client connects
+    // their own provider, so NO platform AI usage limits are stored.
+    // All other enterprise features enabled.
     entitlements: [
-      'ai_content',
+      'ai_client',
       'advanced_analytics',
       'custom_domains',
       'automation',
@@ -280,8 +397,10 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
       'audit_log',
       'advanced_seo',
       'newsletter',
+      'email_templates',
+      'backups',
     ],
-    limits: { maxSites: -1, storageBytes: 100 * GB },
+    limits: { maxSites: -1, storageBytes: 100 * GB, aiArticlesPerMonth: 0, aiWordsPerMonth: 0, aiImagesPerMonth: 0 },
     badgeVariant: 'max',
     sortOrder: 3,
   },
@@ -348,9 +467,20 @@ export function getActivePlanConfigsSync(): PlanConfigData[] {
   return getPlanConfigsSync().filter((p) => p.active);
 }
 
-/** Entitlement keys granted by a plan. */
+/** Entitlement keys granted by a plan, NORMALIZED: legacy 'ai_content'
+ *  is mapped to 'ai_platform', and when the plan has AI Tools in ANY
+ *  mode the legacy 'ai_content' key is ALSO included as a compatibility
+ *  alias — so every existing `requireFeature(request, 'ai_content')`
+ *  gate keeps passing for BOTH Platform AI and Client's Own AI API
+ *  plans (feature access to the AI tooling) with zero route changes.
+ *  Mode-specific checks use 'ai_platform' / 'ai_client'. */
 export function getPlanEntitlements(planId: string): string[] {
-  return getPlanConfigSync(planId).entitlements;
+  const plan = getPlanConfigSync(planId);
+  const base = plan.entitlements;
+  if (base.includes('ai_platform') || base.includes('ai_client')) {
+    return base.includes('ai_content') ? base : [...base, 'ai_content'];
+  }
+  return base;
 }
 
 /** Usage limits for a plan. */
@@ -403,16 +533,15 @@ function rowToData(row: PlanConfigRow): PlanConfigData {
   // limits JSON (those were removed because no real enforcement exists).
   // Picking only the known fields prevents the stale keys from leaking
   // back into the cache and being re-serialized on the next save.
-  let limits: PlanLimits = { maxSites: 0, storageBytes: 0 };
+  let limits: PlanLimits = { ...DEFAULT_LIMITS };
   try {
-    const parsed = JSON.parse(row.limits || '{}') as Partial<PlanLimits>;
-    limits = {
-      maxSites: typeof parsed.maxSites === 'number' ? parsed.maxSites : 0,
-      storageBytes: typeof parsed.storageBytes === 'number' ? parsed.storageBytes : 0,
-    };
+    limits = pickLimits(JSON.parse(row.limits || '{}'));
   } catch {
     // keep defaults
   }
+  // AI usage limits only exist for Platform AI plans — normalize the
+  // stored configuration to match the entitlement mode.
+  limits = zeroAiLimitsIfNotPlatform(limits, entitlements);
   let pricesByCurrency: PricesByCurrency = {};
   try {
     const parsed = JSON.parse(row.pricesByCurrency || '{}') as Partial<PricesByCurrency>;
@@ -467,7 +596,9 @@ function rowToData(row: PlanConfigRow): PlanConfigData {
     stripePriceIdYearly: row.stripePriceIdYearly,
     active: row.active,
     features,
-    entitlements,
+    // Normalize: legacy 'ai_content' → 'ai_platform'; the two AI modes
+    // are mutually exclusive (invalid both-present data → platform wins).
+    entitlements: normalizeEntitlementKeys(entitlements),
     limits,
     badgeVariant: row.badgeVariant,
     sortOrder: row.sortOrder,
@@ -493,8 +624,8 @@ function dataToRow(d: PlanConfigData) {
     stripePriceIdYearly: d.stripePriceIdYearly,
     active: d.active,
     features: JSON.stringify(d.features),
-    entitlements: JSON.stringify(d.entitlements),
-    limits: JSON.stringify(d.limits),
+    entitlements: JSON.stringify(normalizeEntitlementKeys(d.entitlements)),
+    limits: JSON.stringify(zeroAiLimitsIfNotPlatform(d.limits, d.entitlements)),
     badgeVariant: d.badgeVariant,
     sortOrder: d.sortOrder,
   };
@@ -793,8 +924,33 @@ function mergePlanPatch(current: PlanConfigData, patch: PlanConfigInput, default
     stripePriceIdYearly,
     active: patch.active ?? current.active,
     features: patch.features ?? current.features,
-    entitlements: patch.entitlements ?? current.entitlements,
-    limits: { ...current.limits, ...(patch.limits ?? {}) },
+    // Entitlements: the patch's editor-managed keys replace the current
+    // ones, while NON-editor keys (e.g. 'audit_log') are PRESERVED from
+    // the current plan — the Create/Edit Plan modal only manages the 10
+    // Feature Access keys. Then normalize (legacy 'ai_content' →
+    // 'ai_platform'; the two AI modes are mutually exclusive).
+    entitlements: normalizeEntitlementKeys(
+      patch.entitlements !== undefined
+        ? [
+            ...patch.entitlements,
+            ...current.entitlements.filter(
+              (k) =>
+                !patch.entitlements!.includes(k) &&
+                k !== 'ai_content' &&
+                // keys below are editor-managed (replaced by the patch):
+                !PLAN_EDITOR_KEY_SET.has(k),
+            ),
+          ]
+        : current.entitlements,
+    ),
+    // Limits: merge; the AI usage limits are only part of the saved
+    // configuration while the plan uses Platform AI (zeroed otherwise).
+    limits: zeroAiLimitsIfNotPlatform(
+      pickLimits({ ...current.limits, ...(patch.limits ?? {}) }),
+      patch.entitlements !== undefined
+        ? normalizeEntitlementKeys(patch.entitlements)
+        : current.entitlements,
+    ),
     badgeVariant: patch.badgeVariant ?? current.badgeVariant,
     sortOrder: patch.sortOrder ?? current.sortOrder,
   };
@@ -931,12 +1087,11 @@ export async function createPlanConfig(
     stripePriceIdYearly: input.stripePriceIdYearly !== undefined ? input.stripePriceIdYearly : defIds.yearly,
     active: input.active ?? true,
     features: input.features ?? [],
-    entitlements: input.entitlements ?? [],
-    limits: {
-      maxSites: 0,
-      storageBytes: 0,
-      ...(input.limits ?? {}),
-    },
+    entitlements: normalizeEntitlementKeys(input.entitlements ?? []),
+    limits: zeroAiLimitsIfNotPlatform(
+      pickLimits({ ...DEFAULT_LIMITS, ...(input.limits ?? {}) }),
+      normalizeEntitlementKeys(input.entitlements ?? []),
+    ),
     badgeVariant: input.badgeVariant ?? input.planId,
     sortOrder: input.sortOrder ?? maxOrder,
   };

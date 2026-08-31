@@ -7,6 +7,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import ZAI from 'z-ai-web-dev-sdk';
 import { requireFeature } from '@/lib/platform/platform-auth';
+import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
 
 function reqId() {
   return 'req_' + nanoid(8);
@@ -17,6 +18,10 @@ type RouteContext = { params: Promise<{ id: string }> };
 export async function POST(_request: NextRequest, context: RouteContext) {
   const auth = await requireFeature(_request, 'ai_content');
   if ('response' in auth) return auth.response;
+  // Platform AI usage limit — enforced server-side before generating.
+  // Client's Own AI API plans and owner bypass are never counted.
+  const aiLimit = await checkAiLimit(auth.user, { articles: 1 });
+  if (aiLimit && !aiLimit.ok) return aiLimitExceededResponse(aiLimit);
   const id = reqId();
 
   try {

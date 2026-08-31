@@ -8,7 +8,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { getSiteWhere } from '@/lib/site-context';
-import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+import { requirePlatformAdmin, requireFeature } from '@/lib/platform/platform-auth';
 import { createHash } from 'node:crypto';
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -110,6 +110,10 @@ export async function GET(request: NextRequest) {
       // Platform scope: no site filter — return ALL backups across all sites.
       siteFilter = {};
     } else {
+      // Client-side backups — gated by the plan's Backups feature
+      // entitlement (server-side enforced; owner bypass passes).
+      const featureAuth = await requireFeature(request, 'backups');
+      if ('response' in featureAuth) return featureAuth.response;
       siteFilter = await getSiteWhere(request);
     }
 
@@ -232,6 +236,11 @@ export async function POST(request: NextRequest) {
       delete rest.scope;
       delete rest.backupScope;
       preparedBody = { ...rest, scope: resolvedScope };
+    } else {
+      // Client-side backup creation — gated by the plan's Backups
+      // feature entitlement (server-side enforced; owner bypass passes).
+      const featureAuth = await requireFeature(request, 'backups');
+      if ('response' in featureAuth) return featureAuth.response;
     }
 
     const parsed = createSchema.safeParse(preparedBody);

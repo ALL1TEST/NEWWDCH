@@ -63,13 +63,20 @@ export interface Plan {
   /** Marketing copy — auto-derived from entitlements on the client side
    *  (kept for legacy callers; not a separate config). */
   features: string[];
-  /** Authoritative feature keys granted by this plan (checked by hasFeature). */
+  /** Authoritative feature keys granted by this plan (checked by hasFeature).
+   *  AI Tools mode: 'ai_platform' (Platform AI, subject to the AI usage
+   *  limits) or 'ai_client' (Client's Own AI API, no platform AI limits) —
+   *  mutually exclusive. */
   entitlements: string[];
-  /** Plan usage limits. -1 = unlimited. Only limits with REAL server-side
-   *  enforcement are tracked (maxSites, storageBytes). */
+  /** Plan usage limits. -1 = unlimited. Only platform-controlled resources:
+   *  maxSites, storageBytes, and the Platform AI usage limits (applicable
+   * only while the plan uses Platform AI). */
   limits: {
     maxSites: number;
     storageBytes: number;
+    aiArticlesPerMonth: number;
+    aiWordsPerMonth: number;
+    aiImagesPerMonth: number;
   };
 }
 
@@ -1484,8 +1491,8 @@ const INTERNAL_PLAN: Plan = {
   isFree: true,
   active: true,
   features: ['Full platform access', 'All features enabled', 'Billing bypass', 'Not counted in MRR'],
-  entitlements: ['automation', 'ai_content', 'advanced_analytics', 'custom_domains', 'api_access', 'white_label', 'audit_log', 'advanced_seo', 'newsletter'],
-  limits: { maxSites: -1, storageBytes: -1 },
+  entitlements: ['automation', 'ai_platform', 'advanced_analytics', 'custom_domains', 'api_access', 'white_label', 'audit_log', 'advanced_seo', 'newsletter', 'email_templates', 'backups'],
+  limits: { maxSites: -1, storageBytes: -1, aiArticlesPerMonth: -1, aiWordsPerMonth: -1, aiImagesPerMonth: -1 },
 };
 
 interface BillingUser {

@@ -27,7 +27,7 @@ import {
   type Plan as StorePlan,
 } from '@/lib/stores/subscription-store';
 import type { ClientBillingState, Payment, PlanId } from '@/lib/platform/platform-data';
-import { ENTITLEMENT_LABELS, type EntitlementKey } from '@/lib/platform/feature-config';
+import { ENTITLEMENT_LABELS, aiModeOfEntitlements, type EntitlementKey } from '@/lib/platform/feature-config';
 import { formatMoney } from '@/lib/platform/currency-catalog';
 import { PaymentStatusBadge, formatCurrency, formatDate, ErrorState } from '@/modules/platform/shared';
 
@@ -127,7 +127,13 @@ function derivePlanFeatures(plan: {
   features: string[];
   entitlements: string[];
   isFree: boolean;
-  limits: { maxSites: number; storageBytes: number };
+  limits: {
+    maxSites: number;
+    storageBytes: number;
+    aiArticlesPerMonth?: number;
+    aiWordsPerMonth?: number;
+    aiImagesPerMonth?: number;
+  };
 }): string[] {
   if (plan.features.length > 0) return plan.features;
   const items: string[] = [];
@@ -145,7 +151,20 @@ function derivePlanFeatures(plan: {
     items.push('No storage');
   }
   items.push(plan.isFree ? 'Community support' : 'Priority support');
+  // Platform AI plans surface their AI usage limits; Client's Own AI API
+  // plans show the bring-your-own-API entitlement label instead (no
+  // platform AI limits by design).
+  const aiMode = aiModeOfEntitlements(plan.entitlements);
+  if (aiMode === 'platform') {
+    const articles = plan.limits.aiArticlesPerMonth ?? 0;
+    const words = plan.limits.aiWordsPerMonth ?? 0;
+    const images = plan.limits.aiImagesPerMonth ?? 0;
+    items.push(articles === -1 ? 'Unlimited AI articles' : `${articles} AI articles / month`);
+    items.push(words === -1 ? 'Unlimited AI words' : `${words.toLocaleString()} AI words / month`);
+    items.push(images === -1 ? 'Unlimited AI images' : `${images} AI images / month`);
+  }
   for (const e of plan.entitlements) {
+    if (e === 'ai_platform' || e === 'ai_content') continue; // shown as the limit items above
     const label = ENTITLEMENT_LABELS[e as EntitlementKey];
     if (label) items.push(label);
   }

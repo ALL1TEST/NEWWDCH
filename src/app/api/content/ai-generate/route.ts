@@ -6,6 +6,7 @@ import { executeChat } from '@/lib/ai/ai-service';
 import type { ChatMessage } from '@/lib/ai/ai-service';
 import { z } from 'zod/v4';
 import { requireFeature } from '@/lib/platform/platform-auth';
+import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
 
 function reqId() {
   return 'req_' + crypto.randomUUID().slice(0, 8);
@@ -49,6 +50,12 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) {
       return err(parsed.error.issues[0]?.message ?? 'Invalid input');
     }
+
+    // Platform AI usage limit — one article generation per requested
+    // draft, enforced server-side before generating. Client's Own AI
+    // API plans and owner bypass are never counted.
+    const aiLimit = await checkAiLimit(auth.user, { articles: parsed.data.numberOfDrafts ?? 1 });
+    if (aiLimit && !aiLimit.ok) return aiLimitExceededResponse(aiLimit);
 
     const { title, brief, keywords, writingStyle, targetLength, numberOfDrafts, includeCta } = parsed.data;
 
@@ -125,6 +132,9 @@ Write the full article content now. Use proper HTML formatting for headings, par
         temperature: genTemperature + i * 0.15,
         maxTokens: genMaxTokens,
         ...(modelId ? { modelId } : {}),
+        // Attribute the usage to the user for the Platform AI monthly
+        // usage tracker (AiLog).
+        userId: auth.user.id,
       });
       drafts.push({
         content: result.content,

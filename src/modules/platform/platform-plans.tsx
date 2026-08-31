@@ -81,11 +81,17 @@ import {
   PlanBadge,
 } from '@/modules/platform/shared';
 import {
-  ENTITLEMENT_KEYS,
+  PLAN_EDITOR_FEATURE_KEYS,
   ENTITLEMENT_LABELS,
-  LIMIT_KEYS,
+  ENTITLEMENT_DESCRIPTIONS,
+  AI_MODE_PLATFORM,
+  AI_MODE_CLIENT,
+  CORE_LIMIT_KEYS,
+  AI_LIMIT_KEYS,
   LIMIT_LABELS,
   UNLIMITED,
+  aiModeOfEntitlements,
+  type AiMode,
   type EntitlementKey,
 } from '@/lib/platform/feature-config';
 import type {
@@ -212,6 +218,210 @@ function BillingPeriodsCheckboxes({
         </p>
       )}
     </div>
+  );
+}
+
+// -------------------- Feature Access / Usage Limits shared UI --------------------
+
+/** Count the editor-visible enabled features (the 9 checkboxes + AI
+ *  Tools counting as one when either mode is selected). */
+function countEditorFeatures(entitlements: readonly string[]): number {
+  const simple = PLAN_EDITOR_FEATURE_KEYS.filter((k) => entitlements.includes(k)).length;
+  const ai = aiModeOfEntitlements(entitlements) !== 'none' ? 1 : 0;
+  return simple + ai;
+}
+
+const EDITOR_FEATURE_TOTAL = PLAN_EDITOR_FEATURE_KEYS.length + 1; // 9 + AI Tools
+
+/** Toggle one simple (checkbox) feature key in the entitlements state. */
+function toggleFeature(cur: string[], key: string): string[] {
+  return cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
+}
+
+/** Select an AI Tools mode (mutually exclusive). Selecting the already
+ *  active mode turns AI OFF — the same interaction model as a radio
+ *  group with an implicit "none" state. Never leaves both modes on. */
+function setAiMode(cur: string[], mode: AiMode): string[] {
+  const withoutAi = cur.filter((k) => k !== AI_MODE_PLATFORM && k !== AI_MODE_CLIENT && k !== 'ai_content');
+  if (mode === 'platform') return [...withoutAi, AI_MODE_PLATFORM];
+  if (mode === 'client') return [...withoutAi, AI_MODE_CLIENT];
+  return withoutAi;
+}
+
+/** One selectable option row of the AI Tools block — radio-style. */
+function AiModeOption({
+  selected,
+  title,
+  description,
+  onSelect,
+  id,
+}: {
+  selected: boolean;
+  title: string;
+  description: string;
+  onSelect: () => void;
+  id: string;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className={`flex items-start gap-2.5 rounded-md border p-2.5 cursor-pointer transition-colors ${
+        selected ? 'border-foreground/30 bg-accent/50' : 'hover:bg-accent/40'
+      }`}
+    >
+      <input
+        id={id}
+        type="radio"
+        name="ai-tools-mode"
+        className="mt-0.5 h-4 w-4 accent-foreground"
+        checked={selected}
+        onChange={onSelect}
+        onClick={(e) => {
+          // Clicking the selected option again → turn AI OFF (none).
+          if (selected) {
+            e.preventDefault();
+            onSelect();
+          }
+        }}
+      />
+      <span className="min-w-0">
+        <span className="block text-xs font-medium">{title}</span>
+        <span className="block text-[10px] text-muted-foreground mt-0.5">{description}</span>
+      </span>
+    </label>
+  );
+}
+
+/** Feature Access section — shared by the Create + Edit Plan dialogs.
+ *  9 simple checkbox features + the AI Tools two-mode block
+ *  (Platform AI / Client's Own AI API — mutually exclusive; neither
+ *  selected = AI disabled). */
+function FeatureAccessSection({
+  entitlements,
+  onChange,
+  idPrefix,
+}: {
+  entitlements: string[];
+  onChange: (next: string[]) => void;
+  idPrefix: string;
+}) {
+  const aiMode = aiModeOfEntitlements(entitlements);
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h4 className="text-sm font-semibold">Feature Access</h4>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Server-side enforced. Disabled features return 403 to clients.
+          </p>
+        </div>
+        <Badge variant="outline" className="text-[10px] font-mono shrink-0">
+          {countEditorFeatures(entitlements)} / {EDITOR_FEATURE_TOTAL}
+        </Badge>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {PLAN_EDITOR_FEATURE_KEYS.map((key) => {
+          const on = entitlements.includes(key);
+          return (
+            <label
+              key={key}
+              htmlFor={`${idPrefix}-feature-${key}`}
+              title={ENTITLEMENT_DESCRIPTIONS[key]}
+              className="flex items-center gap-2 rounded-md border p-2 cursor-pointer hover:bg-accent/40 transition-colors"
+            >
+              <input
+                id={`${idPrefix}-feature-${key}`}
+                type="checkbox"
+                className="h-4 w-4 accent-foreground"
+                checked={on}
+                onChange={() => onChange(toggleFeature(entitlements, key))}
+              />
+              <span className="text-xs font-medium">{ENTITLEMENT_LABELS[key]}</span>
+            </label>
+          );
+        })}
+      </div>
+      {/* AI Tools — two mutually exclusive modes (NOT a simple boolean). */}
+      <div className="space-y-1.5 rounded-md border p-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold">AI Tools</span>
+          <span className="text-[10px] text-muted-foreground">
+            {aiMode === 'platform' ? 'Platform AI' : aiMode === 'client' ? "Client's Own AI API" : 'Disabled'}
+          </span>
+        </div>
+        <AiModeOption
+          id={`${idPrefix}-ai-platform`}
+          selected={aiMode === 'platform'}
+          title="Platform AI"
+          description="Platform provides and pays for the AI API — subject to the AI usage limits below."
+          onSelect={() => onChange(setAiMode(entitlements, aiMode === 'platform' ? 'none' : 'platform'))}
+        />
+        <AiModeOption
+          id={`${idPrefix}-ai-client`}
+          selected={aiMode === 'client'}
+          title="Client's Own AI API"
+          description="Client connects and manages their own AI provider — no platform AI usage limits."
+          onSelect={() => onChange(setAiMode(entitlements, aiMode === 'client' ? 'none' : 'client'))}
+        />
+      </div>
+    </section>
+  );
+}
+
+/** Usage Limits section — shared by the Create + Edit Plan dialogs.
+ *  Core limits (Max Sites, Storage) always shown. The three Platform AI
+ *  usage limits appear ONLY while the plan uses Platform AI — hidden
+ *  (and stored as 0) for Client's Own AI API and AI-disabled plans. */
+function UsageLimitsSection({
+  limits,
+  onChange,
+  aiMode,
+}: {
+  limits: PlanLimits;
+  onChange: (next: PlanLimits) => void;
+  aiMode: AiMode;
+}) {
+  const showAiLimits = aiMode === 'platform';
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-sm font-semibold">Usage Limits</h4>
+        <span className="text-[10px] text-muted-foreground">
+          Use <code className="font-mono px-1 py-0.5 rounded bg-muted">-1</code> for unlimited
+        </span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {CORE_LIMIT_KEYS.map((k) => (
+          <div key={k} className="space-y-1">
+            <Label className="text-xs">{LIMIT_LABELS[k]}</Label>
+            <Input
+              type="number"
+              value={String(limits[k])}
+              onChange={(e) => onChange({ ...limits, [k]: Number(e.target.value) })}
+              className="h-9"
+            />
+            {limits[k] === UNLIMITED && (
+              <p className="text-[10px] text-emerald-600 font-medium">Unlimited</p>
+            )}
+          </div>
+        ))}
+        {showAiLimits &&
+          AI_LIMIT_KEYS.map((k) => (
+            <div key={k} className="space-y-1">
+              <Label className="text-xs">{LIMIT_LABELS[k]}</Label>
+              <Input
+                type="number"
+                value={String(limits[k])}
+                onChange={(e) => onChange({ ...limits, [k]: Number(e.target.value) })}
+                className="h-9"
+              />
+              {limits[k] === UNLIMITED && (
+                <p className="text-[10px] text-emerald-600 font-medium">Unlimited</p>
+              )}
+            </div>
+          ))}
+      </div>
+    </section>
   );
 }
 
@@ -633,7 +843,9 @@ function EditPlanDialog({
       // marketing copy from entitlements on the client side now.
       // savePlanConfig preserves the existing value when omitted.
       entitlements,
-      limits: { ...limits, storageBytes: Number(limits.storageBytes) || 0 },
+      // AI usage limits are part of the saved configuration ONLY while
+      // the plan uses Platform AI (the backend zeroes them otherwise).
+      limits: buildPayloadLimits(limits, aiModeOfEntitlements(entitlements)),
     };
   };
 
@@ -879,72 +1091,25 @@ function EditPlanDialog({
 
           <Separator />
 
-          {/* -------------------- Feature Access -------------------- */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h4 className="text-sm font-semibold">Feature Access</h4>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Server-side enforced. Disabled features return 403 to clients.
-                </p>
-              </div>
-              <Badge variant="outline" className="text-[10px] font-mono shrink-0">
-                {entitlements.length} / {ENTITLEMENT_KEYS.length}
-              </Badge>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {ENTITLEMENT_KEYS.map((key) => {
-                const on = entitlements.includes(key);
-                return (
-                  <label
-                    key={key}
-                    className="flex items-center gap-2 rounded-md border p-2 cursor-pointer hover:bg-accent/40 transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={on}
-                      onChange={() =>
-                        setEntitlements((cur) =>
-                          on ? cur.filter((k) => k !== key) : [...cur, key],
-                        )
-                      }
-                    />
-                    <span className="text-xs font-medium">{ENTITLEMENT_LABELS[key]}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </section>
+          {/* -------------------- Feature Access --------------------
+              9 simple checkbox features + the AI Tools two-mode block
+              (Platform AI / Client's Own AI API — mutually exclusive). */}
+          <FeatureAccessSection
+            entitlements={entitlements}
+            onChange={setEntitlements}
+            idPrefix={`edit-${plan.planId}`}
+          />
 
           <Separator />
 
-          {/* -------------------- Usage Limits -------------------- */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="text-sm font-semibold">Usage Limits</h4>
-              <span className="text-[10px] text-muted-foreground">
-                Use <code className="font-mono px-1 py-0.5 rounded bg-muted">-1</code> for unlimited
-              </span>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {LIMIT_KEYS.map((k) => (
-                <div key={k} className="space-y-1">
-                  <Label className="text-xs">{LIMIT_LABELS[k]}</Label>
-                  <Input
-                    type="number"
-                    value={String(limits[k])}
-                    onChange={(e) =>
-                      setLimits((cur) => ({ ...cur, [k]: Number(e.target.value) }))
-                    }
-                    className="h-9"
-                  />
-                  {limits[k] === UNLIMITED && (
-                    <p className="text-[10px] text-emerald-600 font-medium">Unlimited</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
+          {/* -------------------- Usage Limits --------------------
+              Core limits always; the Platform AI usage limits appear
+              ONLY while Platform AI is selected. */}
+          <UsageLimitsSection
+            limits={limits}
+            onChange={setLimits}
+            aiMode={aiModeOfEntitlements(entitlements)}
+          />
         </div>
 
         <DialogFooter className="gap-2">
@@ -977,9 +1142,30 @@ function EditPlanDialog({
 
 // -------------------- Create Plan Dialog --------------------
 
+/** Normalize the limit state into the API payload. The AI usage limits
+ *  are part of the saved configuration ONLY while the plan uses
+ *  Platform AI — Client's Own AI API and AI-disabled plans store 0
+ *  (the backend enforces the same rule). */
+function buildPayloadLimits(limits: PlanLimits, aiMode: AiMode): PlanLimits {
+  return {
+    maxSites: Number(limits.maxSites) || 0,
+    storageBytes: Number(limits.storageBytes) || 0,
+    ...(aiMode === 'platform'
+      ? {
+          aiArticlesPerMonth: Number(limits.aiArticlesPerMonth) || 0,
+          aiWordsPerMonth: Number(limits.aiWordsPerMonth) || 0,
+          aiImagesPerMonth: Number(limits.aiImagesPerMonth) || 0,
+        }
+      : { aiArticlesPerMonth: 0, aiWordsPerMonth: 0, aiImagesPerMonth: 0 }),
+  };
+}
+
 const EMPTY_LIMITS: PlanLimits = {
   maxSites: 0,
   storageBytes: 0,
+  aiArticlesPerMonth: 0,
+  aiWordsPerMonth: 0,
+  aiImagesPerMonth: 0,
 };
 
 /** Derive a planId from a name: lowercase, hyphenated, ASCII-only.
@@ -1087,7 +1273,9 @@ function CreatePlanDialog({
         // features intentionally omitted — the backend derives the
         // marketing copy from entitlements on the client side now.
         entitlements,
-        limits: { ...limits, storageBytes: Number(limits.storageBytes) || 0 },
+        // AI usage limits are part of the saved configuration ONLY while
+        // the plan uses Platform AI (the backend zeroes them otherwise).
+        limits: buildPayloadLimits(limits, aiModeOfEntitlements(entitlements)),
         badgeVariant: effectivePlanId,
       });
     },
@@ -1330,72 +1518,25 @@ function CreatePlanDialog({
 
           <Separator />
 
-          {/* -------------------- Feature Access -------------------- */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h4 className="text-sm font-semibold">Feature Access</h4>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Server-side enforced. Disabled features return 403 to clients.
-                </p>
-              </div>
-              <Badge variant="outline" className="text-[10px] font-mono shrink-0">
-                {entitlements.length} / {ENTITLEMENT_KEYS.length}
-              </Badge>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {ENTITLEMENT_KEYS.map((key) => {
-                const on = entitlements.includes(key);
-                return (
-                  <label
-                    key={key}
-                    className="flex items-center gap-2 rounded-md border p-2 cursor-pointer hover:bg-accent/40 transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={on}
-                      onChange={() =>
-                        setEntitlements((cur) =>
-                          on ? cur.filter((k) => k !== key) : [...cur, key],
-                        )
-                      }
-                    />
-                    <span className="text-xs font-medium">{ENTITLEMENT_LABELS[key]}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </section>
+          {/* -------------------- Feature Access --------------------
+              9 simple checkbox features + the AI Tools two-mode block
+              (Platform AI / Client's Own AI API — mutually exclusive). */}
+          <FeatureAccessSection
+            entitlements={entitlements}
+            onChange={setEntitlements}
+            idPrefix="create"
+          />
 
           <Separator />
 
-          {/* -------------------- Usage Limits -------------------- */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="text-sm font-semibold">Usage Limits</h4>
-              <span className="text-[10px] text-muted-foreground">
-                Use <code className="font-mono px-1 py-0.5 rounded bg-muted">-1</code> for unlimited
-              </span>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {LIMIT_KEYS.map((k) => (
-                <div key={k} className="space-y-1">
-                  <Label className="text-xs">{LIMIT_LABELS[k]}</Label>
-                  <Input
-                    type="number"
-                    value={String(limits[k])}
-                    onChange={(e) =>
-                      setLimits((cur) => ({ ...cur, [k]: Number(e.target.value) }))
-                    }
-                    className="h-9"
-                  />
-                  {limits[k] === UNLIMITED && (
-                    <p className="text-[10px] text-emerald-600 font-medium">Unlimited</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
+          {/* -------------------- Usage Limits --------------------
+              Core limits always; the Platform AI usage limits appear
+              ONLY while Platform AI is selected. */}
+          <UsageLimitsSection
+            limits={limits}
+            onChange={setLimits}
+            aiMode={aiModeOfEntitlements(entitlements)}
+          />
         </div>
 
         <DialogFooter className="gap-2">

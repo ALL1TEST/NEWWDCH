@@ -7,6 +7,7 @@ import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
 import { requireFeature } from '@/lib/platform/platform-auth';
+import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -49,6 +50,10 @@ const playgroundSchema = z.object({
 export async function POST(request: NextRequest) {
   const auth = await requireFeature(request, 'ai_content');
   if ('response' in auth) return auth.response;
+  // Platform AI usage limit — enforced server-side before generating.
+  // Client's Own AI API plans and owner bypass are never counted.
+  const aiLimit = await checkAiLimit(auth.user, { articles: 1 });
+  if (aiLimit && !aiLimit.ok) return aiLimitExceededResponse(aiLimit);
   const id = reqId();
 
   try {
@@ -99,6 +104,9 @@ export async function POST(request: NextRequest) {
       presencePenalty: d.presencePenalty,
       jsonMode: d.jsonMode,
       siteId: d.siteId,
+      // Attribute the usage to the user for the Platform AI monthly
+      // usage tracker (AiLog).
+      userId: auth.user.id,
     });
 
     return ok(result);

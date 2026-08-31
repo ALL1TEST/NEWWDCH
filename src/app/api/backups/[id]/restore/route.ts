@@ -17,7 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
-import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+import { requirePlatformAdmin, requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -91,6 +91,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (parsed.data.scope === 'platform') {
       const auth = await requirePlatformAdmin(request);
       if ('response' in auth) return auth.response;
+    } else {
+      // Client-side restore — gated by the plan's Backups feature
+      // entitlement (server-side enforced; owner bypass passes).
+      const featureAuth = await requireFeature(request, 'backups');
+      if ('response' in featureAuth) return featureAuth.response;
     }
 
     const userId = parsed.data.createdById;

@@ -8,7 +8,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { getSiteWhere } from '@/lib/site-context';
-import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+import { requirePlatformAdmin, requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -214,6 +214,10 @@ export async function GET(request: NextRequest) {
       // Platform scope: no site filter — return ALL storage across all sites.
       siteFilter = {};
     } else {
+      // Client-side storage destinations — gated by the plan's Backups
+      // feature entitlement (server-side enforced; owner bypass passes).
+      const featureAuth = await requireFeature(request, 'backups');
+      if ('response' in featureAuth) return featureAuth.response;
       siteFilter = await getSiteWhere(request);
     }
 

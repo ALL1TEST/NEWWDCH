@@ -8,7 +8,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { getSiteWhere } from '@/lib/site-context';
-import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+import { requirePlatformAdmin, requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -85,6 +85,10 @@ export async function GET(request: NextRequest) {
       if ('response' in auth) return auth.response;
       siteFilter = { siteId: null };
     } else {
+      // Client-side templates — gated by the plan's Email Templates
+      // feature entitlement (server-side enforced; owner bypass passes).
+      const featureAuth = await requireFeature(request, 'email_templates');
+      if ('response' in featureAuth) return featureAuth.response;
       siteFilter = await getSiteWhere(request);
     }
 
@@ -151,6 +155,11 @@ export async function POST(request: NextRequest) {
       const auth = await requirePlatformAdmin(request);
       if ('response' in auth) return auth.response;
       platformUser = { id: auth.user.id };
+    } else {
+      // Client-side templates — gated by the plan's Email Templates
+      // feature entitlement (server-side enforced; owner bypass passes).
+      const featureAuth = await requireFeature(request, 'email_templates');
+      if ('response' in featureAuth) return featureAuth.response;
     }
 
     const parsed = createSchema.safeParse(body);

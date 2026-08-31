@@ -15,7 +15,7 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+import { requirePlatformAdmin, requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -77,6 +77,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const id = reqId();
+
+  // Gated by the plan's Backups feature entitlement (server-side
+  // enforced; owner bypass passes).
+  const featureAuth = await requireFeature(request, 'backups');
+  if ('response' in featureAuth) return featureAuth.response;
 
   try {
     const { id: backupId } = await context.params;
@@ -156,6 +161,12 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       const auth = await requirePlatformAdmin(request);
       if ('response' in auth) return auth.response;
       deleterId = auth.user.id;
+    } else {
+      // Client-side delete — gated by the plan's Backups feature
+      // entitlement (server-side enforced; owner bypass passes).
+      const featureAuth = await requireFeature(request, 'backups');
+      if ('response' in featureAuth) return featureAuth.response;
+      deleterId = featureAuth.user.id;
     }
 
     const existing = await db.backup.findUnique({ where: { id: backupId } });

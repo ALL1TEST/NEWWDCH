@@ -7,6 +7,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { getSiteWhere } from '@/lib/site-context';
 import { requireFeature } from '@/lib/platform/platform-auth';
+import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
 
 function reqId() {
   return 'req_' + nanoid(8);
@@ -50,6 +51,13 @@ export async function POST(request: NextRequest) {
     const size = ASPECT_MAP[aspectRatio] || '1024x1024';
     const clampedCount = Math.min(Math.max(count, 1), 4);
 
+    // Platform AI usage limit — images are counted per generated image,
+    // enforced server-side before generating (the platform pays for the
+    // SDK call). Client's Own AI API plans and owner bypass are never
+    // counted.
+    const aiLimit = await checkAiLimit(auth.user, { images: clampedCount });
+    if (aiLimit && !aiLimit.ok) return aiLimitExceededResponse(aiLimit);
+
     // Dynamically import z-ai-web-dev-sdk
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
     const zai = new ZAI({
@@ -86,6 +94,38 @@ export async function POST(request: NextRequest) {
 
         results.push(item);
       }
+    }
+
+    // The platform pays for the SDK call — count it in the Platform AI
+    // monthly usage tracker (AiLog), using the same "[IMAGE] " marker +
+    // imagesGenerated JSON convention as the ai-service image path.
+    if (results.length > 0) {
+      await db.aiLog
+        .create({
+          data: {
+            providerId: null,
+            providerName: 'Platform SDK (media)',
+            modelId: null,
+            question: `[IMAGE] ${prompt.trim()}`,
+            response: JSON.stringify({
+              imagesGenerated: results.length,
+              size,
+              format: 'b64_json',
+              model: 'z-ai-web-dev-sdk',
+            }),
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            costUsd: 0,
+            durationMs: null,
+            status: 'success',
+            siteId: siteId ?? null,
+            userId: auth.user.id,
+          },
+        })
+        .catch(() => {
+          /* usage logging failure shouldn't mask the result */
+        });
     }
 
     return NextResponse.json({ data: results, meta: { requestId: id } }, { status: 201 });

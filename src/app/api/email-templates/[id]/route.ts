@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -49,7 +50,11 @@ type RouteContext = { params: Promise<{ id: string }> };
 // GET — single
 // =====================================================================
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
+  // Gated by the plan's Email Templates feature entitlement
+  // (server-side enforced; owner bypass passes).
+  const featureAuth = await requireFeature(request, 'email_templates');
+  if ('response' in featureAuth) return featureAuth.response;
   const id = reqId();
 
   try {
@@ -82,6 +87,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 // =====================================================================
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
+  // Gated by the plan's Email Templates feature entitlement
+  // (server-side enforced; owner bypass passes).
+  const featureAuth = await requireFeature(request, 'email_templates');
+  if ('response' in featureAuth) return featureAuth.response;
   const id = reqId();
 
   try {
@@ -184,7 +193,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 // DELETE — hard delete
 // =====================================================================
 
-export async function DELETE(_request: NextRequest, context: RouteContext) {
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  // Gated by the plan's Email Templates feature entitlement
+  // (server-side enforced; owner bypass passes).
+  const featureAuth = await requireFeature(request, 'email_templates');
+  if ('response' in featureAuth) return featureAuth.response;
   const id = reqId();
 
   try {

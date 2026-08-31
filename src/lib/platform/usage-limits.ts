@@ -17,16 +17,19 @@
 // ============================================================
 
 import { db } from '@/lib/db';
-import { getPlanConfigSync, type PlanLimits } from './plan-config';
+import { getPlanConfigSync, aiModeOf, type PlanLimits } from './plan-config';
 import { getCustomerByEmailSync, getCustomerUsageSync } from './platform-data';
 import { hasBillingBypass, getEffectivePlanIdAsync, type EntitlementUser } from './entitlements';
 import { getUserSubscription } from './subscription-data';
 
 // Only resources with a REAL, server-side enforcement system are listed.
-// AI Words / AI Articles / Automation Runs were removed because no real
-// usage-tracking system exists for them — exposing them as limit resources
-// would have implied enforcement that never happened.
+// maxSites / storageBytes are backed by real tables (Site, Media). The
+// Platform AI usage limits (articles / words / images per month) are
+// backed by the AiLog usage tracker and enforced on every AI route —
+// but ONLY while the user's plan uses Platform AI (Client's Own AI API
+// plans are never counted/limited: the client pays their own provider).
 export type LimitResource = 'sites' | 'storageBytes';
+export type AiLimitResource = 'aiArticles' | 'aiWords' | 'aiImages';
 
 export interface LimitCheck {
   ok: boolean;
@@ -34,8 +37,171 @@ export interface LimitCheck {
   limit: number;
   current: number;
   requested: number;
-  resource: LimitResource;
+  resource: LimitResource | AiLimitResource;
   message: string;
+}
+
+// -------------------- Platform AI mode + usage limits --------------------
+
+/** The effective AI Tools configuration for a user:
+ *  - 'unlimited' — owner / billing bypass (platform AI, no limits)
+ *  - 'platform'  — Platform AI, subject to the plan's AI usage limits
+ *  - 'client'    — Client's Own AI API — NEVER count / limit usage
+ *  - 'none'      — AI Tools disabled (feature gate denies upstream) */
+export type EffectiveAiMode = 'unlimited' | 'platform' | 'client' | 'none';
+
+export async function getEffectiveAiMode(user: EntitlementUser): Promise<EffectiveAiMode> {
+  if (hasBillingBypass(user)) return 'unlimited';
+  const { planId, freeTrialExpired } = await getEffectivePlanIdAsync(user);
+  if (freeTrialExpired) return 'none';
+  if (planId === 'internal') return 'unlimited';
+  // NOTE: read the plan's RAW normalized entitlements — NOT
+  // getPlanEntitlements(), which appends the legacy 'ai_content' alias
+  // for BOTH AI modes (hasFeature compatibility). Feeding the aliased
+  // list to aiModeOf would misclassify Client's Own AI API plans as
+  // Platform AI. The cached entitlements are already normalized at
+  // rowToData (legacy 'ai_content' → 'ai_platform', no alias).
+  return aiModeOf(getPlanConfigSync(planId).entitlements);
+}
+
+export interface AiMonthlyUsage {
+  /** successful AI text generations (articles/rewrites/ideas/chat) this calendar month */
+  articles: number;
+  /** generated words (sum of output tokens) this calendar month */
+  words: number;
+  /** generated images this calendar month */
+  images: number;
+}
+
+/** The user's Platform AI usage for the CURRENT CALENDAR MONTH, from the
+ *  AiLog usage tracker. Image generations are logged with a leading
+ *  "[IMAGE] " marker on the question field (the ai-service convention),
+ *  and each image log row's response JSON carries `imagesGenerated` —
+ *  so the image count is the SUM of generated images, not the number
+ *  of log rows (one row may represent up to 10 images). */
+export async function getAiMonthlyUsage(userId: string): Promise<AiMonthlyUsage> {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const base = {
+    userId,
+    createdAt: { gte: monthStart },
+    status: 'success',
+  } as const;
+  const [imageRows, articles, wordsAgg] = await Promise.all([
+    db.aiLog.findMany({
+      where: { ...base, question: { startsWith: '[IMAGE]' } },
+      select: { response: true },
+    }),
+    db.aiLog.count({ where: { ...base, NOT: { question: { startsWith: '[IMAGE]' } } } }),
+    db.aiLog.aggregate({ where: base, _sum: { outputTokens: true } }),
+  ]);
+  let images = 0;
+  for (const row of imageRows) {
+    try {
+      const parsed = JSON.parse(row.response ?? '{}') as { imagesGenerated?: unknown };
+      const n = typeof parsed.imagesGenerated === 'number' ? parsed.imagesGenerated : Number.NaN;
+      images += Number.isNaN(n) ? 1 : Math.max(1, Math.floor(n));
+    } catch {
+      images += 1; // unparsable legacy row → count as one image request
+    }
+  }
+  return {
+    articles,
+    words: wordsAgg._sum.outputTokens ?? 0,
+    images,
+  };
+}
+
+/** The requested AI consumption for one operation. `words` cannot be
+ *  known before generation — the words limit blocks NEW generations
+ *  once the current usage has reached it. */
+export interface AiUsageRequest {
+  articles?: number;
+  images?: number;
+}
+
+/** Check the Platform AI usage limits for a user.
+ *  Returns null when NO limit applies (owner bypass, Client's Own AI
+ *  API mode, or AI disabled — those are never counted/limited).
+ *  Otherwise returns the FIRST violated limit as a LimitCheck (ok=false)
+ *  or an all-clear check (ok=true). */
+export async function checkAiLimit(
+  user: EntitlementUser,
+  requested: AiUsageRequest = { articles: 1 },
+): Promise<LimitCheck | null> {
+  const mode = await getEffectiveAiMode(user);
+  if (mode === 'unlimited' || mode === 'client' || mode === 'none') return null;
+
+  const { planId } = await getEffectivePlanIdAsync(user);
+  const limits = getPlanConfigSync(planId).limits;
+  const usage = await getAiMonthlyUsage(user.id);
+
+  // AI Articles / month — count check.
+  if (requested.articles !== undefined) {
+    const limit = limits.aiArticlesPerMonth;
+    if (limit !== -1 && usage.articles + requested.articles > limit) {
+      return {
+        ok: false,
+        limit,
+        current: usage.articles,
+        requested: requested.articles,
+        resource: 'aiArticles',
+        message: `Platform AI limit reached: ${usage.articles}/${limit} AI articles this month. Upgrade your plan or connect your own AI API for unlimited use.`,
+      };
+    }
+  }
+  // AI Words / month — the generation's word count is not known in
+  // advance, so block NEW generations once the usage has reached the
+  // limit (0-word requests are still blocked when at/over the limit).
+  const wordsLimit = limits.aiWordsPerMonth;
+  if (wordsLimit !== -1 && usage.words >= wordsLimit) {
+    return {
+      ok: false,
+      limit: wordsLimit,
+      current: usage.words,
+      requested: 0,
+      resource: 'aiWords',
+      message: `Platform AI limit reached: ${usage.words}/${wordsLimit} AI words this month. Upgrade your plan or connect your own AI API for unlimited use.`,
+    };
+  }
+  // AI Images / month — count check.
+  if (requested.images !== undefined) {
+    const limit = limits.aiImagesPerMonth;
+    if (limit !== -1 && usage.images + requested.images > limit) {
+      return {
+        ok: false,
+        limit,
+        current: usage.images,
+        requested: requested.images,
+        resource: 'aiImages',
+        message: `Platform AI limit reached: ${usage.images}/${limit} AI images this month. Upgrade your plan or connect your own AI API for unlimited use.`,
+      };
+    }
+  }
+  return {
+    ok: true,
+    limit: -1,
+    current: usage.articles,
+    requested: requested.articles ?? 0,
+    resource: 'aiArticles',
+    message: 'Within Platform AI limits.',
+  };
+}
+
+/** 403-shaped response carrying the Platform AI upgrade message. */
+export function aiLimitExceededResponse(check: LimitCheck) {
+  return Response.json(
+    {
+      error: {
+        code: 'PLAN_LIMIT_EXCEEDED',
+        message: check.message,
+        resource: check.resource,
+        limit: check.limit,
+        current: check.current,
+      },
+    },
+    { status: 403 },
+  );
 }
 
 /**
@@ -44,7 +210,7 @@ export interface LimitCheck {
  */
 export async function getEffectiveLimitsAsync(user: EntitlementUser): Promise<PlanLimits> {
   if (hasBillingBypass(user)) {
-    return { maxSites: -1, storageBytes: -1 };
+    return { maxSites: -1, storageBytes: -1, aiArticlesPerMonth: -1, aiWordsPerMonth: -1, aiImagesPerMonth: -1 };
   }
   const { planId } = await getEffectivePlanIdAsync(user);
   return getPlanConfigSync(planId).limits;
@@ -54,7 +220,7 @@ export async function getEffectiveLimitsAsync(user: EntitlementUser): Promise<Pl
  *  impractical (e.g. initial render). The async version is authoritative. */
 export function getEffectiveLimits(user: EntitlementUser): PlanLimits {
   if (hasBillingBypass(user)) {
-    return { maxSites: -1, storageBytes: -1 };
+    return { maxSites: -1, storageBytes: -1, aiArticlesPerMonth: -1, aiWordsPerMonth: -1, aiImagesPerMonth: -1 };
   }
   const customer = getCustomerByEmailSync(user.email);
   const planId = customer?.planId ?? 'free';

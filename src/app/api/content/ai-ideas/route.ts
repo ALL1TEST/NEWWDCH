@@ -10,6 +10,7 @@ import { executeChat } from '@/lib/ai/ai-service';
 import type { ChatMessage } from '@/lib/ai/ai-service';
 import { z } from 'zod/v4';
 import { requireFeature } from '@/lib/platform/platform-auth';
+import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
 
 function reqId() {
   return 'req_' + crypto.randomUUID().slice(0, 8);
@@ -197,6 +198,12 @@ interface ArticleIdeaDTO {
 export async function POST(request: NextRequest) {
   const auth = await requireFeature(request, 'ai_content');
   if ('response' in auth) return auth.response;
+  // Platform AI usage limit — enforced server-side before generating
+  // (applies to BOTH execution paths below: DB provider and the
+  // platform SDK fallback — the platform provides/pays for both).
+  // Client's Own AI API plans and owner bypass are never counted.
+  const aiLimit = await checkAiLimit(auth.user, { articles: 1 });
+  if (aiLimit && !aiLimit.ok) return aiLimitExceededResponse(aiLimit);
   const id = reqId();
 
   try {
@@ -246,6 +253,9 @@ export async function POST(request: NextRequest) {
         temperature: 0.8,
         maxTokens: 4000,
         jsonMode: true,
+        // Attribute the usage to the user for the Platform AI monthly
+        // usage tracker (AiLog).
+        userId: auth.user.id,
       });
       rawContent = result.content;
       inputTokens = result.inputTokens;
@@ -260,6 +270,30 @@ export async function POST(request: NextRequest) {
         thinking: { type: 'disabled' },
       });
       rawContent = response?.choices?.[0]?.message?.content ?? null;
+      // The platform pays for the SDK call — count it in the Platform AI
+      // monthly usage tracker (AiLog) so the plan limits see it.
+      await db.aiLog
+        .create({
+          data: {
+            providerId: null,
+            providerName: 'Platform SDK (fallback)',
+            modelId: null,
+            question: userPrompt,
+            response: rawContent,
+            inputTokens: response?.usage?.promptTokens ?? 0,
+            outputTokens: response?.usage?.completionTokens ?? 0,
+            totalTokens:
+              (response?.usage?.promptTokens ?? 0) + (response?.usage?.completionTokens ?? 0),
+            costUsd: 0,
+            durationMs: null,
+            status: 'success',
+            siteId: null,
+            userId: auth.user.id,
+          },
+        })
+        .catch(() => {
+          /* usage logging failure shouldn't mask the result */
+        });
     }
 
     if (!rawContent) {

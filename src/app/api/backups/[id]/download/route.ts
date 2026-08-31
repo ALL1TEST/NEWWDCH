@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { existsSync, createReadStream, stat } from 'node:fs';
-import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+import { requirePlatformAdmin, requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -43,6 +43,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
       const auth = await requirePlatformAdmin(request);
       if ('response' in auth) return auth.response;
       downloaderId = auth.user.id;
+    } else {
+      // Client-side download — gated by the plan's Backups feature
+      // entitlement (server-side enforced; owner bypass passes).
+      const featureAuth = await requireFeature(request, 'backups');
+      if ('response' in featureAuth) return featureAuth.response;
+      downloaderId = featureAuth.user.id;
     }
 
     const backup = await db.backup.findUnique({ where: { id: backupId } });

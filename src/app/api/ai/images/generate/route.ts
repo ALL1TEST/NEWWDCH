@@ -6,6 +6,7 @@ import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
 import { requireFeature } from '@/lib/platform/platform-auth';
+import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -77,6 +78,12 @@ export async function POST(request: NextRequest) {
 
     const d = parsed.data;
 
+    // Platform AI usage limit — images are counted per generated image,
+    // enforced server-side before generating. Client's Own AI API plans
+    // and owner bypass are never counted.
+    const aiLimit = await checkAiLimit(auth.user, { images: d.n ?? 1 });
+    if (aiLimit && !aiLimit.ok) return aiLimitExceededResponse(aiLimit);
+
     // Pre-validate that the provider is active and supports image generation
     const provider = await db.aiProvider.findUnique({ where: { id: d.providerId } });
     if (!provider) return err('Provider not found', 404, 'NOT_FOUND');
@@ -109,6 +116,9 @@ export async function POST(request: NextRequest) {
       n: d.n,
       responseFormat: d.responseFormat,
       siteId: d.siteId,
+      // Attribute the usage to the user for the Platform AI monthly
+      // usage tracker (AiLog).
+      userId: auth.user.id,
     });
 
     return ok(result);
