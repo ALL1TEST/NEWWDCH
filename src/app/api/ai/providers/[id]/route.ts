@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 import { encrypt, decrypt, maskSecret } from '@/lib/encryption';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
+import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -78,6 +79,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
+
+  // Client's Own AI API entitlement gate — updating a provider
+  // connection (including its API key) requires the feature. Platform
+  // staff always pass.
+  const featureAuth = await requireFeatureAllowStaff(request, 'ai_client');
+  if ('response' in featureAuth) return featureAuth.response;
 
   try {
     const { id: providerId } = await params;
@@ -162,6 +169,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
+
+  // Client's Own AI API entitlement gate — removing a provider
+  // connection requires the feature. Platform staff always pass.
+  const featureAuth = await requireFeatureAllowStaff(request, 'ai_client');
+  if ('response' in featureAuth) return featureAuth.response;
 
   try {
     const { id: providerId } = await params;

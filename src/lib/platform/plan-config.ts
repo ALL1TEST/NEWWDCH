@@ -62,9 +62,11 @@ const PLAN_EDITOR_KEY_SET = new Set<string>([
 // USAGE LIMITS — only resources the PLATFORM actually controls.
 //   maxSites / storageBytes — platform infrastructure (Site, Media).
 //   ai*PerMonth — Platform AI usage, enforced against the AiLog usage
-//   tracker. They apply ONLY while the plan uses Platform AI
-//   (entitlements include 'ai_platform'): Client's Own AI API plans
-//   ('ai_client') and AI-disabled plans store 0 and are never checked.
+//   tracker. They apply ONLY while the plan includes Platform AI
+//   ('ai_platform'): Client's Own AI API-only plans and AI-disabled
+//   plans store 0 and are never checked. (When both AI features are
+//   enabled the limits apply to usage through Platform AI; the
+//   client's own API usage never consumes them.)
 //   Newsletter / Email Templates / Backups are FEATURE entitlements
 //   only — no usage limits by design.
 export interface PlanLimits {
@@ -93,10 +95,15 @@ const DEFAULT_LIMITS: PlanLimits = {
 // -------------------- Entitlement normalization --------------------
 
 /** Normalize a raw entitlement key list (DB row or API input):
- *  - legacy 'ai_content' → 'ai_platform' (it predates the two-mode
+ *  - legacy 'ai_content' → 'ai_platform' (it predates the two-key
  *    split and always meant the platform-provided AI).
- *  - mutual exclusion: when BOTH AI modes are present (invalid data),
- *    Platform AI wins and 'ai_client' is dropped.
+ *  - Platform AI and Client's Own AI API are INDEPENDENT — both may
+ *    be present (no mutual exclusion to enforce).
+ *  - API ACCESS DEPENDENCY: 'api_access' is dropped when 'ai_client'
+ *    is absent — a plan can never carry API Access without Client's
+ *    Own AI API. (Stale/legacy rows self-clean on load + next save;
+ *    interactive saves are additionally validated upstream with a
+ *    clear 400 message.)
  *  - legacy 'custom_domains' / 'white_label' are STRIPPED: site
  *    domains and site branding are client-owned in this architecture
  *    (every site carries its own domain + identity), so they are not
@@ -110,11 +117,14 @@ export function normalizeEntitlementKeys(keys: readonly string[]): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   const hasPlatform = keys.includes('ai_platform') || keys.includes('ai_content');
+  const hasClient = keys.includes('ai_client');
   for (const k of keys) {
     if (typeof k !== 'string' || !k.trim()) continue;
     if (k === 'ai_content') continue; // legacy → replaced by ai_platform below
     if (LEGACY_REMOVED_KEYS.has(k)) continue; // not plan entitlements anymore
-    if (k === 'ai_client' && hasPlatform) continue; // mutually exclusive → platform wins
+    // API Access requires Client's Own AI API — never keep a stale
+    // api_access grant without its dependency.
+    if (k === 'api_access' && !hasClient) continue;
     if (k === 'ai_platform' && hasPlatform) {
       if (!seen.has('ai_platform')) out.push('ai_platform');
       seen.add('ai_platform');
@@ -134,13 +144,17 @@ export function normalizeEntitlementKeys(keys: readonly string[]): string[] {
 
 /** The AI mode a plan's normalized entitlements resolve to
  *  ('none' | 'platform' | 'client'). Re-exported from feature-config
- *  for server callers (single shared implementation). */
+ *  for server callers (single shared implementation). NOTE: the two AI
+ *  keys are independent — 'platform' means Platform AI is enabled
+ *  (possibly together with Client's Own AI API). */
 export { aiModeOfEntitlements as aiModeOf };
 
-/** Zero the Platform AI usage limits — used when a plan does NOT use
- *  Platform AI (Client's Own AI API or AI disabled): the AI limits are
- *  not configurable in that mode, so they are not part of the saved
- *  configuration. */
+/** Zero the Platform AI usage limits — used when the plan does NOT
+ *  include Platform AI (Client's Own AI API only, or AI disabled): the
+ *  AI limits are not configurable in that configuration, so they are
+ *  not part of the saved plan. (When BOTH AI features are enabled the
+ *  limits stay — Platform AI usage is limited; the client's own API
+ *  usage never consumes them.) */
 function zeroAiLimitsIfNotPlatform(limits: PlanLimits, entitlements: readonly string[]): PlanLimits {
   if (aiModeOfEntitlements(entitlements) === 'platform') return limits;
   return {
@@ -394,11 +408,12 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     stripePriceIdYearly: null,
     active: true,
     features: [],
-    // ENTERPRISE example: Client's Own AI API — the client connects
-    // their own provider, so NO platform AI usage limits are stored.
-    // All other platform features enabled. (No custom_domains /
-    // white_label: site identity is client-owned, not a plan
-    // entitlement.)
+    // ENTERPRISE example: Client's Own AI API + API Access — the
+    // client connects their own provider, so NO platform AI usage
+    // limits are stored. All other platform features enabled.
+    // (Platform AI and Client's Own AI API are independent — this
+    // example simply ships the client-AI configuration; a plan MAY
+    // carry both AI keys.)
     entitlements: [
       'ai_client',
       'advanced_analytics',
@@ -479,12 +494,13 @@ export function getActivePlanConfigsSync(): PlanConfigData[] {
 }
 
 /** Entitlement keys granted by a plan, NORMALIZED: legacy 'ai_content'
- *  is mapped to 'ai_platform', and when the plan has AI Tools in ANY
- *  mode the legacy 'ai_content' key is ALSO included as a compatibility
- *  alias — so every existing `requireFeature(request, 'ai_content')`
- *  gate keeps passing for BOTH Platform AI and Client's Own AI API
- *  plans (feature access to the AI tooling) with zero route changes.
- *  Mode-specific checks use 'ai_platform' / 'ai_client'. */
+ *  is mapped to 'ai_platform', and when the plan has either AI
+ *  feature ('ai_platform' OR 'ai_client') the legacy 'ai_content' key
+ *  is ALSO included as a compatibility alias — so every existing
+ *  `requireFeature(request, 'ai_content')` gate keeps passing for
+ *  BOTH Platform AI and Client's Own AI API plans (general AI-tools
+ *  access) with zero route changes. Source-specific checks use
+ *  'ai_platform' / 'ai_client'. */
 export function getPlanEntitlements(planId: string): string[] {
   const plan = getPlanConfigSync(planId);
   const base = plan.entitlements;
@@ -607,8 +623,9 @@ function rowToData(row: PlanConfigRow): PlanConfigData {
     stripePriceIdYearly: row.stripePriceIdYearly,
     active: row.active,
     features,
-    // Normalize: legacy 'ai_content' → 'ai_platform'; the two AI modes
-    // are mutually exclusive (invalid both-present data → platform wins).
+    // Normalize: legacy 'ai_content' → 'ai_platform'; API Access
+    // without Client's Own AI API is dropped; the two AI keys are
+    // independent (both may be present).
     entitlements: normalizeEntitlementKeys(entitlements),
     limits,
     badgeVariant: row.badgeVariant,
@@ -939,7 +956,8 @@ function mergePlanPatch(current: PlanConfigData, patch: PlanConfigInput, default
     // ones, while NON-editor keys (e.g. 'audit_log') are PRESERVED from
     // the current plan — the Create/Edit Plan modal only manages the 10
     // Feature Access keys. Then normalize (legacy 'ai_content' →
-    // 'ai_platform'; the two AI modes are mutually exclusive).
+    // 'ai_platform'; API Access requires Client's Own AI API; the two
+    // AI keys are independent).
     entitlements: normalizeEntitlementKeys(
       patch.entitlements !== undefined
         ? [
@@ -955,7 +973,8 @@ function mergePlanPatch(current: PlanConfigData, patch: PlanConfigInput, default
         : current.entitlements,
     ),
     // Limits: merge; the AI usage limits are only part of the saved
-    // configuration while the plan uses Platform AI (zeroed otherwise).
+    // configuration while the plan includes Platform AI (zeroed
+    // otherwise — Client's Own AI API usage is never limited).
     limits: zeroAiLimitsIfNotPlatform(
       pickLimits({ ...current.limits, ...(patch.limits ?? {}) }),
       patch.entitlements !== undefined

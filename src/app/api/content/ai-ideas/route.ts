@@ -10,6 +10,7 @@ import { executeChat } from '@/lib/ai/ai-service';
 import type { ChatMessage } from '@/lib/ai/ai-service';
 import { z } from 'zod/v4';
 import { requireFeature } from '@/lib/platform/platform-auth';
+import { hasFeature } from '@/lib/platform/entitlements';
 import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
 
 function reqId() {
@@ -198,10 +199,11 @@ interface ArticleIdeaDTO {
 export async function POST(request: NextRequest) {
   const auth = await requireFeature(request, 'ai_content');
   if ('response' in auth) return auth.response;
-  // Platform AI usage limit — enforced server-side before generating
-  // (applies to BOTH execution paths below: DB provider and the
-  // platform SDK fallback — the platform provides/pays for both).
-  // Client's Own AI API plans and owner bypass are never counted.
+  // Platform AI usage limit — enforced server-side before generating.
+  // It applies while the plan includes Platform AI (provider-path and
+  // SDK-path usage through the platform's AI features are both
+  // attributed to the user in the AiLog tracker). Client's Own
+  // AI API-only plans and owner bypass are never counted.
   const aiLimit = await checkAiLimit(auth.user, { articles: 1 });
   if (aiLimit && !aiLimit.ok) return aiLimitExceededResponse(aiLimit);
   const id = reqId();
@@ -262,7 +264,17 @@ export async function POST(request: NextRequest) {
       outputTokens = result.outputTokens;
       costUsd = result.costUsd;
     } else {
-      // ---- Path 2: Fallback to z-ai-web-dev-sdk ----
+      // ---- Path 2: Fallback to z-ai-web-dev-sdk (Platform AI) ----
+      // The SDK is AI provided and paid for by the platform — only
+      // plans that include Platform AI may use it. A Client's Own
+      // AI API-only plan must connect its own provider instead.
+      if (!(await hasFeature(auth.user, 'ai_platform'))) {
+        return err(
+          "No AI provider connected, and your plan does not include Platform AI. Connect your own AI provider (Client's Own AI API) or upgrade your plan.",
+          403,
+          'FEATURE_NOT_AVAILABLE',
+        );
+      }
       const ZAI = (await import('z-ai-web-dev-sdk')).default;
       const zai = await ZAI.create();
       const response = await zai.chat.completions.create({

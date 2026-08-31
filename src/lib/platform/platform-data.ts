@@ -64,9 +64,9 @@ export interface Plan {
    *  (kept for legacy callers; not a separate config). */
   features: string[];
   /** Authoritative feature keys granted by this plan (checked by hasFeature).
-   *  AI Tools mode: 'ai_platform' (Platform AI, subject to the AI usage
-   *  limits) or 'ai_client' (Client's Own AI API, no platform AI limits) —
-   *  mutually exclusive. */
+   *  Platform AI ('ai_platform', subject to the AI usage limits) and
+   *  Client's Own AI API ('ai_client', never limited) are INDEPENDENT —
+   *  a plan may have either, both, or neither. */
   entitlements: string[];
   /** Plan usage limits. -1 = unlimited. Only platform-controlled resources:
    *  maxSites, storageBytes, and the Platform AI usage limits (applicable
@@ -1492,8 +1492,10 @@ const INTERNAL_PLAN: Plan = {
   active: true,
   features: ['Full platform access', 'All features enabled', 'Billing bypass', 'Not counted in MRR'],
   // No custom_domains / white_label — site identity is client-owned in
-  // this architecture, not a plan entitlement.
-  entitlements: ['automation', 'ai_platform', 'advanced_analytics', 'comments', 'api_access', 'audit_log', 'advanced_seo', 'newsletter', 'email_templates', 'backups'],
+  // this architecture, not a plan entitlement. Both AI features are
+  // enabled (they are independent), and api_access carries its
+  // dependency: ai_client.
+  entitlements: ['automation', 'ai_platform', 'ai_client', 'advanced_analytics', 'comments', 'api_access', 'audit_log', 'advanced_seo', 'newsletter', 'email_templates', 'backups'],
   limits: { maxSites: -1, storageBytes: -1, aiArticlesPerMonth: -1, aiWordsPerMonth: -1, aiImagesPerMonth: -1 },
 };
 

@@ -147,6 +147,26 @@ export async function requireFeature(
   return { user: auth.user };
 }
 
+/** Require an authenticated user WITH a specific feature entitlement,
+ *  but ALSO allow any platform staff member (PLATFORM_ADMIN included).
+ *  Used by routes that manage shared platform infrastructure which
+ *  clients reach only through the gated feature — e.g. the AI provider
+ *  connection routes ('ai_client'): clients need the plan entitlement
+ *  to connect their own AI API, while platform staff configure the
+ *  platform's own providers regardless of which plan they are on.
+ *  (OWNER / INTERNAL / EXEMPT already bypass inside hasFeature.) */
+export async function requireFeatureAllowStaff(
+  request: NextRequest,
+  feature: string,
+): Promise<{ user: AuthUser } | { response: NextResponse }> {
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth;
+  if (isPlatformStaff(auth.user)) return { user: auth.user };
+  // Not platform staff → the standard plan-entitlement gate (single
+  // shared implementation for the grant/override/trial logic).
+  return requireFeature(request, feature);
+}
+
 /** Extract client IP for audit logging (never used for auth decisions). */
 export function getClientIp(request: NextRequest): string | null {
   return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;

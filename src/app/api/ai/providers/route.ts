@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 import { encrypt, maskSecret } from '@/lib/encryption';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
+import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -118,6 +119,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const id = reqId();
 
+  // Client's Own AI API entitlement gate — connecting a provider with
+  // the client's own API key is exactly what this feature grants.
+  // Platform staff (OWNER / PLATFORM_ADMIN) always pass so they can
+  // configure the platform's own providers.
+  const featureAuth = await requireFeatureAllowStaff(request, 'ai_client');
+  if ('response' in featureAuth) return featureAuth.response;
+
   try {
     let body: unknown;
     try {
@@ -157,9 +165,11 @@ export async function POST(request: NextRequest) {
       encryptedKey = await encrypt(d.apiKey);
     }
 
-    // Resolve a createdById — pick the first ADMIN (or any user) since there is
-    // no auth in this setup. The User.createdBy relation is required.
-    let creator = await db.user.findFirst({ where: { role: 'ADMIN' }, select: { id: true } });
+    // Attribute the provider to the authenticated user (the
+    // Client's Own AI API connection owner). Fall back to the first
+    // ADMIN for legacy callers without a session.
+    let creator = await db.user.findUnique({ where: { id: featureAuth.user.id }, select: { id: true } });
+    if (!creator) creator = await db.user.findFirst({ where: { role: 'ADMIN' }, select: { id: true } });
     if (!creator) creator = await db.user.findFirst({ select: { id: true } });
     if (!creator) return err('No user exists to attribute the provider to', 500, 'NO_USER');
 

@@ -16,10 +16,14 @@ function reqId() {
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(_request: NextRequest, context: RouteContext) {
-  const auth = await requireFeature(_request, 'ai_content');
+  // Platform AI entitlement gate — this route runs EXCLUSIVELY on the
+  // platform SDK (z-ai-web-dev-sdk), i.e. AI provided and paid for by
+  // the platform. A Client's Own AI API-only plan gets no platform AI
+  // access here (403); the plan must include Platform AI.
+  const auth = await requireFeature(_request, 'ai_platform');
   if ('response' in auth) return auth.response;
   // Platform AI usage limit — enforced server-side before generating.
-  // Client's Own AI API plans and owner bypass are never counted.
+  // Client's Own AI API-only plans and owner bypass are never counted.
   const aiLimit = await checkAiLimit(auth.user, { articles: 1 });
   if (aiLimit && !aiLimit.ok) return aiLimitExceededResponse(aiLimit);
   const id = reqId();

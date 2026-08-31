@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
+import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -92,6 +93,12 @@ const createSchema = z.object({
 
 export async function POST(request: NextRequest) {
   const id = reqId();
+
+  // Client's Own AI API entitlement gate — registering models for a
+  // connected provider is provider-connection management. Platform
+  // staff always pass.
+  const featureAuth = await requireFeatureAllowStaff(request, 'ai_client');
+  if ('response' in featureAuth) return featureAuth.response;
 
   try {
     let body: unknown;

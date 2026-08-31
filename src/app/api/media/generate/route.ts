@@ -27,7 +27,11 @@ const ASPECT_MAP: Record<string, string> = {
 };
 
 export async function POST(request: NextRequest) {
-  const auth = await requireFeature(request, 'ai_content');
+  // Platform AI entitlement gate — this route runs EXCLUSIVELY on the
+  // platform SDK (z-ai-web-dev-sdk), i.e. AI provided and paid for by
+  // the platform. A Client's Own AI API-only plan gets no platform AI
+  // access here (403); the plan must include Platform AI.
+  const auth = await requireFeature(request, 'ai_platform');
   if ('response' in auth) return auth.response;
   const id = reqId();
 

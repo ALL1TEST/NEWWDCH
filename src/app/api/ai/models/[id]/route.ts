@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
+import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -68,6 +69,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
+
+  // Client's Own AI API entitlement gate — editing a provider's
+  // models is provider-connection management. Platform staff always
+  // pass.
+  const featureAuth = await requireFeatureAllowStaff(request, 'ai_client');
+  if ('response' in featureAuth) return featureAuth.response;
 
   try {
     const { id: modelId } = await params;
@@ -147,6 +154,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
+
+  // Client's Own AI API entitlement gate — deleting a provider's
+  // model is provider-connection management. Platform staff always
+  // pass.
+  const featureAuth = await requireFeatureAllowStaff(request, 'ai_client');
+  if ('response' in featureAuth) return featureAuth.response;
 
   try {
     const { id: modelId } = await params;

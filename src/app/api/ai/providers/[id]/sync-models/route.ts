@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { syncModels } from '@/lib/ai/ai-service';
 import type { ApiResponse, ApiError } from '@/shared/types';
+import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
 
 function reqId() {
   return 'req_' + crypto.randomUUID().slice(0, 8);
@@ -22,6 +23,12 @@ function err(message: string, status = 400, code = 'VALIDATION_ERROR') {
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
+
+  // Client's Own AI API entitlement gate — syncing a provider's
+  // models queries the client's own AI API. Platform staff always
+  // pass.
+  const featureAuth = await requireFeatureAllowStaff(request, 'ai_client');
+  if ('response' in featureAuth) return featureAuth.response;
 
   try {
     const { id: providerId } = await params;

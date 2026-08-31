@@ -27,7 +27,7 @@ import {
   type Plan as StorePlan,
 } from '@/lib/stores/subscription-store';
 import type { ClientBillingState, Payment, PlanId } from '@/lib/platform/platform-data';
-import { ENTITLEMENT_LABELS, aiModeOfEntitlements, type EntitlementKey } from '@/lib/platform/feature-config';
+import { ENTITLEMENT_LABELS, type EntitlementKey } from '@/lib/platform/feature-config';
 import { formatMoney } from '@/lib/platform/currency-catalog';
 import { PaymentStatusBadge, formatCurrency, formatDate, ErrorState } from '@/modules/platform/shared';
 
@@ -151,11 +151,11 @@ function derivePlanFeatures(plan: {
     items.push('No storage');
   }
   items.push(plan.isFree ? 'Community support' : 'Priority support');
-  // Platform AI plans surface their AI usage limits; Client's Own AI API
-  // plans show the bring-your-own-API entitlement label instead (no
-  // platform AI limits by design).
-  const aiMode = aiModeOfEntitlements(plan.entitlements);
-  if (aiMode === 'platform') {
+  // Platform AI plans surface their AI usage limits; a plan WITHOUT
+  // Platform AI (Client's Own AI API only, or AI disabled) never shows
+  // platform AI limits (own-API usage is unlimited by design).
+  const hasPlatformAi = plan.entitlements.includes('ai_platform');
+  if (hasPlatformAi) {
     const articles = plan.limits.aiArticlesPerMonth ?? 0;
     const words = plan.limits.aiWordsPerMonth ?? 0;
     const images = plan.limits.aiImagesPerMonth ?? 0;
@@ -163,8 +163,13 @@ function derivePlanFeatures(plan: {
     items.push(words === -1 ? 'Unlimited AI words' : `${words.toLocaleString()} AI words / month`);
     items.push(images === -1 ? 'Unlimited AI images' : `${images} AI images / month`);
   }
+  // Enabled features — ONLY the enabled ones are displayed (each
+  // entitlement key renders its label, including Platform AI,
+  // Client's Own AI API and API Access as plain feature checkmarks).
+  // The legacy 'ai_content' alias is skipped (it duplicates the AI
+  // feature keys above).
   for (const e of plan.entitlements) {
-    if (e === 'ai_platform' || e === 'ai_content') continue; // shown as the limit items above
+    if (e === 'ai_content') continue;
     const label = ENTITLEMENT_LABELS[e as EntitlementKey];
     if (label) items.push(label);
   }
@@ -598,6 +603,24 @@ export function BillingPage() {
               </span>
             </div>
           )}
+
+          {/* Included in your plan — the plan's usage limits (sites,
+              storage; the AI limits ONLY while Platform AI is enabled)
+              plus the ENABLED feature checkmarks (disabled features are
+              never displayed). Same derivation as the plan cards. */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Included in your plan
+            </p>
+            <ul className="space-y-2">
+              {derivePlanFeatures(currentPlan).map((feature, idx) => (
+                <li key={`${feature}-${idx}`} className="flex items-start gap-2 text-sm">
+                  <Check className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                  <span>{feature}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
 
           <Separator />
 

@@ -84,14 +84,10 @@ import {
   PLAN_EDITOR_FEATURE_KEYS,
   ENTITLEMENT_LABELS,
   ENTITLEMENT_DESCRIPTIONS,
-  AI_MODE_PLATFORM,
-  AI_MODE_CLIENT,
   CORE_LIMIT_KEYS,
   AI_LIMIT_KEYS,
   LIMIT_LABELS,
   UNLIMITED,
-  aiModeOfEntitlements,
-  type AiMode,
   type EntitlementKey,
 } from '@/lib/platform/feature-config';
 import type {
@@ -223,80 +219,43 @@ function BillingPeriodsCheckboxes({
 
 // -------------------- Feature Access / Usage Limits shared UI --------------------
 
-/** Count the editor-visible enabled features (the 8 checkboxes + AI
- *  Tools counting as one when either mode is selected). */
+/** Count the editor-visible enabled features (the 10 checkboxes —
+ *  Platform AI and Client's Own AI API each count as one feature). */
 function countEditorFeatures(entitlements: readonly string[]): number {
-  const simple = PLAN_EDITOR_FEATURE_KEYS.filter((k) => entitlements.includes(k)).length;
-  const ai = aiModeOfEntitlements(entitlements) !== 'none' ? 1 : 0;
-  return simple + ai;
+  return PLAN_EDITOR_FEATURE_KEYS.filter((k) => entitlements.includes(k)).length;
 }
 
-const EDITOR_FEATURE_TOTAL = PLAN_EDITOR_FEATURE_KEYS.length + 1; // 8 + AI Tools
+const EDITOR_FEATURE_TOTAL = PLAN_EDITOR_FEATURE_KEYS.length; // 10
 
-/** Toggle one simple (checkbox) feature key in the entitlements state. */
+/** Toggle one feature key in the entitlements state — with the ONE
+ *  inter-feature dependency rule applied interactively:
+ *  - enabling API Access auto-enables Client's Own AI API (required),
+ *  - disabling Client's Own AI API auto-disables API Access.
+ *  Platform AI is fully independent of both. */
 function toggleFeature(cur: string[], key: string): string[] {
-  return cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
-}
-
-/** Select an AI Tools mode (mutually exclusive). Selecting the already
- *  active mode turns AI OFF — the same interaction model as a radio
- *  group with an implicit "none" state. Never leaves both modes on. */
-function setAiMode(cur: string[], mode: AiMode): string[] {
-  const withoutAi = cur.filter((k) => k !== AI_MODE_PLATFORM && k !== AI_MODE_CLIENT && k !== 'ai_content');
-  if (mode === 'platform') return [...withoutAi, AI_MODE_PLATFORM];
-  if (mode === 'client') return [...withoutAi, AI_MODE_CLIENT];
-  return withoutAi;
-}
-
-/** One selectable option row of the AI Tools block — radio-style. */
-function AiModeOption({
-  selected,
-  title,
-  description,
-  onSelect,
-  id,
-}: {
-  selected: boolean;
-  title: string;
-  description: string;
-  onSelect: () => void;
-  id: string;
-}) {
-  return (
-    <label
-      htmlFor={id}
-      className={`flex items-start gap-2.5 rounded-md border p-2.5 cursor-pointer transition-colors ${
-        selected ? 'border-foreground/30 bg-accent/50' : 'hover:bg-accent/40'
-      }`}
-    >
-      <input
-        id={id}
-        type="radio"
-        name="ai-tools-mode"
-        className="mt-0.5 h-4 w-4 accent-foreground"
-        checked={selected}
-        onChange={onSelect}
-        onClick={(e) => {
-          // Clicking the selected option again → turn AI OFF (none).
-          if (selected) {
-            e.preventDefault();
-            onSelect();
-          }
-        }}
-      />
-      <span className="min-w-0">
-        <span className="block text-xs font-medium">{title}</span>
-        <span className="block text-[10px] text-muted-foreground mt-0.5">{description}</span>
-      </span>
-    </label>
-  );
+  const next = cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
+  if (key === 'api_access' && next.includes('api_access') && !next.includes('ai_client')) {
+    // Enabling API Access → auto-enable its dependency.
+    return [...next, 'ai_client'];
+  }
+  if (key === 'ai_client' && !next.includes('ai_client') && next.includes('api_access')) {
+    // Disabling Client's Own AI API → API Access loses its dependency.
+    return next.filter((k) => k !== 'api_access');
+  }
+  return next;
 }
 
 /** Feature Access section — shared by the Create + Edit Plan dialogs.
- *  8 simple checkbox features + the AI Tools two-mode block
- *  (Platform AI / Client's Own AI API — mutually exclusive; neither
- *  selected = AI disabled). Custom Domains and White Label are not
- *  offered: site identity is client-owned, not a plan entitlement. */
+ *  10 INDEPENDENT feature checkboxes: Automation, Advanced SEO,
+ *  Advanced Analytics, Comments, Newsletter, Email Templates, Backups,
+ *  Platform AI, Client's Own AI API, API Access. Platform AI and
+ *  Client's Own AI API are normal checkboxes (not mutually exclusive —
+ *  a plan may have either, both, or neither). The ONE inter-feature
+ *  rule is interactive here: enabling API Access auto-enables Client's
+ *  Own AI API, and disabling Client's Own AI API auto-disables API
+ *  Access (a saved plan never carries API Access without its
+ *  dependency). Custom Domains and White Label are not offered: site
+ *  identity is client-owned, not a plan entitlement. */
 function FeatureAccessSection({
   entitlements,
   onChange,
@@ -306,7 +265,6 @@ function FeatureAccessSection({
   onChange: (next: string[]) => void;
   idPrefix: string;
 }) {
-  const aiMode = aiModeOfEntitlements(entitlements);
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -323,6 +281,17 @@ function FeatureAccessSection({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {PLAN_EDITOR_FEATURE_KEYS.map((key) => {
           const on = entitlements.includes(key);
+          // The three special features carry a short description line
+          // (they are semantically distinct from the plain tools);
+          // API Access additionally shows its live dependency state.
+          const showDescription =
+            key === 'ai_platform' || key === 'ai_client' || key === 'api_access';
+          const apiAccessHint =
+            key === 'api_access'
+              ? entitlements.includes('ai_client')
+                ? "Requires Client's Own AI API — enabled ✓"
+                : "Requires Client's Own AI API — will be enabled automatically"
+              : null;
           return (
             <label
               key={key}
@@ -337,33 +306,17 @@ function FeatureAccessSection({
                 checked={on}
                 onChange={() => onChange(toggleFeature(entitlements, key))}
               />
-              <span className="text-xs font-medium">{ENTITLEMENT_LABELS[key]}</span>
+              <span className="min-w-0">
+                <span className="block text-xs font-medium">{ENTITLEMENT_LABELS[key]}</span>
+                {showDescription && (
+                  <span className="block text-[10px] text-muted-foreground mt-0.5">
+                    {apiAccessHint ?? ENTITLEMENT_DESCRIPTIONS[key]}
+                  </span>
+                )}
+              </span>
             </label>
           );
         })}
-      </div>
-      {/* AI Tools — two mutually exclusive modes (NOT a simple boolean). */}
-      <div className="space-y-1.5 rounded-md border p-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold">AI Tools</span>
-          <span className="text-[10px] text-muted-foreground">
-            {aiMode === 'platform' ? 'Platform AI' : aiMode === 'client' ? "Client's Own AI API" : 'Disabled'}
-          </span>
-        </div>
-        <AiModeOption
-          id={`${idPrefix}-ai-platform`}
-          selected={aiMode === 'platform'}
-          title="Platform AI"
-          description="Platform provides and pays for the AI API — subject to the AI usage limits below."
-          onSelect={() => onChange(setAiMode(entitlements, aiMode === 'platform' ? 'none' : 'platform'))}
-        />
-        <AiModeOption
-          id={`${idPrefix}-ai-client`}
-          selected={aiMode === 'client'}
-          title="Client's Own AI API"
-          description="Client connects and manages their own AI provider — no platform AI usage limits."
-          onSelect={() => onChange(setAiMode(entitlements, aiMode === 'client' ? 'none' : 'client'))}
-        />
       </div>
     </section>
   );
@@ -371,18 +324,20 @@ function FeatureAccessSection({
 
 /** Usage Limits section — shared by the Create + Edit Plan dialogs.
  *  Core limits (Max Sites, Storage) always shown. The three Platform AI
- *  usage limits appear ONLY while the plan uses Platform AI — hidden
- *  (and stored as 0) for Client's Own AI API and AI-disabled plans. */
+ *  usage limits appear ONLY while Platform AI is enabled — hidden
+ *  (and stored as 0) otherwise (Client's Own AI API usage is never
+ *  limited by the plan). */
 function UsageLimitsSection({
   limits,
   onChange,
-  aiMode,
+  showAiLimits,
 }: {
   limits: PlanLimits;
   onChange: (next: PlanLimits) => void;
-  aiMode: AiMode;
+  /** True while the plan's Platform AI checkbox is enabled — the three
+   *  AI usage limits are only configurable (and only stored) then. */
+  showAiLimits: boolean;
 }) {
-  const showAiLimits = aiMode === 'platform';
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -845,8 +800,9 @@ function EditPlanDialog({
       // savePlanConfig preserves the existing value when omitted.
       entitlements,
       // AI usage limits are part of the saved configuration ONLY while
-      // the plan uses Platform AI (the backend zeroes them otherwise).
-      limits: buildPayloadLimits(limits, aiModeOfEntitlements(entitlements)),
+      // the plan includes Platform AI (the backend zeroes them
+      // otherwise — Client's Own AI API usage is never limited).
+      limits: buildPayloadLimits(limits, entitlements.includes('ai_platform')),
     };
   };
 
@@ -1093,8 +1049,9 @@ function EditPlanDialog({
           <Separator />
 
           {/* -------------------- Feature Access --------------------
-              9 simple checkbox features + the AI Tools two-mode block
-              (Platform AI / Client's Own AI API — mutually exclusive). */}
+              10 INDEPENDENT checkboxes — Platform AI and Client's Own
+              AI API are normal features (not a two-mode block); API
+              Access auto-enables/requires Client's Own AI API. */}
           <FeatureAccessSection
             entitlements={entitlements}
             onChange={setEntitlements}
@@ -1105,11 +1062,11 @@ function EditPlanDialog({
 
           {/* -------------------- Usage Limits --------------------
               Core limits always; the Platform AI usage limits appear
-              ONLY while Platform AI is selected. */}
+              ONLY while the Platform AI checkbox is checked. */}
           <UsageLimitsSection
             limits={limits}
             onChange={setLimits}
-            aiMode={aiModeOfEntitlements(entitlements)}
+            showAiLimits={entitlements.includes('ai_platform')}
           />
         </div>
 
@@ -1144,14 +1101,14 @@ function EditPlanDialog({
 // -------------------- Create Plan Dialog --------------------
 
 /** Normalize the limit state into the API payload. The AI usage limits
- *  are part of the saved configuration ONLY while the plan uses
- *  Platform AI — Client's Own AI API and AI-disabled plans store 0
+ *  are part of the saved configuration ONLY while the plan includes
+ *  Platform AI — Client's Own AI API-only and AI-disabled plans store 0
  *  (the backend enforces the same rule). */
-function buildPayloadLimits(limits: PlanLimits, aiMode: AiMode): PlanLimits {
+function buildPayloadLimits(limits: PlanLimits, hasPlatformAi: boolean): PlanLimits {
   return {
     maxSites: Number(limits.maxSites) || 0,
     storageBytes: Number(limits.storageBytes) || 0,
-    ...(aiMode === 'platform'
+    ...(hasPlatformAi
       ? {
           aiArticlesPerMonth: Number(limits.aiArticlesPerMonth) || 0,
           aiWordsPerMonth: Number(limits.aiWordsPerMonth) || 0,
@@ -1275,8 +1232,9 @@ function CreatePlanDialog({
         // marketing copy from entitlements on the client side now.
         entitlements,
         // AI usage limits are part of the saved configuration ONLY while
-        // the plan uses Platform AI (the backend zeroes them otherwise).
-        limits: buildPayloadLimits(limits, aiModeOfEntitlements(entitlements)),
+        // the plan includes Platform AI (the backend zeroes them
+        // otherwise — Client's Own AI API usage is never limited).
+        limits: buildPayloadLimits(limits, entitlements.includes('ai_platform')),
         badgeVariant: effectivePlanId,
       });
     },
@@ -1520,8 +1478,9 @@ function CreatePlanDialog({
           <Separator />
 
           {/* -------------------- Feature Access --------------------
-              9 simple checkbox features + the AI Tools two-mode block
-              (Platform AI / Client's Own AI API — mutually exclusive). */}
+              10 INDEPENDENT checkboxes — Platform AI and Client's Own
+              AI API are normal features (not a two-mode block); API
+              Access auto-enables/requires Client's Own AI API. */}
           <FeatureAccessSection
             entitlements={entitlements}
             onChange={setEntitlements}
@@ -1532,11 +1491,11 @@ function CreatePlanDialog({
 
           {/* -------------------- Usage Limits --------------------
               Core limits always; the Platform AI usage limits appear
-              ONLY while Platform AI is selected. */}
+              ONLY while the Platform AI checkbox is checked. */}
           <UsageLimitsSection
             limits={limits}
             onChange={setLimits}
-            aiMode={aiModeOfEntitlements(entitlements)}
+            showAiLimits={entitlements.includes('ai_platform')}
           />
         </div>
 

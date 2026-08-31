@@ -631,14 +631,17 @@ export function validatePlanConfigInput(input: {
         errors.push('Entitlement keys must be non-empty strings.');
       }
     }
-    // AI Tools — the two modes are mutually exclusive: a plan cannot
-    // have both Platform AI and Client's Own AI API active at once.
+    // Platform AI and Client's Own AI API are INDEPENDENT features —
+    // both may be enabled at once (no mutual exclusion).
+    // API ACCESS DEPENDENCY: API Access requires Client's Own AI API.
+    // A plan can never be saved with api_access but no ai_client
+    // (Platform AI does NOT satisfy this dependency).
     if (
-      (input.entitlements.includes('ai_platform') || input.entitlements.includes('ai_content')) &&
-      input.entitlements.includes('ai_client')
+      input.entitlements.includes('api_access') &&
+      !input.entitlements.includes('ai_client')
     ) {
       errors.push(
-        "AI Tools: select either Platform AI or Client's Own AI API — the two modes are mutually exclusive.",
+        "API Access requires Client's Own AI API — enable Client's Own AI API as well (it is enabled automatically in the plan editor).",
       );
     }
   }

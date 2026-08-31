@@ -26,8 +26,9 @@ import { getUserSubscription } from './subscription-data';
 // maxSites / storageBytes are backed by real tables (Site, Media). The
 // Platform AI usage limits (articles / words / images per month) are
 // backed by the AiLog usage tracker and enforced on every AI route —
-// but ONLY while the user's plan uses Platform AI (Client's Own AI API
-// plans are never counted/limited: the client pays their own provider).
+// but ONLY while the user's plan includes Platform AI (Client's Own
+// AI API-only plans are never counted/limited: the client pays their
+// own provider).
 export type LimitResource = 'sites' | 'storageBytes';
 export type AiLimitResource = 'aiArticles' | 'aiWords' | 'aiImages';
 
@@ -43,11 +44,16 @@ export interface LimitCheck {
 
 // -------------------- Platform AI mode + usage limits --------------------
 
-/** The effective AI Tools configuration for a user:
+/** The effective Platform AI configuration for a user:
  *  - 'unlimited' — owner / billing bypass (platform AI, no limits)
- *  - 'platform'  — Platform AI, subject to the plan's AI usage limits
- *  - 'client'    — Client's Own AI API — NEVER count / limit usage
- *  - 'none'      — AI Tools disabled (feature gate denies upstream) */
+ *  - 'platform'  — Platform AI enabled (alone OR together with
+ *                  Client's Own AI API) → subject to the plan's AI
+ *                  usage limits for usage through Platform AI
+ *  - 'client'    — Client's Own AI API ONLY — NEVER count / limit
+ *  - 'none'      — both AI features disabled (feature gate denies
+ *                  upstream)
+ *  The two AI features are independent — this resolves whether the
+ *  PLATFORM provides AI (limits apply), not a mutual-exclusion mode. */
 export type EffectiveAiMode = 'unlimited' | 'platform' | 'client' | 'none';
 
 export async function getEffectiveAiMode(user: EntitlementUser): Promise<EffectiveAiMode> {
@@ -122,9 +128,9 @@ export interface AiUsageRequest {
 
 /** Check the Platform AI usage limits for a user.
  *  Returns null when NO limit applies (owner bypass, Client's Own AI
- *  API mode, or AI disabled — those are never counted/limited).
- *  Otherwise returns the FIRST violated limit as a LimitCheck (ok=false)
- *  or an all-clear check (ok=true). */
+ *  API-only plans, or both AI features disabled — those are never
+ *  counted/limited). Otherwise returns the FIRST violated limit as a
+ *  LimitCheck (ok=false) or an all-clear check (ok=true). */
 export async function checkAiLimit(
   user: EntitlementUser,
   requested: AiUsageRequest = { articles: 1 },
