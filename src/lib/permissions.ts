@@ -58,6 +58,14 @@ export const PLATFORM_PAGES = [
   { key: 'platform-notifications', label: 'Notifications', icon: 'Bell' },
   { key: 'platform-email-templates', label: 'Email Templates', icon: 'Mail' },
   { key: 'platform-smtp', label: 'SMTP Settings', icon: 'Server' },
+  // PLATFORM AI — the complete copy of the Admin User AI page
+  // (Providers / Models / Prompt Library / Settings tabs), exposed to
+  // Platform Admins under the platform-ai module. Access control needs
+  // no extra rules: isPlatformPage() matches the platform- prefix and
+  // requireFeatureAllowStaff() (used by the /api/ai/* routes) lets
+  // OWNER / PLATFORM_ADMIN through so they can manage the platform's
+  // own providers, models, prompts and AI settings.
+  { key: 'platform-ai', label: 'AI', icon: 'Sparkles' },
   { key: 'platform-backups', label: 'Backups', icon: 'Database' },
   // 'platform-system-health' was removed as a standalone admin page in
   // Task 52. The Overview page's System Health summary tile still surfaces

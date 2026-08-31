@@ -165,6 +165,7 @@ const PLATFORM_NAV_ITEMS: CommandItemDef[] = [
   { id: 'plat-notifications', label: 'Notifications', icon: Bell, module: 'platform-notifications' },
   { id: 'plat-email-templates', label: 'Email Templates', icon: Mail, module: 'platform-email-templates' },
   { id: 'plat-smtp', label: 'SMTP Settings', icon: Settings, module: 'platform-smtp' },
+  { id: 'plat-ai', label: 'AI', icon: Sparkles, module: 'platform-ai' },
   { id: 'plat-backups', label: 'Backups', icon: Database, module: 'platform-backups' },
 ];
 

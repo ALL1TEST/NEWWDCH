@@ -332,6 +332,11 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     icon: 'Server',
   },
   {
+    label: 'AI',
+    href: '#platform-ai',
+    icon: 'Sparkles',
+  },
+  {
     label: 'Backups',
     href: '#platform-backups',
     icon: 'Database',

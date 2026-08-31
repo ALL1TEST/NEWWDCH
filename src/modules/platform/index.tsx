@@ -22,6 +22,7 @@ const notifications = dynamic(() => import('./platform-notifications').then(m =>
 const emailTemplates = dynamic(() => import('./platform-email-templates').then(m => ({ default: m.PlatformEmailTemplatesModule as ComponentType })), { loading: ModuleFallback });
 const smtp = dynamic(() => import('./platform-smtp').then(m => ({ default: m.PlatformSmtpModule as ComponentType })), { loading: ModuleFallback });
 const backups = dynamic(() => import('./platform-backups').then(m => ({ default: m.PlatformBackupsModule as ComponentType })), { loading: ModuleFallback });
+const ai = dynamic(() => import('./platform-ai').then(m => ({ default: m.PlatformAiModule as ComponentType })), { loading: ModuleFallback });
 
 export const platformModuleRegistry: Record<string, ComponentType> = {
   'platform-overview': overview,
@@ -35,4 +36,5 @@ export const platformModuleRegistry: Record<string, ComponentType> = {
   'platform-email-templates': emailTemplates,
   'platform-smtp': smtp,
   'platform-backups': backups,
+  'platform-ai': ai,
 };
