@@ -3,10 +3,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+import { requireAuth } from '@/lib/platform/platform-auth';
 
-// Platform Admin ONLY — prompt library management (internal platform
-// configuration, never exposed to clients).
+// Prompt library management — any authenticated CMS user (same rule
+// as /api/ai/prompts; the Prompt Library is not exposed as a tab in
+// Platform Admin, but the backend functionality is kept).
 
 // ---------- helpers ---------------------------------------------------
 
@@ -29,8 +30,8 @@ function err(message: string, status = 400, code = 'VALIDATION_ERROR') {
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
 
-  const staffAuth = await requirePlatformAdmin(request);
-  if ('response' in staffAuth) return staffAuth.response;
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth.response;
 
   try {
     const { id: promptId } = await params;

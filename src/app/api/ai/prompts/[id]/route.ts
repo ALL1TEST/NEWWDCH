@@ -4,12 +4,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+import { requireAuth } from '@/lib/platform/platform-auth';
 
 // ============================================================
-// PROMPT LIBRARY [id] — Platform Admin ONLY (internal platform
-// configuration; never exposed to clients). Same rule as
-// /api/ai/prompts: every method requires platform staff.
+// PROMPT LIBRARY [id]. Same rule as /api/ai/prompts: any
+// authenticated CMS user (managed from the Admin User → AI page);
+// the Prompt Library is not exposed as a tab in Platform Admin,
+// but the backend functionality/data is kept.
 // ============================================================
 
 // ---------- helpers ---------------------------------------------------
@@ -92,8 +93,8 @@ const updateSchema = z.object({
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
 
-  const staffAuth = await requirePlatformAdmin(request);
-  if ('response' in staffAuth) return staffAuth.response;
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth.response;
 
   try {
     const { id: promptId } = await params;
@@ -122,8 +123,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
 
-  const staffAuth = await requirePlatformAdmin(request);
-  if ('response' in staffAuth) return staffAuth.response;
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth.response;
 
   try {
     const { id: promptId } = await params;
@@ -250,8 +251,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
 
-  const staffAuth = await requirePlatformAdmin(request);
-  if ('response' in staffAuth) return staffAuth.response;
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth.response;
 
   try {
     const { id: promptId } = await params;

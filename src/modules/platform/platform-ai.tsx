@@ -6,22 +6,27 @@
 // Platform Admin CONFIGURES the platform's AI service here:
 //   AI → Providers        (AI providers + API keys)
 //   AI → Models           (models, defaults)
-//   AI → Prompt Library   (internal platform prompts that drive the
-//                         client AI tools — clients never see them)
 //   AI → Settings         (default text/image provider + model,
 //                         temperature, max tokens, budgets)
 //
+// There is intentionally NO "Prompt Library" tab here: the Prompt
+// Library is part of the internal AI system (its prompts are used
+// internally by Platform AI) and is NOT exposed as a visible
+// page/tab in the Platform Admin dashboard. The prompt library
+// data/functionality lives on in the backend — it is managed from
+// the normal Admin User → AI page. A #platform-ai/prompts hash
+// redirects to Providers.
+//
 // This is strictly separated from the CLIENT AI experience (#ai →
-// Providers / Models / Settings — the client's own connections):
-// the client USES Platform AI, never configures it. Server-side,
-// the prompt library (incl. versions/duplicate/favorite), the
-// platform's global AI settings, marketplace and playground are
-// gated to platform staff; clients with the "Client's Own AI API"
-// plan feature manage only their OWN provider connections
-// (row-level ownership), and the AI tools available to a client
-// are controlled by the plan's "Platform AI" feature (generation
-// runs on the platform's configured provider/model, usage metered
-// against the plan's AI Articles/month + AI Images/month limits).
+// Providers / Models / Prompt Library / Settings): the client USES
+// Platform AI, never configures it. Server-side, the platform's
+// global AI settings are gated to platform staff (handled by
+// /api/ai/settings), clients with the "Client's Own AI API" plan
+// feature manage only their OWN provider connections (row-level
+// ownership), and the AI tools available to a client are controlled
+// by the plan's "Platform AI" feature (generation runs on the
+// platform's configured provider/model, usage metered against the
+// plan's AI Articles/month + AI Images/month limits).
 //
 // The only adaptations to the Platform Admin context:
 //   1. Navigation module key — this page lives under the
@@ -38,36 +43,37 @@
 //      dialogs and tables — is the shared, unchanged AI stack.
 //
 // Legacy AI sub-pages (playground, jobs, logs, marketplace,
-// usage) redirect exactly like on the Admin User page.
+// usage) — and the removed prompts tab — redirect exactly like on
+// the Admin User page.
 // ============================================================
 
 import React, { useEffect } from 'react';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { ProvidersPage } from '@/modules/ai/providers-page';
-import { PromptsPage } from '@/modules/ai/prompts-page';
 import { ModelsPage } from '@/modules/ai/models-page';
 import { SettingsPage } from '@/modules/ai/settings-page';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Server,
-  MessageSquare,
   Boxes,
   Settings,
 } from 'lucide-react';
 
 // Simplified AI section — only features relevant to a blogging CMS.
 // Removed: Playground, Jobs, Logs, Marketplace, Usage (provider dashboards handle analytics).
+// No Prompt Library tab — it is not exposed in the Platform Admin dashboard.
 const AI_SUB_PAGES = [
   { value: 'providers', label: 'Providers', icon: Server },
   { value: 'models', label: 'Models', icon: Boxes },
-  { value: 'prompts', label: 'Prompt Library', icon: MessageSquare },
   { value: 'settings', label: 'Settings', icon: Settings },
 ] as const;
 
 type AiSubPage = (typeof AI_SUB_PAGES)[number]['value'];
 
-// Legacy sub-pages that no longer have their own tab — redirect to Providers.
+// Sub-pages that no longer have their own tab — redirect to Providers.
+// 'prompts' (removed from Platform Admin) and legacy pages all fall back.
 const LEGACY_REDIRECT: Record<string, AiSubPage> = {
+  prompts: 'providers',
   playground: 'providers',
   jobs: 'providers',
   logs: 'providers',
@@ -79,7 +85,7 @@ export function PlatformAiModule() {
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
 
-  // Resolve the effective tab: legacy sub-pages redirect to 'providers'
+  // Resolve the effective tab: legacy/removed sub-pages redirect to 'providers'
   const effectiveTab: AiSubPage = currentSubPage && LEGACY_REDIRECT[currentSubPage]
     ? LEGACY_REDIRECT[currentSubPage]
     : (currentSubPage as AiSubPage) || 'providers';
@@ -89,7 +95,7 @@ export function PlatformAiModule() {
   };
 
   useEffect(() => {
-    // Redirect legacy sub-pages to the closest valid tab
+    // Redirect legacy/removed sub-pages to the closest valid tab
     if (currentSubPage && LEGACY_REDIRECT[currentSubPage]) {
       navigate('platform-ai', null, LEGACY_REDIRECT[currentSubPage]);
       return;
@@ -125,9 +131,6 @@ export function PlatformAiModule() {
         </TabsContent>
         <TabsContent value="models">
           <ModelsPage />
-        </TabsContent>
-        <TabsContent value="prompts">
-          <PromptsPage />
         </TabsContent>
         <TabsContent value="settings">
           <SettingsPage />

@@ -58,13 +58,16 @@ export const PLATFORM_PAGES = [
   { key: 'platform-notifications', label: 'Notifications', icon: 'Bell' },
   { key: 'platform-email-templates', label: 'Email Templates', icon: 'Mail' },
   { key: 'platform-smtp', label: 'SMTP Settings', icon: 'Server' },
-  // PLATFORM AI — the complete copy of the Admin User AI page
-  // (Providers / Models / Prompt Library / Settings tabs), exposed to
-  // Platform Admins under the platform-ai module. Access control needs
-  // no extra rules: isPlatformPage() matches the platform- prefix and
+  // PLATFORM AI — the Platform Admin AI management page
+  // (Providers / Models / Settings tabs), exposed to Platform
+  // Admins under the platform-ai module. There is deliberately NO
+  // Prompt Library tab in Platform Admin: the Prompt Library is part
+  // of the internal AI system and is managed from the normal Admin
+  // User → AI page. Access control needs no extra rules:
+  // isPlatformPage() matches the platform- prefix and
   // requireFeatureAllowStaff() (used by the /api/ai/* routes) lets
   // OWNER / PLATFORM_ADMIN through so they can manage the platform's
-  // own providers, models, prompts and AI settings.
+  // own providers, models and AI settings.
   { key: 'platform-ai', label: 'AI', icon: 'Sparkles' },
   { key: 'platform-backups', label: 'Backups', icon: 'Database' },
   // 'platform-system-health' was removed as a standalone admin page in

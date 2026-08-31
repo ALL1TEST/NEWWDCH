@@ -4,16 +4,19 @@
 // The strict separation between the Platform Admin AI management
 // experience and the Client AI experience:
 //
-//   PLATFORM ADMIN (AI → Providers / Models / Prompt Library /
-//   Settings)  = CONFIGURES Platform AI — providers, API keys,
-//   models, defaults, temperature/max-tokens and the internal
-//   prompt templates.
+//   PLATFORM ADMIN (AI → Providers / Models / Settings) =
+//   CONFIGURES Platform AI — providers, API keys, models, defaults,
+//   temperature/max-tokens. There is NO Prompt Library tab in
+//   Platform Admin: the Prompt Library is part of the internal AI
+//   system, is managed from the normal Admin User → AI page, and
+//   its prompts are used internally by Platform AI.
 //
-//   CLIENT (AI / AI Tools)  = USES Platform AI — generate content,
+//   CLIENT (Admin User → AI: Providers / Models / Prompt Library /
+//   Settings + the AI tools) = USES Platform AI — generate content,
 //   generate images, SEO AI tools, view remaining usage. The client
-//   never sees providers, API keys, models, settings or prompt
-//   templates; the system internally selects the appropriate
-//   Platform Admin prompt and runs it on the platform's configured
+//   never configures the platform's providers, API keys, models or
+//   global settings; the system internally selects the appropriate
+//   active prompt and runs it on the platform's configured
 //   provider/model.
 //
 // This module provides the server-side building blocks:
@@ -26,10 +29,11 @@
 //      (Client's Own AI API) are never used for platform generation
 //      and their usage never consumes Platform AI limits.
 //   3. resolvePlatformPrompt(slot, vars) — internal prompt-slot
-//      resolution from the Platform Admin Prompt Library. When a
-//      client uses an AI tool, the system picks the matching active
-//      Platform Admin prompt, injects the tool variables, and
-//      executes it. Clients can never read these prompts.
+//      resolution from the Prompt Library (the internal AI system's
+//      prompt store, managed from the Admin User → AI page; not
+//      exposed as a tab in Platform Admin). When a client uses an AI
+//      tool, the system picks the matching active prompt, injects the
+//      tool variables, and executes it.
 // ============================================================
 
 import { db } from '@/lib/db';
@@ -74,7 +78,7 @@ export async function platformOwnedProviderFilter(): Promise<Record<string, unkn
 
 // -------------------- Prompt-slot resolution --------------------
 
-/** The functional tool slots the Platform Admin Prompt Library can
+/** The functional tool slots the Prompt Library can
  *  drive. A prompt is bound to a slot by an EXACT tag match (e.g.
  *  tags: ["article"]) or — as a fallback — by its slugified name
  *  containing the slot key as a whole segment ("SEO Article Writer"

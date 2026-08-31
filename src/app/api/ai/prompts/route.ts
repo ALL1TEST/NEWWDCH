@@ -4,16 +4,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+import { requireAuth } from '@/lib/platform/platform-auth';
 
 // ============================================================
-// PROMPT LIBRARY — Platform Admin ONLY.
-// The Prompt Library is INTERNAL platform configuration: these
-// prompts drive the platform's AI tools (the system internally
-// selects the appropriate Platform Admin prompt when a client
-// uses an AI feature). Normal clients can neither list, read,
-// create, edit nor delete platform prompts — every method below
-// requires platform staff (OWNER / PLATFORM_ADMIN).
+// PROMPT LIBRARY.
+// The Prompt Library is part of the internal AI system — its
+// prompts are used internally by Platform AI (the system
+// internally selects the appropriate active prompt when an AI
+// tool runs). It is managed from the normal Admin User → AI page
+// (Prompt Library tab) and is NOT exposed as a visible page/tab
+// in the Platform Admin dashboard. Any authenticated user of the
+// CMS can list, read, create, edit and delete prompts here —
+// exactly as before. The backend functionality/data is kept.
 // ============================================================
 
 // ---------- helpers ---------------------------------------------------
@@ -101,10 +103,8 @@ const SORTABLE = new Set(['createdAt', 'updatedAt', 'name', 'category', 'isActiv
 export async function GET(request: NextRequest) {
   const id = reqId();
 
-  // Platform Admin only — the prompt library is internal platform
-  // configuration and must never be exposed to clients.
-  const staffAuth = await requirePlatformAdmin(request);
-  if ('response' in staffAuth) return staffAuth.response;
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth.response;
 
   try {
     const sp = new URL(request.url).searchParams;
@@ -164,10 +164,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const id = reqId();
 
-  // Platform Admin only — only platform staff manage platform
-  // prompts (system prompts, user prompts, variables).
-  const staffAuth = await requirePlatformAdmin(request);
-  if ('response' in staffAuth) return staffAuth.response;
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth.response;
 
   try {
     let body: unknown;
@@ -187,8 +185,8 @@ export async function POST(request: NextRequest) {
 
     const d = parsed.data;
 
-    // Attribute the prompt to the authenticated platform staff member.
-    let creator = await db.user.findUnique({ where: { id: staffAuth.user.id }, select: { id: true } });
+    // Attribute the prompt to the authenticated user.
+    let creator = await db.user.findUnique({ where: { id: auth.user.id }, select: { id: true } });
     if (!creator) creator = await db.user.findFirst({ where: { role: 'ADMIN' }, select: { id: true } });
     if (!creator) creator = await db.user.findFirst({ select: { id: true } });
     if (!creator) return err('No user exists to attribute the prompt to', 500, 'NO_USER');
