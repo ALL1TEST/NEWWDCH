@@ -92,8 +92,11 @@ export const ENTITLEMENT_DESCRIPTIONS: Record<EntitlementKey, string> = {
   email_templates: 'Create + manage reusable email templates',
   backups: 'Create + restore CMS backups (client-managed storage)',
   api_access: 'Programmatic API access — requires Client\'s Own AI API',
-  ai_platform: 'AI provided by the platform — subject to the plan\'s AI usage limits',
-  ai_client: "Connect and use your own AI API — never consumes Platform AI limits",
+  // Exact customer-facing wording from the plan spec (also rendered
+  // next to the Platform AI checkbox in the plan editor, above its
+  // nested Usage Limits block).
+  ai_platform: 'AI provided by the platform — usage is subject to the plan\'s AI limits.',
+  ai_client: "Client connects their own AI provider — platform AI usage limits do not apply.",
   ai_content: 'Generate articles, images and rewrites with AI',
   audit_log: 'Detailed activity + audit trail',
 };

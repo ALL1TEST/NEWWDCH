@@ -255,16 +255,34 @@ function toggleFeature(cur: string[], key: string): string[] {
  *  Own AI API, and disabling Client's Own AI API auto-disables API
  *  Access (a saved plan never carries API Access without its
  *  dependency). Custom Domains and White Label are not offered: site
- *  identity is client-owned, not a plan entitlement. */
+ *  identity is client-owned, not a plan entitlement.
+ *
+ *  PLATFORM AI + USAGE LIMITS UI: the Platform AI option spans the
+ *  full grid width and carries its usage limits NESTED directly
+ *  underneath — "AI provided by the platform — usage is subject to
+ *  the plan's AI limits." followed by a Usage Limits block (AI
+ *  Articles / AI Words / AI Images per month) shown ONLY while
+ *  Platform AI is checked (an admin never configures AI limits for
+ *  a plan without Platform AI; the payload zeroes them). Client's
+ *  Own AI API states the counterpart note: the client connects
+ *  their own provider and platform AI usage limits do NOT apply —
+ *  so on plans with BOTH keys the two logics stay visibly separate. */
 function FeatureAccessSection({
   entitlements,
   onChange,
+  limits,
+  onLimitsChange,
   idPrefix,
 }: {
   entitlements: string[];
   onChange: (next: string[]) => void;
+  /** Current limits state — the three Platform AI usage limits are
+   *  edited inside the nested Usage Limits block below. */
+  limits: PlanLimits;
+  onLimitsChange: (next: PlanLimits) => void;
   idPrefix: string;
 }) {
+  const platformAiOn = entitlements.includes('ai_platform');
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -281,11 +299,84 @@ function FeatureAccessSection({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {PLAN_EDITOR_FEATURE_KEYS.map((key) => {
           const on = entitlements.includes(key);
-          // The three special features carry a short description line
-          // (they are semantically distinct from the plain tools);
+          // Platform AI — full-width option block carrying the plan's
+          // Platform AI usage limits NESTED directly underneath
+          // ("immediately display the related Usage Limits fields
+          // directly with the Platform AI option"). The limits block
+          // is rendered ONLY while Platform AI is checked and lives
+          // OUTSIDE the <label> so editing the inputs never toggles
+          // the checkbox.
+          if (key === 'ai_platform') {
+            return (
+              <div
+                key={key}
+                title={ENTITLEMENT_DESCRIPTIONS[key]}
+                className="sm:col-span-2 rounded-md border transition-colors hover:border-foreground/25"
+              >
+                <label
+                  htmlFor={`${idPrefix}-feature-${key}`}
+                  className="flex items-center gap-2 p-2 cursor-pointer hover:bg-accent/40 transition-colors"
+                >
+                  <input
+                    id={`${idPrefix}-feature-${key}`}
+                    type="checkbox"
+                    className="h-4 w-4 accent-foreground"
+                    checked={on}
+                    onChange={() => onChange(toggleFeature(entitlements, key))}
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-medium">{ENTITLEMENT_LABELS[key]}</span>
+                    <span className="block text-[10px] text-muted-foreground mt-0.5">
+                      {ENTITLEMENT_DESCRIPTIONS[key]}
+                    </span>
+                  </span>
+                </label>
+                {platformAiOn && (
+                  <div className="mx-2 mb-2 rounded-md border bg-muted/30 px-2.5 py-2 space-y-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide">
+                        Usage Limits
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        Apply to Platform AI usage · use{' '}
+                        <code className="font-mono px-1 py-0.5 rounded bg-muted">-1</code> for
+                        unlimited
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {AI_LIMIT_KEYS.map((k) => (
+                        <div key={k} className="space-y-1">
+                          <Label className="text-xs" htmlFor={`${idPrefix}-limit-${k}`}>
+                            {LIMIT_LABELS[k]}
+                          </Label>
+                          <Input
+                            id={`${idPrefix}-limit-${k}`}
+                            type="number"
+                            value={String(limits[k])}
+                            onChange={(e) =>
+                              onLimitsChange({ ...limits, [k]: Number(e.target.value) })
+                            }
+                            className="h-9 bg-background"
+                          />
+                          {limits[k] === UNLIMITED && (
+                            <p className="text-[10px] text-emerald-600 font-medium">Unlimited</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-snug">
+                      These limits apply to Platform AI usage. Client&apos;s Own AI API usage is
+                      never counted against them.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          }
+          // Client's Own AI API + API Access carry a short description
+          // line (they are semantically distinct from the plain tools);
           // API Access additionally shows its live dependency state.
-          const showDescription =
-            key === 'ai_platform' || key === 'ai_client' || key === 'api_access';
+          const showDescription = key === 'ai_client' || key === 'api_access';
           const apiAccessHint =
             key === 'api_access'
               ? entitlements.includes('ai_client')
@@ -323,20 +414,17 @@ function FeatureAccessSection({
 }
 
 /** Usage Limits section — shared by the Create + Edit Plan dialogs.
- *  Core limits (Max Sites, Storage) always shown. The three Platform AI
- *  usage limits appear ONLY while Platform AI is enabled — hidden
- *  (and stored as 0) otherwise (Client's Own AI API usage is never
- *  limited by the plan). */
+ *  Core limits (Max Sites, Storage) always shown. The three Platform
+ *  AI usage limits are configured DIRECTLY with the Platform AI
+ *  option in the Feature Access section above — they appear only
+ *  while Platform AI is enabled and are stored as 0 otherwise
+ *  (Client's Own AI API usage is never limited by the plan). */
 function UsageLimitsSection({
   limits,
   onChange,
-  showAiLimits,
 }: {
   limits: PlanLimits;
   onChange: (next: PlanLimits) => void;
-  /** True while the plan's Platform AI checkbox is enabled — the three
-   *  AI usage limits are only configurable (and only stored) then. */
-  showAiLimits: boolean;
 }) {
   return (
     <section className="space-y-3">
@@ -346,7 +434,7 @@ function UsageLimitsSection({
           Use <code className="font-mono px-1 py-0.5 rounded bg-muted">-1</code> for unlimited
         </span>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         {CORE_LIMIT_KEYS.map((k) => (
           <div key={k} className="space-y-1">
             <Label className="text-xs">{LIMIT_LABELS[k]}</Label>
@@ -361,22 +449,12 @@ function UsageLimitsSection({
             )}
           </div>
         ))}
-        {showAiLimits &&
-          AI_LIMIT_KEYS.map((k) => (
-            <div key={k} className="space-y-1">
-              <Label className="text-xs">{LIMIT_LABELS[k]}</Label>
-              <Input
-                type="number"
-                value={String(limits[k])}
-                onChange={(e) => onChange({ ...limits, [k]: Number(e.target.value) })}
-                className="h-9"
-              />
-              {limits[k] === UNLIMITED && (
-                <p className="text-[10px] text-emerald-600 font-medium">Unlimited</p>
-              )}
-            </div>
-          ))}
       </div>
+      <p className="text-[10px] text-muted-foreground leading-snug">
+        Platform AI usage limits (AI articles / words / images per month) are configured directly
+        with the Platform AI feature in Feature Access — they apply only while Platform AI is
+        enabled and never limit Client&apos;s Own AI API usage.
+      </p>
     </section>
   );
 }
@@ -1049,25 +1127,24 @@ function EditPlanDialog({
           <Separator />
 
           {/* -------------------- Feature Access --------------------
-              10 INDEPENDENT checkboxes — Platform AI and Client's Own
-              AI API are normal features (not a two-mode block); API
-              Access auto-enables/requires Client's Own AI API. */}
+              10 INDEPENDENT checkboxes — Platform AI carries its usage
+              limits NESTED directly underneath the option; API Access
+              auto-enables/requires Client's Own AI API. */}
           <FeatureAccessSection
             entitlements={entitlements}
             onChange={setEntitlements}
+            limits={limits}
+            onLimitsChange={setLimits}
             idPrefix={`edit-${plan.planId}`}
           />
 
           <Separator />
 
           {/* -------------------- Usage Limits --------------------
-              Core limits always; the Platform AI usage limits appear
-              ONLY while the Platform AI checkbox is checked. */}
-          <UsageLimitsSection
-            limits={limits}
-            onChange={setLimits}
-            showAiLimits={entitlements.includes('ai_platform')}
-          />
+              Core limits (Max Sites, Storage); the Platform AI usage
+              limits live directly under the Platform AI feature
+              above. */}
+          <UsageLimitsSection limits={limits} onChange={setLimits} />
         </div>
 
         <DialogFooter className="gap-2">
@@ -1478,25 +1555,24 @@ function CreatePlanDialog({
           <Separator />
 
           {/* -------------------- Feature Access --------------------
-              10 INDEPENDENT checkboxes — Platform AI and Client's Own
-              AI API are normal features (not a two-mode block); API
-              Access auto-enables/requires Client's Own AI API. */}
+              10 INDEPENDENT checkboxes — Platform AI carries its usage
+              limits NESTED directly underneath the option; API Access
+              auto-enables/requires Client's Own AI API. */}
           <FeatureAccessSection
             entitlements={entitlements}
             onChange={setEntitlements}
+            limits={limits}
+            onLimitsChange={setLimits}
             idPrefix="create"
           />
 
           <Separator />
 
           {/* -------------------- Usage Limits --------------------
-              Core limits always; the Platform AI usage limits appear
-              ONLY while the Platform AI checkbox is checked. */}
-          <UsageLimitsSection
-            limits={limits}
-            onChange={setLimits}
-            showAiLimits={entitlements.includes('ai_platform')}
-          />
+              Core limits (Max Sites, Storage); the Platform AI usage
+              limits live directly under the Platform AI feature
+              above. */}
+          <UsageLimitsSection limits={limits} onChange={setLimits} />
         </div>
 
         <DialogFooter className="gap-2">
