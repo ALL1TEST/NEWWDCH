@@ -27,13 +27,13 @@ const SORTABLE = new Set(['createdAt', 'updatedAt', 'title', 'type', 'status', '
 // =====================================================================
 
 export async function GET(request: NextRequest) {
-  // Server-side entitlement enforcement: the 'ai_content' feature must be
-  // granted by the user's plan (or owner bypass / override). A Beta user
-  // hitting this endpoint directly is denied with 403.
+  // Server-side entitlement enforcement: the Platform AI feature must
+  // be granted by the user's plan (or owner bypass / override). A user
+  // without Platform AI hitting this endpoint directly is denied with 403.
   const authOk = await requireAuth(request);
   if ('response' in authOk) return authOk.response;
-  const allowed = await hasFeature(authOk.user, 'ai_content');
-  if (!allowed) return forbiddenResponse('ai_content');
+  const allowed = await hasFeature(authOk.user, 'ai_platform');
+  if (!allowed) return forbiddenResponse('ai_platform');
   const id = reqId();
 
   try {

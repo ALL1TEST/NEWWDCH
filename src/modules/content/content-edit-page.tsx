@@ -61,6 +61,7 @@ import { TiptapEditor, type TiptapEditorRef } from '@/components/editor/tiptap-e
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { useAiWorkspace } from '@/hooks/use-ai-workspace';
 import { cn, normalizeContentToHtml, truncate } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { PostStatus } from '@/shared/types';
@@ -440,6 +441,11 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<TiptapEditorRef>(null);
 
+  // Platform AI entitlement (client-side hiding only — the AI
+  // endpoints enforce the plan feature server-side).
+  const { data: aiWorkspace } = useAiWorkspace();
+  const aiToolsEnabled = aiWorkspace?.entitlements.aiPlatform ?? true;
+
   const [tagSearch, setTagSearch] = useState('');
   const [slugValue, setSlugValue] = useState('');
   const [aiInput, setAiInput] = useState('');
@@ -601,7 +607,7 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
   // AI content generation (full article)
   const aiGenerateMutation = useMutation({
     mutationFn: (prompt: string) =>
-      postApi('/api/content/ai-generate', {
+      postApi<{ drafts?: Array<{ content: string; wordCount: number }> }>('/api/content/ai-generate', {
         title: watchedTitle || 'Untitled',
         brief: prompt,
         writingStyle: 'Professional',
@@ -609,7 +615,8 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
         numberOfDrafts: 1,
       }),
     onSuccess: (result) => {
-      const draft = result.data?.drafts?.[0];
+      // postApi unwraps the ApiResponse envelope → result IS the data object.
+      const draft = result?.drafts?.[0];
       if (draft) {
         setEditorContent(draft.content);
         toast.success('AI content generated!');
@@ -621,9 +628,10 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
   // AI edit selected text
   const aiEditSelectionMutation = useMutation({
     mutationFn: ({ text, action, context }: { text: string; action: string; context?: string }) =>
-      postApi<{ data: { editedText: string } }>('/api/content/ai-edit-selection', { text, action, context }),
+      postApi<{ editedText: string }>('/api/content/ai-edit-selection', { text, action, context }),
     onSuccess: (result) => {
-      const editedText = result.data?.editedText;
+      // postApi unwraps the ApiResponse envelope → result IS the data object.
+      const editedText = result?.editedText;
       if (editedText) {
         editorRef.current?.replaceSelection(editedText);
         toast.success('Text updated');
@@ -871,7 +879,9 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
               onSelectionChange={handleEditorSelectionChange}
             />
 
-            {/* AI Assistant Bar — floating at bottom */}
+            {/* AI Assistant Bar — floating at bottom. Platform AI tools are
+                only exposed to clients whose plan includes Platform AI. */}
+            {aiToolsEnabled && (
             <div className="absolute bottom-0 left-0 right-0 border-t bg-background/95 backdrop-blur-sm">
               {/* Fix #2/#17: Persistent saved selection indicator (survives focus loss to AI textarea) */}
               {savedSelectedText && (
@@ -958,6 +968,7 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
                 ))}
               </div>
             </div>
+            )}
 
             {/* Floating FAB (focus mode) */}
             <button
@@ -1026,6 +1037,8 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
                           size="sm"
                           className="flex-1 h-7 text-xs gap-1.5 border-amber-400/30 text-amber-600 hover:bg-amber-400/10"
                           onClick={() => setAiAssistOpen(true)}
+                          disabled={!aiToolsEnabled}
+                          title={aiToolsEnabled ? 'AI Content Assistant' : 'Platform AI is not included in your plan'}
                         >
                           <Sparkles className="h-3 w-3" />
                           AI

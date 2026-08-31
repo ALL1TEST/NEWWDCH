@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
-  Plus, Search, MoreHorizontal, Pencil, Trash2, Star, Copy, LayoutGrid, List, History, ChevronLeft, ChevronRight, Loader2, MessageSquare, Heart,
+  Plus, Search, MoreHorizontal, Pencil, Trash2, Star, Copy, LayoutGrid, List, History, ChevronLeft, ChevronRight, Loader2, MessageSquare, Heart, Info,
 } from 'lucide-react';
 
 // -------------------- Types --------------------
@@ -322,6 +322,20 @@ export function PromptsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Internal-configuration note + tool-slot guidance */}
+      <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
+        <Info className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">
+          Internal platform configuration — never exposed to clients. When a client uses an AI
+          tool, the system automatically applies the active prompt bound to that tool&apos;s slot.
+          Bind a prompt to a tool by adding its key as a tag:{' '}
+          <code className="text-xs">article</code>, <code className="text-xs">ideas</code>,{' '}
+          <code className="text-xs">title</code>, <code className="text-xs">outline</code>,{' '}
+          <code className="text-xs">rewrite</code>, <code className="text-xs">improve</code>,{' '}
+          <code className="text-xs">seo-title</code>, <code className="text-xs">seo-description</code>,{' '}
+          <code className="text-xs">text-action</code> or <code className="text-xs">images</code>.
+        </p>
+      </div>
       {/* Filters & Actions */}
       <Card>
         <CardContent className="p-4">

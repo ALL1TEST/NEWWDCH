@@ -6,8 +6,15 @@ import type { ChatMessage } from '@/lib/ai/ai-service';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requireFeature } from '@/lib/platform/platform-auth';
-import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+
+// ============================================================
+// AI PLAYGROUND — Platform Admin ONLY.
+// The raw chat playground is a provider-testing tool for the
+// platform staff who configure the AI infrastructure. It is NOT a
+// client AI tool (the client AI experience is the AI Tools
+// workspace) and is unreachable in the client navigation.
+// ============================================================
 
 // ---------- helpers ---------------------------------------------------
 
@@ -48,12 +55,9 @@ const playgroundSchema = z.object({
 // =====================================================================
 
 export async function POST(request: NextRequest) {
-  const auth = await requireFeature(request, 'ai_content');
+  // Platform staff only — internal provider testing tool.
+  const auth = await requirePlatformAdmin(request);
   if ('response' in auth) return auth.response;
-  // Platform AI usage limit — enforced server-side before generating.
-  // Client's Own AI API plans and owner bypass are never counted.
-  const aiLimit = await checkAiLimit(auth.user, { articles: 1 });
-  if (aiLimit && !aiLimit.ok) return aiLimitExceededResponse(aiLimit);
   const id = reqId();
 
   try {

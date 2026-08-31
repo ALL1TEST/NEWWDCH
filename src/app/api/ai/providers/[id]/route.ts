@@ -5,7 +5,14 @@ import { db } from '@/lib/db';
 import { encrypt, decrypt, maskSecret } from '@/lib/encryption';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
+import { requireFeatureAllowStaff, isPlatformStaff } from '@/lib/platform/platform-auth';
+
+// ============================================================
+// AI PROVIDERS [id] — same separation as /api/ai/providers:
+// platform staff manage any provider; ai_client clients manage
+// ONLY the providers they created (ownership enforced per row);
+// everyone else is denied (403).
+// ============================================================
 
 // ---------- helpers ---------------------------------------------------
 
@@ -41,6 +48,11 @@ const updateSchema = z.object({
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
 
+  // Single-provider read = connection management data — same gate as
+  // the list route, with row-level ownership for non-staff callers.
+  const featureAuth = await requireFeatureAllowStaff(request, 'ai_client');
+  if ('response' in featureAuth) return featureAuth.response;
+
   try {
     const { id: providerId } = await params;
 
@@ -54,6 +66,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     });
 
     if (!item) return err('Provider not found', 404, 'NOT_FOUND');
+
+    // Row-level ownership: non-staff callers may only read their own
+    // provider connections.
+    if (!isPlatformStaff(featureAuth.user) && item.createdById !== featureAuth.user.id) {
+      return err('You can only access your own AI provider connections.', 403, 'FORBIDDEN');
+    }
 
     let maskedKey: string | null = null;
     if (item.apiKeyEncrypted) {
@@ -91,6 +109,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const existing = await db.aiProvider.findUnique({ where: { id: providerId } });
     if (!existing) return err('Provider not found', 404, 'NOT_FOUND');
+
+    // Row-level ownership: non-staff callers may only update their own
+    // provider connections (never the platform's providers).
+    if (!isPlatformStaff(featureAuth.user) && existing.createdById !== featureAuth.user.id) {
+      return err('You can only manage your own AI provider connections.', 403, 'FORBIDDEN');
+    }
 
     let body: unknown;
     try {
@@ -180,6 +204,12 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     const existing = await db.aiProvider.findUnique({ where: { id: providerId } });
     if (!existing) return err('Provider not found', 404, 'NOT_FOUND');
+
+    // Row-level ownership: non-staff callers may only delete their own
+    // provider connections (never the platform's providers).
+    if (!isPlatformStaff(featureAuth.user) && existing.createdById !== featureAuth.user.id) {
+      return err('You can only manage your own AI provider connections.', 403, 'FORBIDDEN');
+    }
 
     // Collect model IDs belonging to this provider (for clearing prompt/log references)
     const modelIds = await db.aiModel.findMany({ where: { providerId }, select: { id: true } });

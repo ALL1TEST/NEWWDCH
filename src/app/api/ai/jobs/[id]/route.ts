@@ -32,7 +32,7 @@ const updateSchema = z.object({
 // =====================================================================
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireFeature(request, 'ai_content');
+  const auth = await requireFeature(request, 'ai_platform');
   if ('response' in auth) return auth.response;
   const id = reqId();
 
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 // =====================================================================
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireFeature(request, 'ai_content');
+  const auth = await requireFeature(request, 'ai_platform');
   if ('response' in auth) return auth.response;
   const id = reqId();
 
@@ -108,7 +108,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 // =====================================================================
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireFeature(request, 'ai_content');
+  const auth = await requireFeature(request, 'ai_platform');
   if ('response' in auth) return auth.response;
   const id = reqId();
 

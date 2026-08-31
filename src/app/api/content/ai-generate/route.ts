@@ -7,6 +7,7 @@ import type { ChatMessage } from '@/lib/ai/ai-service';
 import { z } from 'zod/v4';
 import { requireFeature } from '@/lib/platform/platform-auth';
 import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
+import { resolvePlatformPrompt, platformOwnedProviderFilter } from '@/lib/ai/platform-ai';
 
 function reqId() {
   return 'req_' + crypto.randomUUID().slice(0, 8);
@@ -30,11 +31,23 @@ const schema = z.object({
 });
 
 // =====================================================================
-// POST — generate article draft from AI
+// POST — generate article draft with AI (client AI tool)
+// =====================================================================
+// This is a PLATFORM AI generation endpoint:
+//   • Requires the Platform AI plan feature — a client without it is
+//     denied (403). The client never configures providers or API keys;
+//     the platform's configured provider/model is used automatically.
+//   • Usage is tracked against the plan's AI Articles / month limit.
+//   • The system internally selects the matching Platform Admin
+//     prompt (Prompt Library slot "article") and injects the tool
+//     variables — the client never sees the prompt templates.
+//   • Generation runs exclusively on PLATFORM-OWNED providers
+//     (created by platform staff) or, when none is configured, on
+//     the platform SDK (z-ai-web-dev-sdk).
 // =====================================================================
 
 export async function POST(request: NextRequest) {
-  const auth = await requireFeature(request, 'ai_content');
+  const auth = await requireFeature(request, 'ai_platform');
   if ('response' in auth) return auth.response;
   const id = reqId();
 
@@ -59,44 +72,6 @@ export async function POST(request: NextRequest) {
 
     const { title, brief, keywords, writingStyle, targetLength, numberOfDrafts, includeCta } = parsed.data;
 
-    // Read global AI settings for default provider/model/temperature/maxTokens
-    const aiSettings = await db.aiSettings.findUnique({ where: { scope: 'global' } });
-
-    // Resolve provider: use AiSettings.defaultProviderId if set, else AiProvider.isDefault, else any active
-    let activeProvider = null as Awaited<ReturnType<typeof db.aiProvider.findFirst>> | null;
-    if (aiSettings?.defaultProviderId) {
-      activeProvider = await db.aiProvider.findFirst({
-        where: { id: aiSettings.defaultProviderId, isActive: true, apiKeyEncrypted: { not: null } },
-        include: { models: true },
-      });
-    }
-    if (!activeProvider) {
-      activeProvider = await db.aiProvider.findFirst({
-        where: { isActive: true, isDefault: true, apiKeyEncrypted: { not: null } },
-        include: { models: true },
-      });
-    }
-    if (!activeProvider) {
-      const fallback = await db.aiProvider.findFirst({
-        where: { isActive: true, apiKeyEncrypted: { not: null } },
-        include: { models: true },
-      });
-      if (!fallback) {
-        return err('No active AI provider configured. Please set up an AI provider in Settings > AI.', 400, 'NO_PROVIDER');
-      }
-      activeProvider = fallback;
-    }
-
-    // Resolve model: use AiSettings.defaultModelId if set and belongs to the provider
-    const defaultModel = aiSettings?.defaultModelId
-      ? activeProvider.models.find((m) => m.id === aiSettings.defaultModelId && m.isActive)
-      : null;
-    const modelId = defaultModel?.modelId ?? activeProvider.models.find((m) => m.isActive)?.modelId;
-
-    // Use settings temperature/maxTokens if available
-    const genTemperature = aiSettings?.defaultTemperature ?? 0.7;
-    const genMaxTokens = aiSettings?.defaultMaxTokens ?? 8000;
-
     const lengthMap: Record<string, string> = {
       'Short (300-600 words)': '300-600',
       'Medium (800-1200 words)': '800-1200',
@@ -105,13 +80,15 @@ export async function POST(request: NextRequest) {
     };
     const wordCount = lengthMap[targetLength] || targetLength;
 
-    const systemPrompt = `You are a professional content writer. Write an article in HTML format using common HTML tags like <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>, <blockquote>. Do NOT use <html>, <head>, <body>, or <div> wrapper tags. Start directly with an <h2> or <p> tag.
+    // ---- Built-in default prompts (used when no Platform Admin
+    // prompt is bound to the "article" slot) ----
+    const defaultSystemPrompt = `You are a professional content writer. Write an article in HTML format using common HTML tags like <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>, <blockquote>. Do NOT use <html>, <head>, <body>, or <div> wrapper tags. Start directly with an <h2> or <p> tag.
 
 Writing style: ${writingStyle}
 Target length: ${wordCount} words
 ${includeCta ? 'Include a compelling call-to-action at the end.' : ''}`;
 
-    const userPrompt = `Write an article with the following details:
+    const defaultUserPrompt = `Write an article with the following details:
 
 Title: ${title}
 ${brief ? `Brief/Description: ${brief}` : ''}
@@ -119,27 +96,122 @@ ${keywords ? `Target keywords: ${keywords}` : ''}
 
 Write the full article content now. Use proper HTML formatting for headings, paragraphs, lists, and emphasis. Make it engaging and SEO-optimized.`;
 
+    // ---- Internally select the Platform Admin prompt (Prompt
+    // Library slot "article") and inject the tool variables. ----
+    const platformPrompt = await resolvePlatformPrompt('article', {
+      title,
+      brief: brief ?? '',
+      keywords: keywords ?? '',
+      style: writingStyle,
+      length: wordCount,
+      cta: includeCta ? 'Include a compelling call-to-action at the end.' : '',
+    });
+    const systemPrompt = platformPrompt?.systemPrompt || defaultSystemPrompt;
+    const userPrompt = platformPrompt?.userPrompt || defaultUserPrompt;
+
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ];
 
-    const drafts = [];
-    for (let i = 0; i < numberOfDrafts; i++) {
-      const result = await executeChat({
-        providerId: activeProvider.id,
-        messages,
-        temperature: genTemperature + i * 0.15,
-        maxTokens: genMaxTokens,
-        ...(modelId ? { modelId } : {}),
-        // Attribute the usage to the user for the Platform AI monthly
-        // usage tracker (AiLog).
-        userId: auth.user.id,
+    // ---- Resolve the platform's configured provider ----
+    // Read global AI settings (managed by Platform Admin) for the
+    // default provider/model/temperature/maxTokens.
+    const aiSettings = await db.aiSettings.findUnique({ where: { scope: 'global' } });
+    const owned = await platformOwnedProviderFilter();
+
+    // Resolution order (PLATFORM-OWNED providers only):
+    //   1. AiSettings.defaultProviderId
+    //   2. Any platform-owned provider flagged default
+    //   3. Any active platform-owned provider
+    const findProvider = (extra: Record<string, unknown>) =>
+      db.aiProvider.findFirst({
+        where: { ...extra, ...owned },
+        include: { models: true },
       });
-      drafts.push({
-        content: result.content,
-        wordCount: result.content.split(/\s+/).length,
-      });
+
+    let activeProvider = aiSettings?.defaultProviderId
+      ? await findProvider({ id: aiSettings.defaultProviderId, isActive: true, apiKeyEncrypted: { not: null } })
+      : null;
+    if (!activeProvider) {
+      activeProvider = await findProvider({ isActive: true, isDefault: true, apiKeyEncrypted: { not: null } });
+    }
+    if (!activeProvider) {
+      activeProvider = await findProvider({ isActive: true, apiKeyEncrypted: { not: null } });
+    }
+
+    const drafts: Array<{ content: string; wordCount: number }> = [];
+
+    if (activeProvider) {
+      // Resolve model: use AiSettings.defaultModelId if set and belongs to the provider
+      const defaultModel = aiSettings?.defaultModelId
+        ? activeProvider.models.find((m) => m.id === aiSettings.defaultModelId && m.isActive)
+        : null;
+      const modelId = defaultModel?.modelId ?? activeProvider.models.find((m) => m.isActive)?.modelId;
+
+      // Use platform-configured temperature/maxTokens (a Platform Admin
+      // prompt override wins, then request defaults, then settings).
+      const genTemperature = platformPrompt?.temperature ?? aiSettings?.defaultTemperature ?? 0.7;
+      const genMaxTokens = platformPrompt?.maxTokens ?? aiSettings?.defaultMaxTokens ?? 8000;
+
+      for (let i = 0; i < numberOfDrafts; i++) {
+        const result = await executeChat({
+          providerId: activeProvider.id,
+          messages,
+          temperature: genTemperature + i * 0.15,
+          maxTokens: genMaxTokens,
+          ...(modelId ? { modelId } : {}),
+          // Attribute the usage to the user for the Platform AI monthly
+          // usage tracker (AiLog).
+          userId: auth.user.id,
+        });
+        drafts.push({
+          content: result.content,
+          wordCount: result.content.split(/\s+/).length,
+        });
+      }
+    } else {
+      // ---- Platform SDK fallback (z-ai-web-dev-sdk) ----
+      // The SDK is AI provided and paid for by the platform; it is the
+      // platform's built-in engine when no provider is configured.
+      // Usage is logged to AiLog so the plan limits see it.
+      const ZAI = (await import('z-ai-web-dev-sdk')).default;
+      const zai = await ZAI.create();
+      for (let i = 0; i < numberOfDrafts; i++) {
+        const response = await zai.chat.completions.create({
+          messages,
+          thinking: { type: 'disabled' },
+        });
+        const content = response?.choices?.[0]?.message?.content ?? '';
+        if (!content) {
+          return err('AI generation returned no content. Please try again.', 502, 'AI_ERROR');
+        }
+        await db.aiLog
+          .create({
+            data: {
+              providerId: null,
+              providerName: 'Platform SDK (fallback)',
+              modelId: null,
+              question: userPrompt,
+              response: content,
+              inputTokens: response?.usage?.promptTokens ?? 0,
+              outputTokens: response?.usage?.completionTokens ?? 0,
+              totalTokens:
+                (response?.usage?.promptTokens ?? 0) + (response?.usage?.completionTokens ?? 0),
+              costUsd: 0,
+              durationMs: null,
+              status: 'success',
+              userId: auth.user.id,
+            },
+          })
+          .catch(() => {
+            /* usage logging failure shouldn't mask the result */
+          });
+        drafts.push({
+          content,
+          wordCount: content.split(/\s+/).length,
+        });
+      }
     }
 
     return NextResponse.json({

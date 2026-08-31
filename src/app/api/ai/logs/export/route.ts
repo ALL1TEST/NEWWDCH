@@ -9,7 +9,7 @@ import { requireFeature } from '@/lib/platform/platform-auth';
 // =====================================================================
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeature(request, 'ai_content');
+  const auth = await requireFeature(request, 'ai_platform');
   if ('response' in auth) return auth.response;
   try {
     const sp = new URL(request.url).searchParams;

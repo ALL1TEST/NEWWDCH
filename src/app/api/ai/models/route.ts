@@ -4,7 +4,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
+import { requireFeatureAllowStaff, isPlatformStaff } from '@/lib/platform/platform-auth';
+
+// ============================================================
+// AI MODELS — same separation as /api/ai/providers: platform staff
+// see/manage every model; ai_client clients see/manage ONLY models
+// of the providers they created; everyone else is denied (403).
+// ============================================================
 
 // ---------- helpers ---------------------------------------------------
 
@@ -29,6 +35,13 @@ const SORTABLE = new Set(['createdAt', 'updatedAt', 'name', 'modelId', 'isActive
 export async function GET(request: NextRequest) {
   const id = reqId();
 
+  // Model list = connection management data. Platform staff see the
+  // full platform infrastructure; ai_client clients see only their OWN
+  // connections' models; everyone else is denied.
+  const featureAuth = await requireFeatureAllowStaff(request, 'ai_client');
+  if ('response' in featureAuth) return featureAuth.response;
+  const staff = isPlatformStaff(featureAuth.user);
+
   try {
     const sp = new URL(request.url).searchParams;
     const page = Math.max(1, Number(sp.get('page')) || 1);
@@ -41,6 +54,9 @@ export async function GET(request: NextRequest) {
     const supportsFunctionCalling = sp.get('supportsFunctionCalling');
 
     const where: Record<string, unknown> = {};
+    // Non-staff callers (Client's Own AI API) only ever see models of
+    // their own provider connections.
+    if (!staff) where.provider = { createdById: featureAuth.user.id };
     if (search) where.name = { contains: search };
     if (providerId) where.providerId = providerId;
     const type = sp.get('type')?.trim();
@@ -120,6 +136,11 @@ export async function POST(request: NextRequest) {
     if (!provider) {
       return err('Provider not found', 404, 'NOT_FOUND');
     }
+    // Row-level ownership: non-staff callers may only add models to
+    // their own provider connections.
+    if (!isPlatformStaff(featureAuth.user) && provider.createdById !== featureAuth.user.id) {
+      return err('You can only manage models of your own AI provider connections.', 403, 'FORBIDDEN');
+    }
     if (!provider.isActive) {
       return err('Cannot add models to an inactive provider. Please activate the provider first.', 400, 'PROVIDER_INACTIVE');
     }
@@ -133,9 +154,13 @@ export async function POST(request: NextRequest) {
     }
 
     // If setting as default, atomically clear other defaults of the same type then create.
+    // The default flag is scoped per owner for non-staff callers so a
+    // client's default never unsets the platform's (or another client's).
     if (d.isDefault) {
+      const unsetWhere: Record<string, unknown> = { type: d.type, isDefault: true };
+      if (!isPlatformStaff(featureAuth.user)) unsetWhere.provider = { createdById: featureAuth.user.id };
       await db.aiModel.updateMany({
-        where: { type: d.type, isDefault: true },
+        where: unsetWhere,
         data: { isDefault: false },
       });
     }

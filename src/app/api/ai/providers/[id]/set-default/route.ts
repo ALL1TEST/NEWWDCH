@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
+import { requireFeatureAllowStaff, isPlatformStaff } from '@/lib/platform/platform-auth';
 
 function reqId() {
   return 'req_' + crypto.randomUUID().slice(0, 8);
@@ -35,13 +35,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const provider = await db.aiProvider.findUnique({ where: { id: providerId } });
     if (!provider) return err('Provider not found', 404, 'NOT_FOUND');
+
+    // Row-level ownership: non-staff callers may only manage their own
+    // provider connections.
+    if (!isPlatformStaff(featureAuth.user) && provider.createdById !== featureAuth.user.id) {
+      return err('You can only manage your own AI provider connections.', 403, 'FORBIDDEN');
+    }
+
     if (!provider.isActive) {
       return err('Cannot set an inactive provider as default. Please activate it first.', 400, 'INACTIVE');
     }
 
-    // Atomically: clear all other defaults, then set this one.
+    // Atomically: clear other defaults, then set this one. The default
+    // flag is scoped per owner — a non-staff caller's default never
+    // unsets the platform's (or another client's) default, so the two
+    // AI experiences stay strictly separated.
+    const unsetWhere: Record<string, unknown> = { isDefault: true, id: { not: providerId } };
+    if (!isPlatformStaff(featureAuth.user)) unsetWhere.createdById = featureAuth.user.id;
     await db.$transaction([
-      db.aiProvider.updateMany({ where: { isDefault: true, id: { not: providerId } }, data: { isDefault: false } }),
+      db.aiProvider.updateMany({ where: unsetWhere, data: { isDefault: false } }),
       db.aiProvider.update({ where: { id: providerId }, data: { isDefault: true } }),
     ]);
 

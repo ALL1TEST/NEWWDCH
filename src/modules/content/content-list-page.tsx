@@ -62,6 +62,7 @@ import { AvatarWithFallback } from '@/components/shared';
 import { getApi, postApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { useAiWorkspace } from '@/hooks/use-ai-workspace';
 import { cn, formatRelativeTime, truncate } from '@/lib/utils';
 import type { PaginatedResponse, PostStatus } from '@/shared/types';
 import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
@@ -569,6 +570,11 @@ export function ContentListPage() {
   const navigate = useNavigationStore((s) => s.navigate);
   const queryClient = useQueryClient();
 
+  // Platform AI entitlement (client-side hiding only — the AI ideas
+  // endpoint enforces the plan feature server-side).
+  const { data: aiWorkspace } = useAiWorkspace();
+  const aiToolsEnabled = aiWorkspace?.entitlements.aiPlatform ?? true;
+
   const [deleteTarget, setDeleteTarget] = useState<ContentItemRow | null>(null);
   const [statusTab, setStatusTab] = useState('all');
   const [search, setSearch] = useState('');
@@ -807,7 +813,9 @@ export function ContentListPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {/* AI Ideas — global page action (not a row action) */}
+            {/* AI Ideas — global page action (not a row action). Platform AI
+                tools are only exposed to clients whose plan includes it. */}
+            {aiToolsEnabled && (
             <Button
               variant="outline"
               className="h-9 px-4 gap-2 border-amber-400/40 text-amber-700 hover:bg-amber-400/10 hover:text-amber-700"
@@ -817,6 +825,7 @@ export function ContentListPage() {
               <Sparkles className="h-4 w-4" />
               AI Ideas
             </Button>
+            )}
             {/* Categories & Tags manager */}
             <Button
               variant="outline"
@@ -1081,7 +1090,9 @@ export function ContentListPage() {
           </div>
       </main>
 
-      {/* AI Ideas Sidebar - Animated Panel */}
+      {/* AI Ideas Sidebar - Animated Panel. Platform AI tools are only
+          exposed to clients whose plan includes it. */}
+      {aiToolsEnabled && (
       <aside
         className={cn(
           'shrink-0 transition-all duration-300 ease-in-out overflow-hidden',
@@ -1250,6 +1261,7 @@ export function ContentListPage() {
           </div>
         </div>
       </aside>
+      )}
 
       {/* Categories & Tags management modal */}
       <CategoriesTagsDialog open={catTagOpen} onOpenChange={setCatTagOpen} />

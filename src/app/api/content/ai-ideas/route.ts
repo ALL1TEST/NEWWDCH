@@ -1,7 +1,10 @@
 // ============================================================
 // POST /api/content/ai-ideas — Generate AI article ideas
-// Uses DB-configured provider via executeChat if available,
-// falls back to z-ai-web-dev-sdk otherwise.
+// (client AI tool — Platform AI)
+// Requires the Platform AI plan feature; runs on PLATFORM-OWNED
+// providers via executeChat when configured, falling back to the
+// platform SDK (z-ai-web-dev-sdk). Internally selects the Platform
+// Admin prompt bound to the "ideas" slot when one exists.
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -12,6 +15,7 @@ import { z } from 'zod/v4';
 import { requireFeature } from '@/lib/platform/platform-auth';
 import { hasFeature } from '@/lib/platform/entitlements';
 import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
+import { resolvePlatformPrompt, platformOwnedProviderFilter } from '@/lib/ai/platform-ai';
 
 function reqId() {
   return 'req_' + crypto.randomUUID().slice(0, 8);
@@ -197,7 +201,10 @@ interface ArticleIdeaDTO {
 // =====================================================================
 
 export async function POST(request: NextRequest) {
-  const auth = await requireFeature(request, 'ai_content');
+  // Platform AI generation endpoint — requires the Platform AI plan
+  // feature (staff bypass). A client without Platform AI cannot call
+  // platform AI generation endpoints.
+  const auth = await requireFeature(request, 'ai_platform');
   if ('response' in auth) return auth.response;
   // Platform AI usage limit — enforced server-side before generating.
   // It applies while the plan includes Platform AI (provider-path and
@@ -223,23 +230,36 @@ export async function POST(request: NextRequest) {
 
     const { niche, keywords, count, existingTitles } = parsed.data;
 
-    const systemPrompt = buildSystemPrompt(count, existingTitles);
-    const userPrompt = buildUserPrompt(niche ?? '', keywords ?? '', count);
+    // ---- Internally select the Platform Admin prompt (Prompt
+    // Library slot "ideas") and inject the tool variables — the
+    // client never sees the prompt templates. ----
+    const platformPrompt = await resolvePlatformPrompt('ideas', {
+      niche: niche ?? '',
+      keywords: keywords ?? '',
+      count: String(count),
+      existingTitles: (existingTitles ?? []).join('\n'),
+    });
+
+    const systemPrompt = platformPrompt?.systemPrompt || buildSystemPrompt(count, existingTitles);
+    const userPrompt = platformPrompt?.userPrompt || buildUserPrompt(niche ?? '', keywords ?? '', count);
 
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ];
 
-    // ---- Path 1: DB-configured provider via executeChat ----
+    // ---- Path 1: DB-configured PLATFORM-OWNED provider via executeChat ----
+    // Platform AI generation runs only on providers created by
+    // platform staff; a client's own providers are never used.
+    const owned = await platformOwnedProviderFilter();
     const provider = await db.aiProvider.findFirst({
-      where: { isActive: true, isDefault: true, apiKeyEncrypted: { not: null } },
+      where: { isActive: true, isDefault: true, apiKeyEncrypted: { not: null }, ...owned },
       include: { models: true },
     });
     const activeProvider =
       provider ??
       (await db.aiProvider.findFirst({
-        where: { isActive: true, apiKeyEncrypted: { not: null } },
+        where: { isActive: true, apiKeyEncrypted: { not: null }, ...owned },
         include: { models: true },
       }));
 
@@ -252,8 +272,8 @@ export async function POST(request: NextRequest) {
       const result = await executeChat({
         providerId: activeProvider.id,
         messages,
-        temperature: 0.8,
-        maxTokens: 4000,
+        temperature: platformPrompt?.temperature ?? 0.8,
+        maxTokens: platformPrompt?.maxTokens ?? 4000,
         jsonMode: true,
         // Attribute the usage to the user for the Platform AI monthly
         // usage tracker (AiLog).

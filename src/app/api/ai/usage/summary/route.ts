@@ -24,7 +24,7 @@ function err(message: string, status = 400, code = 'VALIDATION_ERROR') {
 // =====================================================================
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeature(request, 'ai_content');
+  const auth = await requireFeature(request, 'ai_platform');
   if ('response' in auth) return auth.response;
   const id = reqId();
 

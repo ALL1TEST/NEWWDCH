@@ -7,6 +7,7 @@ import type { ChatMessage } from '@/lib/ai/ai-service';
 import { z } from 'zod/v4';
 import { requireFeature } from '@/lib/platform/platform-auth';
 import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
+import { resolvePlatformPrompt, slotForAction, platformOwnedProviderFilter } from '@/lib/ai/platform-ai';
 
 function reqId() {
   return 'req_' + crypto.randomUUID().slice(0, 8);
@@ -26,11 +27,26 @@ const schema = z.object({
 });
 
 // =====================================================================
-// POST — edit a selected text snippet with AI
+// POST — edit a selected text snippet with AI (client AI tool)
+// =====================================================================
+// This is a PLATFORM AI generation endpoint (Generate Title, Generate
+// Outline, Rewrite Content, Improve Content, Generate SEO Title,
+// Generate SEO Description, …):
+//   • Requires the Platform AI plan feature — a client without it is
+//     denied (403). The platform's configured provider/model is used
+//     automatically; the client never configures providers or keys.
+//   • Usage is tracked against the plan's AI Articles / month limit.
+//   • The system internally selects the matching Platform Admin
+//     prompt (Prompt Library slot for the action) and injects the
+//     text/action/context variables — the client never sees the
+//     prompt templates.
+//   • Generation runs exclusively on PLATFORM-OWNED providers
+//     (created by platform staff) or, when none is configured, on
+//     the platform SDK (z-ai-web-dev-sdk).
 // =====================================================================
 
 export async function POST(request: NextRequest) {
-  const auth = await requireFeature(request, 'ai_content');
+  const auth = await requireFeature(request, 'ai_platform');
   if ('response' in auth) return auth.response;
   // Platform AI usage limit — enforced server-side before generating.
   // Client's Own AI API plans and owner bypass are never counted.
@@ -53,25 +69,9 @@ export async function POST(request: NextRequest) {
 
     const { text, action, context } = parsed.data;
 
-    // Find an active AI provider
-    const provider = await db.aiProvider.findFirst({
-      where: { isActive: true, isDefault: true, apiKeyEncrypted: { not: null } },
-      include: { models: true },
-    });
-
-    if (!provider) {
-      const fallback = await db.aiProvider.findFirst({
-        where: { isActive: true, apiKeyEncrypted: { not: null } },
-        include: { models: true },
-      });
-      if (!fallback) {
-        return err('No active AI provider configured. Please set up an AI provider in Settings > AI.', 400, 'NO_PROVIDER');
-      }
-    }
-
-    const activeProvider = provider!;
-
-    const systemPrompt = `You are a professional text editor. The user has selected a portion of text from their document and wants you to apply a specific editing action to it.
+    // ---- Built-in default prompts (used when no Platform Admin
+    // prompt is bound to the action's slot) ----
+    const defaultSystemPrompt = `You are a professional text editor. The user has selected a portion of text from their document and wants you to apply a specific editing action to it.
 
 Rules:
 - Return ONLY the modified text, nothing else.
@@ -79,10 +79,10 @@ Rules:
 - Do NOT add explanations, prefixes, or suffixes.
 - Preserve the original formatting (bold, italic, links, etc.) when possible by using the same HTML tags.
 - If the action is ambiguous, make a reasonable best-effort edit.
-- If the action cannot be applied (e.g., "Add a conclusion" on a single word), improve the text in the spirit of the action.
+- If the action cannot be applied (e.g. "Add a conclusion" on a single word), improve the text in the spirit of the action.
 - Output plain text by default. Only use HTML tags if the input text contains HTML tags.`;
 
-    const userPrompt = `Selected text:
+    const defaultUserPrompt = `Selected text:
 """
 ${text}
 """
@@ -92,23 +92,92 @@ ${context ? `\nContext (surrounding content for reference):\n"""\n${context}\n""
 
 Apply the action to the selected text and return ONLY the modified text.`;
 
+    // ---- Internally select the Platform Admin prompt for this
+    // action's slot and inject the tool variables. ----
+    const slot = slotForAction(action);
+    const platformPrompt = await resolvePlatformPrompt(slot, {
+      text,
+      action,
+      context: context ?? '',
+    });
+    const systemPrompt = platformPrompt?.systemPrompt || defaultSystemPrompt;
+    const userPrompt = platformPrompt?.userPrompt || defaultUserPrompt;
+
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ];
 
-    const result = await executeChat({
-      providerId: activeProvider.id,
-      messages,
-      temperature: 0.5,
-      maxTokens: 4000,
-      // Attribute the usage to the user for the Platform AI monthly
-      // usage tracker (AiLog).
-      userId: auth.user.id,
+    // ---- Resolve the platform's configured provider
+    // (PLATFORM-OWNED providers only) ----
+    const aiSettings = await db.aiSettings.findUnique({ where: { scope: 'global' } });
+    const owned = await platformOwnedProviderFilter();
+    const provider = await db.aiProvider.findFirst({
+      where: { isActive: true, isDefault: true, apiKeyEncrypted: { not: null }, ...owned },
+      include: { models: true },
     });
+    const activeProvider =
+      provider ??
+      (aiSettings?.defaultProviderId
+        ? await db.aiProvider.findFirst({
+            where: { id: aiSettings.defaultProviderId, isActive: true, apiKeyEncrypted: { not: null }, ...owned },
+            include: { models: true },
+          })
+        : null) ??
+      (await db.aiProvider.findFirst({
+        where: { isActive: true, apiKeyEncrypted: { not: null }, ...owned },
+        include: { models: true },
+      }));
+
+    let content: string;
+    if (activeProvider) {
+      const result = await executeChat({
+        providerId: activeProvider.id,
+        messages,
+        temperature: platformPrompt?.temperature ?? 0.5,
+        maxTokens: platformPrompt?.maxTokens ?? 4000,
+        // Attribute the usage to the user for the Platform AI monthly
+        // usage tracker (AiLog).
+        userId: auth.user.id,
+      });
+      content = result.content;
+    } else {
+      // ---- Platform SDK fallback (z-ai-web-dev-sdk) ----
+      const ZAI = (await import('z-ai-web-dev-sdk')).default;
+      const zai = await ZAI.create();
+      const response = await zai.chat.completions.create({
+        messages,
+        thinking: { type: 'disabled' },
+      });
+      content = response?.choices?.[0]?.message?.content ?? '';
+      if (!content) {
+        return err('AI edit returned no content. Please try again.', 502, 'AI_ERROR');
+      }
+      await db.aiLog
+        .create({
+          data: {
+            providerId: null,
+            providerName: 'Platform SDK (fallback)',
+            modelId: null,
+            question: userPrompt,
+            response: content,
+            inputTokens: response?.usage?.promptTokens ?? 0,
+            outputTokens: response?.usage?.completionTokens ?? 0,
+            totalTokens:
+              (response?.usage?.promptTokens ?? 0) + (response?.usage?.completionTokens ?? 0),
+            costUsd: 0,
+            durationMs: null,
+            status: 'success',
+            userId: auth.user.id,
+          },
+        })
+        .catch(() => {
+          /* usage logging failure shouldn't mask the result */
+        });
+    }
 
     // Strip markdown code block wrappers if present
-    let editedText = result.content.trim();
+    let editedText = content.trim();
     if (editedText.startsWith('```')) {
       editedText = editedText.replace(/^```(?:html|text)?\n?/, '').replace(/\n?```$/, '');
     }

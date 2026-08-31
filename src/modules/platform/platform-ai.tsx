@@ -1,18 +1,23 @@
 'use client';
 
 // ============================================================
-// PLATFORM AI — complete copy of the Admin User AI page.
+// PLATFORM AI — the Platform Admin AI MANAGEMENT page.
 // ============================================================
-// This is the Platform Admin version of the AI page
-// (src/modules/ai/ai-page.tsx — the single source of truth).
-// It renders the EXACT same page: the same tab bar (Providers,
-// Models, Prompt Library, Settings), the same icons, labels,
-// styling, spacing and interactions, and the very same tab
-// components — ProvidersPage, ModelsPage, PromptsPage and
-// SettingsPage are imported directly from the Admin User AI
-// module, so every section, table, filter, dialog, modal,
-// action and setting is identical by construction (no
-// duplicated/simplified variant that could drift).
+// Platform Admin CONFIGURES the platform's AI service here:
+//   AI → Providers        (AI providers + API keys)
+//   AI → Models           (models, defaults)
+//   AI → Prompt Library   (internal platform prompts that drive the
+//                         client AI tools — clients never see them)
+//   AI → Settings         (default text/image provider + model,
+//                         temperature, max tokens, budgets)
+//
+// This is strictly separated from the CLIENT AI experience
+// (#ai → AI Tools / My Providers / My Models): the client USES
+// Platform AI, never configures it. Server-side, every management
+// endpoint below is gated to platform staff; clients with the
+// Client's Own AI API plan feature manage only their OWN provider
+// connections (row-level ownership), and Prompt Library + Settings
+// return 403 for them.
 //
 // The only adaptations to the Platform Admin context:
 //   1. Navigation module key — this page lives under the

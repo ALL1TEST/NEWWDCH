@@ -5,7 +5,18 @@ import { db } from '@/lib/db';
 import { encrypt, maskSecret } from '@/lib/encryption';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
+import { requireFeatureAllowStaff, isPlatformStaff } from '@/lib/platform/platform-auth';
+
+// ============================================================
+// AI PROVIDERS — two distinct experiences, strictly separated:
+//   • Platform staff (OWNER / PLATFORM_ADMIN) manage the PLATFORM's
+//     AI infrastructure (Platform Admin → AI → Providers) — they see
+//     and manage every provider.
+//   • Clients with the "Client's Own AI API" plan feature manage
+//     ONLY the providers they created themselves (their own API
+//     connections). Clients without the feature get 403.
+// Platform AI generation never runs on client-owned providers.
+// ============================================================
 
 // ---------- helpers ---------------------------------------------------
 
@@ -44,6 +55,13 @@ const SORTABLE = new Set(['createdAt', 'updatedAt', 'name', 'kind', 'isActive', 
 export async function GET(request: NextRequest) {
   const id = reqId();
 
+  // List access = connection management data. Platform staff see the
+  // full platform infrastructure; ai_client clients see only their OWN
+  // connections; everyone else is denied.
+  const featureAuth = await requireFeatureAllowStaff(request, 'ai_client');
+  if ('response' in featureAuth) return featureAuth.response;
+  const staff = isPlatformStaff(featureAuth.user);
+
   try {
     const sp = new URL(request.url).searchParams;
     const page = Math.max(1, Number(sp.get('page')) || 1);
@@ -56,6 +74,9 @@ export async function GET(request: NextRequest) {
     const connectionStatus = sp.get('connectionStatus')?.trim();
 
     const where: Record<string, unknown> = {};
+    // Non-staff callers (Client's Own AI API) only ever see their own
+    // provider connections — the platform's providers are never exposed.
+    if (!staff) where.createdById = featureAuth.user.id;
     if (search) where.name = { contains: search };
     if (kind) where.kind = kind;
     if (isActive !== null && isActive !== undefined && isActive !== '') where.isActive = isActive === 'true';

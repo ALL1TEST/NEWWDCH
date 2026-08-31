@@ -4,6 +4,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+
+// ============================================================
+// PROMPT LIBRARY — Platform Admin ONLY.
+// The Prompt Library is INTERNAL platform configuration: these
+// prompts drive the platform's AI tools (the system internally
+// selects the appropriate Platform Admin prompt when a client
+// uses an AI feature). Normal clients can neither list, read,
+// create, edit nor delete platform prompts — every method below
+// requires platform staff (OWNER / PLATFORM_ADMIN).
+// ============================================================
 
 // ---------- helpers ---------------------------------------------------
 
@@ -90,6 +101,11 @@ const SORTABLE = new Set(['createdAt', 'updatedAt', 'name', 'category', 'isActiv
 export async function GET(request: NextRequest) {
   const id = reqId();
 
+  // Platform Admin only — the prompt library is internal platform
+  // configuration and must never be exposed to clients.
+  const staffAuth = await requirePlatformAdmin(request);
+  if ('response' in staffAuth) return staffAuth.response;
+
   try {
     const sp = new URL(request.url).searchParams;
     const page = Math.max(1, Number(sp.get('page')) || 1);
@@ -148,6 +164,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const id = reqId();
 
+  // Platform Admin only — only platform staff manage platform
+  // prompts (system prompts, user prompts, variables).
+  const staffAuth = await requirePlatformAdmin(request);
+  if ('response' in staffAuth) return staffAuth.response;
+
   try {
     let body: unknown;
     try {
@@ -166,9 +187,9 @@ export async function POST(request: NextRequest) {
 
     const d = parsed.data;
 
-    // Resolve a createdById — pick the first ADMIN (or any user) since there
-    // is no auth in this setup. The User.createdBy relation is required.
-    let creator = await db.user.findFirst({ where: { role: 'ADMIN' }, select: { id: true } });
+    // Attribute the prompt to the authenticated platform staff member.
+    let creator = await db.user.findUnique({ where: { id: staffAuth.user.id }, select: { id: true } });
+    if (!creator) creator = await db.user.findFirst({ where: { role: 'ADMIN' }, select: { id: true } });
     if (!creator) creator = await db.user.findFirst({ select: { id: true } });
     if (!creator) return err('No user exists to attribute the prompt to', 500, 'NO_USER');
 

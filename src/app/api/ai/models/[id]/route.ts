@@ -4,7 +4,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
+import { requireFeatureAllowStaff, isPlatformStaff } from '@/lib/platform/platform-auth';
+
+// ============================================================
+// AI MODELS [id] — same separation as /api/ai/providers: platform
+// staff manage any model; ai_client clients manage ONLY models of
+// providers they created (ownership enforced per row); everyone
+// else is denied (403).
+// ============================================================
 
 // ---------- helpers ---------------------------------------------------
 
@@ -47,16 +54,29 @@ const updateSchema = z.object({
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
 
+  // Model read = connection management data — same gate + ownership
+  // as the models list route.
+  const featureAuth = await requireFeatureAllowStaff(request, 'ai_client');
+  if ('response' in featureAuth) return featureAuth.response;
+
   try {
     const { id: modelId } = await params;
 
     const item = await db.aiModel.findUnique({
       where: { id: modelId },
-      include: { provider: { select: { id: true, name: true, kind: true } } },
+      include: { provider: { select: { id: true, name: true, kind: true, createdById: true } } },
     });
 
     if (!item) return err('Model not found', 404, 'NOT_FOUND');
-    return ok(item);
+
+    // Row-level ownership: non-staff callers may only read models of
+    // their own provider connections.
+    if (!isPlatformStaff(featureAuth.user) && item.provider?.createdById !== featureAuth.user.id) {
+      return err('You can only access models of your own AI provider connections.', 403, 'FORBIDDEN');
+    }
+
+    const { provider: _providerOwner, ...safeItem } = item;
+    return ok({ ...safeItem, provider: item.provider ? { id: item.provider.id, name: item.provider.name, kind: item.provider.kind } : null });
   } catch (error) {
     console.error(`[AI/MODELS:GET] ${id} —`, error);
     return err('Failed to fetch model', 500, 'INTERNAL_ERROR');
@@ -81,6 +101,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const existing = await db.aiModel.findUnique({ where: { id: modelId } });
     if (!existing) return err('Model not found', 404, 'NOT_FOUND');
+
+    // Row-level ownership: non-staff callers may only update models of
+    // their own provider connections.
+    const ownerCheck = await db.aiProvider.findUnique({ where: { id: existing.providerId }, select: { createdById: true } });
+    if (!isPlatformStaff(featureAuth.user) && ownerCheck?.createdById !== featureAuth.user.id) {
+      return err('You can only manage models of your own AI provider connections.', 403, 'FORBIDDEN');
+    }
 
     let body: unknown;
     try {
@@ -124,10 +151,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     // If setting as default, clear other defaults of the same type first.
     // Use the NEW type if type is being changed, otherwise the existing type.
+    // The default flag is scoped per owner for non-staff callers so a
+    // client's default never unsets the platform's (or another client's).
     if (d.isDefault === true) {
       const modelType = (d.type ?? existing.type)?.toUpperCase() === 'IMAGE' ? 'IMAGE' : 'TEXT';
+      const unsetWhere: Record<string, unknown> = { type: modelType, isDefault: true, id: { not: modelId } };
+      if (!isPlatformStaff(featureAuth.user)) unsetWhere.provider = { createdById: featureAuth.user.id };
       await db.aiModel.updateMany({
-        where: { type: modelType, isDefault: true, id: { not: modelId } },
+        where: unsetWhere,
         data: { isDefault: false },
       });
       data.isDefault = true;
@@ -166,6 +197,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     const existing = await db.aiModel.findUnique({ where: { id: modelId } });
     if (!existing) return err('Model not found', 404, 'NOT_FOUND');
+
+    // Row-level ownership: non-staff callers may only delete models of
+    // their own provider connections.
+    const ownerCheck = await db.aiProvider.findUnique({ where: { id: existing.providerId }, select: { createdById: true } });
+    if (!isPlatformStaff(featureAuth.user) && ownerCheck?.createdById !== featureAuth.user.id) {
+      return err('You can only manage models of your own AI provider connections.', 403, 'FORBIDDEN');
+    }
 
     await db.aiModel.delete({ where: { id: modelId } });
     return ok({ deleted: true });

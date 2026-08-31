@@ -4,6 +4,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+
+// ============================================================
+// AI SETTINGS — Platform Admin ONLY.
+// These settings ARE the internal configuration of the platform's
+// AI service: default text/image provider + model, temperature,
+// max tokens, budgets and rate limits. Platform Admin configures
+// them (Platform Admin → AI → Settings); clients never read or
+// write them — a client simply uses the platform's configured
+// provider/model automatically.
+// ============================================================
 
 // ---------- helpers ---------------------------------------------------
 
@@ -47,6 +58,9 @@ const upsertSchema = z.object({
 export async function GET(request: NextRequest) {
   const id = reqId();
 
+  const staffAuth = await requirePlatformAdmin(request);
+  if ('response' in staffAuth) return staffAuth.response;
+
   try {
     const sp = new URL(request.url).searchParams;
     const scope = sp.get('scope')?.trim() || 'global';
@@ -65,6 +79,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const id = reqId();
+
+  const staffAuth = await requirePlatformAdmin(request);
+  if ('response' in staffAuth) return staffAuth.response;
 
   try {
     let body: unknown;

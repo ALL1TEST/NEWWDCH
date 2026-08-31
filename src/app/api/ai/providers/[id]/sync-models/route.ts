@@ -3,7 +3,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { syncModels } from '@/lib/ai/ai-service';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
+import { requireFeatureAllowStaff, isPlatformStaff } from '@/lib/platform/platform-auth';
+import { db } from '@/lib/db';
 
 function reqId() {
   return 'req_' + crypto.randomUUID().slice(0, 8);
@@ -32,6 +33,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   try {
     const { id: providerId } = await params;
+
+    // Row-level ownership: non-staff callers may only sync their own
+    // provider connections.
+    const provider = await db.aiProvider.findUnique({ where: { id: providerId }, select: { id: true, createdById: true } });
+    if (!provider) return err('Provider not found', 404, 'NOT_FOUND');
+    if (!isPlatformStaff(featureAuth.user) && provider.createdById !== featureAuth.user.id) {
+      return err('You can only manage your own AI provider connections.', 403, 'FORBIDDEN');
+    }
+
     const count = await syncModels(providerId);
     return ok({ syncedCount: count });
   } catch (error) {

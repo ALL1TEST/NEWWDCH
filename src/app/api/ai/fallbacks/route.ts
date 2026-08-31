@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
+import { requireFeatureAllowStaff, isPlatformStaff } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -35,11 +35,25 @@ const addSchema = z.object({
 export async function GET(request: NextRequest) {
   const id = reqId();
 
+  // Fallback chains are connection-management data — same gate as the
+  // other provider routes, with ownership filtering for non-staff.
+  const featureAuth = await requireFeatureAllowStaff(request, 'ai_client');
+  if ('response' in featureAuth) return featureAuth.response;
+
   try {
     const sp = new URL(request.url).searchParams;
     const providerId = sp.get('providerId')?.trim();
 
     if (!providerId) return err('providerId query parameter is required');
+
+    // Row-level ownership: non-staff callers may only read fallbacks of
+    // their own provider connections.
+    if (!isPlatformStaff(featureAuth.user)) {
+      const provider = await db.aiProvider.findUnique({ where: { id: providerId }, select: { createdById: true } });
+      if (!provider || provider.createdById !== featureAuth.user.id) {
+        return err('You can only access your own AI provider connections.', 403, 'FORBIDDEN');
+      }
+    }
 
     const items = await db.aiProviderFallback.findMany({
       where: { providerId },
@@ -92,6 +106,18 @@ export async function POST(request: NextRequest) {
       return err('Provider cannot be its own fallback');
     }
 
+    // Row-level ownership: non-staff callers may only configure
+    // fallbacks between their own provider connections.
+    if (!isPlatformStaff(featureAuth.user)) {
+      const owned = await db.aiProvider.findMany({
+        where: { createdById: featureAuth.user.id, id: { in: [d.providerId, d.fallbackId] } },
+        select: { id: true },
+      });
+      if (owned.length < 2) {
+        return err('You can only configure fallbacks between your own AI provider connections.', 403, 'FORBIDDEN');
+      }
+    }
+
     const item = await db.aiProviderFallback.create({
       data: {
         providerId: d.providerId,
@@ -136,6 +162,18 @@ export async function DELETE(request: NextRequest) {
     });
 
     if (!existing) return err('Fallback not found', 404, 'NOT_FOUND');
+
+    // Row-level ownership: non-staff callers may only remove fallbacks
+    // between their own provider connections.
+    if (!isPlatformStaff(featureAuth.user)) {
+      const owned = await db.aiProvider.findMany({
+        where: { createdById: featureAuth.user.id, id: { in: [providerId, fallbackId] } },
+        select: { id: true },
+      });
+      if (owned.length < 2) {
+        return err('You can only configure fallbacks between your own AI provider connections.', 403, 'FORBIDDEN');
+      }
+    }
 
     await db.aiProviderFallback.delete({ where: { id: existing.id } });
     return ok({ deleted: true });

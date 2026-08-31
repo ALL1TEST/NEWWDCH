@@ -4,6 +4,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import { nanoid } from 'nanoid';
+import { requireFeature } from '@/lib/platform/platform-auth';
+
+// ============================================================
+// AI IMAGES / SAVE — a Platform AI tool helper: saves an image the
+// platform AI generated into the client's media library. Requires
+// the Platform AI plan feature (staff bypass); the uploader is the
+// authenticated user.
+// ============================================================
 
 // =====================================================================
 // POST /api/ai/images/save — Save an AI-generated image as a Media record
@@ -21,6 +29,10 @@ const saveSchema = z.object({
 
 export async function POST(request: NextRequest) {
   const requestId = 'req_' + crypto.randomUUID().slice(0, 8);
+
+  // Platform AI generation tool — requires the plan feature.
+  const auth = await requireFeature(request, 'ai_platform');
+  if ('response' in auth) return auth.response;
 
   try {
     let body: unknown;
@@ -69,9 +81,9 @@ export async function POST(request: NextRequest) {
       modelId: d.modelId,
     });
 
-    // Resolve an uploader — the Media.uploadedBy relation requires a valid User FK.
-    // Pick the first ADMIN (or any user) since there is no auth in this setup.
-    let uploader = await db.user.findFirst({ where: { role: 'ADMIN' }, select: { id: true } });
+    // Attribute the upload to the authenticated user.
+    let uploader = await db.user.findUnique({ where: { id: auth.user.id }, select: { id: true } });
+    if (!uploader) uploader = await db.user.findFirst({ where: { role: 'ADMIN' }, select: { id: true } });
     if (!uploader) uploader = await db.user.findFirst({ select: { id: true } });
     if (!uploader) {
       return NextResponse.json(

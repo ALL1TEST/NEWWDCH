@@ -26,7 +26,7 @@ const SORTABLE = new Set(['createdAt', 'durationMs', 'totalTokens', 'costUsd', '
 // =====================================================================
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeature(request, 'ai_content');
+  const auth = await requireFeature(request, 'ai_platform');
   if ('response' in auth) return auth.response;
   const id = reqId();
 

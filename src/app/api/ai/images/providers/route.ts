@@ -1,7 +1,8 @@
 'use server';
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireFeatureAllowStaff, isPlatformStaff } from '@/lib/platform/platform-auth';
 
 // =====================================================================
 // GET /api/ai/images/providers — Find providers capable of image generation
@@ -9,17 +10,29 @@ import { db } from '@/lib/db';
 // OpenAI, Gemini, and Custom (OpenAI-compatible) providers support image
 // generation. A provider qualifies if it's active, has an API key, and has
 // at least one active IMAGE-type model.
+//
+// Connection-management data: platform staff see the platform
+// infrastructure; ai_client clients see ONLY their own connections.
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const requestId = 'req_' + crypto.randomUUID().slice(0, 8);
 
+  const featureAuth = await requireFeatureAllowStaff(request, 'ai_client');
+  if ('response' in featureAuth) return featureAuth.response;
+  const staff = isPlatformStaff(featureAuth.user);
+
   try {
+    const where: Record<string, unknown> = {
+      isActive: true,
+      apiKeyEncrypted: { not: null },
+      kind: { in: ['OPENAI', 'GEMINI', 'CUSTOM'] },
+    };
+    // Non-staff callers (Client's Own AI API) only ever see their own
+    // provider connections.
+    if (!staff) where.createdById = featureAuth.user.id;
+
     const providers = await db.aiProvider.findMany({
-      where: {
-        isActive: true,
-        apiKeyEncrypted: { not: null },
-        kind: { in: ['OPENAI', 'GEMINI', 'CUSTOM'] },
-      },
+      where,
       include: {
         models: {
           where: { isActive: true, type: 'IMAGE' },

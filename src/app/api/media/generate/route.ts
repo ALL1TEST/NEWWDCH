@@ -8,6 +8,7 @@ import { nanoid } from 'nanoid';
 import { getSiteWhere } from '@/lib/site-context';
 import { requireFeature } from '@/lib/platform/platform-auth';
 import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
+import { resolvePlatformPrompt } from '@/lib/ai/platform-ai';
 
 function reqId() {
   return 'req_' + nanoid(8);
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { prompt, aspectRatio = '1:1', count = 1, folderId, uploadedById = 'system' } = body as {
+    const { prompt, aspectRatio = '1:1', count = 1, folderId, uploadedById } = body as {
       prompt: string;
       aspectRatio?: string;
       count?: number;
@@ -52,6 +53,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // The uploader is the authenticated user (the Media.uploadedBy FK
+    // requires a real User id — a literal 'system' default previously
+    // violated the constraint for direct API calls).
+    const uploaderId = uploadedById && uploadedById !== 'system' ? uploadedById : auth.user.id;
+
     const size = ASPECT_MAP[aspectRatio] || '1024x1024';
     const clampedCount = Math.min(Math.max(count, 1), 4);
 
@@ -62,12 +68,20 @@ export async function POST(request: NextRequest) {
     const aiLimit = await checkAiLimit(auth.user, { images: clampedCount });
     if (aiLimit && !aiLimit.ok) return aiLimitExceededResponse(aiLimit);
 
-    // Dynamically import z-ai-web-dev-sdk
+    // Internally select the Platform Admin prompt bound to the "images"
+    // slot (a prompt wrapper/enhancer) when one exists — the client's
+    // raw prompt is injected as the {{prompt}} variable. The client
+    // never sees the prompt template.
+    const platformPrompt = await resolvePlatformPrompt('images', { prompt: prompt.trim() });
+    const effectivePrompt = platformPrompt?.userPrompt?.trim() || prompt.trim();
+
+    // Dynamically import z-ai-web-dev-sdk — use the SDK's own env-based
+    // resolution (ZAI.create()), the same as every other platform-SDK
+    // route (ai-ideas, ai-generate, ai-edit-selection). A hard-coded
+    // baseUrl here previously caused ECONNREFUSED when the gateway
+    // moved.
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const zai = new ZAI({
-      baseUrl: process.env.ZAI_BASE_URL || 'http://localhost:9999',
-      apiKey: process.env.ZAI_API_KEY || 'default-key',
-    });
+    const zai = await ZAI.create();
 
     const siteFilter = await getSiteWhere(request);
     const siteId = (siteFilter.siteId as string) || request.nextUrl.searchParams.get('siteId') || undefined;
@@ -75,7 +89,7 @@ export async function POST(request: NextRequest) {
     const results = [];
 
     for (let i = 0; i < clampedCount; i++) {
-      const res = await zai.images.generations.create({ prompt: prompt.trim(), size });
+      const res = await zai.images.generations.create({ prompt: effectivePrompt, size });
 
       for (const img of res.data || []) {
         const base64Url = `data:image/png;base64,${img.base64}`;
@@ -90,7 +104,7 @@ export async function POST(request: NextRequest) {
             url: base64Url,
             folderId: folderId === '' ? null : folderId || null,
             siteId,
-            uploadedById,
+            uploadedById: uploaderId,
             processingStatus: 'READY',
           },
           include: mediaIncludes,

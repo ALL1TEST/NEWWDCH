@@ -7,6 +7,7 @@ import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
 import { requireFeature } from '@/lib/platform/platform-auth';
 import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
+import { platformOwnedProviderFilter } from '@/lib/ai/platform-ai';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -56,7 +57,10 @@ const imageGenSchema = z.object({
 // =====================================================================
 
 export async function POST(request: NextRequest) {
-  const auth = await requireFeature(request, 'ai_content');
+  // Platform AI generation endpoint — requires the Platform AI plan
+  // feature (staff bypass). A Client's Own AI API-only plan cannot
+  // call platform AI generation endpoints.
+  const auth = await requireFeature(request, 'ai_platform');
   if ('response' in auth) return auth.response;
   const id = reqId();
 
@@ -84,8 +88,13 @@ export async function POST(request: NextRequest) {
     const aiLimit = await checkAiLimit(auth.user, { images: d.n ?? 1 });
     if (aiLimit && !aiLimit.ok) return aiLimitExceededResponse(aiLimit);
 
-    // Pre-validate that the provider is active and supports image generation
-    const provider = await db.aiProvider.findUnique({ where: { id: d.providerId } });
+    // Pre-validate that the provider is active and supports image generation.
+    // Platform AI generation runs ONLY on the platform's own providers
+    // (created by platform staff) — a client's own providers are never
+    // used for platform generation.
+    const provider = await db.aiProvider.findFirst({
+      where: { id: d.providerId, ...(await platformOwnedProviderFilter()) },
+    });
     if (!provider) return err('Provider not found', 404, 'NOT_FOUND');
     if (!provider.isActive) return err('Provider is disabled. Please activate it first.', 400, 'PROVIDER_INACTIVE');
     if (!['OPENAI', 'GEMINI', 'CUSTOM'].includes(provider.kind)) {

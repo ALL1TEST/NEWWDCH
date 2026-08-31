@@ -3,6 +3,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import type { ApiResponse, ApiError } from '@/shared/types';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+
+// Platform Admin ONLY — prompt library management (internal platform
+// configuration, never exposed to clients).
 
 // ---------- helpers ---------------------------------------------------
 
@@ -63,6 +67,9 @@ function serializePrompt<T extends Record<string, unknown>>(item: T): T {
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
+
+  const staffAuth = await requirePlatformAdmin(request);
+  if ('response' in staffAuth) return staffAuth.response;
 
   try {
     const { id: promptId } = await params;

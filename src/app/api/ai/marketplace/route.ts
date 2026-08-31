@@ -5,6 +5,14 @@ import { db } from '@/lib/db';
 import { MARKETPLACE_PACKS } from '@/lib/ai/ai-service';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
+import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+
+// ============================================================
+// PROMPT MARKETPLACE — Platform Admin ONLY.
+// Marketplace packs install PromptTemplate rows — prompt
+// management is internal platform configuration, so installing /
+// listing packs is restricted to platform staff.
+// ============================================================
 
 // ---------- helpers ---------------------------------------------------
 
@@ -33,8 +41,11 @@ const installSchema = z.object({
 // GET — list marketplace packs
 // =====================================================================
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const id = reqId();
+
+  const staffAuth = await requirePlatformAdmin(request);
+  if ('response' in staffAuth) return staffAuth.response;
 
   try {
     // Seed marketplace packs if they don't exist
@@ -64,6 +75,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const id = reqId();
+
+  const staffAuth = await requirePlatformAdmin(request);
+  if ('response' in staffAuth) return staffAuth.response;
 
   try {
     let body: unknown;
