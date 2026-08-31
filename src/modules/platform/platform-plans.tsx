@@ -20,7 +20,7 @@
 // (country → currency → plan price for that currency → fallback to
 // the plan default when unsupported) — the admin never picks the
 // customer's currency. When OFF, every customer is billed in the
-// plan's default currency. Per-currency prices (e.g. 90 MAD) come
+// plan's default currency. Per-currency prices (e.g. 90 DH) come
 // from the PLATFORM-level regional config (CountryPricing), not
 // from this modal.
 //
@@ -219,43 +219,33 @@ function BillingPeriodsCheckboxes({
 
 // -------------------- Feature Access / Usage Limits shared UI --------------------
 
-/** Count the editor-visible enabled features (the 10 checkboxes —
+/** Count the editor-visible enabled features (the 9 checkboxes —
  *  Platform AI and Client's Own AI API each count as one feature). */
 function countEditorFeatures(entitlements: readonly string[]): number {
   return PLAN_EDITOR_FEATURE_KEYS.filter((k) => entitlements.includes(k)).length;
 }
 
-const EDITOR_FEATURE_TOTAL = PLAN_EDITOR_FEATURE_KEYS.length; // 10
+const EDITOR_FEATURE_TOTAL = PLAN_EDITOR_FEATURE_KEYS.length; // 9
 
-/** Toggle one feature key in the entitlements state — with the ONE
- *  inter-feature dependency rule applied interactively:
- *  - enabling API Access auto-enables Client's Own AI API (required),
- *  - disabling Client's Own AI API auto-disables API Access.
- *  Platform AI is fully independent of both. */
+/** Toggle one feature key in the entitlements state. All editor
+ *  features are INDEPENDENT — there is no inter-feature dependency
+ *  anymore (API Access was removed as a separate feature; Client's
+ *  Own AI API already represents the client's own-API connectivity,
+ *  and Platform AI is fully independent of it). */
 function toggleFeature(cur: string[], key: string): string[] {
-  const next = cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
-  if (key === 'api_access' && next.includes('api_access') && !next.includes('ai_client')) {
-    // Enabling API Access → auto-enable its dependency.
-    return [...next, 'ai_client'];
-  }
-  if (key === 'ai_client' && !next.includes('ai_client') && next.includes('api_access')) {
-    // Disabling Client's Own AI API → API Access loses its dependency.
-    return next.filter((k) => k !== 'api_access');
-  }
-  return next;
+  return cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
 }
 
 /** Feature Access section — shared by the Create + Edit Plan dialogs.
- *  10 INDEPENDENT feature checkboxes: Automation, Advanced SEO,
+ *  9 INDEPENDENT feature checkboxes: Automation, Advanced SEO,
  *  Advanced Analytics, Comments, Newsletter, Email Templates, Backups,
- *  Platform AI, Client's Own AI API, API Access. Platform AI and
- *  Client's Own AI API are normal checkboxes (not mutually exclusive —
- *  a plan may have either, both, or neither). The ONE inter-feature
- *  rule is interactive here: enabling API Access auto-enables Client's
- *  Own AI API, and disabling Client's Own AI API auto-disables API
- *  Access (a saved plan never carries API Access without its
- *  dependency). Custom Domains and White Label are not offered: site
- *  identity is client-owned, not a plan entitlement.
+ *  Platform AI, Client's Own AI API. Platform AI and Client's Own AI
+ *  API are normal checkboxes (not mutually exclusive — a plan may have
+ *  either, both, or neither). API Access is NOT offered: it duplicated
+ *  Client's Own AI API (the client's own-provider/API connectivity) and
+ *  was removed as a feature. Custom Domains and White Label are not
+ *  offered either: site identity is client-owned, not a plan
+ *  entitlement.
  *
  *  PLATFORM AI + USAGE LIMITS UI: the Platform AI option spans the
  *  full grid width and carries its usage limits NESTED directly
@@ -373,16 +363,10 @@ function FeatureAccessSection({
               </div>
             );
           }
-          // Client's Own AI API + API Access carry a short description
-          // line (they are semantically distinct from the plain tools);
-          // API Access additionally shows its live dependency state.
-          const showDescription = key === 'ai_client' || key === 'api_access';
-          const apiAccessHint =
-            key === 'api_access'
-              ? entitlements.includes('ai_client')
-                ? "Requires Client's Own AI API — enabled ✓"
-                : "Requires Client's Own AI API — will be enabled automatically"
-              : null;
+          // Client's Own AI API carries a short description line (it is
+          // semantically distinct from the plain tools — it states that
+          // platform AI usage limits do not apply to it).
+          const showDescription = key === 'ai_client';
           return (
             <label
               key={key}
@@ -401,7 +385,7 @@ function FeatureAccessSection({
                 <span className="block text-xs font-medium">{ENTITLEMENT_LABELS[key]}</span>
                 {showDescription && (
                   <span className="block text-[10px] text-muted-foreground mt-0.5">
-                    {apiAccessHint ?? ENTITLEMENT_DESCRIPTIONS[key]}
+                    {ENTITLEMENT_DESCRIPTIONS[key]}
                   </span>
                 )}
               </span>
@@ -461,10 +445,10 @@ function UsageLimitsSection({
 
 // -------------------- Price formatting --------------------
 // formatMoney comes from the shared currency catalog (client-safe):
-//   (9, 'USD') → "$9" · (90, 'MAD') → "90 MAD" · (9, 'CHF') → "CHF 9".
+//   (9, 'USD') → "$9" · (90, 'MAD') → "90 DH" · (9, 'CHF') → "CHF 9".
 
 /** Format the LARGE primary price on a plan card — integer amounts.
- *  e.g. (90, 'MAD') → "90 MAD"; (0, 'CHF') → "CHF 0". */
+ *  e.g. (90, 'MAD') → "90 DH"; (0, 'CHF') → "CHF 0". */
 function formatPriceSymbol(amount: number, currency: string): string {
   return formatMoney(amount, currency, 0);
 }
@@ -740,7 +724,7 @@ function EditPlanDialog({
   // ONE base price configuration — the plan's default/fallback
   // currency (country/currency selector) + monthly/yearly prices
   // denominated in it. NO per-currency matrix: other currency prices
-  // (e.g. 90 MAD) are platform-level regional config, resolved
+  // (e.g. 90 DH) are platform-level regional config, resolved
   // server-side per customer.
   const [currency, setCurrency] = useState((plan.currency ?? 'CHF').toUpperCase());
   const [autoCurrency, setAutoCurrency] = useState(plan.autoCurrency ?? true);
@@ -1127,9 +1111,9 @@ function EditPlanDialog({
           <Separator />
 
           {/* -------------------- Feature Access --------------------
-              10 INDEPENDENT checkboxes — Platform AI carries its usage
-              limits NESTED directly underneath the option; API Access
-              auto-enables/requires Client's Own AI API. */}
+              9 INDEPENDENT checkboxes — Platform AI carries its usage
+              limits NESTED directly underneath the option; Client's
+              Own AI API stands alone (no API Access feature). */}
           <FeatureAccessSection
             entitlements={entitlements}
             onChange={setEntitlements}
@@ -1555,9 +1539,9 @@ function CreatePlanDialog({
           <Separator />
 
           {/* -------------------- Feature Access --------------------
-              10 INDEPENDENT checkboxes — Platform AI carries its usage
-              limits NESTED directly underneath the option; API Access
-              auto-enables/requires Client's Own AI API. */}
+              9 INDEPENDENT checkboxes — Platform AI carries its usage
+              limits NESTED directly underneath the option; Client's
+              Own AI API stands alone (no API Access feature). */}
           <FeatureAccessSection
             entitlements={entitlements}
             onChange={setEntitlements}

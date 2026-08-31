@@ -1493,9 +1493,10 @@ const INTERNAL_PLAN: Plan = {
   features: ['Full platform access', 'All features enabled', 'Billing bypass', 'Not counted in MRR'],
   // No custom_domains / white_label — site identity is client-owned in
   // this architecture, not a plan entitlement. Both AI features are
-  // enabled (they are independent), and api_access carries its
-  // dependency: ai_client.
-  entitlements: ['automation', 'ai_platform', 'ai_client', 'advanced_analytics', 'comments', 'api_access', 'audit_log', 'advanced_seo', 'newsletter', 'email_templates', 'backups'],
+  // enabled (they are independent). No 'api_access' — it was removed
+  // as a separate feature: Client's Own AI API already represents the
+  // client's own-provider/API access.
+  entitlements: ['automation', 'ai_platform', 'ai_client', 'advanced_analytics', 'comments', 'audit_log', 'advanced_seo', 'newsletter', 'email_templates', 'backups'],
   limits: { maxSites: -1, storageBytes: -1, aiArticlesPerMonth: -1, aiWordsPerMonth: -1, aiImagesPerMonth: -1 },
 };
 

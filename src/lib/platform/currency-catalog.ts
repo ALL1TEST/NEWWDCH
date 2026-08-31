@@ -18,8 +18,10 @@
 // duplicate code prefix in "[Flag] Country — CODE — Symbol").
 //
 // PRICE DISPLAY: formatMoney(amount, code) renders "$9" / "€9" /
-// "CHF 9" / "90 MAD" — symbol prefix for symbol currencies, code
-// prefix/suffix otherwise.
+// "CHF 9" / "90 DH" — symbol prefix for symbol currencies, symbol
+// suffix otherwise. MAD displays "DH" (the Latin dirham symbol — the
+// Arabic "د.م" is deliberately NOT used anywhere in the Plans &
+// Pricing interface).
 // ============================================================
 
 export interface CountryCurrencyEntry {
@@ -42,7 +44,7 @@ export interface CountryCurrencyEntry {
 export const COUNTRY_CURRENCY_CATALOG: CountryCurrencyEntry[] = [
   // ---- Representative entries (drive the selector order) ----
   { country: 'US', countryName: 'United States', currency: 'USD', flag: '🇺🇸', symbol: '$' },
-  { country: 'MA', countryName: 'Morocco', currency: 'MAD', flag: '🇲🇦', symbol: 'د.م.' },
+  { country: 'MA', countryName: 'Morocco', currency: 'MAD', flag: '🇲🇦', symbol: 'DH' },
   { country: 'EU', countryName: 'European Union', currency: 'EUR', flag: '🇪🇺', symbol: '€' },
   { country: 'CH', countryName: 'Switzerland', currency: 'CHF', flag: '🇨🇭', symbol: 'CHF' },
   { country: 'GB', countryName: 'United Kingdom', currency: 'GBP', flag: '🇬🇧', symbol: '£' },
@@ -141,7 +143,7 @@ export function findCountryEntry(countryCode: string): CountryCurrencyEntry | nu
 
 /** How a price renders for a currency: the symbol and whether it is
  *  prefixed or suffixed. Symbol currencies (USD $, EUR € …) prefix the
- *  symbol; MAD suffixes its code ("90 MAD"); CHF prefixes ("CHF 9");
+ *  symbol; MAD suffixes "DH" ("90 DH"); CHF prefixes ("CHF 9");
  *  unknown codes prefix their code. */
 const CURRENCY_FORMAT: Record<string, { text: string; position: 'prefix' | 'suffix' }> = {
   USD: { text: '$', position: 'prefix' },
@@ -160,11 +162,11 @@ const CURRENCY_FORMAT: Record<string, { text: string; position: 'prefix' | 'suff
   SEK: { text: 'kr', position: 'suffix' },
   NOK: { text: 'kr', position: 'suffix' },
   DKK: { text: 'kr', position: 'suffix' },
-  MAD: { text: 'MAD', position: 'suffix' },
+  MAD: { text: 'DH', position: 'suffix' },
   CHF: { text: 'CHF', position: 'prefix' },
 };
 
-/** The native symbol for a currency code (e.g. MAD → 'د.م.'). Used by
+/** The native symbol for a currency code (e.g. MAD → 'DH'). Used by
  *  the selector's "flag — name — code — symbol" display. */
 const CURRENCY_SYMBOL: Record<string, string> = {
   USD: '$',
@@ -183,12 +185,12 @@ const CURRENCY_SYMBOL: Record<string, string> = {
   SEK: 'kr',
   NOK: 'kr',
   DKK: 'kr',
-  MAD: 'د.م.',
+  MAD: 'DH',
   CHF: 'CHF',
 };
 
 /** Format an amount for display in a currency.
- *  e.g. (9, 'USD') → "$9"; (90, 'MAD') → "90 MAD"; (9, 'CHF') → "CHF 9".
+ *  e.g. (9, 'USD') → "$9"; (90, 'MAD') → "90 DH"; (9, 'CHF') → "CHF 9".
  *  `decimals` controls the fraction digits (default 0). */
 export function formatMoney(amount: number, currency: string, decimals = 0): string {
   const code = (currency ?? '').trim().toUpperCase();
@@ -200,7 +202,7 @@ export function formatMoney(amount: number, currency: string, decimals = 0): str
   return fmt.position === 'prefix' ? `${fmt.text}${num}` : `${num} ${fmt.text}`;
 }
 
-/** Display symbol for a currency (MAD → 'د.م.', USD → '$'). */
+/** Display symbol for a currency (MAD → 'DH', USD → '$'). */
 export function currencySymbolOf(code: string): string {
   return CURRENCY_SYMBOL[(code ?? '').trim().toUpperCase()] ?? (code ?? '').toUpperCase();
 }
@@ -215,13 +217,13 @@ export interface SelectableCurrency {
   countryCode: string;
   flag: string;
   countryName: string;
-  /** Native symbol shown in the selector (MAD → 'د.م.'). */
+  /** Native symbol shown in the selector (MAD → 'DH'). */
   symbol: string;
 }
 
 /** De-duplicated currency list for the Default Currency selector. The
  *  first catalog entry per currency is the representative country
- *  (🇺🇸 United States — USD, 🇲🇦 Morocco — MAD, 🇪🇺 European Union —
+ *  (🇺🇸 United States — USD, 🇲🇦 Morocco — MAD — DH, 🇪🇺 European Union —
  *  EUR, 🇨🇭 Switzerland — CHF, …). Order follows the catalog. */
 export const SELECTABLE_CURRENCIES: SelectableCurrency[] = (() => {
   const seen = new Set<string>();

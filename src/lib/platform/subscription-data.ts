@@ -632,18 +632,10 @@ export function validatePlanConfigInput(input: {
       }
     }
     // Platform AI and Client's Own AI API are INDEPENDENT features —
-    // both may be enabled at once (no mutual exclusion).
-    // API ACCESS DEPENDENCY: API Access requires Client's Own AI API.
-    // A plan can never be saved with api_access but no ai_client
-    // (Platform AI does NOT satisfy this dependency).
-    if (
-      input.entitlements.includes('api_access') &&
-      !input.entitlements.includes('ai_client')
-    ) {
-      errors.push(
-        "API Access requires Client's Own AI API — enable Client's Own AI API as well (it is enabled automatically in the plan editor).",
-      );
-    }
+    // both may be enabled at once (no mutual exclusion). API Access is
+    // no longer a feature at all: a stale 'api_access' key in the input
+    // is silently stripped by normalizeEntitlementKeys on save
+    // (Client's Own AI API already covers the client's own-API access).
   }
   return errors;
 }

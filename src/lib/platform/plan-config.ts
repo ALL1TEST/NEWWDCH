@@ -99,11 +99,11 @@ const DEFAULT_LIMITS: PlanLimits = {
  *    split and always meant the platform-provided AI).
  *  - Platform AI and Client's Own AI API are INDEPENDENT — both may
  *    be present (no mutual exclusion to enforce).
- *  - API ACCESS DEPENDENCY: 'api_access' is dropped when 'ai_client'
- *    is absent — a plan can never carry API Access without Client's
- *    Own AI API. (Stale/legacy rows self-clean on load + next save;
- *    interactive saves are additionally validated upstream with a
- *    clear 400 message.)
+ *  - API Access is REMOVED as a feature: 'api_access' is a legacy
+ *    removed key (like custom_domains / white_label) — Client's Own
+ *    AI API already represents the client's own-provider/API access,
+ *    so the duplicate key is STRIPPED on load + save. Old DB rows
+ *    self-clean; stale API input never reaches the saved plan.
  *  - legacy 'custom_domains' / 'white_label' are STRIPPED: site
  *    domains and site branding are client-owned in this architecture
  *    (every site carries its own domain + identity), so they are not
@@ -113,18 +113,17 @@ const DEFAULT_LIMITS: PlanLimits = {
 export function normalizeEntitlementKeys(keys: readonly string[]): string[] {
   // Legacy keys that are no longer plan entitlements — stripped on
   // load/save so existing rows + stale API input clean themselves.
-  const LEGACY_REMOVED_KEYS = new Set(['custom_domains', 'white_label']);
+  // 'api_access' joined them: Client's Own AI API already covers the
+  // client's own-API connectivity, so a separate API Access feature
+  // no longer exists anywhere (editor, cards, server checks).
+  const LEGACY_REMOVED_KEYS = new Set(['custom_domains', 'white_label', 'api_access']);
   const out: string[] = [];
   const seen = new Set<string>();
   const hasPlatform = keys.includes('ai_platform') || keys.includes('ai_content');
-  const hasClient = keys.includes('ai_client');
   for (const k of keys) {
     if (typeof k !== 'string' || !k.trim()) continue;
     if (k === 'ai_content') continue; // legacy → replaced by ai_platform below
     if (LEGACY_REMOVED_KEYS.has(k)) continue; // not plan entitlements anymore
-    // API Access requires Client's Own AI API — never keep a stale
-    // api_access grant without its dependency.
-    if (k === 'api_access' && !hasClient) continue;
     if (k === 'ai_platform' && hasPlatform) {
       if (!seen.has('ai_platform')) out.push('ai_platform');
       seen.add('ai_platform');
@@ -408,18 +407,16 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     stripePriceIdYearly: null,
     active: true,
     features: [],
-    // ENTERPRISE example: Client's Own AI API + API Access — the
-    // client connects their own provider, so NO platform AI usage
-    // limits are stored. All other platform features enabled.
-    // (Platform AI and Client's Own AI API are independent — this
-    // example simply ships the client-AI configuration; a plan MAY
-    // carry both AI keys.)
+    // ENTERPRISE example: Client's Own AI API — the client connects
+    // their own provider, so NO platform AI usage limits are stored.
+    // All other platform features enabled. (Platform AI and Client's
+    // Own AI API are independent — this example simply ships the
+    // client-AI configuration; a plan MAY carry both AI keys.)
     entitlements: [
       'ai_client',
       'advanced_analytics',
       'automation',
       'comments',
-      'api_access',
       'audit_log',
       'advanced_seo',
       'newsletter',
@@ -623,9 +620,10 @@ function rowToData(row: PlanConfigRow): PlanConfigData {
     stripePriceIdYearly: row.stripePriceIdYearly,
     active: row.active,
     features,
-    // Normalize: legacy 'ai_content' → 'ai_platform'; API Access
-    // without Client's Own AI API is dropped; the two AI keys are
-    // independent (both may be present).
+    // Normalize: legacy 'ai_content' → 'ai_platform'; the legacy
+    // 'api_access' key is stripped (no separate API Access feature —
+    // Client's Own AI API covers it); the two AI keys are independent
+    // (both may be present).
     entitlements: normalizeEntitlementKeys(entitlements),
     limits,
     badgeVariant: row.badgeVariant,
@@ -954,9 +952,9 @@ function mergePlanPatch(current: PlanConfigData, patch: PlanConfigInput, default
     features: patch.features ?? current.features,
     // Entitlements: the patch's editor-managed keys replace the current
     // ones, while NON-editor keys (e.g. 'audit_log') are PRESERVED from
-    // the current plan — the Create/Edit Plan modal only manages the 10
+    // the current plan — the Create/Edit Plan modal only manages the 9
     // Feature Access keys. Then normalize (legacy 'ai_content' →
-    // 'ai_platform'; API Access requires Client's Own AI API; the two
+    // 'ai_platform'; the removed 'api_access' key is stripped; the two
     // AI keys are independent).
     entitlements: normalizeEntitlementKeys(
       patch.entitlements !== undefined

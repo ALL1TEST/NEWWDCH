@@ -156,7 +156,7 @@ const CURRENCIES = [
   { label: 'GBP (£)', value: 'GBP' }, { label: 'JPY (¥)', value: 'JPY' },
   { label: 'CNY (¥)', value: 'CNY' }, { label: 'INR (₹)', value: 'INR' },
   { label: 'AUD (A$)', value: 'AUD' }, { label: 'CAD (C$)', value: 'CAD' },
-  { label: 'CHF (Fr)', value: 'CHF' }, { label: 'MAD (د.م.)', value: 'MAD' },
+  { label: 'CHF (Fr)', value: 'CHF' }, { label: 'MAD (DH)', value: 'MAD' },
 ];
 
 const ENCRYPTION_TYPES = [

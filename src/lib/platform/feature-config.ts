@@ -24,13 +24,18 @@
 //       • Client's Own AI API — the client connects their own provider
 //         /API; that usage NEVER consumes the Platform AI limits.
 //
-// API ACCESS DEPENDENCY (the ONE rule between features):
-//   API Access REQUIRES Client's Own AI API — a saved plan can never
-//   have api_access without ai_client. Enabling API Access also
-//   enables Client's Own AI API; turning Client's Own AI API off also
-//   turns API Access off (enforced in the plan editor UI, in input
-//   validation, and in normalizeEntitlementKeys). Platform AI does NOT
-//   satisfy this dependency.
+// API ACCESS — REMOVED as a separate feature: 'Client's Own AI API'
+//   already represents the customer's ability to connect and use
+//   their own AI provider/API, so a standalone 'API Access'
+//   entitlement would duplicate it. 'api_access' is now a legacy
+//   removed key — plan-config's normalizeEntitlementKeys strips it
+//   from saved rows / API input on load and on save (the plan editor,
+//   plan cards and server-side checks no longer know it at all). The
+//   AI logic is unchanged:
+//     • Platform AI         — platform-provided AI, subject to the
+//       plan's AI usage limits.
+//     • Client's Own AI API — the client's own provider/API, never
+//       counted against the Platform AI limits.
 //
 // SITE IDENTITY IS NOT A PLAN ENTITLEMENT: clients already create and
 // manage their own sites/blogs from the dashboard — every site carries
@@ -49,7 +54,6 @@ export const ENTITLEMENT_KEYS = [
   'newsletter',
   'email_templates',
   'backups',
-  'api_access',
   // Platform AI + Client's Own AI API — independent Feature Access
   // keys (a plan may have either, both, or neither). 'ai_content'
   // below is the legacy pre-migration key, normalized to 'ai_platform'
@@ -76,7 +80,6 @@ export const ENTITLEMENT_LABELS: Record<EntitlementKey, string> = {
   newsletter: 'Newsletter',
   email_templates: 'Email Templates',
   backups: 'Backups',
-  api_access: 'API Access',
   ai_platform: 'Platform AI',
   ai_client: "Client's Own AI API",
   ai_content: 'AI Tools',
@@ -91,7 +94,6 @@ export const ENTITLEMENT_DESCRIPTIONS: Record<EntitlementKey, string> = {
   newsletter: 'Subscriber management + campaigns (client-managed delivery)',
   email_templates: 'Create + manage reusable email templates',
   backups: 'Create + restore CMS backups (client-managed storage)',
-  api_access: 'Programmatic API access — requires Client\'s Own AI API',
   // Exact customer-facing wording from the plan spec (also rendered
   // next to the Platform AI checkbox in the plan editor, above its
   // nested Usage Limits block).
@@ -104,15 +106,16 @@ export const ENTITLEMENT_DESCRIPTIONS: Record<EntitlementKey, string> = {
 // -------------------- Plan editor Feature Access --------------------
 
 /** The Feature Access checkboxes exposed in the Create/Edit Plan
- *  modal (in display order) — 10 INDEPENDENT features, including
+ *  modal (in display order) — 9 INDEPENDENT features, including
  *  Platform AI and Client's Own AI API as normal checkboxes (a plan
  *  may have either, both, or neither; they are NOT mutually
- *  exclusive). The ONE inter-feature rule lives here as a note:
- *  API Access requires Client's Own AI API (the plan editor
- *  auto-enables it; the backend rejects/normalizes invalid combos).
- *  Custom Domains and White Label are deliberately NOT here: sites
- *  (with their own domain + branding) are client-owned in this
- *  architecture, so they are not plan entitlements at all. */
+ *  exclusive). API Access is NOT a feature anymore: Client's Own AI
+ *  API already represents the client's own-API connectivity, so the
+ *  duplicate 'api_access' key was removed (legacy rows are stripped by
+ *  normalizeEntitlementKeys). Custom Domains and White Label are
+ *  deliberately NOT here either: sites (with their own domain +
+ *  branding) are client-owned in this architecture, so they are not
+ *  plan entitlements at all. */
 export const PLAN_EDITOR_FEATURE_KEYS = [
   'automation',
   'advanced_seo',
@@ -123,7 +126,6 @@ export const PLAN_EDITOR_FEATURE_KEYS = [
   'backups',
   'ai_platform',
   'ai_client',
-  'api_access',
 ] as const;
 
 export type PlanEditorFeatureKey = (typeof PLAN_EDITOR_FEATURE_KEYS)[number];
