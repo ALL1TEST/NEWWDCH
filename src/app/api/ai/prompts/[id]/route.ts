@@ -4,11 +4,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requireAuth } from '@/lib/platform/platform-auth';
+import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
 
 // ============================================================
-// PROMPT LIBRARY [id]. Same rule as /api/ai/prompts: any
-// authenticated CMS user (managed from the Admin User → AI page);
+// PROMPT LIBRARY [id]. Same rule as /api/ai/prompts: gated by the
+// plan's "Client's Own AI API" feature (ai_client) for clients,
+// platform staff bypass (managed from the Admin User → AI page);
 // the Prompt Library is not exposed as a tab in Platform Admin,
 // but the backend functionality/data is kept.
 // ============================================================
@@ -93,7 +94,7 @@ const updateSchema = z.object({
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
 
-  const auth = await requireAuth(request);
+  const auth = await requireFeatureAllowStaff(request, 'ai_client');
   if ('response' in auth) return auth.response;
 
   try {
@@ -123,7 +124,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
 
-  const auth = await requireAuth(request);
+  const auth = await requireFeatureAllowStaff(request, 'ai_client');
   if ('response' in auth) return auth.response;
 
   try {
@@ -251,7 +252,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
 
-  const auth = await requireAuth(request);
+  const auth = await requireFeatureAllowStaff(request, 'ai_client');
   if ('response' in auth) return auth.response;
 
   try {

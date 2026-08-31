@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requireAuth } from '@/lib/platform/platform-auth';
+import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
 
 // ============================================================
 // PROMPT LIBRARY.
@@ -13,9 +13,18 @@ import { requireAuth } from '@/lib/platform/platform-auth';
 // internally selects the appropriate active prompt when an AI
 // tool runs). It is managed from the normal Admin User → AI page
 // (Prompt Library tab) and is NOT exposed as a visible page/tab
-// in the Platform Admin dashboard. Any authenticated user of the
-// CMS can list, read, create, edit and delete prompts here —
-// exactly as before. The backend functionality/data is kept.
+// in the Platform Admin dashboard.
+//
+// ENTITLEMENT: the Prompt Library tab lives on the Admin User → AI
+// page, which belongs to the plan's "Client's Own AI API" feature
+// (ai_client) — NEVER to Platform AI (ai_platform). Platform AI only
+// gates the AI generation tools and their AI Articles/month +
+// AI Images/month limits. Server-side the gate is
+// requireFeatureAllowStaff('ai_client'): platform staff bypass (they
+// configure the platform's own AI stack), clients need the plan
+// feature — exactly like the Providers/Models routes of the same
+// page. The internal Platform AI usage of prompts
+// (resolvePlatformPrompt) reads the DB directly and is unaffected.
 // ============================================================
 
 // ---------- helpers ---------------------------------------------------
@@ -103,7 +112,7 @@ const SORTABLE = new Set(['createdAt', 'updatedAt', 'name', 'category', 'isActiv
 export async function GET(request: NextRequest) {
   const id = reqId();
 
-  const auth = await requireAuth(request);
+  const auth = await requireFeatureAllowStaff(request, 'ai_client');
   if ('response' in auth) return auth.response;
 
   try {
@@ -164,7 +173,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const id = reqId();
 
-  const auth = await requireAuth(request);
+  const auth = await requireFeatureAllowStaff(request, 'ai_client');
   if ('response' in auth) return auth.response;
 
   try {

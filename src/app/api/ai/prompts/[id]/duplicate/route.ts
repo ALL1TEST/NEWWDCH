@@ -3,11 +3,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requireAuth } from '@/lib/platform/platform-auth';
+import { requireFeatureAllowStaff } from '@/lib/platform/platform-auth';
 
-// Prompt library management — any authenticated CMS user (same rule
-// as /api/ai/prompts; the Prompt Library is not exposed as a tab in
-// Platform Admin, but the backend functionality is kept).
+// Prompt library management — same rule as /api/ai/prompts: gated by
+// the plan's "Client's Own AI API" feature (ai_client) for clients,
+// platform staff bypass (the Prompt Library is not exposed as a tab
+// in Platform Admin, but the backend functionality is kept).
 
 // ---------- helpers ---------------------------------------------------
 
@@ -69,7 +70,7 @@ function serializePrompt<T extends Record<string, unknown>>(item: T): T {
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = reqId();
 
-  const auth = await requireAuth(request);
+  const auth = await requireFeatureAllowStaff(request, 'ai_client');
   if ('response' in auth) return auth.response;
 
   try {

@@ -4,18 +4,22 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApi } from '@/lib/api-client';
 
 // ============================================================
-// CLIENT AI STATE — the plan's Platform AI connection, client side.
+// CLIENT AI STATE — the plan's AI connection, client side.
 // ============================================================
 // Server-side source of truth: /api/ai/client/workspace.
 //   • aiPlatform  — the plan includes Platform AI → the client may
-//     USE the AI tools (content editor assistant, AI Ideas, AI
-//     Generate in Media) which run on the Platform Admin's
-//     configured provider/model internally, with usage subject to
-//     the plan's AI Articles/month + AI Images/month limits.
+//     USE the platform-provided AI tools (content editor assistant,
+//     AI Ideas, AI Generate in Media) which run on the Platform
+//     Admin's configured provider/model internally, with usage
+//     subject to the plan's AI Articles/month + AI Images/month
+//     limits. NEVER grants the Admin User → AI page.
 //   • aiClient    — the plan includes Client's Own AI API → the
-//     client may configure their OWN AI provider connections
-//     (Admin User → AI → Providers/Models), never mixed with
-//     Platform AI and never consuming its limits.
+//     client may configure their OWN AI provider connections, and
+//     this is the ONLY entitlement that shows the Admin User → AI
+//     page (Providers / Models / Prompt Library / Settings — the
+//     sidebar, command palette and #ai route guard all key off
+//     this flag, never off aiPlatform), never mixed with Platform
+//     AI and never consuming its limits.
 //   • mode        — 'unlimited' (platform staff) | 'platform' |
 //     'client' (own API only) | 'none'.
 //

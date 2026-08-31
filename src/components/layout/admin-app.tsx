@@ -5,6 +5,7 @@ import { ShieldAlert } from 'lucide-react';
 import { AdminShell } from './admin-shell';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useAiWorkspace } from '@/hooks/use-ai-workspace';
 import { moduleRegistry } from '@/lib/module-registry';
 import { canAccessPage, isPlatformPage } from '@/lib/permissions';
 
@@ -38,8 +39,24 @@ export default function AdminApp() {
   // Access control — if the user cannot access the current page,
   // render an "Access Denied" notice instead of the module.
   const pageKey = currentModule || 'dashboard';
+
+  // ENTITLEMENT GUARD — Admin User → AI page. The AI page belongs to the
+  // plan's "Client's Own AI API" feature (ai_client), NEVER to Platform
+  // AI (ai_platform): Platform AI only gates the AI generation tools and
+  // their AI Articles/month + AI Images/month limits, so a plan with
+  // Platform AI alone (e.g. Pro) must NOT unlock this page, while a plan
+  // with Client's Own AI API keeps it even without Platform AI. The
+  // sidebar/command-palette hide their entries off the same flag; this
+  // guard covers direct #ai hash navigation. While the workspace query
+  // is loading the page renders (cosmetic fail-open) — every /api/ai/*
+  // route of the page enforces ai_client server-side (403).
+  const { data: aiWorkspace } = useAiWorkspace();
+  const isStaff = user?.role === 'PLATFORM_ADMIN' || user?.role === 'OWNER';
+  const aiPageAllowed = isStaff || (aiWorkspace?.entitlements.aiClient ?? true);
+
   const hasAccess = user
-    ? canAccessPage(user.role, user.pagePermissions, pageKey)
+    ? canAccessPage(user.role, user.pagePermissions, pageKey) &&
+      (pageKey !== 'ai' || aiPageAllowed)
     : true;
 
   // Suppress unused-var warning for currentItemId (kept for nav sync).

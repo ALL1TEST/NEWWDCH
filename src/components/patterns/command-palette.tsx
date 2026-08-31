@@ -43,6 +43,7 @@ import {
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useAiWorkspace } from '@/hooks/use-ai-workspace';
 import { getApi } from '@/lib/api-client';
 import { formatRelativeTime } from '@/lib/utils';
 
@@ -267,6 +268,16 @@ export function CommandPalette() {
 
   const isPlatformStaff = user?.role === 'PLATFORM_ADMIN' || user?.role === 'OWNER';
 
+  // Admin User → AI page visibility — same entitlement rule as the
+  // sidebar: the AI page belongs to the plan's "Client's Own AI API"
+  // feature (ai_client), NEVER to Platform AI (ai_platform). Clients
+  // whose plan lacks Client's Own AI API get no AI navigation entries
+  // here either. While the workspace query is loading the entries stay
+  // visible (cosmetic fail-open — the API routes enforce ai_client
+  // server-side).
+  const { data: aiWorkspace } = useAiWorkspace();
+  const aiClientEnabled = isPlatformStaff || (aiWorkspace?.entitlements.aiClient ?? true);
+
   // Global keyboard listener for Cmd/Ctrl+K and Escape.
   // Escape MUST close the palette: without it the z-50 backdrop stays up
   // and blocks every interaction on the page until an outside click.
@@ -458,20 +469,26 @@ export function CommandPalette() {
     // SMTP Settings, Backups) — the client CMS items (Content, Media,
     // AI, AI Providers, Prompt Library, AI Jobs, etc.) are NOT relevant
     // for a platform admin's role and are filtered out. Client roles
-    // (admin/editor/author) keep the full CMS nav + actions.
+    // (admin/editor/author) keep the full CMS nav + actions — except the
+    // AI entries when the plan lacks Client's Own AI API (ai_client):
+    // the AI page is the client's own-API configuration page and is
+    // never granted by Platform AI.
+    const withoutAiPage = (items: CommandItemDef[]) =>
+      aiClientEnabled ? items : items.filter((i) => i.module !== 'ai');
+
     if (recentItems.length > 0) {
-      result.push({ heading: 'Recent', items: recentItems });
+      result.push({ heading: 'Recent', items: withoutAiPage(recentItems) });
     }
 
     if (isPlatformStaff) {
       result.push({ heading: 'Platform Admin', items: PLATFORM_NAV_ITEMS });
     } else {
-      result.push({ heading: 'Navigation', items: NAV_ITEMS });
+      result.push({ heading: 'Navigation', items: withoutAiPage(NAV_ITEMS) });
       result.push({ heading: 'Actions', items: ACTION_ITEMS });
     }
 
     return result;
-  }, [shouldSearch, searchResults, isPlatformStaff]);
+  }, [shouldSearch, searchResults, isPlatformStaff, aiClientEnabled]);
 
   // When the user is searching, override Command's default filter
   // (we already have backend results — don't client-side filter them

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requireAuth, isPlatformStaff } from '@/lib/platform/platform-auth';
+import { requireFeatureAllowStaff, isPlatformStaff } from '@/lib/platform/platform-auth';
 
 // ============================================================
 // AI SETTINGS
@@ -20,6 +20,14 @@ import { requireAuth, isPlatformStaff } from '@/lib/platform/platform-auth';
 //     saves exactly like before, but a client can never read or
 //     write the platform's AI configuration, and may only
 //     reference their OWN provider/model connections in it.
+//
+// ENTITLEMENT: this route is part of the Admin User → AI page, which
+// belongs to the plan's "Client's Own AI API" feature (ai_client) —
+// NEVER to Platform AI (ai_platform). Platform AI only gates the AI
+// generation tools and their AI Articles/month + AI Images/month
+// limits; it never grants access to this page or route. Server-side
+// the gate is requireFeatureAllowStaff('ai_client') (platform staff
+// bypass — they configure the platform's own infrastructure).
 // ============================================================
 
 // ---------- helpers ---------------------------------------------------
@@ -91,7 +99,7 @@ const upsertSchema = z.object({
 export async function GET(request: NextRequest) {
   const id = reqId();
 
-  const auth = await requireAuth(request);
+  const auth = await requireFeatureAllowStaff(request, 'ai_client');
   if ('response' in auth) return auth.response;
   const staff = isPlatformStaff(auth.user);
 
@@ -115,7 +123,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const id = reqId();
 
-  const auth = await requireAuth(request);
+  const auth = await requireFeatureAllowStaff(request, 'ai_client');
   if ('response' in auth) return auth.response;
   const staff = isPlatformStaff(auth.user);
 
