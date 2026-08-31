@@ -15,11 +15,10 @@ import { getApi } from '@/lib/api-client';
 //     limits. NEVER grants the Admin User → AI page.
 //   • aiClient    — the plan includes Client's Own AI API → the
 //     client may configure their OWN AI provider connections, and
-//     this is the ONLY entitlement that shows the Admin User → AI
-//     page (Providers / Models / Prompt Library / Settings — the
-//     sidebar, command palette and #ai route guard all key off
-//     this flag, never off aiPlatform), never mixed with Platform
-//     AI and never consuming its limits.
+//     this is the entitlement that shows the Admin User → AI page
+//     (the sidebar / command palette / #ai route guard key off
+//     usePlanEntitlements + MODULE_FEATURE_MAP, never off aiPlatform),
+//     never mixed with Platform AI and never consuming its limits.
 //   • mode        — 'unlimited' (platform staff) | 'platform' |
 //     'client' (own API only) | 'none'.
 //

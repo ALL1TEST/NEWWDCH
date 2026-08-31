@@ -21,6 +21,7 @@ const tags = dynamic(() => import('@/modules/tags').then(m => ({ default: m.Tags
 const comments = dynamic(() => import('@/modules/comments').then(m => ({ default: m.CommentsModule as ComponentType })), { loading: ModuleFallback });
 const newsletter = dynamic(() => import('@/modules/newsletter').then(m => ({ default: m.NewsletterModule as ComponentType })), { loading: ModuleFallback });
 const seo = dynamic(() => import('@/modules/seo').then(m => ({ default: m.SeoModule as ComponentType })), { loading: ModuleFallback });
+const analytics = dynamic(() => import('@/modules/analytics').then(m => ({ default: m.AnalyticsModule as ComponentType })), { loading: ModuleFallback });
 const notifications = dynamic(() => import('@/modules/notifications').then(m => ({ default: m.NotificationsModule as ComponentType })), { loading: ModuleFallback });
 const settings = dynamic(() => import('@/modules/settings').then(m => ({ default: m.SettingsModule as ComponentType })), { loading: ModuleFallback });
 const ai = dynamic(() => import('@/modules/ai').then(m => ({ default: m.AiModule as ComponentType })), { loading: ModuleFallback });
@@ -34,5 +35,5 @@ const billing = dynamic(() => import('@/modules/billing').then(m => ({ default: 
 
 export const moduleRegistry: Record<string, ComponentType> = {
   ...platformModuleRegistry,
-  dashboard, content, calendar, media, users, categories, tags, comments, newsletter, 'email-templates': emailTemplates, seo, notifications, settings, ai, audit, backups, automation, jobs, profile, billing,
+  dashboard, content, calendar, media, users, categories, tags, comments, newsletter, 'email-templates': emailTemplates, seo, analytics, notifications, settings, ai, audit, backups, automation, jobs, profile, billing,
 };

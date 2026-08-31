@@ -5,7 +5,7 @@ import { ShieldAlert } from 'lucide-react';
 import { AdminShell } from './admin-shell';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
-import { useAiWorkspace } from '@/hooks/use-ai-workspace';
+import { usePlanEntitlements, isModuleAllowedByPlan } from '@/hooks/use-entitlements';
 import { moduleRegistry } from '@/lib/module-registry';
 import { canAccessPage, isPlatformPage } from '@/lib/permissions';
 
@@ -40,23 +40,24 @@ export default function AdminApp() {
   // render an "Access Denied" notice instead of the module.
   const pageKey = currentModule || 'dashboard';
 
-  // ENTITLEMENT GUARD — Admin User → AI page. The AI page belongs to the
-  // plan's "Client's Own AI API" feature (ai_client), NEVER to Platform
-  // AI (ai_platform): Platform AI only gates the AI generation tools and
-  // their AI Articles/month + AI Images/month limits, so a plan with
-  // Platform AI alone (e.g. Pro) must NOT unlock this page, while a plan
-  // with Client's Own AI API keeps it even without Platform AI. The
-  // sidebar/command-palette hide their entries off the same flag; this
-  // guard covers direct #ai hash navigation. While the workspace query
-  // is loading the page renders (cosmetic fail-open) — every /api/ai/*
-  // route of the page enforces ai_client server-side (403).
-  const { data: aiWorkspace } = useAiWorkspace();
+  // PLAN FEATURE SYNC (route guard) — Platform Admin → Plans & Pricing
+  // → Feature Access for the customer's ACTIVE plan is the single
+  // source of truth for the Admin User dashboard (never the plan name):
+  // modules whose page key requires a plan feature (MODULE_FEATURE_MAP:
+  // seo → Advanced SEO, analytics → Advanced Analytics, comments,
+  // newsletter, automation, email-templates, backups, ai → Client's
+  // Own AI API) are blocked with the Access Denied notice when the plan
+  // lacks the feature — hiding the sidebar entry alone is NOT enough, a
+  // user manually entering the disabled feature's URL is stopped here.
+  // While the entitlements query loads the page renders (cosmetic
+  // fail-open) — every feature API route enforces requireFeature
+  // server-side (403 FEATURE_NOT_AVAILABLE), so no data leaks.
+  const { data: planEntitlements } = usePlanEntitlements();
   const isStaff = user?.role === 'PLATFORM_ADMIN' || user?.role === 'OWNER';
-  const aiPageAllowed = isStaff || (aiWorkspace?.entitlements.aiClient ?? true);
+  const featureAllowed = isStaff || isModuleAllowedByPlan(pageKey, planEntitlements);
 
   const hasAccess = user
-    ? canAccessPage(user.role, user.pagePermissions, pageKey) &&
-      (pageKey !== 'ai' || aiPageAllowed)
+    ? canAccessPage(user.role, user.pagePermissions, pageKey) && featureAllowed
     : true;
 
   // Suppress unused-var warning for currentItemId (kept for nav sync).

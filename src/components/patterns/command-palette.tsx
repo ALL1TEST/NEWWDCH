@@ -27,6 +27,7 @@ import {
   Receipt,
   CreditCard,
   Ticket,
+  Zap,
   Loader2,
   type LucideIcon,
 } from 'lucide-react';
@@ -43,7 +44,7 @@ import {
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
-import { useAiWorkspace } from '@/hooks/use-ai-workspace';
+import { usePlanEntitlements, isModuleAllowedByPlan } from '@/hooks/use-entitlements';
 import { getApi } from '@/lib/api-client';
 import { formatRelativeTime } from '@/lib/utils';
 
@@ -105,9 +106,10 @@ const NAV_ITEMS: CommandItemDef[] = [
   { id: 'nav-categories', label: 'Categories', icon: Tag, module: 'categories' },
   { id: 'nav-tags', label: 'Tags', icon: Tag, module: 'tags' },
   { id: 'nav-comments', label: 'Comments', icon: MessageSquare, module: 'comments' },
-  { id: 'nav-newsletters', label: 'Newsletters', icon: Mail, module: 'newsletters' },
+  { id: 'nav-newsletters', label: 'Newsletters', icon: Mail, module: 'newsletter' },
   { id: 'nav-seo', label: 'SEO', icon: Search, module: 'seo' },
   { id: 'nav-analytics', label: 'Analytics', icon: BarChart3, module: 'analytics' },
+  { id: 'nav-automation', label: 'Automation', icon: Zap, module: 'automation' },
   { id: 'nav-notifications', label: 'Notifications', icon: Bell, module: 'notifications' },
   { id: 'nav-ai', label: 'AI', icon: Sparkles, module: 'ai' },
   { id: 'nav-ai-providers', label: 'AI Providers', icon: Settings, module: 'ai', subPage: 'providers' },
@@ -268,15 +270,17 @@ export function CommandPalette() {
 
   const isPlatformStaff = user?.role === 'PLATFORM_ADMIN' || user?.role === 'OWNER';
 
-  // Admin User → AI page visibility — same entitlement rule as the
-  // sidebar: the AI page belongs to the plan's "Client's Own AI API"
-  // feature (ai_client), NEVER to Platform AI (ai_platform). Clients
-  // whose plan lacks Client's Own AI API get no AI navigation entries
-  // here either. While the workspace query is loading the entries stay
-  // visible (cosmetic fail-open — the API routes enforce ai_client
-  // server-side).
-  const { data: aiWorkspace } = useAiWorkspace();
-  const aiClientEnabled = isPlatformStaff || (aiWorkspace?.entitlements.aiClient ?? true);
+  // PLAN FEATURE SYNC — same entitlement rule as the sidebar: the
+  // plan's Feature Access configuration (resolved via
+  // /api/entitlements) is the single source of truth for the Admin
+  // User dashboard. Navigation entries whose module requires a plan
+  // feature (MODULE_FEATURE_MAP: SEO → Advanced SEO, Analytics →
+  // Advanced Analytics, Comments, Newsletter, AI → Client's Own AI
+  // API, Backups) are hidden when the plan lacks the feature — never
+  // keyed off the plan name. While the entitlements query loads, the
+  // entries stay visible (cosmetic fail-open — the feature APIs
+  // enforce 403 FEATURE_NOT_AVAILABLE server-side).
+  const { data: planEntitlements } = usePlanEntitlements();
 
   // Global keyboard listener for Cmd/Ctrl+K and Escape.
   // Escape MUST close the palette: without it the z-50 backdrop stays up
@@ -469,26 +473,28 @@ export function CommandPalette() {
     // SMTP Settings, Backups) — the client CMS items (Content, Media,
     // AI, AI Providers, Prompt Library, AI Jobs, etc.) are NOT relevant
     // for a platform admin's role and are filtered out. Client roles
-    // (admin/editor/author) keep the full CMS nav + actions — except the
-    // AI entries when the plan lacks Client's Own AI API (ai_client):
-    // the AI page is the client's own-API configuration page and is
-    // never granted by Platform AI.
-    const withoutAiPage = (items: CommandItemDef[]) =>
-      aiClientEnabled ? items : items.filter((i) => i.module !== 'ai');
+    // (admin/editor/author) keep the full CMS nav + actions — except
+    // entries whose module requires a plan feature the active plan
+    // lacks (MODULE_FEATURE_MAP via the entitlements query): the plan's
+    // Feature Access checkboxes decide what appears here.
+    const withoutFeatureLocked = (items: CommandItemDef[]) =>
+      isPlatformStaff || !planEntitlements
+        ? items
+        : items.filter((i) => isModuleAllowedByPlan(i.module, planEntitlements));
 
     if (recentItems.length > 0) {
-      result.push({ heading: 'Recent', items: withoutAiPage(recentItems) });
+      result.push({ heading: 'Recent', items: withoutFeatureLocked(recentItems) });
     }
 
     if (isPlatformStaff) {
       result.push({ heading: 'Platform Admin', items: PLATFORM_NAV_ITEMS });
     } else {
-      result.push({ heading: 'Navigation', items: withoutAiPage(NAV_ITEMS) });
+      result.push({ heading: 'Navigation', items: withoutFeatureLocked(NAV_ITEMS) });
       result.push({ heading: 'Actions', items: ACTION_ITEMS });
     }
 
     return result;
-  }, [shouldSearch, searchResults, isPlatformStaff, aiClientEnabled]);
+  }, [shouldSearch, searchResults, isPlatformStaff, planEntitlements]);
 
   // When the user is searching, override Command's default filter
   // (we already have backend results — don't client-side filter them

@@ -130,6 +130,64 @@ export const PLAN_EDITOR_FEATURE_KEYS = [
 
 export type PlanEditorFeatureKey = (typeof PLAN_EDITOR_FEATURE_KEYS)[number];
 
+// -------------------- Dashboard module ↔ plan feature --------------------
+
+/**
+ * DASHBOARD MODULE → REQUIRED PLAN FEATURE.
+ *
+ * The single source of truth connecting the Admin User dashboard
+ * surfaces to the Platform Admin → Plans & Pricing → Feature Access
+ * checkboxes. The Platform Admin's saved Feature Access configuration
+ * for the customer's ACTIVE plan decides what the customer's Admin
+ * User dashboard shows — never the plan's name.
+ *
+ * Mapping (module key = first segment of the hash route):
+ *   automation        → 'automation'          (#automation)
+ *   seo               → 'advanced_seo'        (#seo, incl. all sub-pages)
+ *   analytics         → 'advanced_analytics'  (#analytics)
+ *   comments          → 'comments'            (#comments)
+ *   newsletter        → 'newsletter'          (#newsletter)
+ *   email-templates   → 'email_templates'     (#email-templates)
+ *   backups           → 'backups'             (#backups, incl. sub-pages)
+ *   ai                → 'ai_client'           (#ai — the Admin User AI
+ *                        page is the client's OWN AI API configuration,
+ *                        NEVER Platform AI)
+ *
+ * Modules NOT in this map (dashboard, content, calendar, media, users,
+ * categories, tags, notifications, settings, profile, billing, jobs,
+ * audit) are NOT plan features and remain available to all client
+ * roles.
+ *
+ * This map is used by the sidebar (nav item visibility), the command
+ * palette (nav entry visibility) and the client route guard
+ * (#hash access) — all three layers key off the SAME map so hiding a
+ * menu item never conflicts with the route guard. The AUTHORITATIVE
+ * enforcement stays server-side: every feature API route calls
+ * requireFeature('...') and denies with 403 FEATURE_NOT_AVAILABLE.
+ *
+ * Platform AI ('ai_platform') is DELIBERATELY absent from this map:
+ * it gates the platform-provided AI TOOLS (content editor assistant,
+ * AI Ideas, AI Generate — metered by AI Articles/month +
+ * AI Images/month), not a dashboard page. Client's Own AI API
+ * ('ai_client') is what shows the Admin User → AI page.
+ */
+export const MODULE_FEATURE_MAP: Record<string, string> = {
+  automation: 'automation',
+  seo: 'advanced_seo',
+  analytics: 'advanced_analytics',
+  comments: 'comments',
+  newsletter: 'newsletter',
+  'email-templates': 'email_templates',
+  backups: 'backups',
+  ai: 'ai_client',
+};
+
+/** The plan feature required to access a dashboard module (page key).
+ *  Returns undefined for non-feature modules (always allowed). */
+export function featureForModule(moduleKey: string): string | undefined {
+  return MODULE_FEATURE_MAP[moduleKey];
+}
+
 /** AI feature keys — kept as named constants for server-side checks
  *  (requireFeature('ai_platform') / ('ai_client')). */
 export const AI_MODE_PLATFORM = 'ai_platform';

@@ -92,7 +92,7 @@ import { SiteSelector } from '@/components/layout/site-selector';
 import { cn } from '@/lib/utils';
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
 import { useSubscriptionStore } from '@/lib/stores/subscription-store';
-import { useAiWorkspace } from '@/hooks/use-ai-workspace';
+import { usePlanEntitlements, isModuleAllowedByPlan } from '@/hooks/use-entitlements';
 import { NotificationBell } from '@/components/layout/notification-bell';
 import { UserProfileMenu } from '@/components/layout/user-profile-menu';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
@@ -256,6 +256,11 @@ const NAV_ITEMS: NavItem[] = [
     label: 'SEO',
     href: '#seo',
     icon: 'Search',
+  },
+  {
+    label: 'Analytics',
+    href: '#analytics',
+    icon: 'BarChart3',
   },
   {
     label: 'AI',
@@ -922,28 +927,34 @@ export function AppSidebar() {
   const userRole = user?.role;
   const pagePermissions = user?.pagePermissions ?? null;
   const isPlatformAdmin = userRole === 'PLATFORM_ADMIN' || userRole === 'OWNER';
-  // Admin User → AI page visibility. The AI page (Providers / Models /
-  // Prompt Library / Settings) is the CLIENT'S OWN AI API configuration
-  // page — its visibility is driven by the plan's "Client's Own AI API"
-  // feature (ai_client) and NEVER by Platform AI (ai_platform). A client
-  // on a plan with only Platform AI (e.g. Pro) does NOT get the AI page;
-  // a client on a plan with Client's Own AI API gets it even without
-  // Platform AI. Platform staff use the separate platform sidebar (their
-  // nav never contains this item). While the workspace query is loading
-  // the item stays visible (cosmetic fail-open — the API routes enforce
-  // ai_client server-side).
-  const { data: aiWorkspace } = useAiWorkspace();
-  const aiClientEnabled = isPlatformAdmin || (aiWorkspace?.entitlements.aiClient ?? true);
+  // PLAN FEATURE SYNC — Platform Admin → Plans & Pricing → Feature
+  // Access for the customer's ACTIVE plan is the single source of
+  // truth for the Admin User dashboard (never the plan NAME): nav
+  // items whose module requires a plan feature (MODULE_FEATURE_MAP:
+  // SEO → Advanced SEO, Analytics → Advanced Analytics, Comments,
+  // Newsletter, Automation, Email Templates, Backups, AI → Client's
+  // Own AI API) are hidden when the plan lacks the feature. Settings
+  // children are filtered the same way (Email Templates / Backups).
+  // While the entitlements query loads, items stay visible (cosmetic
+  // fail-open) — routes guard access and the feature APIs enforce
+  // 403 FEATURE_NOT_AVAILABLE server-side.
+  const { data: planEntitlements } = usePlanEntitlements();
+  const pageKeyOf = (href: string) => href.replace(/^#/, '').split('/')[0];
   const visibleItems = useMemo(() => {
     if (!userRole) return [];
     // Platform admins see the dedicated platform nav, not the client CMS nav.
     const sourceItems = isPlatformAdmin ? PLATFORM_NAV_ITEMS : NAV_ITEMS;
     const items = getVisibleNavItems(userRole, sourceItems, pagePermissions);
-    // Hide the AI page entry for clients whose plan lacks Client's Own
-    // AI API. This NEVER keys off Platform AI (ai_platform) — Platform AI
-    // only gates the AI generation tools and their monthly limits.
-    return aiClientEnabled ? items : items.filter((item) => item.href !== '#ai');
-  }, [userRole, pagePermissions, isPlatformAdmin, aiClientEnabled]);
+    if (isPlatformAdmin) return items;
+    return items
+      .map((item) => ({
+        ...item,
+        children: item.children
+          ? item.children.filter((child) => isModuleAllowedByPlan(pageKeyOf(child.href), planEntitlements))
+          : undefined,
+      }))
+      .filter((item) => isModuleAllowedByPlan(pageKeyOf(item.href), planEntitlements));
+  }, [userRole, pagePermissions, isPlatformAdmin, planEntitlements]);
 
   /*
    * SINGLE SOURCE OF TRUTH for the expanded top-level section.
