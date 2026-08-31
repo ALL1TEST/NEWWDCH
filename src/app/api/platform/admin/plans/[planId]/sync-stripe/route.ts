@@ -1,17 +1,22 @@
 import { NextRequest } from 'next/server';
 import { requireOwner, ok, fail, getClientIp } from '@/lib/platform/platform-auth';
 import { getPlanConfigSync, savePlanConfig, type PlanConfigInput } from '@/lib/platform/plan-config';
-import { isStripeConfiguredAsync, getStripeClient, syncPlanToStripe } from '@/lib/stripe';
+import {
+  isStripeConfiguredAsync,
+  getStripeClient,
+  syncPlanToStripeMulti,
+  type SyncMultiResult,
+} from '@/lib/stripe';
 import { logAdminAction } from '@/lib/platform/audit';
 
 // ============================================================
-// PLATFORM ADMIN → SYNC A PLAN TO STRIPE.
+// PLATFORM ADMIN → SYNC A PLAN TO STRIPE (MULTI-CURRENCY).
 // ============================================================
 // POST /api/platform/admin/plans/[planId]/sync-stripe
-//   Owner-only. Idempotently creates (or reuses) the Stripe
-//   Product + monthly + yearly Stripe Prices for this local
-//   PlanConfig and writes the resolved Stripe Price IDs back
-//   onto the plan row (stripePriceIdMonthly / stripePriceIdYearly).
+//   Owner-only. Idempotently creates (or reuses) the Stripe Product +
+//   one Stripe Price PER (currency, interval) pair for this local
+//   PlanConfig (multi-currency), and writes the resolved
+//   stripePriceIdsByCurrency map back onto the plan row.
 //
 // Behavior:
 //   1. Refuses when Stripe is not configured → 503
@@ -20,16 +25,21 @@ import { logAdminAction } from '@/lib/platform/audit';
 //   2. Refuses when the plan is FREE → 400. Free plans have no
 //      Stripe charge — they're handled by the free-plan flow
 //      (POST /api/platform/billing/change-plan with planId='free').
-//   3. Calls syncPlanToStripe (existing helper) which:
-//        - Reuses existing Stripe Price IDs when present.
-//        - Otherwise looks up active Stripe Prices by metadata.
-//        - Otherwise creates a Stripe Product (metadata.planId) +
-//          monthly + yearly Prices (metadata.planId + metadata.interval).
-//   4. Persists the resolved Stripe Price IDs back onto the local
-//      PlanConfig row via savePlanConfig (no-op when the values
-//      match the existing row).
-//   5. Returns the refreshed plan + the Stripe Price IDs + whether
-//      any new Stripe objects were created (created: boolean).
+//   3. Calls syncPlanToStripeMulti which:
+//        - Creates/reuses a single Stripe Product per plan (metadata.planId).
+//        - For each (currency, interval) pair in pricesByCurrency:
+//            * Reuses the existing Stripe Price ID when the amount matches.
+//            * Creates a NEW Stripe Price when the amount changed
+//              (price-change detection — old Price kept active so
+//              existing subscriptions stay on the original price).
+//            * Skips zero-price pairs (preserves any existing IDs).
+//   4. Persists the resolved stripePriceIdsByCurrency map back onto
+//      the local PlanConfig row via savePlanConfig. Also mirrors the
+//      DEFAULT currency's IDs into stripePriceIdMonthly /
+//      stripePriceIdYearly for backward-compat with legacy callers.
+//   5. Returns the refreshed planId + stripePriceIdsByCurrency +
+//      created count + defaultCurrencySnapshot so the admin UI can
+//      display all per-currency Stripe Price IDs.
 //
 // This route is the manual "Sync to Stripe" affordance in the
 // Edit Plan dialog. It's also called automatically when an admin
@@ -58,46 +68,60 @@ export async function POST(request: NextRequest) {
 
   try {
     const stripe = await getStripeClient();
-    const result = await syncPlanToStripe(stripe, {
+    const result: SyncMultiResult = await syncPlanToStripeMulti(stripe, {
       planId: plan.planId,
       name: plan.name,
-      priceMonthly: plan.priceMonthly,
-      priceYearly: plan.priceYearly,
-      currency: plan.currency,
-      stripePriceIdMonthly: plan.stripePriceIdMonthly,
-      stripePriceIdYearly: plan.stripePriceIdYearly,
+      defaultCurrency: plan.currency,
+      pricesByCurrency: plan.pricesByCurrency,
+      stripePriceIdsByCurrency: plan.stripePriceIdsByCurrency,
     });
 
-    // Persist the resolved Stripe Price IDs back onto the local plan
-    // row. Only patch the two price-id fields — leave everything else
-    // (price, features, entitlements, etc.) untouched.
-    const created =
-      result.stripePriceIdMonthly !== plan.stripePriceIdMonthly ||
-      result.stripePriceIdYearly !== plan.stripePriceIdYearly;
-
-    if (created) {
-      const patch: PlanConfigInput = {
-        stripePriceIdMonthly: result.stripePriceIdMonthly,
-        stripePriceIdYearly: result.stripePriceIdYearly,
+    // Snapshot the default currency's IDs so we can mirror them into
+    // the legacy stripePriceIdMonthly / stripePriceIdYearly fields.
+    // The map is keyed by UPPERCASE currency code; plan.currency is the
+    // already-resolved default currency but we normalize defensively.
+    const snapshot =
+      result.stripePriceIdsByCurrency[plan.currency.toUpperCase()] ?? {
+        monthly: null,
+        yearly: null,
       };
-      await savePlanConfig(planId, patch);
-    }
+
+    // Persist the resolved stripePriceIdsByCurrency back onto the local
+    // plan row. Also mirror the default currency's IDs into the legacy
+    // stripePriceIdMonthly / stripePriceIdYearly snapshot fields so
+    // legacy callers (e.g. the older single-currency checkout path)
+    // keep seeing the right IDs.
+    const patch: PlanConfigInput = {
+      stripePriceIdsByCurrency: result.stripePriceIdsByCurrency,
+      stripePriceIdMonthly: snapshot.monthly,
+      stripePriceIdYearly: snapshot.yearly,
+    };
+    await savePlanConfig(planId, patch);
+
+    // Whether any NEW Stripe Prices were created during this sync.
+    // (syncPlanToStripeMulti returns this counter — the admin UI uses
+    // it to surface a "X new Stripe Prices created" toast.)
+    const created = result.created;
 
     await logAdminAction({
       userId: auth.user.id,
       action: 'plan.synced_to_stripe',
       resourceType: 'PlanConfig',
       resourceId: planId,
-      details: `${plan.name}: monthly=${result.stripePriceIdMonthly}, yearly=${result.stripePriceIdYearly} (${created ? 'updated' : 'unchanged'})`,
+      details: `${plan.name}: currencies=${Object.keys(result.stripePriceIdsByCurrency).join(
+        ',',
+      )} (default ${plan.currency}: monthly=${snapshot.monthly ?? '—'}, yearly=${snapshot.yearly ?? '—'}) — ${
+        created > 0 ? `${created} new Stripe Price(s) created` : 'unchanged'
+      }`,
       ipAddress: getClientIp(request) ?? undefined,
       userAgent: request.headers.get('user-agent') ?? undefined,
     });
 
     return ok({
       planId: plan.planId,
-      stripePriceIdMonthly: result.stripePriceIdMonthly,
-      stripePriceIdYearly: result.stripePriceIdYearly,
+      stripePriceIdsByCurrency: result.stripePriceIdsByCurrency,
       created,
+      defaultCurrencySnapshot: snapshot,
     });
   } catch (err) {
     return fail(

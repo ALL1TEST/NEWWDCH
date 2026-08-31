@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import ZAI from 'z-ai-web-dev-sdk';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 function reqId() {
   return 'req_' + nanoid(8);
@@ -14,6 +15,8 @@ function reqId() {
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(_request: NextRequest, context: RouteContext) {
+  const auth = await requireFeature(_request, 'ai_content');
+  if ('response' in auth) return auth.response;
   const id = reqId();
 
   try {

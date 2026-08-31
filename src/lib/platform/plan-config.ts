@@ -8,19 +8,26 @@
 // exposed here, so an owner edit (savePlanConfig) propagates to the
 // client billing experience and to MRR on the next read.
 //
-// The cache is hydrated from the PlanConfig table on startup and after
-// every mutation. If the table is empty on first hydrate, the DEFAULT
-// configs are seeded so the platform is never without plans. If the
-// table contains the LEGACY catalog (Beta/Pro/Max/Enterprise), the
-// migration runs automatically: Enterprise is removed (only when no
-// active subscription references it), Beta is renamed to Plus, and a
-// Free plan is inserted at sortOrder 0.
+// MULTI-CURRENCY: each plan stores pricesByCurrency (JSON map
+// { USD: { monthly, yearly }, EUR: {...}, MAD: {...}, CHF: {...} })
+// so the same plan can be sold in multiple currencies at independent
+// prices. The customer's currency is resolved server-side from their
+// IP geolocation (see country-pricing.ts:resolveCustomerCurrency).
+// The plan's `currency` field is the platform default currency
+// (auto-resolved from CountryPricing.isDefault) — it's a snapshot
+// only, used by legacy callers. `priceMonthly` / `priceYearly` mirror
+// the default currency's price for the same reason.
 //
-// Final canonical catalog:
-//   1. Free  (planId='free',  isFree=true,  priceMonthly=0)
-//   2. Plus  (planId='plus',  isFree=false, priceMonthly=0 or 9)
-//   3. Pro   (planId='pro',   priceMonthly=49)
-//   4. Max   (planId='max',   priceMonthly=99)
+// STRIPE: for each paid plan × supported currency × interval, a real
+// Stripe Price is created on sync and its ID persisted in
+// stripePriceIdsByCurrency. The default currency's IDs are mirrored
+// in stripePriceIdMonthly/Yearly for legacy callers. Checkout always
+// resolves the per-currency Stripe Price ID server-side — the
+// customer's currency determines which Price is charged.
+//
+// The cache is hydrated from the PlanConfig table on startup and
+// after every mutation. If the table is empty on first hydrate, the
+// DEFAULT configs are seeded.
 // ============================================================
 
 import { db } from '@/lib/db';
@@ -39,22 +46,53 @@ export interface PlanLimits {
 
 export type BillingInterval = 'monthly' | 'yearly';
 
+/** Per-currency price for a plan: monthly + yearly in MAJOR units
+ *  (e.g. 49 = 49 USD). 0 = free for that interval. */
+export interface CurrencyPrice {
+  monthly: number;
+  yearly: number;
+}
+
+/** Per-currency Stripe Price IDs: monthly + yearly. null = not yet wired. */
+export interface CurrencyStripeIds {
+  monthly: string | null;
+  yearly: string | null;
+}
+
+/** Map of currency → { monthly, yearly } prices. */
+export type PricesByCurrency = Record<string, CurrencyPrice>;
+
+/** Map of currency → { monthly, yearly } Stripe Price IDs. */
+export type StripePriceIdsByCurrency = Record<string, CurrencyStripeIds>;
+
 export interface PlanConfigData {
   planId: string;
   name: string;
+  /** Snapshot of the platform DEFAULT currency's monthly price.
+   *  Authoritative prices live in `pricesByCurrency`. */
   priceMonthly: number;
+  /** Snapshot of the platform DEFAULT currency's yearly price. */
   priceYearly: number;
+  /** Platform default currency (auto-resolved from CountryPricing). */
   currency: string;
+  /** Authoritative per-currency price map. */
+  pricesByCurrency: PricesByCurrency;
+  /** Authoritative per-currency Stripe Price ID map. */
+  stripePriceIdsByCurrency: StripePriceIdsByCurrency;
   /** Default cadence; the client can pick monthly/yearly per subscription. */
   interval: BillingInterval;
   isFree: boolean;
   /** null = unlimited free access; positive N = trial duration in days for free plans. */
   freePlanDurationDays: number | null;
-  /** Stripe Price IDs. null = Stripe not yet wired; checkout will refuse to fake success. */
+  /** Snapshot Stripe Price IDs for the platform DEFAULT currency.
+   *  Authoritative IDs live in `stripePriceIdsByCurrency`. */
   stripePriceIdMonthly: string | null;
   stripePriceIdYearly: string | null;
   active: boolean;
+  /** Marketing copy — auto-derived from entitlements on the client side.
+   *  Kept on the model for backward-compat but NOT a separate config. */
   features: string[];
+  /** Authoritative feature keys granted by this plan (checked by hasFeature). */
   entitlements: string[];
   limits: PlanLimits;
   badgeVariant: string;
@@ -65,6 +103,37 @@ export interface PlanConfigData {
 
 const GB = 1024 * 1024 * 1024;
 
+// Default multi-currency prices for each plan. The platform DEFAULT
+// currency is CHF (CountryPricing seed: Switzerland/CH/isDefault=true).
+// Each plan carries an explicit price for every supported currency so
+// the same plan can be sold in MAD, USD, EUR, and CHF at independent
+// price points. Free plans are 0 in every currency. Prices are in
+// MAJOR units (49 = 49 USD), per Stripe's convention.
+const PRICES_FREE: PricesByCurrency = {
+  CHF: { monthly: 0, yearly: 0 },
+  USD: { monthly: 0, yearly: 0 },
+  EUR: { monthly: 0, yearly: 0 },
+  MAD: { monthly: 0, yearly: 0 },
+};
+const PRICES_PLUS: PricesByCurrency = {
+  CHF: { monthly: 9, yearly: 90 },
+  USD: { monthly: 10, yearly: 100 },
+  EUR: { monthly: 9, yearly: 90 },
+  MAD: { monthly: 90, yearly: 900 },
+};
+const PRICES_PRO: PricesByCurrency = {
+  CHF: { monthly: 49, yearly: 490 },
+  USD: { monthly: 55, yearly: 550 },
+  EUR: { monthly: 45, yearly: 450 },
+  MAD: { monthly: 490, yearly: 4900 },
+};
+const PRICES_MAX: PricesByCurrency = {
+  CHF: { monthly: 99, yearly: 990 },
+  USD: { monthly: 109, yearly: 1090 },
+  EUR: { monthly: 92, yearly: 920 },
+  MAD: { monthly: 990, yearly: 9900 },
+};
+
 export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
   {
     planId: 'free',
@@ -72,13 +141,15 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     priceMonthly: 0,
     priceYearly: 0,
     currency: 'CHF',
+    pricesByCurrency: { ...PRICES_FREE },
+    stripePriceIdsByCurrency: {},
     interval: 'monthly',
     isFree: true,
     freePlanDurationDays: null, // unlimited
     stripePriceIdMonthly: null,
     stripePriceIdYearly: null,
     active: true,
-    features: ['Up to 3 sites', 'Basic analytics', 'Community support', '1 GB storage'],
+    features: [], // derived from entitlements on the client side
     entitlements: [],
     limits: { maxSites: 3, storageBytes: 1 * GB },
     badgeVariant: 'free',
@@ -90,19 +161,15 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     priceMonthly: 9,
     priceYearly: 90,
     currency: 'CHF',
+    pricesByCurrency: { ...PRICES_PLUS },
+    stripePriceIdsByCurrency: {},
     interval: 'monthly',
     isFree: false,
     freePlanDurationDays: null,
     stripePriceIdMonthly: null,
     stripePriceIdYearly: null,
     active: true,
-    features: [
-      'Up to 5 sites',
-      'Advanced analytics',
-      'Email support',
-      '5 GB storage',
-      'AI content tools',
-    ],
+    features: [],
     entitlements: ['ai_content', 'advanced_analytics', 'newsletter'],
     limits: { maxSites: 5, storageBytes: 5 * GB },
     badgeVariant: 'plus',
@@ -114,20 +181,15 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     priceMonthly: 49,
     priceYearly: 490,
     currency: 'CHF',
+    pricesByCurrency: { ...PRICES_PRO },
+    stripePriceIdsByCurrency: {},
     interval: 'monthly',
     isFree: false,
     freePlanDurationDays: null,
     stripePriceIdMonthly: null,
     stripePriceIdYearly: null,
     active: true,
-    features: [
-      'Up to 10 sites',
-      'Advanced analytics',
-      'Priority support',
-      '10 GB storage',
-      'AI content tools',
-      'Custom domains',
-    ],
+    features: [],
     entitlements: ['ai_content', 'advanced_analytics', 'custom_domains', 'automation', 'newsletter'],
     limits: { maxSites: 10, storageBytes: 10 * GB },
     badgeVariant: 'pro',
@@ -139,23 +201,15 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     priceMonthly: 99,
     priceYearly: 990,
     currency: 'CHF',
+    pricesByCurrency: { ...PRICES_MAX },
+    stripePriceIdsByCurrency: {},
     interval: 'monthly',
     isFree: false,
     freePlanDurationDays: null,
     stripePriceIdMonthly: null,
     stripePriceIdYearly: null,
     active: true,
-    features: [
-      'Unlimited sites',
-      'Full analytics suite',
-      '24/7 dedicated support',
-      '100 GB storage',
-      'AI content tools',
-      'Custom domains',
-      'API access',
-      'White-label',
-      'Audit log',
-    ],
+    features: [],
     entitlements: [
       'ai_content',
       'advanced_analytics',
@@ -253,6 +307,8 @@ type PlanConfigRow = {
   priceMonthly: number;
   priceYearly: number;
   currency: string;
+  pricesByCurrency: string;
+  stripePriceIdsByCurrency: string;
   interval: string;
   isFree: boolean;
   freePlanDurationDays: number | null;
@@ -294,12 +350,44 @@ function rowToData(row: PlanConfigRow): PlanConfigData {
   } catch {
     // keep defaults
   }
+  let pricesByCurrency: PricesByCurrency = {};
+  try {
+    const parsed = JSON.parse(row.pricesByCurrency || '{}') as Partial<PricesByCurrency>;
+    if (parsed && typeof parsed === 'object') {
+      for (const [cur, val] of Object.entries(parsed)) {
+        if (val && typeof val === 'object') {
+          const m = typeof (val as CurrencyPrice).monthly === 'number' ? (val as CurrencyPrice).monthly : 0;
+          const y = typeof (val as CurrencyPrice).yearly === 'number' ? (val as CurrencyPrice).yearly : 0;
+          pricesByCurrency[cur.toUpperCase()] = { monthly: m, yearly: y };
+        }
+      }
+    }
+  } catch {
+    pricesByCurrency = {};
+  }
+  let stripePriceIdsByCurrency: StripePriceIdsByCurrency = {};
+  try {
+    const parsed = JSON.parse(row.stripePriceIdsByCurrency || '{}') as Partial<StripePriceIdsByCurrency>;
+    if (parsed && typeof parsed === 'object') {
+      for (const [cur, val] of Object.entries(parsed)) {
+        if (val && typeof val === 'object') {
+          const m = typeof (val as CurrencyStripeIds).monthly === 'string' ? (val as CurrencyStripeIds).monthly : null;
+          const y = typeof (val as CurrencyStripeIds).yearly === 'string' ? (val as CurrencyStripeIds).yearly : null;
+          stripePriceIdsByCurrency[cur.toUpperCase()] = { monthly: m, yearly: y };
+        }
+      }
+    }
+  } catch {
+    stripePriceIdsByCurrency = {};
+  }
   return {
     planId: row.planId,
     name: row.name,
     priceMonthly: row.priceMonthly,
     priceYearly: row.priceYearly,
     currency: row.currency,
+    pricesByCurrency,
+    stripePriceIdsByCurrency,
     interval: (row.interval === 'yearly' ? 'yearly' : 'monthly') as BillingInterval,
     isFree: row.isFree,
     freePlanDurationDays: row.freePlanDurationDays,
@@ -321,6 +409,8 @@ function dataToRow(d: PlanConfigData) {
     priceMonthly: d.priceMonthly,
     priceYearly: d.priceYearly,
     currency: d.currency,
+    pricesByCurrency: JSON.stringify(d.pricesByCurrency ?? {}),
+    stripePriceIdsByCurrency: JSON.stringify(d.stripePriceIdsByCurrency ?? {}),
     interval: d.interval,
     isFree: d.isFree,
     freePlanDurationDays: d.freePlanDurationDays,
@@ -498,15 +588,24 @@ export async function hydrate(): Promise<void> {
 
 export interface PlanConfigInput {
   name?: string;
+  /** Snapshot of the platform DEFAULT currency's monthly price. */
   priceMonthly?: number;
+  /** Snapshot of the platform DEFAULT currency's yearly price. */
   priceYearly?: number;
+  /** Platform default currency. Auto-resolved when omitted. */
   currency?: string;
+  /** Authoritative per-currency prices: { USD: { monthly, yearly }, ... }. */
+  pricesByCurrency?: PricesByCurrency;
+  /** Stripe Price ID snapshots for the default currency. */
+  stripePriceIdMonthly?: string | null;
+  stripePriceIdYearly?: string | null;
+  /** Authoritative per-currency Stripe Price IDs: { USD: { monthly, yearly }, ... }. */
+  stripePriceIdsByCurrency?: StripePriceIdsByCurrency;
   interval?: BillingInterval;
   isFree?: boolean;
   freePlanDurationDays?: number | null;
-  stripePriceIdMonthly?: string | null;
-  stripePriceIdYearly?: string | null;
   active?: boolean;
+  /** Marketing copy. Auto-derived from entitlements when omitted. */
   features?: string[];
   entitlements?: string[];
   limits?: Partial<PlanLimits>;
@@ -514,46 +613,64 @@ export interface PlanConfigInput {
   sortOrder?: number;
 }
 
-/** Update an existing plan config. Writes DB, refreshes cache.
- *
- *  AUTO-SYNC TO STRIPE: when Stripe is configured AND the plan is
- *  PAID (priceMonthly > 0 OR priceYearly > 0) AND the admin did NOT
- *  explicitly set the Stripe Price IDs in this patch (i.e. the field
- *  is omitted from `patch`), the backend calls syncPlanToStripe to
- *  ensure a Stripe Product + monthly + yearly Prices exist and writes
- *  the resolved Stripe Price IDs back onto the row. This means the
- *  admin can edit a paid plan's name / features / limits and the
- *  Stripe side stays in sync without manually wiring price IDs.
- *
- *  When the admin explicitly sets `stripePriceIdMonthly` / `stripePriceIdYearly`
- *  (even to null = "clear"), the auto-sync is skipped — the admin is
- *  taking manual control of the Stripe side. They can use the dedicated
- *  "Sync to Stripe" route (/api/platform/admin/plans/[planId]/sync-stripe)
- *  to push the local plan to Stripe at any time. */
-export async function savePlanConfig(planId: string, patch: PlanConfigInput): Promise<PlanConfigData | null> {
-  const existing = await db.planConfig.findUnique({ where: { planId } });
-  if (!existing) return null;
-  const current = rowToData(existing);
-
-  // Distinguish "field omitted" from "field set to null". When the
-  // admin omits both stripePriceId* fields, they want the backend to
-  // keep them in sync with Stripe automatically (see AUTO-SYNC above).
-  // When either is explicitly provided (including null to clear),
-  // the admin is taking manual control.
-  const adminTouchedStripePriceIds =
-    'stripePriceIdMonthly' in patch || 'stripePriceIdYearly' in patch;
-
-  const next: PlanConfigData = {
+/** Merge a patch (Partial<PlanConfigData>) into the current data,
+ *  applying defaults for the multi-currency fields when omitted.
+ *  - pricesByCurrency: keep current when omitted.
+ *  - stripePriceIdsByCurrency: keep current when omitted.
+ *  - When pricesByCurrency is provided but priceMonthly/priceYearly
+ *    are NOT, snapshot the default currency's price into the legacy
+ *    fields for backward-compat with legacy callers.
+ *  - When stripePriceIdsByCurrency is provided but stripePriceIdMonthly/
+ *    Yearly are NOT, snapshot the default currency's IDs.
+ */
+function mergePlanPatch(current: PlanConfigData, patch: PlanConfigInput, defaultCurrency: string): PlanConfigData {
+  const pricesByCurrency: PricesByCurrency = patch.pricesByCurrency ?? current.pricesByCurrency ?? {};
+  const stripePriceIdsByCurrency: StripePriceIdsByCurrency =
+    patch.stripePriceIdsByCurrency ?? current.stripePriceIdsByCurrency ?? {};
+  // Default-currency snapshot — keep the legacy fields in sync so legacy
+  // callers that read priceMonthly/priceYearly/stripePriceIdMonthly/Yearly
+  // see the right values.
+  const curUpper = defaultCurrency.toUpperCase();
+  const defPrice = pricesByCurrency[curUpper] ?? { monthly: 0, yearly: 0 };
+  const defIds = stripePriceIdsByCurrency[curUpper] ?? { monthly: null, yearly: null };
+  const priceMonthly =
+    patch.priceMonthly !== undefined
+      ? patch.priceMonthly
+      : patch.pricesByCurrency !== undefined
+        ? defPrice.monthly
+        : current.priceMonthly;
+  const priceYearly =
+    patch.priceYearly !== undefined
+      ? patch.priceYearly
+      : patch.pricesByCurrency !== undefined
+        ? defPrice.yearly
+        : current.priceYearly;
+  const stripePriceIdMonthly =
+    patch.stripePriceIdMonthly !== undefined
+      ? patch.stripePriceIdMonthly
+      : patch.stripePriceIdsByCurrency !== undefined
+        ? defIds.monthly
+        : current.stripePriceIdMonthly;
+  const stripePriceIdYearly =
+    patch.stripePriceIdYearly !== undefined
+      ? patch.stripePriceIdYearly
+      : patch.stripePriceIdsByCurrency !== undefined
+        ? defIds.yearly
+        : current.stripePriceIdYearly;
+  const isFree = patch.isFree ?? current.isFree;
+  return {
     planId: current.planId,
     name: patch.name ?? current.name,
-    priceMonthly: patch.priceMonthly ?? current.priceMonthly,
-    priceYearly: patch.priceYearly ?? current.priceYearly,
+    priceMonthly,
+    priceYearly,
     currency: patch.currency ?? current.currency,
+    pricesByCurrency,
+    stripePriceIdsByCurrency,
     interval: patch.interval ?? current.interval,
-    isFree: patch.isFree ?? current.isFree,
+    isFree,
     freePlanDurationDays: patch.freePlanDurationDays ?? current.freePlanDurationDays,
-    stripePriceIdMonthly: patch.stripePriceIdMonthly ?? current.stripePriceIdMonthly,
-    stripePriceIdYearly: patch.stripePriceIdYearly ?? current.stripePriceIdYearly,
+    stripePriceIdMonthly,
+    stripePriceIdYearly,
     active: patch.active ?? current.active,
     features: patch.features ?? current.features,
     entitlements: patch.entitlements ?? current.entitlements,
@@ -561,38 +678,72 @@ export async function savePlanConfig(planId: string, patch: PlanConfigInput): Pr
     badgeVariant: patch.badgeVariant ?? current.badgeVariant,
     sortOrder: patch.sortOrder ?? current.sortOrder,
   };
+}
+
+/** Update an existing plan config. Writes DB, refreshes cache.
+ *
+ *  AUTO-SYNC TO STRIPE: when Stripe is configured AND the plan is
+ *  PAID (any currency has a positive price) AND the admin did NOT
+ *  explicitly set the Stripe Price IDs in this patch, the backend calls
+ *  syncPlanToStripe (multi-currency) to ensure a Stripe Product +
+ *  per-currency monthly+yearly Prices exist and writes the resolved IDs
+ *  into stripePriceIdsByCurrency + the default-currency snapshot fields.
+ */
+export async function savePlanConfig(planId: string, patch: PlanConfigInput): Promise<PlanConfigData | null> {
+  const existing = await db.planConfig.findUnique({ where: { planId } });
+  if (!existing) return null;
+  const current = rowToData(existing);
+
+  // When the admin omitted currency, resolve the platform default so the
+  // legacy priceMonthly/priceYearly snapshot stays in the right currency.
+  if (!patch.currency && !current.currency) {
+    patch = { ...patch, currency: await resolvePlatformDefaultCurrency() };
+  }
+  const finalCurrency = (patch.currency ?? current.currency).toUpperCase();
+
+  // Distinguish "field omitted" from "field set". When the admin omits
+  // both stripePriceId* AND stripePriceIdsByCurrency, they want the
+  // backend to auto-sync. When either is explicitly provided, manual.
+  const adminTouchedStripePriceIds =
+    'stripePriceIdMonthly' in patch ||
+    'stripePriceIdYearly' in patch ||
+    'stripePriceIdsByCurrency' in patch;
+
+  const next = mergePlanPatch(current, patch, finalCurrency);
   await db.planConfig.update({ where: { planId }, data: dataToRow(next) });
   await hydrate();
 
-  // ---- AUTO-SYNC TO STRIPE ----
-  // Best-effort — never throws. Swallows Stripe errors so an admin
-  // edit doesn't fail just because Stripe is unreachable. The admin
-  // can use the explicit "Sync to Stripe" route to surface errors.
-  if (!adminTouchedStripePriceIds && !next.isFree && (next.priceMonthly > 0 || next.priceYearly > 0)) {
+  // ---- AUTO-SYNC TO STRIPE (multi-currency) ----
+  // Best-effort — never throws.
+  const hasAnyPaidCurrency = Object.values(next.pricesByCurrency).some(
+    (p) => p.monthly > 0 || p.yearly > 0,
+  );
+  if (!adminTouchedStripePriceIds && !next.isFree && hasAnyPaidCurrency) {
     try {
-      const { isStripeConfiguredAsync, getStripeClient, syncPlanToStripe } = await import('@/lib/stripe');
+      const { isStripeConfiguredAsync, getStripeClient, syncPlanToStripeMulti } = await import('@/lib/stripe');
       if (await isStripeConfiguredAsync()) {
         const stripe = await getStripeClient();
-        const syncResult = await syncPlanToStripe(stripe, {
+        const syncResult = await syncPlanToStripeMulti(stripe, {
           planId: next.planId,
           name: next.name,
-          priceMonthly: next.priceMonthly,
-          priceYearly: next.priceYearly,
-          currency: next.currency,
-          stripePriceIdMonthly: next.stripePriceIdMonthly,
-          stripePriceIdYearly: next.stripePriceIdYearly,
+          defaultCurrency: finalCurrency,
+          pricesByCurrency: next.pricesByCurrency,
+          stripePriceIdsByCurrency: next.stripePriceIdsByCurrency,
         });
-        // Persist the resolved Stripe Price IDs back onto the row
-        // (only when they changed — otherwise the update is a no-op).
-        if (
-          syncResult.stripePriceIdMonthly !== next.stripePriceIdMonthly ||
-          syncResult.stripePriceIdYearly !== next.stripePriceIdYearly
-        ) {
+        // Persist the resolved Stripe Price IDs back onto the row when they changed.
+        const snapshot = syncResult.stripePriceIdsByCurrency[finalCurrency] ?? { monthly: null, yearly: null };
+        const changed =
+          JSON.stringify(syncResult.stripePriceIdsByCurrency) !==
+            JSON.stringify(next.stripePriceIdsByCurrency) ||
+          snapshot.monthly !== next.stripePriceIdMonthly ||
+          snapshot.yearly !== next.stripePriceIdYearly;
+        if (changed) {
           await db.planConfig.update({
             where: { planId },
             data: {
-              stripePriceIdMonthly: syncResult.stripePriceIdMonthly,
-              stripePriceIdYearly: syncResult.stripePriceIdYearly,
+              stripePriceIdsByCurrency: JSON.stringify(syncResult.stripePriceIdsByCurrency),
+              stripePriceIdMonthly: snapshot.monthly,
+              stripePriceIdYearly: snapshot.yearly,
             },
           });
           await hydrate();
@@ -606,45 +757,42 @@ export async function savePlanConfig(planId: string, patch: PlanConfigInput): Pr
   return getPlanConfigSync(planId);
 }
 
-/** Create a new plan config.
+/** Create a new plan config. AUTO-SYNC TO STRIPE: when Stripe is
+ *  configured AND the new plan is PAID AND the admin did NOT
+ *  explicitly provide Stripe Price IDs in the input, the backend
+ *  calls syncPlanToStripeMulti (multi-currency) to create a Stripe
+ *  Product + per-currency monthly+yearly Prices and writes the
+ *  resolved IDs back onto the new plan row.
  *
- *  AUTO-SYNC TO STRIPE: when Stripe is configured AND the new plan
- *  is PAID (priceMonthly > 0 OR priceYearly > 0) AND the admin did
- *  NOT explicitly provide Stripe Price IDs in the input, the backend
- *  calls syncPlanToStripe to create a Stripe Product + monthly +
- *  yearly Prices and writes the resolved Stripe Price IDs back onto
- *  the new plan row. So creating a new paid plan in Platform Admin
- *  automatically creates the corresponding Stripe Product + Prices —
- *  no need to manually wire Stripe Price IDs in the Stripe dashboard.
- *
- *  When the admin explicitly provides Stripe Price IDs (manually
- *  created in the Stripe dashboard), the auto-sync is skipped — the
- *  admin is asserting the Stripe side is already wired. */
+ *  When pricesByCurrency is omitted, an empty map is used (the admin
+ *  will need to add prices per currency via the editor). When provided,
+ *  the default currency's price is mirrored into priceMonthly/Yearly. */
 export async function createPlanConfig(
   input: PlanConfigInput & { planId: string; name: string },
 ): Promise<PlanConfigData> {
   const maxOrder = await db.planConfig.count();
-  // Currency is NOT chosen per-plan in the admin editor — it is derived
-  // from the platform's default country (CountryPricing table). When the
-  // caller omits `currency`, resolve it from the platform default so a
-  // newly-created plan immediately matches the platform's billing
-  // configuration. When the caller explicitly provides a currency (e.g.
-  // a migration script), honor it.
   const currency =
     input.currency && input.currency.trim().length > 0
       ? input.currency
       : await resolvePlatformDefaultCurrency();
+  const curUpper = currency.toUpperCase();
+  const pricesByCurrency: PricesByCurrency = input.pricesByCurrency ?? {};
+  const defPrice = pricesByCurrency[curUpper] ?? { monthly: 0, yearly: 0 };
+  const stripePriceIdsByCurrency: StripePriceIdsByCurrency = input.stripePriceIdsByCurrency ?? {};
+  const defIds = stripePriceIdsByCurrency[curUpper] ?? { monthly: null, yearly: null };
   const data: PlanConfigData = {
     planId: input.planId,
     name: input.name,
-    priceMonthly: input.priceMonthly ?? 0,
-    priceYearly: input.priceYearly ?? 0,
-    currency,
+    priceMonthly: input.priceMonthly !== undefined ? input.priceMonthly : defPrice.monthly,
+    priceYearly: input.priceYearly !== undefined ? input.priceYearly : defPrice.yearly,
+    currency: curUpper,
+    pricesByCurrency,
+    stripePriceIdsByCurrency,
     interval: input.interval ?? 'monthly',
     isFree: input.isFree ?? false,
     freePlanDurationDays: input.freePlanDurationDays ?? null,
-    stripePriceIdMonthly: input.stripePriceIdMonthly ?? null,
-    stripePriceIdYearly: input.stripePriceIdYearly ?? null,
+    stripePriceIdMonthly: input.stripePriceIdMonthly !== undefined ? input.stripePriceIdMonthly : defIds.monthly,
+    stripePriceIdYearly: input.stripePriceIdYearly !== undefined ? input.stripePriceIdYearly : defIds.yearly,
     active: input.active ?? true,
     features: input.features ?? [],
     entitlements: input.entitlements ?? [],
@@ -659,44 +807,48 @@ export async function createPlanConfig(
   await db.planConfig.create({ data: dataToRow(data) });
   await hydrate();
 
-  // ---- AUTO-SYNC TO STRIPE ----
+  // ---- AUTO-SYNC TO STRIPE (multi-currency) ----
   // Best-effort — never throws. The plan row is already created; if
   // the Stripe side fails, the admin can use the explicit "Sync to
   // Stripe" route to surface errors.
   const adminTouchedStripePriceIds =
-    'stripePriceIdMonthly' in input || 'stripePriceIdYearly' in input;
-  if (
-    !adminTouchedStripePriceIds &&
-    !data.isFree &&
-    (data.priceMonthly > 0 || data.priceYearly > 0)
-  ) {
+    'stripePriceIdMonthly' in input ||
+    'stripePriceIdYearly' in input ||
+    'stripePriceIdsByCurrency' in input;
+  const hasAnyPaidCurrency = Object.values(data.pricesByCurrency).some(
+    (p) => p.monthly > 0 || p.yearly > 0,
+  );
+  if (!adminTouchedStripePriceIds && !data.isFree && hasAnyPaidCurrency) {
     try {
-      const { isStripeConfiguredAsync, getStripeClient, syncPlanToStripe } = await import('@/lib/stripe');
+      const { isStripeConfiguredAsync, getStripeClient, syncPlanToStripeMulti } = await import('@/lib/stripe');
       if (await isStripeConfiguredAsync()) {
         const stripe = await getStripeClient();
-        const syncResult = await syncPlanToStripe(stripe, {
+        const syncResult = await syncPlanToStripeMulti(stripe, {
           planId: data.planId,
           name: data.name,
-          priceMonthly: data.priceMonthly,
-          priceYearly: data.priceYearly,
-          currency: data.currency,
-          stripePriceIdMonthly: data.stripePriceIdMonthly,
-          stripePriceIdYearly: data.stripePriceIdYearly,
+          defaultCurrency: curUpper,
+          pricesByCurrency: data.pricesByCurrency,
+          stripePriceIdsByCurrency: data.stripePriceIdsByCurrency,
         });
-        if (
-          syncResult.stripePriceIdMonthly !== data.stripePriceIdMonthly ||
-          syncResult.stripePriceIdYearly !== data.stripePriceIdYearly
-        ) {
+        const snapshot = syncResult.stripePriceIdsByCurrency[curUpper] ?? { monthly: null, yearly: null };
+        const changed =
+          JSON.stringify(syncResult.stripePriceIdsByCurrency) !==
+            JSON.stringify(data.stripePriceIdsByCurrency) ||
+          snapshot.monthly !== data.stripePriceIdMonthly ||
+          snapshot.yearly !== data.stripePriceIdYearly;
+        if (changed) {
           await db.planConfig.update({
             where: { planId: data.planId },
             data: {
-              stripePriceIdMonthly: syncResult.stripePriceIdMonthly,
-              stripePriceIdYearly: syncResult.stripePriceIdYearly,
+              stripePriceIdsByCurrency: JSON.stringify(syncResult.stripePriceIdsByCurrency),
+              stripePriceIdMonthly: snapshot.monthly,
+              stripePriceIdYearly: snapshot.yearly,
             },
           });
           await hydrate();
-          data.stripePriceIdMonthly = syncResult.stripePriceIdMonthly;
-          data.stripePriceIdYearly = syncResult.stripePriceIdYearly;
+          data.stripePriceIdsByCurrency = syncResult.stripePriceIdsByCurrency;
+          data.stripePriceIdMonthly = snapshot.monthly;
+          data.stripePriceIdYearly = snapshot.yearly;
         }
       }
     } catch {

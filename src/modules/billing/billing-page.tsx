@@ -26,6 +26,7 @@ import {
   type Plan as StorePlan,
 } from '@/lib/stores/subscription-store';
 import type { ClientBillingState, Payment, PlanId } from '@/lib/platform/platform-data';
+import { ENTITLEMENT_LABELS, type EntitlementKey } from '@/lib/platform/feature-config';
 import { PaymentStatusBadge, formatCurrency, formatDate, ErrorState } from '@/modules/platform/shared';
 
 // -------------------- Helpers --------------------
@@ -44,15 +45,94 @@ function normalizeInterval(interval: string): string {
   return interval?.replace(/ly$/, '');
 }
 
+// -------------------- Multi-currency + derived feature helpers --------------------
+
+const GB_FACTOR = 1024 * 1024 * 1024;
+
+/** Server-side currency resolution context (from /api/platform/billing/me
+ *  → customerCurrencyResolution). The existing ClientBillingState type
+ *  doesn't declare these fields yet — the API adds them as siblings of
+ *  the existing ClientBillingState fields. We type them locally so the
+ *  frontend can read them without resorting to `any`. */
+interface CustomerCurrencyResolution {
+  currency: string;
+  countryCode: string;
+  countryName: string;
+  source: 'ip' | 'default' | 'local';
+  regional: boolean;
+}
+
+type BillingStateWithCurrency = ClientBillingState & {
+  customerCurrencyResolution?: CustomerCurrencyResolution;
+  customerCurrency?: string;
+  customerCountryCode?: string;
+  customerCountryName?: string;
+  currencySource?: 'ip' | 'default' | 'local';
+};
+
+/** Resolve the monthly price + currency to display for a plan in the
+ *  customer's resolved currency. Falls back to the plan's legacy
+ *  priceMonthly/currency snapshot when the plan doesn't have a
+ *  per-currency entry for the customer's currency (legacy compat for
+ *  older plans that only carry the default-currency snapshot). */
+function resolvePlanPriceMonthly(
+  plan: {
+    pricesByCurrency?: Record<string, { monthly: number; yearly: number }>;
+    priceMonthly: number;
+    currency: string;
+  },
+  customerCurrency: string,
+): { monthly: number; currency: string } {
+  const entry = plan.pricesByCurrency?.[customerCurrency];
+  if (entry) return { monthly: entry.monthly, currency: customerCurrency };
+  return { monthly: plan.priceMonthly, currency: plan.currency };
+}
+
+/** Derive the marketing feature list from the plan's entitlements +
+ *  a few standard items (max sites, storage, support tier). Uses the
+ *  legacy plan.features array when it has entries (legacy compat for
+ *  plans that still have manually-maintained marketing copy, e.g. the
+ *  synthetic Internal plan). The structured entitlements are the
+ *  single source of truth — the admin no longer maintains a separate
+ *  marketing list per plan. */
+function derivePlanFeatures(plan: {
+  features: string[];
+  entitlements: string[];
+  isFree: boolean;
+  limits: { maxSites: number; storageBytes: number };
+}): string[] {
+  if (plan.features.length > 0) return plan.features;
+  const items: string[] = [];
+  items.push(
+    plan.limits.maxSites === -1
+      ? 'Unlimited sites'
+      : `Up to ${plan.limits.maxSites} sites`,
+  );
+  const gb = plan.limits.storageBytes / GB_FACTOR;
+  if (gb >= 1) {
+    items.push(`${Math.floor(gb)} GB storage`);
+  } else if (plan.limits.storageBytes > 0) {
+    items.push(`${plan.limits.storageBytes} bytes storage`);
+  } else {
+    items.push('No storage');
+  }
+  items.push(plan.isFree ? 'Community support' : 'Priority support');
+  for (const e of plan.entitlements) {
+    const label = ENTITLEMENT_LABELS[e as EntitlementKey];
+    if (label) items.push(label);
+  }
+  return items;
+}
+
 // -------------------- Component --------------------
 
 export function BillingPage() {
   const { t } = useT();
   const queryClient = useQueryClient();
 
-  const billingQuery = useQuery<ClientBillingState>({
+  const billingQuery = useQuery<BillingStateWithCurrency>({
     queryKey: ['platform-billing-me'],
-    queryFn: () => getApi<ClientBillingState>('/api/platform/billing/me'),
+    queryFn: () => getApi<BillingStateWithCurrency>('/api/platform/billing/me'),
   });
 
   // Change-plan mutation — only used for FREE plans now. Paid plans go
@@ -232,7 +312,7 @@ export function BillingPage() {
   }
 
   // -------------------- Loaded --------------------
-  const billingState: ClientBillingState = billingQuery.data;
+  const billingState: BillingStateWithCurrency = billingQuery.data;
 
   // Owner / billing-bypass users (billingMode INTERNAL/EXEMPT) get a
   // dedicated panel instead of the plan cards — they have full platform
@@ -266,8 +346,8 @@ export function BillingPage() {
             </div>
             <Separator />
             <ul className="space-y-2">
-              {billingState.plan.features.map((feature) => (
-                <li key={feature} className="flex items-start gap-2 text-sm">
+              {derivePlanFeatures(billingState.plan).map((feature, idx) => (
+                <li key={`${feature}-${idx}`} className="flex items-start gap-2 text-sm">
                   <Check className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                   <span>{feature}</span>
                 </li>
@@ -278,6 +358,16 @@ export function BillingPage() {
       </div>
     );
   }
+
+  // Customer's resolved currency + country (server-side IP geolocation
+  // via /api/platform/billing/me → customerCurrencyResolution). Falls
+  // back to the plan's default currency when no resolution is present
+  // (e.g. legacy customer without the new server-side resolution).
+  const customerCurrencyResolution = billingState.customerCurrencyResolution;
+  const customerCurrency =
+    customerCurrencyResolution?.currency ?? billingState.plan.currency;
+  const customerCountryName = customerCurrencyResolution?.countryName;
+  const currencySource = customerCurrencyResolution?.source;
 
   const currentPlan = billingState.plan;
   const otherPlans = billingState.allPlans.filter((p) => p.id !== currentPlan.id);
@@ -291,6 +381,14 @@ export function BillingPage() {
   const currentInterval = billingState.billingInterval ?? currentPlan.interval;
 
   const currentStorePlan = getStorePlan(currentPlan.id);
+
+  // Resolve the current plan's monthly price + display currency for
+  // the customer's resolved currency. Falls back to the plan's legacy
+  // priceMonthly/currency snapshot when no per-currency price is
+  // configured for the customer's currency (legacy compat).
+  const currentPriceResolved = resolvePlanPriceMonthly(currentPlan, customerCurrency);
+  const currentMonthly = currentPriceResolved.monthly;
+  const currentDisplayCurrency = currentPriceResolved.currency;
 
   const isHigherPlan = (plan: { price: number }) => plan.price > currentPlan.price;
   const getActionLabel = (plan: { price: number; isFree: boolean }) => {
@@ -332,6 +430,24 @@ export function BillingPage() {
       <div>
         <h1 className="text-xl font-bold tracking-tight text-foreground">{t('billing.title')}</h1>
         <p className="text-sm text-muted-foreground mt-1">{t('billing.description')}</p>
+        {/* Auto Currency indicator — shows the customer's resolved
+            currency + the source (IP-detected / platform default /
+            local development). The server resolves this from the
+            request IP; the client cannot change currency manually. */}
+        {currencySource && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="text-[10px] font-mono">
+              Currency: {customerCurrency}
+            </Badge>
+            <span className="text-[11px] text-muted-foreground">
+              {currencySource === 'ip'
+                ? `Auto-detected from your location${customerCountryName ? ` (${customerCountryName})` : ''}`
+                : currencySource === 'default'
+                  ? 'Platform default'
+                  : 'Local development'}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Free-trial-expired banner — surfaces server-side enforcement */}
@@ -370,10 +486,15 @@ export function BillingPage() {
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground ml-7">
-                {currentPlan.price === 0
+                {currentMonthly === 0
                   ? t('billing.free')
-                  : `${currentPlan.price} ${currentPlan.currency}/${normalizeInterval(currentInterval)}`}
+                  : `${currentMonthly} ${currentDisplayCurrency}/${normalizeInterval(currentInterval)}`}
               </p>
+              {currentMonthly > 0 && customerCountryName && currentDisplayCurrency === customerCurrency && (
+                <p className="text-[11px] text-muted-foreground ml-7">
+                  Priced for {customerCountryName} ({customerCurrency})
+                </p>
+              )}
             </div>
             <Badge
               variant={status === 'active' ? 'default' : 'outline'}
@@ -441,6 +562,9 @@ export function BillingPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {otherPlans.map((plan) => {
             const storePlan = getStorePlan(plan.id);
+            const planPriceResolved = resolvePlanPriceMonthly(plan, customerCurrency);
+            const planMonthly = planPriceResolved.monthly;
+            const planDisplayCurrency = planPriceResolved.currency;
             const isBusy =
               (changePlanMutation.isPending && changePlanMutation.variables?.planId === plan.id) ||
               (checkoutMutation.isPending && checkoutMutation.variables?.planId === plan.id);
@@ -463,18 +587,23 @@ export function BillingPage() {
                 <CardContent className="space-y-4">
                   <div>
                     <span className="text-2xl font-bold">
-                      {plan.price === 0 ? t('billing.free') : `${plan.price}`}
+                      {planMonthly === 0 ? t('billing.free') : `${planMonthly}`}
                     </span>
-                    {plan.price > 0 && (
+                    {planMonthly > 0 && (
                       <span className="text-sm text-muted-foreground ml-1">
-                        {plan.currency}/{normalizeInterval(plan.interval)}
+                        {planDisplayCurrency}/{normalizeInterval(plan.interval)}
                       </span>
+                    )}
+                    {planMonthly > 0 && customerCountryName && planDisplayCurrency === customerCurrency && (
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Priced for {customerCountryName} ({customerCurrency})
+                      </p>
                     )}
                   </div>
                   <Separator />
                   <ul className="space-y-2">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-start gap-2 text-sm">
+                    {derivePlanFeatures(plan).map((feature, idx) => (
+                      <li key={`${feature}-${idx}`} className="flex items-start gap-2 text-sm">
                         <Check className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                         <span>{feature}</span>
                       </li>

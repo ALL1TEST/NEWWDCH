@@ -109,6 +109,44 @@ export async function requireOwner(request: NextRequest): Promise<{ user: AuthUs
   return { user: auth.user };
 }
 
+/** Require an authenticated user WITH a specific feature entitlement.
+ *  This is the SINGLE helper every feature API route should call — it
+ *  enforces server-side that the user's plan (or owner bypass / override)
+ *  grants the requested feature. A Free user hitting a gated endpoint
+ *  directly is denied with 403 FEATURE_NOT_AVAILABLE.
+ *
+ *  Usage:
+ *    const auth = await requireFeature(request, 'advanced_analytics');
+ *    if ('response' in auth) return auth.response;
+ *    // auth.user has the feature granted (or is platform staff).
+ *
+ *  The owner bypass (OWNER role / INTERNAL billing mode) is enforced
+ *  inside hasFeature() — Platform Admin always has full access
+ *  regardless of which plan they happen to be on. */
+export async function requireFeature(
+  request: NextRequest,
+  feature: string,
+): Promise<{ user: AuthUser } | { response: NextResponse }> {
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth;
+  const { hasFeature, forbiddenResponse, trialExpiredResponse } = await import('./entitlements');
+  // 1. Owner / billing bypass → grant (hasFeature returns true here).
+  // 2. Per-customer override (grant/revoke + expiry).
+  // 3. DB Subscription → planId → PlanConfig.entitlements.
+  // 4. Otherwise deny.
+  const allowed = await hasFeature(auth.user, feature);
+  if (!allowed) {
+    // Distinguish "feature not in plan" from "free trial expired".
+    const { getEffectivePlanIdAsync } = await import('./entitlements');
+    const { freeTrialExpired } = await getEffectivePlanIdAsync(auth.user);
+    if (freeTrialExpired) {
+      return { response: trialExpiredResponse() };
+    }
+    return { response: forbiddenResponse(feature) };
+  }
+  return { user: auth.user };
+}
+
 /** Extract client IP for audit logging (never used for auth decisions). */
 export function getClientIp(request: NextRequest): string | null {
   return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;

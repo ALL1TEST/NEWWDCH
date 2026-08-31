@@ -210,6 +210,11 @@ export async function getPublicStripeConfig(): Promise<{
  *
  * Returns null when the plan has no Stripe price wired for the
  * requested interval — the caller MUST refuse to fake checkout.
+ *
+ * NOTE: this returns the DEFAULT currency's Stripe Price ID. For
+ * multi-currency checkout, use resolveStripePriceIdForCurrency()
+ * which looks up the per-currency Stripe Price ID in
+ * stripePriceIdsByCurrency.
  */
 export async function resolveStripePriceId(
   planId: string,
@@ -218,6 +223,44 @@ export async function resolveStripePriceId(
   const { db } = await import('@/lib/db');
   const row = await db.planConfig.findUnique({ where: { planId } });
   if (!row) return null;
+  if (interval === 'yearly') return row.stripePriceIdYearly ?? null;
+  return row.stripePriceIdMonthly ?? null;
+}
+
+/**
+ * Resolve the Stripe Price ID for a (planId, currency, interval) pair
+ * from the authoritative per-currency map stored on PlanConfig. Falls
+ * back to the default-currency snapshot when the requested currency
+ * has no per-currency Stripe Price wired (legacy compat). Returns
+ * null when no Stripe Price is wired for the requested currency +
+ * interval — the caller MUST refuse to fake checkout.
+ *
+ * Currency is normalized to uppercase (USD, EUR, CHF, MAD).
+ */
+export async function resolveStripePriceIdForCurrency(
+  planId: string,
+  currency: string,
+  interval: 'monthly' | 'yearly',
+): Promise<string | null> {
+  const { db } = await import('@/lib/db');
+  const row = await db.planConfig.findUnique({ where: { planId } });
+  if (!row) return null;
+  const curUpper = currency.trim().toUpperCase();
+  // 1. Try the authoritative per-currency map.
+  let byCurrency: Record<string, { monthly: string | null; yearly: string | null }> = {};
+  try {
+    byCurrency = JSON.parse(row.stripePriceIdsByCurrency || '{}');
+  } catch {
+    byCurrency = {};
+  }
+  const entry = byCurrency[curUpper];
+  if (entry) {
+    const id = interval === 'yearly' ? entry.yearly : entry.monthly;
+    if (id && id.trim().length > 0) return id;
+  }
+  // 2. Fall back to the default-currency snapshot fields. This keeps
+  //    backward compatibility with plans that were synced before the
+  //    multi-currency fields existed.
   if (interval === 'yearly') return row.stripePriceIdYearly ?? null;
   return row.stripePriceIdMonthly ?? null;
 }
@@ -517,6 +560,177 @@ export async function syncPlanToStripe(
   const stripePriceIdMonthly = await resolveInterval('monthly');
   const stripePriceIdYearly = await resolveInterval('yearly');
   return { stripePriceIdMonthly, stripePriceIdYearly };
+}
+
+// ============================================================
+// MULTI-CURRENCY STRIPE SYNC
+// ============================================================
+// syncPlanToStripeMulti creates/reuses a single Stripe Product (per
+// plan) + a Stripe Price PER (currency, interval) — so a single plan
+// can be sold in USD, EUR, CHF, MAD at independent price points and
+// each (currency, interval) pair has its own real Stripe Price ID.
+// Returns the resolved stripePriceIdsByCurrency map so the caller can
+// persist it onto PlanConfig.
+//
+// PRICE-CHANGE DETECTION: per (currency, interval), when an existing
+// Stripe Price ID is provided AND the corresponding locally-configured
+// amount changed, a NEW Stripe Price is created on the same Product
+// with the updated amount. The OLD Price is kept active so existing
+// subscriptions on it stay on the original price (Stripe pattern).
+//
+// ZERO-PRICE SKIP: when a (currency, interval) pair has a 0 price,
+// the existing Stripe Price (if any) is left untouched and NO new
+// Price is created. The returned ID for that pair is null.
+// ============================================================
+
+export interface SyncMultiInput {
+  planId: string;
+  name: string;
+  defaultCurrency: string;
+  /** Map of currency → { monthly, yearly } prices. */
+  pricesByCurrency: Record<string, { monthly: number; yearly: number }>;
+  /** Existing Stripe Price IDs per currency. */
+  stripePriceIdsByCurrency?: Record<string, { monthly: string | null; yearly: string | null }>;
+}
+
+export interface SyncMultiResult {
+  stripePriceIdsByCurrency: Record<string, { monthly: string | null; yearly: string | null }>;
+  /** Number of NEW Stripe Prices created during this sync. */
+  created: number;
+}
+
+export async function syncPlanToStripeMulti(
+  stripe: Stripe,
+  input: SyncMultiInput,
+): Promise<SyncMultiResult> {
+  // 1. Ensure the Stripe Product exists (one per planId).
+  let productId: string | undefined;
+  try {
+    const existingProducts = await stripe.products.list({ limit: 100 });
+    const existingProduct = existingProducts.data.find(
+      (p) => p.metadata?.planId === input.planId,
+    );
+    if (existingProduct) productId = existingProduct.id;
+  } catch {
+    // fall through to create
+  }
+  if (!productId) {
+    const product = await stripe.products.create({
+      name: input.name,
+      metadata: { planId: input.planId },
+    });
+    productId = product.id;
+  }
+
+  // 2. For each (currency, interval) pair, resolve or create the
+  //    appropriate Stripe Price. Currencies with all-zero prices are
+  //    skipped (the existing IDs are preserved as-is, no new Prices
+  //    created).
+  const result: SyncMultiResult['stripePriceIdsByCurrency'] = {};
+  let created = 0;
+  const currencies = Object.keys(input.pricesByCurrency);
+  // Include currencies that had prior Stripe Price IDs even if no
+  // current price config — so we preserve the IDs (legacy compat).
+  const existingMap = input.stripePriceIdsByCurrency ?? {};
+  const allCurrencies = Array.from(new Set([...currencies, ...Object.keys(existingMap)]));
+
+  for (const rawCur of allCurrencies) {
+    const curUpper = rawCur.toUpperCase();
+    const price = input.pricesByCurrency[curUpper] ?? { monthly: 0, yearly: 0 };
+    const existing = existingMap[curUpper] ?? { monthly: null, yearly: null };
+    const out: { monthly: string | null; yearly: string | null } = {
+      monthly: existing.monthly,
+      yearly: existing.yearly,
+    };
+    for (const interval of ['monthly', 'yearly'] as const) {
+      const amount = interval === 'monthly' ? price.monthly : price.yearly;
+      const expectedAmount = amount * 100;
+      // ZERO PRICE: skip creating a new Price. Keep the existing ID
+      // if any (legacy). Do NOT archive — existing subs may still
+      // reference it.
+      if (amount <= 0) {
+        continue;
+      }
+      const existingId = interval === 'monthly' ? existing.monthly : existing.yearly;
+      let resolvedId: string | null = null;
+      // (a) If an existing ID is provided, verify + price-change check.
+      if (existingId && existingId.trim().length > 0) {
+        try {
+          const existingPrice = await stripe.prices.retrieve(existingId);
+          const existingAmount = existingPrice.unit_amount ?? 0;
+          if (existingAmount === expectedAmount) {
+            resolvedId = existingId;
+          } else {
+            // Price changed → create a NEW Stripe Price on the same
+            // Product with the updated amount.
+            const stripeInterval: 'month' | 'year' = interval === 'monthly' ? 'month' : 'year';
+            const newPrice = await stripe.prices.create({
+              unit_amount: expectedAmount,
+              currency: curUpper.toLowerCase(),
+              recurring: { interval: stripeInterval },
+              product: productId,
+              metadata: { planId: input.planId, interval, currency: curUpper },
+            });
+            resolvedId = newPrice.id;
+            created++;
+          }
+        } catch {
+          // Retrieval failed (deleted? permission?) — fall through
+          // to lookup-by-metadata + create branch.
+        }
+      }
+      // (b) If no resolved ID yet, try to find an existing active
+      //     Stripe Price with matching metadata (currency + interval).
+      if (!resolvedId) {
+        try {
+          const list = await stripe.prices.list({ active: true, limit: 100 });
+          const match = list.data.find(
+            (p) =>
+              p.metadata?.planId === input.planId &&
+              p.metadata?.interval === interval &&
+              p.metadata?.currency === curUpper,
+          );
+          if (match) {
+            const matchAmount = match.unit_amount ?? 0;
+            if (matchAmount === expectedAmount) {
+              resolvedId = match.id;
+            } else {
+              // Amount mismatch → create new on the same Product.
+              const stripeInterval: 'month' | 'year' = interval === 'monthly' ? 'month' : 'year';
+              const newPrice = await stripe.prices.create({
+                unit_amount: expectedAmount,
+                currency: curUpper.toLowerCase(),
+                recurring: { interval: stripeInterval },
+                product: productId,
+                metadata: { planId: input.planId, interval, currency: curUpper },
+              });
+              resolvedId = newPrice.id;
+              created++;
+            }
+          }
+        } catch {
+          // fall through to create branch
+        }
+      }
+      // (c) If still no resolved ID, create a fresh Stripe Price.
+      if (!resolvedId) {
+        const stripeInterval: 'month' | 'year' = interval === 'monthly' ? 'month' : 'year';
+        const newPrice = await stripe.prices.create({
+          unit_amount: expectedAmount,
+          currency: curUpper.toLowerCase(),
+          recurring: { interval: stripeInterval },
+          product: productId,
+          metadata: { planId: input.planId, interval, currency: curUpper },
+        });
+        resolvedId = newPrice.id;
+        created++;
+      }
+      if (interval === 'monthly') out.monthly = resolvedId;
+      else out.yearly = resolvedId;
+    }
+    result[curUpper] = out;
+  }
+  return { stripePriceIdsByCurrency: result, created };
 }
 
 /**

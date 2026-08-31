@@ -5,6 +5,7 @@ import { executeImageGeneration } from '@/lib/ai/ai-service';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -54,6 +55,8 @@ const imageGenSchema = z.object({
 // =====================================================================
 
 export async function POST(request: NextRequest) {
+  const auth = await requireFeature(request, 'ai_content');
+  if ('response' in auth) return auth.response;
   const id = reqId();
 
   try {

@@ -3,15 +3,24 @@
 // ============================================================
 // PLATFORM PLANS & PRICING — simplified admin UI.
 // ============================================================
-// Owner sees compact plan cards (Beta / Pro / Max …) with a quick
-// Active toggle, a compact price + features + limits summary,
+// Owner sees compact plan cards (Free / Plus / Pro / Max …) with a
+// quick Active toggle, a compact price + features + limits summary,
 // and an "Edit Plan" button. The Edit Plan button opens a Dialog
-// with three compact sections: Basic Information, Feature Access,
-// Usage Limits. An optional collapsed "Client Display" section
-// holds the marketing feature list shown to clients on the
-// Client Billing page. A "+ Create Plan" button at the top-right
-// opens a Create Plan dialog (same sections, blank defaults) that
-// POSTs to /api/platform/admin/plans.
+// with three compact sections: Basic Information (multi-currency
+// price matrix), Feature Access (entitlement checkboxes), Usage
+// Limits. A collapsed "Stripe Billing" section holds the
+// per-currency Stripe Price IDs and a manual sync button. A
+// "+ Create Plan" button at the top-right opens a Create Plan
+// dialog (same sections, blank defaults) that POSTs to
+// /api/platform/admin/plans.
+//
+// MULTI-CURRENCY: each plan stores pricesByCurrency +
+// stripePriceIdsByCurrency (one entry per supported currency).
+// The legacy priceMonthly/priceYearly/currency/stripePriceIdMonthly/
+// stripePriceIdYearly fields are snapshots of the platform DEFAULT
+// currency — they are derived by the backend, never sent in the
+// patch. The Client Billing page derives the customer's currency
+// server-side from their IP and looks up pricesByCurrency[currency].
 //
 // All writes go through /api/platform/admin/plans (GET list,
 // POST create) + /api/platform/admin/plans/[planId] (PUT update)
@@ -19,8 +28,7 @@
 // Billing page and MRR read. Server-side entitlement enforcement
 // (hasFeature) and usage-limit checks (checkLimit) consume the
 // same data, so toggling a feature off here denies it for clients
-// on the next request. The Client Billing page is NOT modified
-// and continues to read from /api/platform/billing/me.
+// on the next request.
 // ============================================================
 
 import { useMemo, useState } from 'react';
@@ -31,7 +39,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
@@ -65,7 +72,6 @@ import {
   Save,
   ShieldAlert,
   RefreshCw,
-  ExternalLink,
   CheckCircle2,
 } from 'lucide-react';
 import {
@@ -80,7 +86,12 @@ import {
   UNLIMITED,
   type EntitlementKey,
 } from '@/lib/platform/feature-config';
-import type { PlanConfigData, PlanLimits } from '@/lib/platform/plan-config';
+import type {
+  PlanConfigData,
+  PlanLimits,
+  PricesByCurrency,
+  StripePriceIdsByCurrency,
+} from '@/lib/platform/plan-config';
 import { useAuthStore } from '@/lib/stores/auth-store';
 
 type PlanPatch = Partial<PlanConfigData>;
@@ -373,47 +384,71 @@ function EditPlanDialog({
 }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(plan.name);
-  const [priceMonthly, setPriceMonthly] = useState(String(plan.priceMonthly));
-  const [priceYearly, setPriceYearly] = useState(String(plan.priceYearly));
+  // MULTI-CURRENCY: pricesByCurrency is the AUTHORITATIVE price map
+  // (one entry per supported currency, each with monthly + yearly).
+  // The legacy priceMonthly/priceYearly/currency snapshot fields are
+  // derived from pricesByCurrency[defaultCurrency] by the backend —
+  // we don't send them in the patch.
+  const [pricesByCurrency, setPricesByCurrency] = useState<PricesByCurrency>(
+    plan.pricesByCurrency ?? {},
+  );
+  const [stripePriceIdsByCurrency, setStripePriceIdsByCurrency] =
+    useState<StripePriceIdsByCurrency>(plan.stripePriceIdsByCurrency ?? {});
   // Currency is NOT admin-editable per-plan — it is derived from the
   // platform's default country (CountryPricing). We display it as
-  // read-only so the admin knows what currency the prices are in, but
-  // never send it in the patch (the backend keeps the plan's stored
-  // currency). This keeps currency handling consistent between the
-  // plan, checkout, client billing page, and Stripe.
+  // read-only so the admin knows the platform default currency.
   const currency = plan.currency;
   const [interval, setInterval] = useState<'monthly' | 'yearly'>(plan.interval);
   const [active, setActive] = useState(plan.active);
-  const [features, setFeatures] = useState(plan.features.join('\n'));
   const [entitlements, setEntitlements] = useState<string[]>(plan.entitlements);
   const [limits, setLimits] = useState<PlanLimits>(plan.limits);
-  // New (Task 64): free-trial duration + Stripe Price IDs.
+  // Free-trial duration (only used when ALL prices are 0).
   const [freePlanDurationDays, setFreePlanDurationDays] = useState<string>(
     plan.freePlanDurationDays == null ? '' : String(plan.freePlanDurationDays),
   );
-  const [stripePriceIdMonthly, setStripePriceIdMonthly] = useState(plan.stripePriceIdMonthly ?? '');
-  const [stripePriceIdYearly, setStripePriceIdYearly] = useState(plan.stripePriceIdYearly ?? '');
-  const [clientDisplayOpen, setClientDisplayOpen] = useState(false);
   const [stripeOpen, setStripeOpen] = useState(false);
+
+  // Fetch the platform's SUPPORTED currencies (active CountryPricing
+  // rows). The default currency (isDefault: true) is moved to the front
+  // so it shows as the first row in the price + Stripe Price ID matrices.
+  // Used to drive the multi-currency inputs below.
+  const currenciesQuery = useQuery<string[]>({
+    queryKey: ['platform-currencies'],
+    queryFn: async () => {
+      const res = await fetch('/api/platform/admin/countries', { credentials: 'include' });
+      const json = await res.json();
+      const rows = Array.isArray(json) ? json : (json.data ?? []);
+      const list = (rows as { currency?: string; isDefault?: boolean }[])
+        .filter((r) => r && typeof r === 'object' && r.currency);
+      const def = list.find((r) => r.isDefault);
+      const set = new Set<string>();
+      if (def?.currency) set.add(String(def.currency).toUpperCase());
+      for (const r of list) {
+        if (r.currency) set.add(String(r.currency).toUpperCase());
+      }
+      return Array.from(set);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const currencies = currenciesQuery.data ?? [];
 
   // The EditPlanDialog is conditionally rendered by the parent (mounted
   // fresh each time the user opens it), so the useState initializers
   // above already seed local state from the latest server snapshot.
   // No useEffect sync is needed — that would just trigger cascading
-  // renders (and the React Compiler correctly flags it).
+  // renders (and the React Compiler correctly flags it). Currency rows
+  // not yet in the state are rendered with their default value (0 or '')
+  // and added to the state on the first onChange.
 
   const reset = () => {
     setName(plan.name);
-    setPriceMonthly(String(plan.priceMonthly));
-    setPriceYearly(String(plan.priceYearly));
+    setPricesByCurrency(plan.pricesByCurrency ?? {});
+    setStripePriceIdsByCurrency(plan.stripePriceIdsByCurrency ?? {});
     setInterval(plan.interval);
     setActive(plan.active);
-    setFeatures(plan.features.join('\n'));
     setEntitlements(plan.entitlements);
     setLimits(plan.limits);
     setFreePlanDurationDays(plan.freePlanDurationDays == null ? '' : String(plan.freePlanDurationDays));
-    setStripePriceIdMonthly(plan.stripePriceIdMonthly ?? '');
-    setStripePriceIdYearly(plan.stripePriceIdYearly ?? '');
   };
 
   const saveMutation = useMutation({
@@ -434,26 +469,26 @@ function EditPlanDialog({
     },
   });
 
-  // Sync this plan to Stripe (creates/reuses the Stripe Product + monthly +
-  // yearly Prices and writes the resolved Stripe Price IDs back onto the
-  // plan row). Surfaces Stripe errors inline so the admin can fix them.
+  // Sync this plan to Stripe (creates/reuses the Stripe Product + one
+  // Stripe Price per (currency, interval) pair and writes the resolved
+  // stripePriceIdsByCurrency map back onto the plan row). Surfaces
+  // Stripe errors inline so the admin can fix them.
   const syncToStripeMutation = useMutation({
     mutationFn: () =>
       postApi<{
         planId: string;
-        stripePriceIdMonthly: string;
-        stripePriceIdYearly: string;
-        created: boolean;
+        stripePriceIdsByCurrency: StripePriceIdsByCurrency;
+        created: number;
+        defaultCurrencySnapshot: { monthly: string | null; yearly: string | null };
       }>(`/api/platform/admin/plans/${plan.planId}/sync-stripe`),
     onSuccess: (data) => {
-      // Reflect the synced Stripe Price IDs in the local form state so the
-      // admin can see them without re-opening the dialog.
-      setStripePriceIdMonthly(data.stripePriceIdMonthly);
-      setStripePriceIdYearly(data.stripePriceIdYearly);
+      // Reflect the synced per-currency Stripe Price IDs in the local
+      // form state so the admin can see them without re-opening the dialog.
+      setStripePriceIdsByCurrency(data.stripePriceIdsByCurrency);
       queryClient.invalidateQueries({ queryKey: ['platform-plans'] });
       toast.success(
-        data.created
-          ? `Synced to Stripe — created monthly (${data.stripePriceIdMonthly.slice(0, 14)}…) + yearly (${data.stripePriceIdYearly.slice(0, 14)}…) Prices.`
+        data.created > 0
+          ? `Synced to Stripe — ${data.created} new Price(s) created.`
           : 'Stripe Prices are already in sync.',
       );
     },
@@ -471,31 +506,39 @@ function EditPlanDialog({
     },
   });
 
+  // A plan is free when ALL configured currencies have monthly + yearly
+  // prices of 0. The legacy priceMonthly/priceYearly are derived from
+  // the default currency's entry in pricesByCurrency.
+  const isFreeDerived = Object.values(pricesByCurrency).every(
+    (p) => p.monthly === 0 && p.yearly === 0,
+  );
+
   const buildPatch = (): PlanPatch => {
-    const monthly = Number(priceMonthly) || 0;
-    const yearly = Number(priceYearly) || 0;
-    const isFreeDerived = monthly === 0 && yearly === 0;
     return {
       name,
-      priceMonthly: monthly,
-      priceYearly: yearly,
-      // currency is intentionally NOT sent — the backend keeps the plan's
-      // stored currency (derived from the platform default country). The
-      // admin never manually chooses currency per plan.
+      // No priceMonthly/priceYearly/currency in the patch — they're
+      // derived from pricesByCurrency[defaultCurrency] by the backend.
+      pricesByCurrency,
       interval,
       isFree: isFreeDerived,
       freePlanDurationDays: isFreeDerived ? (freePlanDurationDays.trim() === '' ? null : Number(freePlanDurationDays) || null) : null,
-      stripePriceIdMonthly: stripePriceIdMonthly.trim() === '' ? null : stripePriceIdMonthly.trim(),
-      stripePriceIdYearly: stripePriceIdYearly.trim() === '' ? null : stripePriceIdYearly.trim(),
+      // No stripePriceIdMonthly/Yearly — they live in
+      // stripePriceIdsByCurrency now (controlled via the Stripe section).
+      stripePriceIdsByCurrency,
       active,
-      features: features
-        .split('\n')
-        .map((f) => f.trim())
-        .filter(Boolean),
+      // features intentionally omitted — the backend derives the
+      // marketing copy from entitlements on the client side now.
+      // savePlanConfig preserves the existing value when omitted.
       entitlements,
       limits: { ...limits, storageBytes: Number(limits.storageBytes) || 0 },
     };
   };
+
+  // Stripe sync status — true when at least one currency has any
+  // Stripe Price ID set. Used for the inline status text.
+  const stripeWired = Object.values(stripePriceIdsByCurrency).some(
+    (v) => v.monthly || v.yearly,
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -515,7 +558,7 @@ function EditPlanDialog({
           {/* -------------------- Basic Information -------------------- */}
           <section className="space-y-3">
             <h4 className="text-sm font-semibold">Basic Information</h4>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Name</Label>
                 <Input
@@ -525,25 +568,7 @@ function EditPlanDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Monthly Price</Label>
-                <Input
-                  type="number"
-                  value={priceMonthly}
-                  onChange={(e) => setPriceMonthly(e.target.value)}
-                  className="h-9"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Yearly Price</Label>
-                <Input
-                  type="number"
-                  value={priceYearly}
-                  onChange={(e) => setPriceYearly(e.target.value)}
-                  className="h-9"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Currency</Label>
+                <Label className="text-xs">Default Currency</Label>
                 <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3">
                   <span className="text-sm font-medium tabular-nums">{currency}</span>
                   <span className="ml-auto text-[10px] text-muted-foreground">platform</span>
@@ -583,9 +608,69 @@ function EditPlanDialog({
                 />
               </div>
             </div>
-            {/* Free plan trial duration — shown only when both prices are 0
-                (i.e. this is a free plan). Empty = unlimited. */}
-            {Number(priceMonthly) === 0 && Number(priceYearly) === 0 && (
+
+            {/* MULTI-CURRENCY PRICE MATRIX — one row per supported
+                currency. The currency code is a read-only badge; the
+                Monthly + Yearly prices are editable number inputs. Any
+                currency not yet in the state defaults to {0, 0} (free).
+                The default currency's row mirrors the legacy
+                priceMonthly/priceYearly snapshot — kept in sync by the
+                backend on save. */}
+            <div className="space-y-2">
+              <Label className="text-xs">Prices by Currency</Label>
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-[80px_1fr_1fr] gap-2 text-[10px] text-muted-foreground px-1">
+                  <span>Currency</span>
+                  <span>Monthly</span>
+                  <span>Yearly</span>
+                </div>
+                {currencies.length === 0 ? (
+                  <div className="text-[11px] text-muted-foreground italic">
+                    Loading supported currencies…
+                  </div>
+                ) : (
+                  currencies.map((code) => (
+                    <div key={code} className="grid grid-cols-[80px_1fr_1fr] gap-2 items-center">
+                      <Badge variant="outline" className="font-mono text-[10px] justify-center h-9">
+                        {code}
+                      </Badge>
+                      <Input
+                        type="number"
+                        value={pricesByCurrency[code]?.monthly ?? 0}
+                        onChange={(e) =>
+                          setPricesByCurrency((s) => ({
+                            ...s,
+                            [code]: {
+                              monthly: Number(e.target.value) || 0,
+                              yearly: s[code]?.yearly ?? 0,
+                            },
+                          }))
+                        }
+                        className="h-9"
+                      />
+                      <Input
+                        type="number"
+                        value={pricesByCurrency[code]?.yearly ?? 0}
+                        onChange={(e) =>
+                          setPricesByCurrency((s) => ({
+                            ...s,
+                            [code]: {
+                              monthly: s[code]?.monthly ?? 0,
+                              yearly: Number(e.target.value) || 0,
+                            },
+                          }))
+                        }
+                        className="h-9"
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Free plan trial duration — shown only when ALL prices
+                are 0 (i.e. this is a free plan). Empty = unlimited. */}
+            {isFreeDerived && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Free Access Duration (days)</Label>
@@ -626,13 +711,7 @@ function EditPlanDialog({
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-3 pt-2">
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Wire this plan to Stripe for real recurring billing. When you click <strong>Save</strong>,
-                the backend will automatically create the corresponding Stripe Product + monthly +
-                yearly Prices and store the resolved Stripe Price IDs below (unless you set them
-                manually — then it respects your values). You can also trigger an explicit sync now.
-              </p>
-              {/* Sync button + status */}
+              {/* Compact sync row — button on the left, status on the right. */}
               <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
                 <Button
                   type="button"
@@ -649,51 +728,68 @@ function EditPlanDialog({
                   )}
                   Sync to Stripe
                 </Button>
-                <div className="text-[11px] text-muted-foreground">
-                  {stripePriceIdMonthly && stripePriceIdYearly ? (
+                <div className="text-[11px] text-muted-foreground ml-auto">
+                  {stripeWired ? (
                     <span className="inline-flex items-center gap-1 text-emerald-700">
                       <CheckCircle2 className="h-3 w-3" />
-                      Wired: monthly + yearly Prices set
+                      Wired: per-currency Stripe Prices set
                     </span>
                   ) : (
-                    <span>
-                      Not yet wired. Click the button to create the Stripe Product + Prices
-                      (requires Stripe to be connected).
-                    </span>
+                    <span>Not yet wired. Click the button to create Stripe Prices.</span>
                   )}
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Stripe Price ID — Monthly</Label>
-                  <Input
-                    value={stripePriceIdMonthly}
-                    onChange={(e) => setStripePriceIdMonthly(e.target.value)}
-                    className="h-9 font-mono text-xs"
-                    placeholder="price_… (auto-filled after sync)"
-                  />
+              {/* MULTI-CURRENCY STRIPE PRICE ID GRID — one row per
+                  supported currency. Empty string on the input → null
+                  on the state so the backend auto-syncs. */}
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-[80px_1fr_1fr] gap-2 text-[10px] text-muted-foreground px-1">
+                  <span>Currency</span>
+                  <span>Monthly Price ID</span>
+                  <span>Yearly Price ID</span>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Stripe Price ID — Yearly</Label>
-                  <Input
-                    value={stripePriceIdYearly}
-                    onChange={(e) => setStripePriceIdYearly(e.target.value)}
-                    className="h-9 font-mono text-xs"
-                    placeholder="price_… (auto-filled after sync)"
-                  />
-                </div>
+                {currencies.length === 0 ? (
+                  <div className="text-[11px] text-muted-foreground italic">
+                    Loading supported currencies…
+                  </div>
+                ) : (
+                  currencies.map((code) => (
+                    <div key={code} className="grid grid-cols-[80px_1fr_1fr] gap-2 items-center">
+                      <Badge variant="outline" className="font-mono text-[10px] justify-center h-9">
+                        {code}
+                      </Badge>
+                      <Input
+                        value={stripePriceIdsByCurrency[code]?.monthly ?? ''}
+                        onChange={(e) =>
+                          setStripePriceIdsByCurrency((s) => ({
+                            ...s,
+                            [code]: {
+                              monthly: e.target.value.trim() === '' ? null : e.target.value,
+                              yearly: s[code]?.yearly ?? null,
+                            },
+                          }))
+                        }
+                        className="h-9 font-mono text-xs"
+                        placeholder="price_… (auto-filled after sync)"
+                      />
+                      <Input
+                        value={stripePriceIdsByCurrency[code]?.yearly ?? ''}
+                        onChange={(e) =>
+                          setStripePriceIdsByCurrency((s) => ({
+                            ...s,
+                            [code]: {
+                              monthly: s[code]?.monthly ?? null,
+                              yearly: e.target.value.trim() === '' ? null : e.target.value,
+                            },
+                          }))
+                        }
+                        className="h-9 font-mono text-xs"
+                        placeholder="price_… (auto-filled after sync)"
+                      />
+                    </div>
+                  ))
+                )}
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                Tip: leave these fields untouched to let the backend auto-sync on Save. Setting them
-                manually (even clearing) takes manual control of the Stripe side. Connect Stripe in{' '}
-                <a
-                  href="#platform-stripe-settings"
-                  className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
-                >
-                  Stripe Settings
-                  <ExternalLink className="h-3 w-3" />
-                </a>.
-              </p>
             </CollapsibleContent>
           </Collapsible>
 
@@ -765,44 +861,6 @@ function EditPlanDialog({
               ))}
             </div>
           </section>
-
-          <Separator />
-
-          {/* -------------------- Optional Client Display -------------------- */}
-          <Collapsible open={clientDisplayOpen} onOpenChange={setClientDisplayOpen}>
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="flex items-center justify-between w-full rounded-md hover:bg-accent/30 px-2 py-1.5 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">Client Display</span>
-                  <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                    optional
-                  </Badge>
-                </div>
-                <ChevronDown
-                  className={`h-4 w-4 text-muted-foreground transition-transform ${
-                    clientDisplayOpen ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-2 pt-2">
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Marketing copy shown to clients on the Client Billing page (one feature per line).
-                The structured entitlements above are enforced server-side regardless of this list —
-                keep them aligned to avoid confusing clients.
-              </p>
-              <Textarea
-                value={features}
-                onChange={(e) => setFeatures(e.target.value)}
-                rows={4}
-                className="text-sm"
-                placeholder="Up to 3 sites&#10;Basic analytics&#10;Email support"
-              />
-            </CollapsibleContent>
-          </Collapsible>
         </div>
 
         <DialogFooter className="gap-2">
@@ -862,41 +920,51 @@ function CreatePlanDialog({
   const [name, setName] = useState('');
   const [planId, setPlanId] = useState('');
   const [planIdTouched, setPlanIdTouched] = useState(false);
-  const [priceMonthly, setPriceMonthly] = useState('0');
-  const [priceYearly, setPriceYearly] = useState('0');
+  // MULTI-CURRENCY: pricesByCurrency is the AUTHORITATIVE price map
+  // (one entry per supported currency, each with monthly + yearly).
+  // Starts empty — populated by the user. The legacy
+  // priceMonthly/priceYearly/currency snapshot fields are derived from
+  // pricesByCurrency[defaultCurrency] by the backend on create.
+  const [pricesByCurrency, setPricesByCurrency] = useState<PricesByCurrency>({});
+  const [stripePriceIdsByCurrency, setStripePriceIdsByCurrency] =
+    useState<StripePriceIdsByCurrency>({});
   const [interval, setInterval] = useState<'monthly' | 'yearly'>('monthly');
   const [active, setActive] = useState(true);
-  const [features, setFeatures] = useState('');
   const [entitlements, setEntitlements] = useState<string[]>([]);
   const [limits, setLimits] = useState<PlanLimits>(EMPTY_LIMITS);
-  const [clientDisplayOpen, setClientDisplayOpen] = useState(false);
   const [stripeOpen, setStripeOpen] = useState(false);
-  // New (Task 64): free-trial duration + Stripe Price IDs.
+  // Free-trial duration (only used when ALL prices are 0).
   const [freePlanDurationDays, setFreePlanDurationDays] = useState('');
-  const [stripePriceIdMonthly, setStripePriceIdMonthly] = useState('');
-  const [stripePriceIdYearly, setStripePriceIdYearly] = useState('');
 
-  // Currency is NOT admin-editable per-plan — it is derived from the
-  // platform's default country (CountryPricing). We fetch the default
-  // so the admin can SEE the currency the new plan's prices will be
-  // denominated in, but never send it in the create payload (the backend
-  // resolves it from the platform default on save).
-  const currencyQuery = useQuery({
-    queryKey: ['platform-default-currency'],
+  // Fetch the platform's SUPPORTED currencies (active CountryPricing
+  // rows). The default currency (isDefault: true) is moved to the
+  // front so it shows as the first row in the price + Stripe Price ID
+  // matrices. Also gives us the default currency for the read-only
+  // display in Basic Information (replaces the legacy
+  // 'platform-default-currency' query).
+  const currenciesQuery = useQuery<string[]>({
+    queryKey: ['platform-currencies'],
     queryFn: async () => {
       const res = await fetch('/api/platform/admin/countries', { credentials: 'include' });
       const json = await res.json();
       const rows = Array.isArray(json) ? json : (json.data ?? []);
       const list = (rows as { currency?: string; isDefault?: boolean }[])
-        .filter((r) => r && typeof r === 'object');
+        .filter((r) => r && typeof r === 'object' && r.currency);
       const def = list.find((r) => r.isDefault);
-      if (def?.currency) return def.currency;
-      const any = list.find((r) => r.currency);
-      return any?.currency ?? 'CHF';
+      const set = new Set<string>();
+      if (def?.currency) set.add(String(def.currency).toUpperCase());
+      for (const r of list) {
+        if (r.currency) set.add(String(r.currency).toUpperCase());
+      }
+      return Array.from(set);
     },
     staleTime: 5 * 60 * 1000,
   });
-  const currency = currencyQuery.data ?? 'CHF';
+  const currencies = currenciesQuery.data ?? [];
+  // The platform default currency (first element of the currencies
+  // list — the query puts the isDefault row at the front). Fallback
+  // 'CHF' when the list is still loading or no countries configured.
+  const currency = currencies[0] ?? 'CHF';
 
   // Existing plan IDs — for live uniqueness validation.
   const existingPlansQuery = useQuery({
@@ -914,28 +982,29 @@ function CreatePlanDialog({
   const effectivePlanId = planIdTouched ? planId : derivePlanId(name);
   const planIdTaken = effectivePlanId.length > 0 && existingPlanIds.includes(effectivePlanId);
 
+  // A plan is free when ALL configured currencies have monthly + yearly
+  // prices of 0. An empty pricesByCurrency map is also "free" (vacuously).
+  const isFreeDerived = Object.values(pricesByCurrency).every(
+    (p) => p.monthly === 0 && p.yearly === 0,
+  );
+
   const createMutation = useMutation({
     mutationFn: () => {
-      const monthly = Number(priceMonthly) || 0;
-      const yearly = Number(priceYearly) || 0;
-      const isFree = monthly === 0 && yearly === 0;
       return postApi<PlanConfigData>('/api/platform/admin/plans', {
         planId: effectivePlanId,
         name,
-        priceMonthly: monthly,
-        priceYearly: yearly,
-        // currency is intentionally NOT sent — the backend resolves it
-        // from the platform default country (CountryPricing) on create.
+        // No priceMonthly/priceYearly/currency — the backend derives
+        // them from pricesByCurrency[defaultCurrency] on create.
+        pricesByCurrency,
+        // No stripePriceIdMonthly/Yearly — they live in
+        // stripePriceIdsByCurrency now.
+        stripePriceIdsByCurrency,
         interval,
-        isFree,
-        freePlanDurationDays: isFree && freePlanDurationDays.trim() !== '' ? Number(freePlanDurationDays) || null : null,
-        stripePriceIdMonthly: stripePriceIdMonthly.trim() === '' ? null : stripePriceIdMonthly.trim(),
-        stripePriceIdYearly: stripePriceIdYearly.trim() === '' ? null : stripePriceIdYearly.trim(),
+        isFree: isFreeDerived,
+        freePlanDurationDays: isFreeDerived && freePlanDurationDays.trim() !== '' ? Number(freePlanDurationDays) || null : null,
         active,
-        features: features
-          .split('\n')
-          .map((f) => f.trim())
-          .filter(Boolean),
+        // features intentionally omitted — the backend derives the
+        // marketing copy from entitlements on the client side now.
         entitlements,
         limits: { ...limits, storageBytes: Number(limits.storageBytes) || 0 },
         badgeVariant: effectivePlanId,
@@ -978,7 +1047,7 @@ function CreatePlanDialog({
           {/* -------------------- Basic Information -------------------- */}
           <section className="space-y-3">
             <h4 className="text-sm font-semibold">Basic Information</h4>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Plan Name *</Label>
                 <Input
@@ -989,25 +1058,7 @@ function CreatePlanDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Monthly Price</Label>
-                <Input
-                  type="number"
-                  value={priceMonthly}
-                  onChange={(e) => setPriceMonthly(e.target.value)}
-                  className="h-9"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Yearly Price</Label>
-                <Input
-                  type="number"
-                  value={priceYearly}
-                  onChange={(e) => setPriceYearly(e.target.value)}
-                  className="h-9"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Currency</Label>
+                <Label className="text-xs">Default Currency</Label>
                 <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3">
                   <span className="text-sm font-medium tabular-nums">{currency}</span>
                   <span className="ml-auto text-[10px] text-muted-foreground">platform</span>
@@ -1068,9 +1119,68 @@ function CreatePlanDialog({
                 </div>
               </div>
             </div>
-            {/* Free plan trial duration — shown only when both prices are 0
-                (i.e. this is a free plan). Empty = unlimited. */}
-            {Number(priceMonthly) === 0 && Number(priceYearly) === 0 && (
+
+            {/* MULTI-CURRENCY PRICE MATRIX — one row per supported
+                currency. Any currency not yet in the state defaults to
+                {0, 0} (free); the entry is added to the state on the
+                first onChange. The default currency's row mirrors the
+                legacy priceMonthly/priceYearly snapshot — derived by the
+                backend on create. */}
+            <div className="space-y-2">
+              <Label className="text-xs">Prices by Currency</Label>
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-[80px_1fr_1fr] gap-2 text-[10px] text-muted-foreground px-1">
+                  <span>Currency</span>
+                  <span>Monthly</span>
+                  <span>Yearly</span>
+                </div>
+                {currencies.length === 0 ? (
+                  <div className="text-[11px] text-muted-foreground italic">
+                    Loading supported currencies…
+                  </div>
+                ) : (
+                  currencies.map((code) => (
+                    <div key={code} className="grid grid-cols-[80px_1fr_1fr] gap-2 items-center">
+                      <Badge variant="outline" className="font-mono text-[10px] justify-center h-9">
+                        {code}
+                      </Badge>
+                      <Input
+                        type="number"
+                        value={pricesByCurrency[code]?.monthly ?? 0}
+                        onChange={(e) =>
+                          setPricesByCurrency((s) => ({
+                            ...s,
+                            [code]: {
+                              monthly: Number(e.target.value) || 0,
+                              yearly: s[code]?.yearly ?? 0,
+                            },
+                          }))
+                        }
+                        className="h-9"
+                      />
+                      <Input
+                        type="number"
+                        value={pricesByCurrency[code]?.yearly ?? 0}
+                        onChange={(e) =>
+                          setPricesByCurrency((s) => ({
+                            ...s,
+                            [code]: {
+                              monthly: s[code]?.monthly ?? 0,
+                              yearly: Number(e.target.value) || 0,
+                            },
+                          }))
+                        }
+                        className="h-9"
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Free plan trial duration — shown only when ALL prices
+                are 0 (i.e. this is a free plan). Empty = unlimited. */}
+            {isFreeDerived && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Free Access Duration (days)</Label>
@@ -1110,44 +1220,59 @@ function CreatePlanDialog({
                 />
               </button>
             </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-2 pt-2">
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                When you create a paid plan with Stripe connected, the backend will automatically
-                create the corresponding Stripe Product + monthly + yearly Prices and store the
-                resolved Stripe Price IDs. Leave these fields empty to let the backend auto-sync.
-                Set them manually only if you pre-created the Stripe Prices in the Stripe dashboard.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Stripe Price ID — Monthly</Label>
-                  <Input
-                    value={stripePriceIdMonthly}
-                    onChange={(e) => setStripePriceIdMonthly(e.target.value)}
-                    className="h-9 font-mono text-xs"
-                    placeholder="price_… (auto-created on Save)"
-                  />
+            <CollapsibleContent className="space-y-3 pt-2">
+              {/* MULTI-CURRENCY STRIPE PRICE ID GRID — one row per
+                  supported currency. Empty string on input → null on
+                  state so the backend auto-syncs. Leave empty to let
+                  the backend auto-create the Stripe Prices on Save. */}
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-[80px_1fr_1fr] gap-2 text-[10px] text-muted-foreground px-1">
+                  <span>Currency</span>
+                  <span>Monthly Price ID</span>
+                  <span>Yearly Price ID</span>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Stripe Price ID — Yearly</Label>
-                  <Input
-                    value={stripePriceIdYearly}
-                    onChange={(e) => setStripePriceIdYearly(e.target.value)}
-                    className="h-9 font-mono text-xs"
-                    placeholder="price_… (auto-created on Save)"
-                  />
-                </div>
+                {currencies.length === 0 ? (
+                  <div className="text-[11px] text-muted-foreground italic">
+                    Loading supported currencies…
+                  </div>
+                ) : (
+                  currencies.map((code) => (
+                    <div key={code} className="grid grid-cols-[80px_1fr_1fr] gap-2 items-center">
+                      <Badge variant="outline" className="font-mono text-[10px] justify-center h-9">
+                        {code}
+                      </Badge>
+                      <Input
+                        value={stripePriceIdsByCurrency[code]?.monthly ?? ''}
+                        onChange={(e) =>
+                          setStripePriceIdsByCurrency((s) => ({
+                            ...s,
+                            [code]: {
+                              monthly: e.target.value.trim() === '' ? null : e.target.value,
+                              yearly: s[code]?.yearly ?? null,
+                            },
+                          }))
+                        }
+                        className="h-9 font-mono text-xs"
+                        placeholder="price_… (auto-created on Save)"
+                      />
+                      <Input
+                        value={stripePriceIdsByCurrency[code]?.yearly ?? ''}
+                        onChange={(e) =>
+                          setStripePriceIdsByCurrency((s) => ({
+                            ...s,
+                            [code]: {
+                              monthly: s[code]?.monthly ?? null,
+                              yearly: e.target.value.trim() === '' ? null : e.target.value,
+                            },
+                          }))
+                        }
+                        className="h-9 font-mono text-xs"
+                        placeholder="price_… (auto-created on Save)"
+                      />
+                    </div>
+                  ))
+                )}
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                Connect Stripe first in{' '}
-                <a
-                  href="#platform-stripe-settings"
-                  className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
-                >
-                  Stripe Settings
-                  <ExternalLink className="h-3 w-3" />
-                </a>{' '}
-                so auto-sync works on plan creation.
-              </p>
             </CollapsibleContent>
           </Collapsible>
 
@@ -1219,43 +1344,6 @@ function CreatePlanDialog({
               ))}
             </div>
           </section>
-
-          <Separator />
-
-          {/* -------------------- Optional Client Display -------------------- */}
-          <Collapsible open={clientDisplayOpen} onOpenChange={setClientDisplayOpen}>
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="flex items-center justify-between w-full rounded-md hover:bg-accent/30 px-2 py-1.5 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">Client Display</span>
-                  <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                    optional
-                  </Badge>
-                </div>
-                <ChevronDown
-                  className={`h-4 w-4 text-muted-foreground transition-transform ${
-                    clientDisplayOpen ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-2 pt-2">
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Marketing copy shown to clients on the Client Billing page (one feature per line).
-                Leave empty to skip the feature list on the client side.
-              </p>
-              <Textarea
-                value={features}
-                onChange={(e) => setFeatures(e.target.value)}
-                rows={4}
-                className="text-sm"
-                placeholder="Up to 25 sites&#10;Advanced analytics&#10;Priority support"
-              />
-            </CollapsibleContent>
-          </Collapsible>
         </div>
 
         <DialogFooter className="gap-2">

@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import type { ApiResponse, ApiError } from '@/shared/types';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -25,6 +26,8 @@ const SORTABLE = new Set(['createdAt', 'durationMs', 'totalTokens', 'costUsd', '
 // =====================================================================
 
 export async function GET(request: NextRequest) {
+  const auth = await requireFeature(request, 'ai_content');
+  if ('response' in auth) return auth.response;
   const id = reqId();
 
   try {

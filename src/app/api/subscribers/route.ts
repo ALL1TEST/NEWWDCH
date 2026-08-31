@@ -8,6 +8,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { getSiteWhere } from '@/lib/site-context';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -32,6 +33,8 @@ const SORTABLE = new Set(['createdAt', 'updatedAt', 'email', 'status', 'subscrib
 // =====================================================================
 
 export async function GET(request: NextRequest) {
+  const auth = await requireFeature(request, 'newsletter');
+  if ('response' in auth) return auth.response;
   const id = reqId();
 
   try {
@@ -86,6 +89,8 @@ export async function GET(request: NextRequest) {
 // =====================================================================
 
 export async function POST(request: NextRequest) {
+  const auth = await requireFeature(request, 'newsletter');
+  if ('response' in auth) return auth.response;
   const id = reqId();
 
   try {

@@ -7,17 +7,25 @@
 // Behavior:
 //   - Validates the plan + interval and checks the user doesn't already
 //     have an active subscription to the same plan (would be a no-op).
-//   - Reads the Stripe Price ID from PlanConfig.stripePriceIdMonthly /
-//     stripePriceIdYearly.
+//   - Resolves the customer's billing currency SERVER-SIDE from the
+//     request IP via resolveCustomerCurrency (x-forwarded-for). The
+//     client CANNOT influence the currency — it's authoritative.
+//   - Reads the per-currency Stripe Price ID from
+//     PlanConfig.stripePriceIdsByCurrency[currency][interval] via
+//     resolveStripePriceIdForCurrency (falls back to the legacy
+//     default-currency snapshot fields for older plans).
 //   - If STRIPE_SECRET_KEY is not configured → returns 503
 //     "PAYMENT_PROVIDER_NOT_CONFIGURED" with a clear message. NEVER
 //     fakes a successful payment.
-//   - If the plan's Stripe Price ID is missing → returns 424
-//     "STRIPE_PRICE_NOT_CONFIGURED" with the plan id so the admin can
-//     wire it via Platform Admin → Edit Plan.
+//   - If the plan has no Stripe Price wired for the resolved currency +
+//     interval → returns 424 "STRIPE_PRICE_NOT_CONFIGURED" with the
+//     resolved currency in the message so the admin knows which
+//     currency is missing a Stripe Price.
 //   - Pre-creates (or fetches) the Stripe Customer via
 //     getOrCreateStripeCustomer so the webhook can attribute the event to
 //     the right user BEFORE checkout completes.
+//   - Adds `currency` and `country` to the Checkout Session metadata so
+//     the webhook can snapshot them onto the Subscription / Payment rows.
 //   - If `couponCode` is provided:
 //       * Looks up the local Coupon row (404 COUPON_NOT_FOUND if missing).
 //       * Runs validateCoupon (must return ok:true; 400 COUPON_INVALID
@@ -36,7 +44,7 @@
 //     so the customer can enter a code at checkout (Stripe will validate
 //     it against any Promotion Code we created via createStripeCouponMirror).
 //   - On success → creates a Stripe Checkout Session and returns its `url`
-//     so the client can redirect.
+//     + the resolved currency / country so the client can display them.
 //   - The actual subscription activation happens via the
 //     /api/webhooks/stripe route when Stripe fires
 //     `checkout.session.completed`.
@@ -48,7 +56,7 @@ import { ensurePlanAssignable, getUserSubscription } from '@/lib/platform/subscr
 import {
   isStripeConfiguredAsync,
   getStripeClient,
-  resolveStripePriceId,
+  resolveStripePriceIdForCurrency,
   getPublicStripeConfig,
   getOrCreateStripeCustomer,
   createStripeCouponMirror,
@@ -56,6 +64,7 @@ import {
 import { db } from '@/lib/db';
 import { validateCoupon } from '@/lib/platform/coupons';
 import { getPlanConfigSync } from '@/lib/platform/plan-config';
+import { resolveCustomerCurrency } from '@/lib/platform/country-pricing';
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -98,12 +107,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Resolve the Stripe Price ID for this plan + interval.
-  const priceId = await resolveStripePriceId(planId, interval);
+  // ---- Resolve the customer's currency SERVER-SIDE from the request IP ----
+  // The customer's currency is determined by their IP geolocation (via the
+  // Caddy gateway's x-forwarded-for header). The client CANNOT send a
+  // currency hint — this is authoritative. Falls back to the platform
+  // default country for loopback / unknown / inactive-country IPs.
+  const currencyResolution = await resolveCustomerCurrency(request, planId);
+  const customerCurrency = currencyResolution.currency;
+  const customerCountryCode = currencyResolution.countryCode;
+
+  // Resolve the per-currency Stripe Price ID for this plan + interval +
+  // customer currency. Falls back to the default-currency snapshot
+  // fields for plans synced before the multi-currency fields existed.
+  const priceId = await resolveStripePriceIdForCurrency(planId, customerCurrency, interval);
   if (!priceId) {
     return fail(
       'STRIPE_PRICE_NOT_CONFIGURED',
-      `Plan "${planId}" does not have a Stripe Price ID configured for the ${interval} interval. An admin must wire it via Platform Admin → Edit Plan → Stripe Price ID (${interval}).`,
+      `Plan "${planId}" does not have a Stripe Price ID configured for currency "${customerCurrency}" (interval: ${interval}). An admin must wire it via Platform Admin → Edit Plan → Stripe Price IDs by currency.`,
       424,
     );
   }
@@ -158,6 +178,8 @@ export async function POST(request: NextRequest) {
         userEmail: auth.user.email,
         planId,
         interval,
+        currency: customerCurrency,
+        country: customerCountryCode,
       },
     };
 
@@ -182,13 +204,16 @@ export async function POST(request: NextRequest) {
       // does NOT need to enter a code at checkout.
       sessionParams.discounts = [{ coupon: stripeCouponId! }];
       sessionParams.allow_promotion_codes = false;
-      // Surface the coupon code on the session metadata so the webhook
-      // can snapshot it onto the Payment row when the charge succeeds.
+      // Surface the coupon code + resolved currency / country on the
+      // session metadata so the webhook can snapshot them onto the
+      // Payment row when the charge succeeds.
       sessionParams.metadata = {
         userId: auth.user.id,
         userEmail: auth.user.email,
         planId,
         interval,
+        currency: customerCurrency,
+        country: customerCountryCode,
         couponCode: couponRow.code,
       };
     } else {
@@ -224,7 +249,12 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return ok({ url: session.url, sessionId: session.id });
+    return ok({
+      url: session.url,
+      sessionId: session.id,
+      currency: customerCurrency,
+      countryCode: customerCountryCode,
+    });
   } catch (err) {
     return fail(
       'STRIPE_ERROR',

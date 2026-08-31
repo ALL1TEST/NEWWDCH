@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -31,6 +32,8 @@ const updateSchema = z.object({
 // =====================================================================
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireFeature(request, 'ai_content');
+  if ('response' in auth) return auth.response;
   const id = reqId();
 
   try {
@@ -57,6 +60,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 // =====================================================================
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireFeature(request, 'ai_content');
+  if ('response' in auth) return auth.response;
   const id = reqId();
 
   try {
@@ -103,6 +108,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 // =====================================================================
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireFeature(request, 'ai_content');
+  if ('response' in auth) return auth.response;
   const id = reqId();
 
   try {

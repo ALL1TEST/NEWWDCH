@@ -40,20 +40,25 @@ export type PaymentStatus = 'paid' | 'pending' | 'failed' | 'refunded';
 export interface Plan {
   id: PlanId;
   name: string;
-  /** Monthly price in the plan's currency (legacy field, == priceMonthly). */
+  /** Monthly price in the plan's default currency (legacy field, == priceMonthly). */
   price: number;
   priceMonthly: number;
   priceYearly: number;
   currency: string;
+  /** Authoritative per-currency price map. */
+  pricesByCurrency: Record<string, { monthly: number; yearly: number }>;
+  /** Authoritative per-currency Stripe Price IDs. */
+  stripePriceIdsByCurrency: Record<string, { monthly: string | null; yearly: string | null }>;
   interval: BillingInterval;
   isFree: boolean;
   active: boolean;
+  /** Marketing copy — auto-derived from entitlements on the client side
+   *  (kept for legacy callers; not a separate config). */
   features: string[];
   /** Authoritative feature keys granted by this plan (checked by hasFeature). */
   entitlements: string[];
   /** Plan usage limits. -1 = unlimited. Only limits with REAL server-side
-   *  enforcement are tracked (maxSites, storageBytes). AI Words / AI Articles /
-   *  Automation Runs were removed because no real usage-tracking system exists. */
+   *  enforcement are tracked (maxSites, storageBytes). */
   limits: {
     maxSites: number;
     storageBytes: number;
@@ -170,6 +175,8 @@ function toPlan(d: PlanConfigData): Plan {
     priceMonthly: d.priceMonthly,
     priceYearly: d.priceYearly,
     currency: d.currency,
+    pricesByCurrency: d.pricesByCurrency,
+    stripePriceIdsByCurrency: d.stripePriceIdsByCurrency,
     interval: d.interval,
     isFree: d.isFree,
     active: d.active,
@@ -1452,6 +1459,13 @@ const INTERNAL_PLAN: Plan = {
   priceMonthly: 0,
   priceYearly: 0,
   currency: 'CHF',
+  pricesByCurrency: {
+    CHF: { monthly: 0, yearly: 0 },
+    USD: { monthly: 0, yearly: 0 },
+    EUR: { monthly: 0, yearly: 0 },
+    MAD: { monthly: 0, yearly: 0 },
+  },
+  stripePriceIdsByCurrency: {},
   interval: 'monthly',
   isFree: true,
   active: true,

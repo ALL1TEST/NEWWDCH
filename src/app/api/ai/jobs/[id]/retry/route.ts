@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import type { ApiResponse, ApiError } from '@/shared/types';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -23,6 +24,8 @@ function err(message: string, status = 400, code = 'VALIDATION_ERROR') {
 // =====================================================================
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireFeature(request, 'ai_content');
+  if ('response' in auth) return auth.response;
   const id = reqId();
 
   try {

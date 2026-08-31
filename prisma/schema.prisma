@@ -2084,32 +2084,51 @@ model FeatureFlag {
 
 // The editable plan definition. The Client Billing API reads price,
 // features, entitlements and limits from here — NOT from a hardcoded
-// constant. `features` is marketing copy; `entitlements` is the
-// authoritative feature-key list checked by hasFeature().
+// constant. `entitlements` is the authoritative feature-key list
+// checked by hasFeature() server-side on every feature route.
+// `features` is kept as a derived marketing copy (auto-derived from
+// entitlements on the Client Billing page) — NOT a separate config.
 //
 // planId values: 'free' | 'plus' | 'pro' | 'max' | custom.
 // freePlanDurationDays: null = unlimited; positive N = trial duration in
 //   days for free plans (enforced server-side; expired trial blocks
 //   gated features).
-// stripePriceIdMonthly/Yearly: optional Stripe Price IDs for real
-//   recurring billing. Empty = Stripe not yet wired for this plan; the
-//   checkout API refuses to fake success in that case.
+// stripePriceIdMonthly/Yearly: snapshot for the platform DEFAULT
+//   currency only (kept for backward-compat with existing readers).
+//   The AUTHORITATIVE per-currency Stripe Price IDs are stored in
+//   `stripePriceIdsByCurrency` (JSON map: { USD: { monthly, yearly },
+//   EUR: {...}, MAD: {...}, CHF: {...} }).
+// pricesByCurrency: JSON map of monthly+yearly prices for each
+//   supported currency ({ USD: { monthly, yearly }, ... }). The
+//   platform DEFAULT currency's price is mirrored into priceMonthly
+//   / priceYearly for backward compat with legacy callers.
+// currency: the platform default currency (auto-resolved from the
+//   CountryPricing table — admin never edits this per plan).
 model PlanConfig {
   id                   String   @id @default(cuid())
   planId               String   @unique // 'free' | 'plus' | 'pro' | 'max' | custom
   name                 String
-  priceMonthly         Int      @default(0) // major currency units (49 = 49 CHF)
+  priceMonthly         Int      @default(0) // major currency units (49 = 49 CHF) — snapshot for default currency
   priceYearly          Int      @default(0)
-  currency             String   @default("CHF")
+  currency             String   @default("CHF") // platform default currency (auto-resolved)
+  // JSON: { USD: { monthly, yearly }, EUR: {...}, MAD: {...}, CHF: {...} }.
+  // The authoritative multi-currency price list. Default-currency's
+  // monthly/yearly also mirrored in priceMonthly/priceYearly above for
+  // backward-compat with legacy callers.
+  pricesByCurrency     String   @default("{}")
+  // JSON: { USD: { monthly: 'price_...', yearly: 'price_...' }, ... }.
+  // Real Stripe Price IDs per (currency, interval). The default
+  // currency's IDs are mirrored in stripePriceIdMonthly/Yearly below.
+  stripePriceIdsByCurrency String @default("{}")
   interval             String   @default("monthly") // monthly | yearly — default cadence; client can pick
   isFree               Boolean  @default(false)
   freePlanDurationDays Int? // null = unlimited; positive N = trial duration in days for free plans
-  stripePriceIdMonthly String? // Stripe Price ID for monthly billing; null = not yet wired
-  stripePriceIdYearly  String? // Stripe Price ID for yearly billing; null = not yet wired
+  stripePriceIdMonthly String? // snapshot for default currency; authoritative IDs in stripePriceIdsByCurrency
+  stripePriceIdYearly  String? // snapshot for default currency; authoritative IDs in stripePriceIdsByCurrency
   active               Boolean  @default(true)
-  features             String   @default("[]") // JSON: string[] (marketing)
-  entitlements         String   @default("[]") // JSON: string[] (feature keys)
-  limits               String   @default("{}") // JSON: { maxSites, storageBytes, aiWords, aiArticles, automationRuns }
+  features             String   @default("[]") // JSON: string[] — derived marketing copy (auto-derived from entitlements)
+  entitlements         String   @default("[]") // JSON: string[] (authoritative feature keys)
+  limits               String   @default("{}") // JSON: { maxSites, storageBytes }
   badgeVariant         String   @default("") // maps to client badge styling
   sortOrder            Int      @default(0)
   createdAt            DateTime @default(now())

@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { generateRequestId } from '@/lib/utils';
 import { getSiteWhere } from '@/lib/site-context';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 type CheckStatus = 'pass' | 'warning' | 'fail' | 'info';
 
@@ -20,6 +21,8 @@ interface CheckResult {
 }
 
 export async function GET(request: NextRequest) {
+  const auth = await requireFeature(request, 'advanced_seo');
+  if ('response' in auth) return auth.response;
   const id = generateRequestId();
   const start = Date.now();
 

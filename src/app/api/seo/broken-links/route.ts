@@ -8,6 +8,7 @@ import { db } from '@/lib/db';
 import { generateRequestId } from '@/lib/utils';
 import { z } from 'zod/v4';
 import { getSiteWhere } from '@/lib/site-context';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- validation ------------------------------------------------
 
@@ -27,6 +28,8 @@ const SORTABLE = new Set(['createdAt', 'updatedAt', 'detectedAt', 'brokenUrl', '
 // =====================================================================
 
 export async function GET(request: NextRequest) {
+  const auth = await requireFeature(request, 'advanced_seo');
+  if ('response' in auth) return auth.response;
   const id = generateRequestId();
   const start = Date.now();
 
@@ -86,6 +89,8 @@ export async function GET(request: NextRequest) {
 // =====================================================================
 
 export async function POST(request: NextRequest) {
+  const auth = await requireFeature(request, 'advanced_seo');
+  if ('response' in auth) return auth.response;
   const id = generateRequestId();
   const start = Date.now();
 

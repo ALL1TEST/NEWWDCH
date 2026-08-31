@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 import { executeChat } from '@/lib/ai/ai-service';
 import type { ChatMessage } from '@/lib/ai/ai-service';
 import { z } from 'zod/v4';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 function reqId() {
   return 'req_' + crypto.randomUUID().slice(0, 8);
@@ -32,6 +33,8 @@ const schema = z.object({
 // =====================================================================
 
 export async function POST(request: NextRequest) {
+  const auth = await requireFeature(request, 'ai_content');
+  if ('response' in auth) return auth.response;
   const id = reqId();
 
   try {

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -26,6 +27,8 @@ const SORTABLE = new Set(['createdAt', 'action', 'resourceType', 'userId']);
 // =====================================================================
 
 export async function GET(request: NextRequest) {
+  const auth = await requireFeature(request, 'audit_log');
+  if ('response' in auth) return auth.response;
   const id = reqId();
 
   try {

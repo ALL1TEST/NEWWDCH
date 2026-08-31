@@ -5,8 +5,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSiteWhere } from '@/lib/site-context';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 export async function GET(request: NextRequest) {
+  const auth = await requireFeature(request, 'advanced_analytics');
+  if ('response' in auth) return auth.response;
   const id = 'req_' + Math.random().toString(36).slice(2, 10);
   const siteFilter = await getSiteWhere(request);
 

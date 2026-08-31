@@ -11,12 +11,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { getSiteWhere } from '@/lib/site-context';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 function reqId() {
   return 'req_' + nanoid(8);
 }
 
 export async function GET(request: NextRequest) {
+  const auth = await requireFeature(request, 'newsletter');
+  if ('response' in auth) return auth.response;
   const id = reqId();
 
   try {

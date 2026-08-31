@@ -526,6 +526,10 @@ export function validatePlanConfigInput(input: {
   priceMonthly?: number;
   priceYearly?: number;
   currency?: string;
+  /** Authoritative per-currency price map. */
+  pricesByCurrency?: Record<string, { monthly: number; yearly: number }>;
+  /** Authoritative per-currency Stripe Price IDs. */
+  stripePriceIdsByCurrency?: Record<string, { monthly: string | null; yearly: string | null }>;
   interval?: string;
   freePlanDurationDays?: number | null;
   limits?: Partial<{
@@ -533,6 +537,7 @@ export function validatePlanConfigInput(input: {
     storageBytes: number;
   }>;
   entitlements?: string[];
+  features?: string[];
 }): string[] {
   const errors: string[] = [];
   if (input.name !== undefined && !input.name.trim()) errors.push('Plan name is required.');
@@ -544,6 +549,36 @@ export function validatePlanConfigInput(input: {
     errors.push('Yearly price must be a non-negative number.');
   }
   if (input.currency !== undefined && !input.currency.trim()) errors.push('Currency is required.');
+  if (input.pricesByCurrency !== undefined) {
+    for (const [cur, val] of Object.entries(input.pricesByCurrency)) {
+      if (!cur || !cur.trim()) {
+        errors.push('Currency code in pricesByCurrency must be a non-empty string.');
+        continue;
+      }
+      if (!val || typeof val !== 'object') {
+        errors.push(`pricesByCurrency.${cur} must be { monthly, yearly }.`);
+        continue;
+      }
+      if (Number.isNaN(val.monthly) || val.monthly < 0) {
+        errors.push(`pricesByCurrency.${cur}.monthly must be a non-negative number.`);
+      }
+      if (Number.isNaN(val.yearly) || val.yearly < 0) {
+        errors.push(`pricesByCurrency.${cur}.yearly must be a non-negative number.`);
+      }
+    }
+  }
+  if (input.stripePriceIdsByCurrency !== undefined) {
+    for (const [cur, val] of Object.entries(input.stripePriceIdsByCurrency)) {
+      if (!cur || !cur.trim()) {
+        errors.push('Currency code in stripePriceIdsByCurrency must be a non-empty string.');
+        continue;
+      }
+      if (!val || typeof val !== 'object') {
+        errors.push(`stripePriceIdsByCurrency.${cur} must be { monthly, yearly }.`);
+        continue;
+      }
+    }
+  }
   if (input.interval !== undefined && !['monthly', 'yearly'].includes(input.interval)) {
     errors.push('Billing interval must be "monthly" or "yearly".');
   }
