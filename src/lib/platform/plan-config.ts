@@ -8,15 +8,20 @@
 // exposed here, so an owner edit (savePlanConfig) propagates to the
 // client billing experience and to MRR on the next read.
 //
-// MULTI-CURRENCY: each plan stores pricesByCurrency (JSON map
-// { USD: { monthly, yearly }, EUR: {...}, MAD: {...}, CHF: {...} })
-// so the same plan can be sold in multiple currencies at independent
-// prices. The customer's currency is resolved server-side from their
-// IP geolocation (see country-pricing.ts:resolveCustomerCurrency).
-// The plan's `currency` field is the platform default currency
-// (auto-resolved from CountryPricing.isDefault) — it's a snapshot
-// only, used by legacy callers. `priceMonthly` / `priceYearly` mirror
-// the default currency's price for the same reason.
+// MULTI-CURRENCY: the plan carries ONE base price configuration —
+// priceMonthly / priceYearly denominated in the plan's default /
+// fallback `currency` (both edited directly in the Edit Plan modal).
+// The customer's currency is resolved SERVER-SIDE from their IP
+// geolocation (see country-pricing.ts:resolveCustomerPricing) when
+// the plan's `autoCurrency` flag is on; otherwise every customer is
+// billed in the plan default currency.
+//
+// pricesByCurrency is a DERIVED store (NOT edited per-plan in the
+// modal): the default currency's entry mirrors the base price on
+// every save, and the other entries hold the platform-level
+// regional prices (CountryPricing.regionalPrices + legacy entries)
+// — preserved across saves so customers in other currencies keep
+// seeing their configured price (e.g. "90 MAD / month").
 //
 // STRIPE: for each paid plan × supported currency × interval, a real
 // Stripe Price is created on sync and its ID persisted in
@@ -68,16 +73,22 @@ export type StripePriceIdsByCurrency = Record<string, CurrencyStripeIds>;
 export interface PlanConfigData {
   planId: string;
   name: string;
-  /** Snapshot of the platform DEFAULT currency's monthly price.
-   *  Authoritative prices live in `pricesByCurrency`. */
+  /** Base monthly price (in the plan default currency) — edited in the
+   *  Edit Plan modal. Authoritative for the default currency. */
   priceMonthly: number;
-  /** Snapshot of the platform DEFAULT currency's yearly price. */
+  /** Base yearly price (in the plan default currency). */
   priceYearly: number;
-  /** Platform default currency (auto-resolved from CountryPricing). */
+  /** Plan DEFAULT / FALLBACK currency (admin-selected via the
+   *  country/currency selector in the Edit Plan modal). */
   currency: string;
-  /** Authoritative per-currency price map. */
+  /** When true the customer's currency is auto-detected server-side from
+   *  their IP (country → currency → supported check → fallback to
+   *  `currency`). When false every customer is billed in `currency`. */
+  autoCurrency: boolean;
+  /** Derived per-currency price map — default entry mirrors the base
+   *  price; other entries are platform regional prices (preserved). */
   pricesByCurrency: PricesByCurrency;
-  /** Authoritative per-currency Stripe Price ID map. */
+  /** Per-currency Stripe Price IDs (maintained by the Stripe sync). */
   stripePriceIdsByCurrency: StripePriceIdsByCurrency;
   /** Default cadence; the client can pick monthly/yearly per subscription. */
   interval: BillingInterval;
@@ -141,6 +152,7 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     priceMonthly: 0,
     priceYearly: 0,
     currency: 'CHF',
+    autoCurrency: true,
     pricesByCurrency: { ...PRICES_FREE },
     stripePriceIdsByCurrency: {},
     interval: 'monthly',
@@ -161,6 +173,7 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     priceMonthly: 9,
     priceYearly: 90,
     currency: 'CHF',
+    autoCurrency: true,
     pricesByCurrency: { ...PRICES_PLUS },
     stripePriceIdsByCurrency: {},
     interval: 'monthly',
@@ -181,6 +194,7 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     priceMonthly: 49,
     priceYearly: 490,
     currency: 'CHF',
+    autoCurrency: true,
     pricesByCurrency: { ...PRICES_PRO },
     stripePriceIdsByCurrency: {},
     interval: 'monthly',
@@ -201,6 +215,7 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     priceMonthly: 99,
     priceYearly: 990,
     currency: 'CHF',
+    autoCurrency: true,
     pricesByCurrency: { ...PRICES_MAX },
     stripePriceIdsByCurrency: {},
     interval: 'monthly',
@@ -307,6 +322,7 @@ type PlanConfigRow = {
   priceMonthly: number;
   priceYearly: number;
   currency: string;
+  autoCurrency: boolean;
   pricesByCurrency: string;
   stripePriceIdsByCurrency: string;
   interval: string;
@@ -386,6 +402,7 @@ function rowToData(row: PlanConfigRow): PlanConfigData {
     priceMonthly: row.priceMonthly,
     priceYearly: row.priceYearly,
     currency: row.currency,
+    autoCurrency: row.autoCurrency ?? true,
     pricesByCurrency,
     stripePriceIdsByCurrency,
     interval: (row.interval === 'yearly' ? 'yearly' : 'monthly') as BillingInterval,
@@ -409,6 +426,7 @@ function dataToRow(d: PlanConfigData) {
     priceMonthly: d.priceMonthly,
     priceYearly: d.priceYearly,
     currency: d.currency,
+    autoCurrency: d.autoCurrency,
     pricesByCurrency: JSON.stringify(d.pricesByCurrency ?? {}),
     stripePriceIdsByCurrency: JSON.stringify(d.stripePriceIdsByCurrency ?? {}),
     interval: d.interval,
@@ -588,13 +606,19 @@ export async function hydrate(): Promise<void> {
 
 export interface PlanConfigInput {
   name?: string;
-  /** Snapshot of the platform DEFAULT currency's monthly price. */
+  /** Base monthly price in the plan default currency (modal-edited). */
   priceMonthly?: number;
-  /** Snapshot of the platform DEFAULT currency's yearly price. */
+  /** Base yearly price in the plan default currency (modal-edited). */
   priceYearly?: number;
-  /** Platform default currency. Auto-resolved when omitted. */
+  /** Plan default / fallback currency (admin-selected). When provided
+   *  together with priceMonthly/priceYearly, the default currency's
+   *  pricesByCurrency entry is DERIVED from the base price. */
   currency?: string;
-  /** Authoritative per-currency prices: { USD: { monthly, yearly }, ... }. */
+  /** Auto-detect the customer's currency from their IP (fallback to
+   *  `currency` when the detected currency is unsupported). */
+  autoCurrency?: boolean;
+  /** Per-currency prices. Rarely sent directly — the modal sends the
+   *  base price + currency and the backend derives the default entry. */
   pricesByCurrency?: PricesByCurrency;
   /** Stripe Price ID snapshots for the default currency. */
   stripePriceIdMonthly?: string | null;
@@ -613,38 +637,59 @@ export interface PlanConfigInput {
   sortOrder?: number;
 }
 
-/** Merge a patch (Partial<PlanConfigData>) into the current data,
- *  applying defaults for the multi-currency fields when omitted.
- *  - pricesByCurrency: keep current when omitted.
- *  - stripePriceIdsByCurrency: keep current when omitted.
- *  - When pricesByCurrency is provided but priceMonthly/priceYearly
- *    are NOT, snapshot the default currency's price into the legacy
- *    fields for backward-compat with legacy callers.
- *  - When stripePriceIdsByCurrency is provided but stripePriceIdMonthly/
- *    Yearly are NOT, snapshot the default currency's IDs.
+/** Merge a patch (Partial<PlanConfigData>) into the current data.
+ *  The Edit Plan modal sends the ONE base price configuration
+ *  (priceMonthly + priceYearly + currency + autoCurrency) — NOT a
+ *  per-currency matrix. Derivation rules:
+ *  - pricesByCurrency: starts from the current map (or the explicit
+ *    patch map when provided); whenever the base price / currency is
+ *    in the patch, the DEFAULT currency's entry is re-derived as
+ *    { monthly: priceMonthly, yearly: priceYearly }. Other currency
+ *    entries (platform regional / legacy prices) are PRESERVED.
+ *  - stripePriceIdsByCurrency: kept as-is when omitted (the Stripe
+ *    sync maintains it); the default-currency snapshots mirror the
+ *    default entry.
  */
 function mergePlanPatch(current: PlanConfigData, patch: PlanConfigInput, defaultCurrency: string): PlanConfigData {
-  const pricesByCurrency: PricesByCurrency = patch.pricesByCurrency ?? current.pricesByCurrency ?? {};
-  const stripePriceIdsByCurrency: StripePriceIdsByCurrency =
-    patch.stripePriceIdsByCurrency ?? current.stripePriceIdsByCurrency ?? {};
-  // Default-currency snapshot — keep the legacy fields in sync so legacy
-  // callers that read priceMonthly/priceYearly/stripePriceIdMonthly/Yearly
-  // see the right values.
   const curUpper = defaultCurrency.toUpperCase();
-  const defPrice = pricesByCurrency[curUpper] ?? { monthly: 0, yearly: 0 };
-  const defIds = stripePriceIdsByCurrency[curUpper] ?? { monthly: null, yearly: null };
+
+  // pricesByCurrency — clone (never mutate the cache's object in place).
+  const sourcePrices = patch.pricesByCurrency ?? current.pricesByCurrency ?? {};
+  const pricesByCurrency: PricesByCurrency = { ...sourcePrices };
+
+  // Base price precedence:
+  //   1. Explicit patch values (the modal always sends these).
+  //   2. Legacy mirror: an explicit pricesByCurrency map with an entry
+  //      for the final default currency (backward-compat callers).
+  //   3. Current snapshot.
+  const mirrored =
+    patch.priceMonthly === undefined && patch.pricesByCurrency !== undefined
+      ? pricesByCurrency[curUpper]
+      : undefined;
   const priceMonthly =
-    patch.priceMonthly !== undefined
-      ? patch.priceMonthly
-      : patch.pricesByCurrency !== undefined
-        ? defPrice.monthly
-        : current.priceMonthly;
+    patch.priceMonthly !== undefined ? patch.priceMonthly : mirrored?.monthly ?? current.priceMonthly;
   const priceYearly =
-    patch.priceYearly !== undefined
-      ? patch.priceYearly
-      : patch.pricesByCurrency !== undefined
-        ? defPrice.yearly
-        : current.priceYearly;
+    patch.priceYearly !== undefined ? patch.priceYearly : mirrored?.yearly ?? current.priceYearly;
+
+  // The base price configuration was touched (or a legacy map was sent)
+  // → re-derive the DEFAULT currency's entry from the base price. All
+  // OTHER currency entries (platform regional / legacy prices) are
+  // preserved untouched.
+  const baseTouched =
+    patch.priceMonthly !== undefined ||
+    patch.priceYearly !== undefined ||
+    patch.currency !== undefined ||
+    patch.pricesByCurrency !== undefined;
+  if (baseTouched) {
+    pricesByCurrency[curUpper] = { monthly: priceMonthly, yearly: priceYearly };
+  }
+
+  const stripePriceIdsByCurrency: StripePriceIdsByCurrency = {
+    ...(patch.stripePriceIdsByCurrency ?? current.stripePriceIdsByCurrency ?? {}),
+  };
+  // Default-currency snapshot — keep the legacy fields in sync so legacy
+  // callers that read stripePriceIdMonthly/Yearly see the right values.
+  const defIds = stripePriceIdsByCurrency[curUpper] ?? { monthly: null, yearly: null };
   const stripePriceIdMonthly =
     patch.stripePriceIdMonthly !== undefined
       ? patch.stripePriceIdMonthly
@@ -663,7 +708,8 @@ function mergePlanPatch(current: PlanConfigData, patch: PlanConfigInput, default
     name: patch.name ?? current.name,
     priceMonthly,
     priceYearly,
-    currency: patch.currency ?? current.currency,
+    currency: curUpper,
+    autoCurrency: patch.autoCurrency ?? current.autoCurrency,
     pricesByCurrency,
     stripePriceIdsByCurrency,
     interval: patch.interval ?? current.interval,
@@ -764,9 +810,9 @@ export async function savePlanConfig(planId: string, patch: PlanConfigInput): Pr
  *  Product + per-currency monthly+yearly Prices and writes the
  *  resolved IDs back onto the new plan row.
  *
- *  When pricesByCurrency is omitted, an empty map is used (the admin
- *  will need to add prices per currency via the editor). When provided,
- *  the default currency's price is mirrored into priceMonthly/Yearly. */
+ *  The Create Plan modal sends the ONE base price configuration
+ *  (priceMonthly + priceYearly + currency + autoCurrency); the default
+ *  currency's pricesByCurrency entry is derived from the base price. */
 export async function createPlanConfig(
   input: PlanConfigInput & { planId: string; name: string },
 ): Promise<PlanConfigData> {
@@ -776,16 +822,23 @@ export async function createPlanConfig(
       ? input.currency
       : await resolvePlatformDefaultCurrency();
   const curUpper = currency.toUpperCase();
-  const pricesByCurrency: PricesByCurrency = input.pricesByCurrency ?? {};
-  const defPrice = pricesByCurrency[curUpper] ?? { monthly: 0, yearly: 0 };
+  const pricesByCurrency: PricesByCurrency = { ...(input.pricesByCurrency ?? {}) };
+  // Base price precedence: explicit input → legacy mirror from an
+  // explicit pricesByCurrency map → 0.
+  const mirrored = input.pricesByCurrency ? pricesByCurrency[curUpper] : undefined;
+  const priceMonthly = input.priceMonthly ?? mirrored?.monthly ?? 0;
+  const priceYearly = input.priceYearly ?? mirrored?.yearly ?? 0;
+  // Derive the default currency entry from the base price.
+  pricesByCurrency[curUpper] = { monthly: priceMonthly, yearly: priceYearly };
   const stripePriceIdsByCurrency: StripePriceIdsByCurrency = input.stripePriceIdsByCurrency ?? {};
   const defIds = stripePriceIdsByCurrency[curUpper] ?? { monthly: null, yearly: null };
   const data: PlanConfigData = {
     planId: input.planId,
     name: input.name,
-    priceMonthly: input.priceMonthly !== undefined ? input.priceMonthly : defPrice.monthly,
-    priceYearly: input.priceYearly !== undefined ? input.priceYearly : defPrice.yearly,
+    priceMonthly,
+    priceYearly,
     currency: curUpper,
+    autoCurrency: input.autoCurrency ?? true,
     pricesByCurrency,
     stripePriceIdsByCurrency,
     interval: input.interval ?? 'monthly',

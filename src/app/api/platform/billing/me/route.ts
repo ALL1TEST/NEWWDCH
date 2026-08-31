@@ -1,23 +1,32 @@
 import { NextRequest } from 'next/server';
 import { requireAuth, ok } from '@/lib/platform/platform-auth';
 import { getClientBillingAsync } from '@/lib/platform/platform-data';
-import { resolveCustomerCurrency } from '@/lib/platform/country-pricing';
+import {
+  detectCurrencyContext,
+  resolvePlanPricingFromContext,
+  type CurrencyContext,
+  type ResolvedPlanPricing,
+} from '@/lib/platform/country-pricing';
+import { getPlanConfigSync } from '@/lib/platform/plan-config';
 
 // GET /api/platform/billing/me
 //   Returns the authenticated user's full billing state PLUS the
-//   server-determined customer currency resolution (from their request
-//   IP via x-forwarded-for → CountryPricing).
+//   server-determined currency + per-plan pricing resolution.
 //
-//   - `customerCurrencyResolution` is the authoritative sub-object:
-//     { currency, countryCode, countryName, source, regional }.
-//   - Top-level convenience fields (customerCurrency, customerCountryCode,
-//     customerCountryName, currencySource) are also surfaced for easy
-//     frontend consumption.
+//   - `customerCurrencyResolution` is the detected country/currency for
+//     this request (from the IP via x-forwarded-for → CountryPricing /
+//     currency catalog). The customer never picks a currency manually —
+//     this is what the page header badge shows.
+//   - `planPricing` maps EVERY active planId → the SERVER-RESOLVED
+//     final price the customer pays for that plan:
+//       { currency, monthly, yearly, source, supported,
+//         detectedCurrency, countryCode, countryName, regional }
+//     It applies each plan's AUTO CURRENCY rules (autoCurrency off →
+//     plan default; detected currency supported → that currency's
+//     price; otherwise fallback to the plan default currency). The
+//     frontend DISPLAYS these values — it does not compute prices.
 //   - The existing ClientBillingState shape is NOT modified — the new
-//     fields are added ALONGSIDE the existing ones. The frontend reads
-//     `plan.pricesByCurrency[customerCurrency]` to display the right
-//     price per plan (the pricesByCurrency map is already on every Plan
-//     in `allPlans`).
+//     fields are added ALONGSIDE the existing ones.
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if ('response' in auth) return auth.response;
@@ -26,23 +35,32 @@ export async function GET(request: NextRequest) {
   // currentPeriodEnd, trialEnd, freeTrialExpiresAt, stripeSubscriptionId, etc.
   const billingState = await getClientBillingAsync(auth.user);
 
-  // Resolve the customer's billing currency + country SERVER-SIDE from
-  // the request IP. We do NOT pass a planId — the customer currency is
-  // the same regardless of which plan they're on (it's determined by IP
-  // geolocation only). The existing plans already expose a
-  // pricesByCurrency map so the frontend can look up the right price.
-  const currencyResolution = await resolveCustomerCurrency(request);
+  // Detect the customer's country + currency ONCE (server-side, from
+  // the request IP), then resolve each plan's final pricing from that
+  // same context — one detection, consistent per-plan results.
+  const ctx: CurrencyContext = await detectCurrencyContext(request);
+
+  const planPricing: Record<string, ResolvedPlanPricing> = {};
+  for (const plan of billingState.allPlans) {
+    const config = getPlanConfigSync(plan.id);
+    planPricing[plan.id] = resolvePlanPricingFromContext(config, ctx);
+  }
 
   return ok({
     ...billingState,
-    // Authoritative sub-object — preserves the full resolution context
-    // (source, regional flag) for clients that need it.
-    customerCurrencyResolution: currencyResolution,
-    // Convenience top-level fields — easy to consume on the frontend
-    // without drilling into the sub-object.
-    customerCurrency: currencyResolution.currency,
-    customerCountryCode: currencyResolution.countryCode,
-    customerCountryName: currencyResolution.countryName,
-    currencySource: currencyResolution.source,
+    // Detected country/currency for this request (pre-fallback context).
+    customerCurrencyResolution: {
+      currency: ctx.currency,
+      countryCode: ctx.countryCode,
+      countryName: ctx.countryName,
+      source: ctx.source,
+    },
+    // Convenience top-level fields — easy to consume on the frontend.
+    customerCurrency: ctx.currency,
+    customerCountryCode: ctx.countryCode,
+    customerCountryName: ctx.countryName,
+    currencySource: ctx.source,
+    // Server-resolved FINAL price per plan (display source of truth).
+    planPricing,
   });
 }

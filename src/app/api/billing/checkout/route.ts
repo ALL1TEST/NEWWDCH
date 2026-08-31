@@ -7,13 +7,15 @@
 // Behavior:
 //   - Validates the plan + interval and checks the user doesn't already
 //     have an active subscription to the same plan (would be a no-op).
-//   - Resolves the customer's billing currency SERVER-SIDE from the
-//     request IP via resolveCustomerCurrency (x-forwarded-for). The
-//     client CANNOT influence the currency — it's authoritative.
-//   - Reads the per-currency Stripe Price ID from
-//     PlanConfig.stripePriceIdsByCurrency[currency][interval] via
-//     resolveStripePriceIdForCurrency (falls back to the legacy
-//     default-currency snapshot fields for older plans).
+//   - Resolves the customer's FINAL currency + price SERVER-SIDE via
+//     resolveCustomerPricing (plan autoCurrency rules: IP → country →
+//     currency → plan price for that currency → fallback to the plan
+//     default currency when unsupported). The client CANNOT influence
+//     the currency — the body only carries planId + interval + coupon.
+//   - Reads the Stripe Price that charges EXACTLY the resolved currency
+//     via resolveStripePriceIdStrict (per-currency map; the default
+//     snapshots only when the resolved currency IS the plan default).
+//     No cross-currency fallback — a mismatched charge is impossible.
 //   - If STRIPE_SECRET_KEY is not configured → returns 503
 //     "PAYMENT_PROVIDER_NOT_CONFIGURED" with a clear message. NEVER
 //     fakes a successful payment.
@@ -56,7 +58,7 @@ import { ensurePlanAssignable, getUserSubscription } from '@/lib/platform/subscr
 import {
   isStripeConfiguredAsync,
   getStripeClient,
-  resolveStripePriceIdForCurrency,
+  resolveStripePriceIdStrict,
   getPublicStripeConfig,
   getOrCreateStripeCustomer,
   createStripeCouponMirror,
@@ -64,7 +66,7 @@ import {
 import { db } from '@/lib/db';
 import { validateCoupon } from '@/lib/platform/coupons';
 import { getPlanConfigSync } from '@/lib/platform/plan-config';
-import { resolveCustomerCurrency } from '@/lib/platform/country-pricing';
+import { resolveCustomerPricing } from '@/lib/platform/country-pricing';
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -107,23 +109,31 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // ---- Resolve the customer's currency SERVER-SIDE from the request IP ----
-  // The customer's currency is determined by their IP geolocation (via the
-  // Caddy gateway's x-forwarded-for header). The client CANNOT send a
-  // currency hint — this is authoritative. Falls back to the platform
-  // default country for loopback / unknown / inactive-country IPs.
-  const currencyResolution = await resolveCustomerCurrency(request, planId);
-  const customerCurrency = currencyResolution.currency;
-  const customerCountryCode = currencyResolution.countryCode;
+  // ---- Resolve the customer's FINAL currency + price SERVER-SIDE ----
+  // resolveCustomerPricing applies the plan's AUTO CURRENCY rules:
+  //   - autoCurrency OFF → the plan default currency + base price.
+  //   - ON → country detected from the request IP (Caddy gateway's
+  //     x-forwarded-for) → mapped to a currency → plan price for that
+  //     currency (regional / per-currency) → fallback to the plan
+  //     default when the currency is not supported.
+  // The client CANNOT send a currency hint — the body only carries
+  // planId + interval (+ coupon). This resolution is authoritative and
+  // is exactly what the Client Billing page displays.
+  const pricing = await resolveCustomerPricing(request, planId);
+  const customerCurrency = pricing.currency;
+  const customerCountryCode = pricing.countryCode;
 
-  // Resolve the per-currency Stripe Price ID for this plan + interval +
-  // customer currency. Falls back to the default-currency snapshot
-  // fields for plans synced before the multi-currency fields existed.
-  const priceId = await resolveStripePriceIdForCurrency(planId, customerCurrency, interval);
+  // Resolve the Stripe Price for the FINAL currency + interval. STRICT:
+  // the returned Price charges exactly `customerCurrency` (no silent
+  // cross-currency fallback) so the displayed price/currency always
+  // matches what Stripe charges. Missing → 424 with the currency in
+  // the message so the admin knows which (currency, interval) pair
+  // needs a Stripe Price.
+  const priceId = await resolveStripePriceIdStrict(planId, customerCurrency, interval);
   if (!priceId) {
     return fail(
       'STRIPE_PRICE_NOT_CONFIGURED',
-      `Plan "${planId}" does not have a Stripe Price ID configured for currency "${customerCurrency}" (interval: ${interval}). An admin must wire it via Platform Admin → Edit Plan → Stripe Price IDs by currency.`,
+      `Plan "${planId}" does not have a Stripe Price ID configured for currency "${customerCurrency}" (interval: ${interval}). An admin must sync the plan to Stripe from Platform Admin → Edit Plan → Stripe Billing.`,
       424,
     );
   }

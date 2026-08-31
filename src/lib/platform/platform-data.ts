@@ -45,9 +45,13 @@ export interface Plan {
   priceMonthly: number;
   priceYearly: number;
   currency: string;
-  /** Authoritative per-currency price map. */
+  /** Auto-detect the customer's currency server-side from their IP;
+   *  fall back to `currency` when the detected currency is unsupported. */
+  autoCurrency: boolean;
+  /** Derived per-currency price map (default entry mirrors the base
+   *  price; other entries are platform regional / legacy prices). */
   pricesByCurrency: Record<string, { monthly: number; yearly: number }>;
-  /** Authoritative per-currency Stripe Price IDs. */
+  /** Per-currency Stripe Price IDs. */
   stripePriceIdsByCurrency: Record<string, { monthly: string | null; yearly: string | null }>;
   interval: BillingInterval;
   isFree: boolean;
@@ -175,6 +179,7 @@ function toPlan(d: PlanConfigData): Plan {
     priceMonthly: d.priceMonthly,
     priceYearly: d.priceYearly,
     currency: d.currency,
+    autoCurrency: d.autoCurrency,
     pricesByCurrency: d.pricesByCurrency,
     stripePriceIdsByCurrency: d.stripePriceIdsByCurrency,
     interval: d.interval,
@@ -1459,6 +1464,7 @@ const INTERNAL_PLAN: Plan = {
   priceMonthly: 0,
   priceYearly: 0,
   currency: 'CHF',
+  autoCurrency: false,
   pricesByCurrency: {
     CHF: { monthly: 0, yearly: 0 },
     USD: { monthly: 0, yearly: 0 },

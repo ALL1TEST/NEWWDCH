@@ -526,6 +526,8 @@ export function validatePlanConfigInput(input: {
   priceMonthly?: number;
   priceYearly?: number;
   currency?: string;
+  /** Auto-detect the customer's currency from their IP. */
+  autoCurrency?: boolean;
   /** Authoritative per-currency price map. */
   pricesByCurrency?: Record<string, { monthly: number; yearly: number }>;
   /** Authoritative per-currency Stripe Price IDs. */
@@ -549,6 +551,9 @@ export function validatePlanConfigInput(input: {
     errors.push('Yearly price must be a non-negative number.');
   }
   if (input.currency !== undefined && !input.currency.trim()) errors.push('Currency is required.');
+  if (input.autoCurrency !== undefined && typeof input.autoCurrency !== 'boolean') {
+    errors.push('Auto Currency must be a boolean.');
+  }
   if (input.pricesByCurrency !== undefined) {
     for (const [cur, val] of Object.entries(input.pricesByCurrency)) {
       if (!cur || !cur.trim()) {

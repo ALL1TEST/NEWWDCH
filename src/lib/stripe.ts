@@ -265,6 +265,50 @@ export async function resolveStripePriceIdForCurrency(
   return row.stripePriceIdMonthly ?? null;
 }
 
+/**
+ * STRICT variant for checkout: resolve the Stripe Price ID that charges
+ * EXACTLY `currency` for (planId, interval). Unlike
+ * resolveStripePriceIdForCurrency there is NO cross-currency fallback —
+ * a missing Stripe Price returns null so the caller refuses checkout
+ * instead of silently charging the wrong currency:
+ *   - per-currency map entry for `currency`;
+ *   - the default-currency snapshot fields ONLY when `currency` IS the
+ *     plan's default currency (they are prices in that currency).
+ *
+ * This guarantees the displayed currency (server-resolved via
+ * resolveCustomerPricing) always matches the currency actually charged
+ * by Stripe — the frontend can never push a mismatched currency.
+ */
+export async function resolveStripePriceIdStrict(
+  planId: string,
+  currency: string,
+  interval: 'monthly' | 'yearly',
+): Promise<string | null> {
+  const { db } = await import('@/lib/db');
+  const row = await db.planConfig.findUnique({ where: { planId } });
+  if (!row) return null;
+  const curUpper = currency.trim().toUpperCase();
+  let byCurrency: Record<string, { monthly: string | null; yearly: string | null }> = {};
+  try {
+    byCurrency = JSON.parse(row.stripePriceIdsByCurrency || '{}');
+  } catch {
+    byCurrency = {};
+  }
+  const entry = byCurrency[curUpper];
+  if (entry) {
+    const id = interval === 'yearly' ? entry.yearly : entry.monthly;
+    if (id && id.trim().length > 0) return id;
+  }
+  // The default-currency snapshots are prices in the PLAN DEFAULT
+  // currency — usable only when that IS the requested currency.
+  const planCurrency = (row.currency ?? '').trim().toUpperCase();
+  if (planCurrency === curUpper) {
+    if (interval === 'yearly') return row.stripePriceIdYearly ?? null;
+    return row.stripePriceIdMonthly ?? null;
+  }
+  return null;
+}
+
 /** Verify the Stripe webhook signature. Reads the webhook secret from
  *  DB first, then falls back to STRIPE_WEBHOOK_SECRET. Returns the
  *  verified event or null if verification fails (or Stripe isn't

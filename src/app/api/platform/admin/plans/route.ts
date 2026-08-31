@@ -57,11 +57,10 @@ export async function POST(request: NextRequest) {
       priceMonthly: body.priceMonthly,
       priceYearly: body.priceYearly,
       currency: body.currency,
-      // Multi-currency authoritative fields — forwarded from the body so
-      // the admin can configure per-currency prices + Stripe Price IDs
-      // directly from the Edit Plan / Create Plan modal. When omitted,
-      // createPlanConfig falls back to an empty map (legacy single-currency
-      // behavior preserved via the default currency snapshot above).
+      autoCurrency: body.autoCurrency,
+      // Per-currency map — rarely sent directly; the modal sends the
+      // base price + currency and the backend derives the default
+      // currency's entry. Kept for programmatic callers.
       pricesByCurrency: body.pricesByCurrency,
       stripePriceIdsByCurrency: body.stripePriceIdsByCurrency,
       interval: body.interval,

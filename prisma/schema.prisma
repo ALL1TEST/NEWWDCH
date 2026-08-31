@@ -2093,28 +2093,32 @@ model FeatureFlag {
 // freePlanDurationDays: null = unlimited; positive N = trial duration in
 //   days for free plans (enforced server-side; expired trial blocks
 //   gated features).
-// stripePriceIdMonthly/Yearly: snapshot for the platform DEFAULT
-//   currency only (kept for backward-compat with existing readers).
-//   The AUTHORITATIVE per-currency Stripe Price IDs are stored in
-//   `stripePriceIdsByCurrency` (JSON map: { USD: { monthly, yearly },
+// `stripePriceIdsByCurrency` (JSON map: { USD: { monthly, yearly },
 //   EUR: {...}, MAD: {...}, CHF: {...} }).
+// currency: the plan's DEFAULT / FALLBACK currency (selected by the
+//   owner in the Edit Plan modal via the country/currency selector).
+// autoCurrency: when true, the customer's currency is auto-detected
+//   server-side from their IP (country → currency → supported check →
+//   fallback to `currency` when unsupported). When false, every
+//   customer is billed in `currency`.
 // pricesByCurrency: JSON map of monthly+yearly prices for each
-//   supported currency ({ USD: { monthly, yearly }, ... }). The
-//   platform DEFAULT currency's price is mirrored into priceMonthly
-//   / priceYearly for backward compat with legacy callers.
-// currency: the platform default currency (auto-resolved from the
-//   CountryPricing table — admin never edits this per plan).
+//   supported currency ({ USD: { monthly, yearly }, ... }). The plan's
+//   DEFAULT currency entry is DERIVED from priceMonthly/priceYearly on
+//   every save (the admin only edits the ONE base price in the modal);
+//   other currency entries are platform-level regional prices
+//   (CountryPricing.regionalPrices) preserved across saves.
 model PlanConfig {
   id                   String   @id @default(cuid())
   planId               String   @unique // 'free' | 'plus' | 'pro' | 'max' | custom
   name                 String
-  priceMonthly         Int      @default(0) // major currency units (49 = 49 CHF) — snapshot for default currency
-  priceYearly          Int      @default(0)
-  currency             String   @default("CHF") // platform default currency (auto-resolved)
+  priceMonthly         Int      @default(0) // base monthly price in the plan default currency
+  priceYearly          Int      @default(0) // base yearly price in the plan default currency
+  currency             String   @default("CHF") // plan default / fallback currency
+  autoCurrency         Boolean  @default(true) // auto-detect customer currency from IP; fallback to `currency`
   // JSON: { USD: { monthly, yearly }, EUR: {...}, MAD: {...}, CHF: {...} }.
-  // The authoritative multi-currency price list. Default-currency's
-  // monthly/yearly also mirrored in priceMonthly/priceYearly above for
-  // backward-compat with legacy callers.
+  // The default currency's entry mirrors priceMonthly/priceYearly (derived
+  // on save); other entries hold the platform's per-currency regional
+  // prices (preserved; not edited per-plan in the modal).
   pricesByCurrency     String   @default("{}")
   // JSON: { USD: { monthly: 'price_...', yearly: 'price_...' }, ... }.
   // Real Stripe Price IDs per (currency, interval). The default

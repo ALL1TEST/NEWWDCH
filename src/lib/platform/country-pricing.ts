@@ -2,27 +2,38 @@
 // COUNTRY / CURRENCY / REGIONAL PRICING — server-determined.
 // ============================================================
 // IP geolocation is the initial detection; the SERVER determines the
-// final applicable price + currency from the CountryPricing table.
-// The client cannot change currency in the frontend to obtain a
-// different price. The owner configures supported countries, the
-// currency per country, regional prices, and the default currency.
+// final applicable price + currency from the plan config + the
+// CountryPricing table. The client cannot change currency in the
+// frontend to obtain a different price.
 //
-// resolveCustomerCurrency(request) is the SINGLE entry point used by
-// /api/billing/checkout + /api/platform/billing/me to determine the
-// customer's currency for a given request. It:
-//   1. Extracts the client IP from x-forwarded-for / x-real-ip.
-//   2. Maps the IP to a country code via a built-in IP→country table
-//      (covers well-known cloud + ISP ranges + RFC1918 / loopback
-//      mappings so dev/test from localhost resolves deterministically).
-//   3. Looks up the country code in CountryPricing. If active, returns
-//      that country's currency. If not active / unknown, falls back to
-//      the platform default country.
-//   4. Returns { currency, countryCode, countryName, source, regional }.
+// AUTO CURRENCY RESOLUTION (per plan):
+//   1. When the plan's autoCurrency flag is OFF → every customer is
+//      billed in the plan's default currency at the base price.
+//   2. When ON → the customer's country is detected from their IP,
+//      mapped to a currency (CountryPricing row first, then the
+//      shared currency catalog), and the plan price for that currency
+//      is resolved:
+//        a. the plan's BASE price when the detected currency IS the
+//           plan default currency;
+//        b. the country's regional price (CountryPricing.regionalPrices
+//           [planId]) when the platform configured one;
+//        c. the plan's per-currency entry (pricesByCurrency) when
+//           present (legacy / platform regional data);
+//        d. otherwise the currency is NOT SUPPORTED for this plan →
+//           FALL BACK to the plan default currency + base price.
+//   3. Billing interval (monthly / yearly) is orthogonal — the
+//      resolved { monthly, yearly } pair is interval-agnostic.
+//
+// resolveCustomerPricing(request, planId) is the SINGLE entry point
+// used by /api/billing/checkout + /api/platform/billing/me. The
+// customer NEVER sends a currency hint — the server's resolution is
+// authoritative.
 // ============================================================
 
 import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { getPlanConfigSync } from './plan-config';
+import { getPlanConfigSync, type PlanConfigData } from './plan-config';
+import { countryToCurrency, findCountryEntry } from './currency-catalog';
 
 export interface CountryPricingRow {
   id: string;
@@ -146,49 +157,21 @@ export interface ResolvedPrice {
   regional: boolean;
 }
 
-/** Resolve the final server-determined price for a plan in a country. */
+/** Resolve the server-determined price for a plan for an explicit
+ *  country (admin/testing entry point — same core logic the customer
+ *  flow uses, with the country forced instead of IP-detected). */
 export async function resolvePrice(planId: string, countryCode?: string | null): Promise<ResolvedPrice> {
-  await ensureSeeded();
+  const ctx = await detectCurrencyContext(null, countryCode ?? undefined);
   const plan = getPlanConfigSync(planId);
-
-  let country: CountryPricingRow | null = null;
-  if (countryCode) {
-    const row = await db.countryPricing.findFirst({ where: { countryCode, active: true } });
-    country = row ? rowToData(row) : null;
-  }
-  if (!country) country = await getDefaultCountry();
-  if (!country) {
-    return {
-      planId,
-      monthly: plan.priceMonthly,
-      yearly: plan.priceYearly,
-      currency: plan.currency,
-      countryCode: '—',
-      countryName: 'Default',
-      regional: false,
-    };
-  }
-
-  const regional = country.regionalPrices[planId];
-  if (regional) {
-    return {
-      planId,
-      monthly: regional.monthly,
-      yearly: regional.yearly,
-      currency: country.currency,
-      countryCode: country.countryCode,
-      countryName: country.countryName,
-      regional: true,
-    };
-  }
+  const resolved = resolvePlanPricingFromContext(plan, ctx);
   return {
     planId,
-    monthly: plan.priceMonthly,
-    yearly: plan.priceYearly,
-    currency: country.currency,
-    countryCode: country.countryCode,
-    countryName: country.countryName,
-    regional: false,
+    monthly: resolved.monthly,
+    yearly: resolved.yearly,
+    currency: resolved.currency,
+    countryCode: resolved.countryCode,
+    countryName: resolved.countryName,
+    regional: resolved.regional,
   };
 }
 
@@ -233,17 +216,12 @@ export async function deleteCountry(id: string): Promise<boolean> {
 }
 
 /**
- * Resolve the platform's default billing currency. The currency is NOT
- * chosen per-plan in the admin editor — it is derived from the default
- * country configured in the CountryPricing table (the "billing
- * configuration" the platform already uses). Falls back to 'CHF' when
- * no default country is configured (e.g. fresh DB before bootstrap).
- *
- * This keeps currency handling consistent between the plan, checkout,
- * client billing page, and Stripe: every plan stores its prices in the
- * platform default currency, the Stripe Prices are created in that same
- * currency, and the client billing page displays that same currency —
- * the admin never manually picks a currency per plan.
+ * Resolve the platform's DEFAULT billing currency (from the default
+ * CountryPricing row). Used as the INITIAL selection for a NEW plan's
+ * default currency in the Create Plan modal and as the fallback when
+ * a plan row carries no currency. Each plan's default / fallback
+ * currency is admin-editable via the country/currency selector in the
+ * Edit Plan modal — this is only the platform-level starting point.
  */
 export async function getPlatformDefaultCurrency(): Promise<string> {
   const def = await getDefaultCountry();
@@ -371,30 +349,45 @@ export interface ResolvedCustomerCurrency {
   regional: boolean;
 }
 
-/** Resolve the customer's billing currency + country from the request.
- *  This is the SINGLE entry point used by /api/billing/checkout and
- *  /api/platform/billing/me to determine which currency to charge in.
+// -------------------- Currency detection context --------------------
+
+/** Full server-side detection context for one request: the customer's
+ *  country + currency + the CountryPricing row it came from (null when
+ *  the currency came from the shared catalog or the platform default). */
+export interface CurrencyContext {
+  currency: string;
+  countryCode: string;
+  countryName: string;
+  source: 'ip' | 'default' | 'local';
+  /** The active CountryPricing row for the detected country (null when
+   *  none exists — the currency then came from the currency catalog). */
+  row: CountryPricingRow | null;
+}
+
+/** Detect the customer's country + currency from the request.
  *
  *  Flow:
  *    1. Extract client IP (x-forwarded-for first, x-real-ip next).
  *    2. Map IP → country code via the built-in IP→country table.
  *       Loopback / RFC1918 → '__LOCAL__' → platform default.
- *    3. Look up the country code in CountryPricing (must be active).
- *       If found, return that country's currency (source='ip' or
- *       'local'). Otherwise fall back to the platform default country
- *       (source='default').
+ *    3. Resolve the country's currency:
+ *         a. an ACTIVE CountryPricing row for the country (the
+ *            platform's explicit country → currency config) wins;
+ *         b. else the shared currency catalog (FR → EUR, MA → MAD, …);
+ *         c. else the platform default country.
+ *
+ *  `countryOverride` forces the country (admin/testing entry point).
  *
  *  The client NEVER sends a currency hint — the server's IP resolution
- *  is authoritative. This is the user's explicit requirement:
- *  "The backend must determine/validate the final currency before
- *   creating the Stripe Checkout Session." */
-export async function resolveCustomerCurrency(
+ *  is authoritative: "The backend must determine/validate the final
+ *  currency before creating the Stripe Checkout Session." */
+export async function detectCurrencyContext(
   request: NextRequest | null,
-  planId?: string,
-): Promise<ResolvedCustomerCurrency> {
+  countryOverride?: string,
+): Promise<CurrencyContext> {
   await ensureSeeded();
-  // Extract client IP from standard proxy headers (the Caddy gateway
-  // and Next.js both set x-forwarded-for).
+
+  // ---- 1-2. IP → country ----
   let clientIp: string | null = null;
   if (request) {
     clientIp =
@@ -405,10 +398,12 @@ export async function resolveCustomerCurrency(
   // IPv6 loopback (::1) + IPv4 loopback (127.0.0.1) → local.
   const isLoopback = !clientIp || clientIp === '::1' || clientIp.startsWith('127.');
 
-  // Try IP → country resolution.
   let countryCode: string | null = null;
   let source: 'ip' | 'default' | 'local' = 'default';
-  if (isLoopback) {
+  if (countryOverride && countryOverride.trim()) {
+    countryCode = countryOverride.trim().toUpperCase();
+    source = 'ip';
+  } else if (isLoopback) {
     source = 'local';
   } else if (clientIp) {
     const cc = ipToCountryCode(clientIp);
@@ -420,58 +415,190 @@ export async function resolveCustomerCurrency(
     }
   }
 
-  // Look up the resolved country in CountryPricing. Fall back to the
-  // platform default when no match.
-  let country: CountryPricingRow | null = null;
+  // Local / unknown → the platform default country (and its currency).
+  if (source !== 'ip' && !countryCode) {
+    const def = await getDefaultCountry();
+    return {
+      currency: (def?.currency ?? 'CHF').toUpperCase(),
+      countryCode: def?.countryCode ?? '—',
+      countryName: def?.countryName ?? 'Default',
+      source: source === 'local' ? 'local' : 'default',
+      row: def,
+    };
+  }
+
+  // ---- 3. Country → currency ----
+  // (a) Active CountryPricing row for the country wins.
   if (countryCode) {
     const row = await db.countryPricing.findFirst({
       where: { countryCode, active: true },
     });
-    country = row ? rowToData(row) : null;
+    if (row) {
+      const data = rowToData(row);
+      return {
+        currency: data.currency.toUpperCase(),
+        countryCode: data.countryCode,
+        countryName: data.countryName,
+        source,
+        row: data,
+      };
+    }
+    // (b) Shared currency catalog (FR → EUR, MA → MAD, …).
+    const catalogCurrency = countryToCurrency(countryCode);
+    if (catalogCurrency) {
+      const entry = findCountryEntry(countryCode);
+      return {
+        currency: catalogCurrency,
+        countryCode,
+        countryName: entry?.countryName ?? countryCode,
+        source,
+        row: null,
+      };
+    }
+    // Country detected but unknown to the catalog → default fallback.
+    if (source === 'ip') source = 'default';
   }
-  if (!country) {
-    country = await getDefaultCountry();
-    if (source === 'ip') source = 'default'; // IP resolved but no match
+
+  // (c) Platform default country.
+  const def = await getDefaultCountry();
+  return {
+    currency: (def?.currency ?? 'CHF').toUpperCase(),
+    countryCode: def?.countryCode ?? countryCode ?? '—',
+    countryName: def?.countryName ?? 'Default',
+    source,
+    row: def,
+  };
+}
+
+/** Resolve the customer's billing currency + country from the request
+ *  (country-level detection WITHOUT plan context — used where only the
+ *  detected currency matters, e.g. the Client Billing header badge). */
+export async function resolveCustomerCurrency(
+  request: NextRequest | null,
+): Promise<ResolvedCustomerCurrency> {
+  const ctx = await detectCurrencyContext(request);
+  return {
+    currency: ctx.currency,
+    countryCode: ctx.countryCode,
+    countryName: ctx.countryName,
+    source: ctx.source,
+    regional: false,
+  };
+}
+
+// -------------------- Per-plan pricing resolution --------------------
+
+export interface ResolvedPlanPricing {
+  planId: string;
+  /** The FINAL billing/display currency (detected, or the plan default
+   *  after fallback). This is what Stripe checkout MUST charge in. */
+  currency: string;
+  monthly: number;
+  yearly: number;
+  /** Where the final currency came from:
+   *  'ip' | 'local' — detected from the customer's location;
+   *  'default'      — detection failed → platform default;
+   *  'plan'         — the plan's autoCurrency is OFF (plan default). */
+  source: 'ip' | 'default' | 'local' | 'plan';
+  /** True when the detected currency had a price for this plan (no
+   *  fallback applied). False → the plan default currency is in use. */
+  supported: boolean;
+  /** The currency that was DETECTED for the customer (pre-fallback) —
+   *  surfaced so the UI can explain the fallback. */
+  detectedCurrency: string;
+  countryCode: string;
+  countryName: string;
+  /** True when a country-specific regional price was applied. */
+  regional: boolean;
+}
+
+/** Pure, synchronous per-plan pricing resolution. Takes the detection
+ *  context (from detectCurrencyContext) + the plan config and applies
+ *  the AUTO CURRENCY rules:
+ *    1. autoCurrency OFF → plan default currency + base price.
+ *    2. Detected currency === plan default → base price.
+ *    3. Country regional price (CountryPricing.regionalPrices[planId]).
+ *    4. Plan per-currency entry (pricesByCurrency — platform regional
+ *       / legacy data).
+ *    5. No price for the detected currency → FALL BACK to the plan
+ *       default currency + base price (supported: false).
+ *  The billing interval picks monthly vs yearly from the resolved
+ *  pair — currency detection and interval are orthogonal. */
+export function resolvePlanPricingFromContext(
+  plan: PlanConfigData,
+  ctx: CurrencyContext,
+): ResolvedPlanPricing {
+  const base = {
+    planId: plan.planId,
+    currency: (plan.currency ?? 'CHF').toUpperCase(),
+    monthly: plan.priceMonthly,
+    yearly: plan.priceYearly,
+    detectedCurrency: ctx.currency,
+    countryCode: ctx.countryCode,
+    countryName: ctx.countryName,
+  };
+
+  // 1. Auto Currency OFF → everyone is billed in the plan default.
+  if (!plan.autoCurrency) {
+    return { ...base, source: 'plan', supported: true, regional: false };
   }
-  if (!country) {
-    // No countries configured at all → CHF (schema default).
+
+  // 2. Detected currency IS the plan default → base price.
+  if (ctx.currency === base.currency) {
+    return { ...base, source: ctx.source, supported: true, regional: false };
+  }
+
+  // 3. Country regional price (the platform's configured price for
+  //    this plan in the customer's country).
+  const regional = ctx.row?.regionalPrices?.[plan.planId];
+  if (regional && ctx.row && ctx.currency === ctx.row.currency.toUpperCase()) {
     return {
-      currency: 'CHF',
-      countryCode: '—',
-      countryName: 'Default',
-      source,
+      ...base,
+      currency: ctx.currency,
+      monthly: regional.monthly,
+      yearly: regional.yearly,
+      source: ctx.source,
+      supported: true,
+      regional: true,
+    };
+  }
+
+  // 4. Plan per-currency entry (platform regional / legacy data).
+  const perCurrency = plan.pricesByCurrency?.[ctx.currency];
+  if (perCurrency) {
+    return {
+      ...base,
+      currency: ctx.currency,
+      monthly: perCurrency.monthly,
+      yearly: perCurrency.yearly,
+      source: ctx.source,
+      supported: true,
       regional: false,
     };
   }
 
-  // Determine whether the resolved country has a regionalPrices override
-  // for the requested plan (if any).
-  let regional = false;
-  if (planId) {
-    const plan = getPlanConfigSync(planId);
-    const override = country.regionalPrices[planId];
-    if (override) {
-      regional = true;
-    } else {
-      // No country-level override → the plan's pricesByCurrency[currency]
-      // is the source of truth (also "regional" in the multi-currency
-      // sense — different price per currency).
-      regional = Boolean(plan.pricesByCurrency?.[country.currency]);
-    }
-  }
+  // 5. Detected currency NOT SUPPORTED for this plan → fall back to
+  //    the plan default currency + base price.
+  return { ...base, source: ctx.source, supported: false, regional: false };
+}
 
-  return {
-    currency: country.currency.toUpperCase(),
-    countryCode: country.countryCode,
-    countryName: country.countryName,
-    source,
-    regional,
-  };
+/** Resolve the FINAL price + currency a customer must pay for a plan.
+ *  The SINGLE entry point used by /api/billing/checkout (and the
+ *  billing page via /api/platform/billing/me). The server is the
+ *  authority — the client cannot influence the currency. */
+export async function resolveCustomerPricing(
+  request: NextRequest | null,
+  planId: string,
+  countryOverride?: string,
+): Promise<ResolvedPlanPricing> {
+  const ctx = await detectCurrencyContext(request, countryOverride);
+  const plan = getPlanConfigSync(planId);
+  return resolvePlanPricingFromContext(plan, ctx);
 }
 
 /** List the platform's SUPPORTED currencies — the unique set of
- *  currencies from all ACTIVE CountryPricing rows. Drives the
- *  multi-currency price inputs in the Edit Plan modal. */
+ *  currencies from all ACTIVE CountryPricing rows (used by the
+ *  platform-level pricing configuration + Stripe sync flows). */
 export async function listSupportedCurrencies(): Promise<string[]> {
   await ensureSeeded();
   const rows = await db.countryPricing.findMany({

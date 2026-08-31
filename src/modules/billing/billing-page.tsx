@@ -27,6 +27,7 @@ import {
 } from '@/lib/stores/subscription-store';
 import type { ClientBillingState, Payment, PlanId } from '@/lib/platform/platform-data';
 import { ENTITLEMENT_LABELS, type EntitlementKey } from '@/lib/platform/feature-config';
+import { formatMoney } from '@/lib/platform/currency-catalog';
 import { PaymentStatusBadge, formatCurrency, formatDate, ErrorState } from '@/modules/platform/shared';
 
 // -------------------- Helpers --------------------
@@ -50,15 +51,29 @@ function normalizeInterval(interval: string): string {
 const GB_FACTOR = 1024 * 1024 * 1024;
 
 /** Server-side currency resolution context (from /api/platform/billing/me
- *  → customerCurrencyResolution). The existing ClientBillingState type
- *  doesn't declare these fields yet — the API adds them as siblings of
- *  the existing ClientBillingState fields. We type them locally so the
- *  frontend can read them without resorting to `any`. */
+ *  → customerCurrencyResolution). The customer never selects a currency —
+ *  the server detects it from the request IP. */
 interface CustomerCurrencyResolution {
   currency: string;
   countryCode: string;
   countryName: string;
   source: 'ip' | 'default' | 'local';
+}
+
+/** Server-resolved FINAL price for one plan (from /api/platform/billing/me
+ *  → planPricing[planId]). Computed by the same resolveCustomerPricing
+ *  the checkout route uses — the price/currency displayed here is exactly
+ *  what Stripe charges. */
+interface ServerPlanPricing {
+  planId: string;
+  currency: string;
+  monthly: number;
+  yearly: number;
+  source: 'ip' | 'default' | 'local' | 'plan';
+  supported: boolean;
+  detectedCurrency: string;
+  countryCode: string;
+  countryName: string;
   regional: boolean;
 }
 
@@ -68,24 +83,36 @@ type BillingStateWithCurrency = ClientBillingState & {
   customerCountryCode?: string;
   customerCountryName?: string;
   currencySource?: 'ip' | 'default' | 'local';
+  planPricing?: Record<string, ServerPlanPricing>;
 };
 
-/** Resolve the monthly price + currency to display for a plan in the
- *  customer's resolved currency. Falls back to the plan's legacy
- *  priceMonthly/currency snapshot when the plan doesn't have a
- *  per-currency entry for the customer's currency (legacy compat for
- *  older plans that only carry the default-currency snapshot). */
-function resolvePlanPriceMonthly(
+/** Resolve the price + currency to display for a plan. Prefers the
+ *  SERVER-RESOLVED pricing (planPricing — the same values checkout
+ *  charges); falls back to a local pricesByCurrency lookup for older
+ *  API responses. */
+function resolvePlanPricing(
   plan: {
+    id: string;
     pricesByCurrency?: Record<string, { monthly: number; yearly: number }>;
     priceMonthly: number;
+    priceYearly: number;
     currency: string;
+    interval: 'monthly' | 'yearly';
   },
+  serverPricing: ServerPlanPricing | undefined,
   customerCurrency: string,
-): { monthly: number; currency: string } {
+): { monthly: number; yearly: number; currency: string } {
+  if (serverPricing) {
+    return {
+      monthly: serverPricing.monthly,
+      yearly: serverPricing.yearly,
+      currency: serverPricing.currency,
+    };
+  }
+  // Legacy fallback — local lookup (display only).
   const entry = plan.pricesByCurrency?.[customerCurrency];
-  if (entry) return { monthly: entry.monthly, currency: customerCurrency };
-  return { monthly: plan.priceMonthly, currency: plan.currency };
+  if (entry) return { monthly: entry.monthly, yearly: entry.yearly, currency: customerCurrency };
+  return { monthly: plan.priceMonthly, yearly: plan.priceYearly, currency: plan.currency };
 }
 
 /** Derive the marketing feature list from the plan's entitlements +
@@ -382,13 +409,13 @@ export function BillingPage() {
 
   const currentStorePlan = getStorePlan(currentPlan.id);
 
-  // Resolve the current plan's monthly price + display currency for
-  // the customer's resolved currency. Falls back to the plan's legacy
-  // priceMonthly/currency snapshot when no per-currency price is
-  // configured for the customer's currency (legacy compat).
-  const currentPriceResolved = resolvePlanPriceMonthly(currentPlan, customerCurrency);
-  const currentMonthly = currentPriceResolved.monthly;
-  const currentDisplayCurrency = currentPriceResolved.currency;
+  // Server-resolved FINAL pricing per plan — the same resolveCustomerPricing
+  // values the checkout route charges (falls back to a local lookup for
+  // older API responses).
+  const planPricing = billingState.planPricing;
+  const currentPricing = resolvePlanPricing(currentPlan, planPricing?.[currentPlan.id], customerCurrency);
+  const currentMonthly = currentPricing.monthly;
+  const currentDisplayCurrency = currentPricing.currency;
 
   const isHigherPlan = (plan: { price: number }) => plan.price > currentPlan.price;
   const getActionLabel = (plan: { price: number; isFree: boolean }) => {
@@ -406,9 +433,12 @@ export function BillingPage() {
 
   // Handle a plan change / upgrade:
   //   - Free plan → direct change-plan API (no Stripe needed)
-  //   - Paid plan → checkout API (Stripe Checkout Session) — if Stripe is
-  //     not configured, the mutation onError surfaces a clear message.
-  const handleSelectPlan = (plan: { id: PlanId; name: string; price: number; isFree: boolean }) => {
+  //   - Paid plan → checkout API (Stripe Checkout Session) — the body
+  //     sends ONLY planId + interval; the currency/price is resolved
+  //     SERVER-SIDE from the request IP (the frontend cannot pick it).
+  //     The interval is the TARGET plan's own default cadence — the same
+  //     one its card displays — so the charged amount always matches.
+  const handleSelectPlan = (plan: { id: PlanId; name: string; price: number; isFree: boolean; interval: 'monthly' | 'yearly' }) => {
     if (plan.isFree) {
       changePlanMutation.mutate({
         planId: plan.id,
@@ -419,7 +449,7 @@ export function BillingPage() {
       checkoutMutation.mutate({
         planId: plan.id,
         planName: plan.name,
-        interval: currentInterval,
+        interval: plan.interval,
       });
     }
   };
@@ -488,13 +518,16 @@ export function BillingPage() {
               <p className="text-sm text-muted-foreground ml-7">
                 {currentMonthly === 0
                   ? t('billing.free')
-                  : `${currentMonthly} ${currentDisplayCurrency}/${normalizeInterval(currentInterval)}`}
+                  : `${formatMoney(currentMonthly, currentDisplayCurrency)}/${normalizeInterval(currentInterval)}`}
               </p>
-              {currentMonthly > 0 && customerCountryName && currentDisplayCurrency === customerCurrency && (
-                <p className="text-[11px] text-muted-foreground ml-7">
-                  Priced for {customerCountryName} ({customerCurrency})
-                </p>
-              )}
+              {currentMonthly > 0 &&
+                planPricing?.[currentPlan.id] &&
+                planPricing[currentPlan.id].supported &&
+                customerCountryName && (
+                  <p className="text-[11px] text-muted-foreground ml-7">
+                    Priced for {customerCountryName} ({currentDisplayCurrency})
+                  </p>
+                )}
             </div>
             <Badge
               variant={status === 'active' ? 'default' : 'outline'}
@@ -562,9 +595,11 @@ export function BillingPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {otherPlans.map((plan) => {
             const storePlan = getStorePlan(plan.id);
-            const planPriceResolved = resolvePlanPriceMonthly(plan, customerCurrency);
-            const planMonthly = planPriceResolved.monthly;
-            const planDisplayCurrency = planPriceResolved.currency;
+            // Server-resolved FINAL price — the same values checkout charges.
+            const planPricingResolved = resolvePlanPricing(plan, planPricing?.[plan.id], customerCurrency);
+            const planMonthly = planPricingResolved.monthly;
+            const planDisplayCurrency = planPricingResolved.currency;
+            const planSupported = planPricing?.[plan.id]?.supported ?? true;
             const isBusy =
               (changePlanMutation.isPending && changePlanMutation.variables?.planId === plan.id) ||
               (checkoutMutation.isPending && checkoutMutation.variables?.planId === plan.id);
@@ -587,16 +622,22 @@ export function BillingPage() {
                 <CardContent className="space-y-4">
                   <div>
                     <span className="text-2xl font-bold">
-                      {planMonthly === 0 ? t('billing.free') : `${planMonthly}`}
+                      {planMonthly === 0 ? t('billing.free') : formatMoney(planMonthly, planDisplayCurrency)}
                     </span>
                     {planMonthly > 0 && (
                       <span className="text-sm text-muted-foreground ml-1">
-                        {planDisplayCurrency}/{normalizeInterval(plan.interval)}
+                        /{normalizeInterval(plan.interval)}
                       </span>
                     )}
-                    {planMonthly > 0 && customerCountryName && planDisplayCurrency === customerCurrency && (
+                    {planMonthly > 0 && customerCountryName && planSupported && (
                       <p className="text-[11px] text-muted-foreground mt-1">
-                        Priced for {customerCountryName} ({customerCurrency})
+                        Priced for {customerCountryName} ({planDisplayCurrency})
+                      </p>
+                    )}
+                    {planMonthly > 0 && !planSupported && planPricing?.[plan.id] && (
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Priced in {planDisplayCurrency} (plan default) — {planPricing[plan.id].detectedCurrency} not
+                        configured for this plan
                       </p>
                     )}
                   </div>
