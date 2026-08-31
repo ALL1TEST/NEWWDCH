@@ -1491,7 +1491,9 @@ const INTERNAL_PLAN: Plan = {
   isFree: true,
   active: true,
   features: ['Full platform access', 'All features enabled', 'Billing bypass', 'Not counted in MRR'],
-  entitlements: ['automation', 'ai_platform', 'advanced_analytics', 'custom_domains', 'api_access', 'white_label', 'audit_log', 'advanced_seo', 'newsletter', 'email_templates', 'backups'],
+  // No custom_domains / white_label — site identity is client-owned in
+  // this architecture, not a plan entitlement.
+  entitlements: ['automation', 'ai_platform', 'advanced_analytics', 'comments', 'api_access', 'audit_log', 'advanced_seo', 'newsletter', 'email_templates', 'backups'],
   limits: { maxSites: -1, storageBytes: -1, aiArticlesPerMonth: -1, aiWordsPerMonth: -1, aiImagesPerMonth: -1 },
 };
 

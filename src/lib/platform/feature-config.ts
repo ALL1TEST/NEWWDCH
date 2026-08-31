@@ -22,18 +22,27 @@
 //         limits (articles / words / images per month).
 //       • 'ai_client' (Client's Own AI API) — the client connects
 //         their own provider/API → NO platform AI usage limits.
+//
+// SITE IDENTITY IS NOT A PLAN ENTITLEMENT: clients already create and
+// manage their own sites/blogs from the dashboard — every site carries
+// its own domain/site configuration and its own brand identity. So
+// 'custom_domains' and 'white_label' are NOT plan features (the legacy
+// keys are stripped by normalizeEntitlementKeys on load/save). The
+// plan controls access to actual platform TOOLS, not basic site
+// identity or site configuration. 'api_access' is an independent
+// feature (CMS/platform API access) and is NOT related to either AI
+// mode.
 // ============================================================
 
 export const ENTITLEMENT_KEYS = [
   'automation',
   'advanced_seo',
   'advanced_analytics',
-  'custom_domains',
+  'comments',
   'newsletter',
   'email_templates',
   'backups',
   'api_access',
-  'white_label',
   // AI Tools — the two mutually exclusive modes (a plan can have at
   // most ONE of them; 'ai_content' below is the legacy pre-migration
   // key, normalized to 'ai_platform' on load).
@@ -55,12 +64,11 @@ export const ENTITLEMENT_LABELS: Record<EntitlementKey, string> = {
   automation: 'Automation',
   advanced_seo: 'Advanced SEO',
   advanced_analytics: 'Advanced Analytics',
-  custom_domains: 'Custom Domains',
+  comments: 'Comments',
   newsletter: 'Newsletter',
   email_templates: 'Email Templates',
   backups: 'Backups',
   api_access: 'API Access',
-  white_label: 'White Label',
   ai_platform: 'AI Tools — Platform AI',
   ai_client: "AI Tools — Client's Own AI API",
   ai_content: 'AI Tools',
@@ -71,12 +79,11 @@ export const ENTITLEMENT_DESCRIPTIONS: Record<EntitlementKey, string> = {
   automation: 'Schedule + run workflow automations',
   advanced_seo: 'Broken links, redirects, schema, search console',
   advanced_analytics: 'Detailed traffic + content analytics',
-  custom_domains: 'Publish sites on custom domains',
+  comments: 'Comments moderation + management',
   newsletter: 'Subscriber management + campaigns (client-managed delivery)',
   email_templates: 'Create + manage reusable email templates',
   backups: 'Create + restore CMS backups (client-managed storage)',
   api_access: 'Programmatic API access + tokens',
-  white_label: 'Remove platform branding (white-label)',
   ai_platform: "Platform provides and pays for the AI API — subject to the plan's AI usage limits",
   ai_client: "Client connects their own AI provider/API — not subject to platform AI usage limits",
   ai_content: 'Generate articles, images and rewrites with AI',
@@ -87,17 +94,19 @@ export const ENTITLEMENT_DESCRIPTIONS: Record<EntitlementKey, string> = {
 
 /** The simple checkbox features exposed in the Create/Edit Plan modal's
  *  "Feature Access" section (in display order). AI Tools is NOT in this
- *  list — it is rendered as its own two-mode block (see AI_MODE_*). */
+ *  list — it is rendered as its own two-mode block (see AI_MODE_*).
+ *  Custom Domains and White Label are deliberately NOT here: sites
+ *  (with their own domain + branding) are client-owned in this
+ *  architecture, so they are not plan entitlements at all. */
 export const PLAN_EDITOR_FEATURE_KEYS = [
   'automation',
   'advanced_seo',
   'advanced_analytics',
-  'custom_domains',
+  'comments',
   'newsletter',
   'email_templates',
   'backups',
   'api_access',
-  'white_label',
 ] as const;
 
 export type PlanEditorFeatureKey = (typeof PLAN_EDITOR_FEATURE_KEYS)[number];

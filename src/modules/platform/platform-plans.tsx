@@ -223,7 +223,7 @@ function BillingPeriodsCheckboxes({
 
 // -------------------- Feature Access / Usage Limits shared UI --------------------
 
-/** Count the editor-visible enabled features (the 9 checkboxes + AI
+/** Count the editor-visible enabled features (the 8 checkboxes + AI
  *  Tools counting as one when either mode is selected). */
 function countEditorFeatures(entitlements: readonly string[]): number {
   const simple = PLAN_EDITOR_FEATURE_KEYS.filter((k) => entitlements.includes(k)).length;
@@ -231,7 +231,7 @@ function countEditorFeatures(entitlements: readonly string[]): number {
   return simple + ai;
 }
 
-const EDITOR_FEATURE_TOTAL = PLAN_EDITOR_FEATURE_KEYS.length + 1; // 9 + AI Tools
+const EDITOR_FEATURE_TOTAL = PLAN_EDITOR_FEATURE_KEYS.length + 1; // 8 + AI Tools
 
 /** Toggle one simple (checkbox) feature key in the entitlements state. */
 function toggleFeature(cur: string[], key: string): string[] {
@@ -293,9 +293,10 @@ function AiModeOption({
 }
 
 /** Feature Access section — shared by the Create + Edit Plan dialogs.
- *  9 simple checkbox features + the AI Tools two-mode block
+ *  8 simple checkbox features + the AI Tools two-mode block
  *  (Platform AI / Client's Own AI API — mutually exclusive; neither
- *  selected = AI disabled). */
+ *  selected = AI disabled). Custom Domains and White Label are not
+ *  offered: site identity is client-owned, not a plan entitlement. */
 function FeatureAccessSection({
   entitlements,
   onChange,

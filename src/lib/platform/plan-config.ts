@@ -97,15 +97,23 @@ const DEFAULT_LIMITS: PlanLimits = {
  *    split and always meant the platform-provided AI).
  *  - mutual exclusion: when BOTH AI modes are present (invalid data),
  *    Platform AI wins and 'ai_client' is dropped.
+ *  - legacy 'custom_domains' / 'white_label' are STRIPPED: site
+ *    domains and site branding are client-owned in this architecture
+ *    (every site carries its own domain + identity), so they are not
+ *    plan entitlements. Old DB rows self-clean on load + next save.
  *  - dedupes while preserving order.
  *  Non-editor keys (e.g. 'audit_log') pass through untouched. */
 export function normalizeEntitlementKeys(keys: readonly string[]): string[] {
+  // Legacy keys that are no longer plan entitlements — stripped on
+  // load/save so existing rows + stale API input clean themselves.
+  const LEGACY_REMOVED_KEYS = new Set(['custom_domains', 'white_label']);
   const out: string[] = [];
   const seen = new Set<string>();
   const hasPlatform = keys.includes('ai_platform') || keys.includes('ai_content');
   for (const k of keys) {
     if (typeof k !== 'string' || !k.trim()) continue;
     if (k === 'ai_content') continue; // legacy → replaced by ai_platform below
+    if (LEGACY_REMOVED_KEYS.has(k)) continue; // not plan entitlements anymore
     if (k === 'ai_client' && hasPlatform) continue; // mutually exclusive → platform wins
     if (k === 'ai_platform' && hasPlatform) {
       if (!seen.has('ai_platform')) out.push('ai_platform');
@@ -336,7 +344,7 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     active: true,
     features: [],
     // Plus: Platform AI with modest usage limits.
-    entitlements: ['ai_platform', 'advanced_analytics', 'newsletter'],
+    entitlements: ['ai_platform', 'advanced_analytics', 'comments', 'newsletter'],
     limits: { maxSites: 5, storageBytes: 5 * GB, aiArticlesPerMonth: 25, aiWordsPerMonth: 50_000, aiImagesPerMonth: 10 },
     badgeVariant: 'plus',
     sortOrder: 1,
@@ -360,8 +368,10 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     active: true,
     features: [],
     // PRO example: Platform AI — 100 articles / 200k words / 50 images
-    // per month — plus Newsletter, Email Templates and Backups enabled.
-    entitlements: ['ai_platform', 'advanced_analytics', 'custom_domains', 'automation', 'newsletter', 'email_templates', 'backups'],
+    // per month — plus Comments, Newsletter, Email Templates and
+    // Backups enabled. (No custom_domains / white_label: site identity
+    // is client-owned, not a plan entitlement.)
+    entitlements: ['ai_platform', 'advanced_analytics', 'automation', 'comments', 'newsletter', 'email_templates', 'backups'],
     limits: { maxSites: 10, storageBytes: 10 * GB, aiArticlesPerMonth: 100, aiWordsPerMonth: 200_000, aiImagesPerMonth: 50 },
     badgeVariant: 'pro',
     sortOrder: 2,
@@ -386,14 +396,15 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     features: [],
     // ENTERPRISE example: Client's Own AI API — the client connects
     // their own provider, so NO platform AI usage limits are stored.
-    // All other enterprise features enabled.
+    // All other platform features enabled. (No custom_domains /
+    // white_label: site identity is client-owned, not a plan
+    // entitlement.)
     entitlements: [
       'ai_client',
       'advanced_analytics',
-      'custom_domains',
       'automation',
+      'comments',
       'api_access',
-      'white_label',
       'audit_log',
       'advanced_seo',
       'newsletter',

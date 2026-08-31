@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -36,6 +37,10 @@ type RouteContext = { params: Promise<{ id: string }> };
 // =====================================================================
 
 export async function GET(_request: NextRequest, context: RouteContext) {
+  // Comments is a plan feature entitlement — gated server-side.
+  const featureAuth = await requireFeature(_request, 'comments');
+  if ('response' in featureAuth) return featureAuth.response;
+
   const id = reqId();
 
   try {
@@ -68,6 +73,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 // =====================================================================
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
+  // Comments is a plan feature entitlement — gated server-side.
+  const featureAuth = await requireFeature(request, 'comments');
+  if ('response' in featureAuth) return featureAuth.response;
+
   const id = reqId();
 
   try {
@@ -135,6 +144,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 // =====================================================================
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
+  // Comments is a plan feature entitlement — gated server-side.
+  const featureAuth = await requireFeature(_request, 'comments');
+  if ('response' in featureAuth) return featureAuth.response;
+
   const id = reqId();
 
   try {

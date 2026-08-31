@@ -10,6 +10,7 @@ import { z } from 'zod/v4';
 import { getSiteWhere } from '@/lib/site-context';
 import { getSettingValue } from '@/lib/settings-service';
 import { checkCommentSpam } from '@/lib/akismet';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -40,6 +41,12 @@ const SORTABLE = new Set(['createdAt', 'updatedAt']);
 // =====================================================================
 
 export async function GET(request: NextRequest) {
+  // Comments is a plan feature entitlement — gated server-side
+  // (403 FEATURE_NOT_AVAILABLE when the plan does not include it;
+  // owner bypass passes).
+  const featureAuth = await requireFeature(request, 'comments');
+  if ('response' in featureAuth) return featureAuth.response;
+
   const id = reqId();
 
   try {
@@ -90,6 +97,10 @@ export async function GET(request: NextRequest) {
 // =====================================================================
 
 export async function POST(request: NextRequest) {
+  // Comments is a plan feature entitlement — gated server-side.
+  const featureAuth = await requireFeature(request, 'comments');
+  if ('response' in featureAuth) return featureAuth.response;
+
   const id = reqId();
 
   try {

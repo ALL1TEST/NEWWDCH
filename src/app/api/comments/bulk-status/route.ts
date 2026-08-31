@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
+import { requireFeature } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -25,6 +26,10 @@ const bulkStatusSchema = z.object({
 // =====================================================================
 
 export async function PATCH(request: NextRequest) {
+  // Comments is a plan feature entitlement — gated server-side.
+  const featureAuth = await requireFeature(request, 'comments');
+  if ('response' in featureAuth) return featureAuth.response;
+
   const id = reqId();
 
   try {

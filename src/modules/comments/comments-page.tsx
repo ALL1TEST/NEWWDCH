@@ -581,6 +581,25 @@ function CommentSettingsCard() {
 export function CommentsPage() {
   const queryClient = useQueryClient();
 
+  // ---------- Plan entitlement gate (client-side) ----------
+  // Comments is a real plan feature entitlement. The AUTHORITATIVE
+  // check is the server-side requireFeature('comments') gate on every
+  // /api/comments route; this probe mirrors it in the UI so a plan
+  // without Comments sees a clear "not included" state instead of the
+  // moderation tooling. While the probe loads the page renders normally
+  // (no lock flash); the server still 403s any real API call.
+  const { data: entitlementData, isLoading: entitlementLoading } = useQuery({
+    queryKey: ['entitlements-me'],
+    queryFn: () =>
+      getApi<{ entitlements: string[]; billingMode: string }>(
+        '/api/platform/admin/entitlements/me',
+      ),
+    staleTime: 30_000,
+    retry: false,
+  });
+  const commentsAllowed =
+    entitlementLoading || !!entitlementData?.entitlements?.includes('comments');
+
   const [statusTab, setStatusTab] = useState('all');
   const [searchValue, setSearchValue] = useState('');
   const [sortField, setSortField] = useState('createdAt');
@@ -1042,6 +1061,43 @@ export function CommentsPage() {
         return 'No comments yet. They will appear here when users leave comments on your content.';
     }
   }, [searchValue, statusTab]);
+
+  // ---------- Plan entitlement gate ----------
+  // The current plan does not include the Comments feature → render a
+  // clear "not included" state instead of the moderation tooling. The
+  // server-side requireFeature('comments') gate independently blocks
+  // every /api/comments call with 403 FEATURE_NOT_AVAILABLE, so this
+  // UI state can never bypass enforcement.
+  if (!commentsAllowed) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center px-4 py-10">
+        <Card className="w-full max-w-md">
+          <CardContent className="flex flex-col items-center gap-4 p-8 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+              <MessageSquare className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
+            </div>
+            <div className="space-y-1.5">
+              <h2 className="text-lg font-semibold text-foreground">
+                Comments is not included in your plan
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Upgrade your plan to moderate and manage comments across your
+                content. Direct API calls are also blocked server-side.
+              </p>
+            </div>
+            <Button
+              onClick={() => {
+                window.location.hash = '#billing';
+              }}
+              className="mt-2"
+            >
+              View Plans &amp; Upgrade
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <TooltipProvider delayDuration={300}>

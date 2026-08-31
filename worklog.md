@@ -8961,3 +8961,42 @@ Stage Summary:
 - Usage Limits = Max Sites, Storage, and the 3 AI limits (AI limits shown/configured ONLY for Platform-AI plans and zeroed in storage otherwise); enforcement: checkLimit (sites/storage, unchanged) + checkAiLimit on every AI route.
 - Existing architecture fully reused: same entitlements JSON column (no DB schema change), same hasFeature/requireFeature chain (legacy 'ai_content' gates keep working for both modes via a compat alias), same plan cache/merge/save endpoints, same modal component structure.
 - Key files: src/lib/platform/{feature-config,plan-config,usage-limits,subscription-data,platform-data}.ts, src/modules/platform/platform-plans.tsx, src/modules/billing/billing-page.tsx, AI routes (playground, ai-generate, ai-ideas, ai-edit-selection, ai/images/generate, media/generate, media/[id]/generate-seo), email-templates routes (main + [id]), backups routes (main, [id], restore, download, verify, schedules, logs, stats, storage).
+
+---
+Task ID: FEATURE-ACCESS-UPDATE
+Agent: main (orchestrator)
+Task: Update the Plan Feature Access system per the CMS architecture — REMOVE Custom Domains + White Label (site identity is client-owned, not a plan entitlement), ADD Comments as a real entitlement (server + client enforced), keep API Access independent, keep AI Tools 3-mode config and the platform-controlled Usage Limits untouched.
+
+Work Log:
+- Investigated the current architecture: feature-config.ts (single entitlement vocabulary), plan-config.ts (normalization + DEFAULT_PLAN_CONFIGS + DB persistence), platform-data.ts (INTERNAL_PLAN), platform-plans.tsx (FeatureAccessSection/UsageLimitsSection shared by Create + Edit dialogs), entitlements.ts (hasFeature/requireFeature chain), comments routes (previously had NO entitlement gate), comments-page.tsx (renders demo data via USE_DEMO_DATA flag).
+- feature-config.ts: removed 'custom_domains' + 'white_label' from ENTITLEMENT_KEYS / ENTITLEMENT_LABELS / ENTITLEMENT_DESCRIPTIONS / PLAN_EDITOR_FEATURE_KEYS; added 'comments' (label "Comments", description "Comments moderation + management") in the user-specified order: automation, advanced_seo, advanced_analytics, comments, newsletter, email_templates, backups, api_access (8 checkboxes); documented the architecture rule (site identity NOT a plan entitlement; api_access independent of AI modes) in the header comment.
+- plan-config.ts: normalizeEntitlementKeys now STRIPS legacy 'custom_domains'/'white_label' (LEGACY_REMOVED_KEYS) so old DB rows + stale API input self-clean on load AND on save (same pattern as the legacy 'ai_content' key); DEFAULT_PLAN_CONFIGS updated — plus gains 'comments'; pro drops custom_domains, gains 'comments'; max drops custom_domains + white_label, gains 'comments'; free stays empty.
+- platform-data.ts: INTERNAL_PLAN entitlements — removed custom_domains/white_label, added comments.
+- Server-side enforcement (requireFeature(request, 'comments') gate, owner bypass passes): /api/comments GET+POST, /api/comments/[id] GET+PATCH+DELETE, /api/comments/bulk-status PATCH.
+- Client-side enforcement: CommentsPage now probes GET /api/platform/admin/entitlements/me (the purpose-built entitlement endpoint) and renders a locked "Comments is not included in your plan" card with a View Plans & Upgrade button (window.location.hash = '#billing') when 'comments' is not granted — covers the demo-data mode which never hits the API; the server 403s independently.
+- scripts/migrate_plan_feature_access.ts: one-off idempotent Prisma migration — canonical rows (free/plus/pro/max) aligned to the new model, custom rows only get the removed keys stripped; ran it (free=[], plus 4 keys, pro 7 keys, max 10 keys, zero removed keys remaining).
+- platform-plans.tsx: comments in docstrings updated (9 → 8 checkboxes + AI Tools).
+- Verification (API + curl):
+  * GET /api/platform/admin/plans → all 4 plans canonical, comments present on plus/pro/max, no custom_domains/white_label anywhere.
+  * Comments gate: free user (freeuser@example.com, no sub → free plan) → 403 FEATURE_NOT_AVAILABLE on ALL 5 comment endpoints (list/create/get/patch/bulk); plus-plan user (author@example.com, legacy demo customer → plus) → 200; owner → 200 (bypass).
+  * entitlements/me: free → []; owner → all keys incl. comments, no custom_domains/white_label.
+  * Persistence round-trip: PUT with custom_domains+white_label in the payload → stored stripped; PUT toggling comments off → persisted; UI toggle off→save→on→save → persisted both ways; pro restored to canonical (verified via API: exact set match).
+  * AI mutual-exclusion regression: PUT [ai_platform, ai_client] → 400 VALIDATION_ERROR; pro unchanged.
+  * billing/me (plus user): entitlements ['ai_platform','advanced_analytics','comments','newsletter'], limits incl. the 3 AI limits.
+- Dev-server note: hit a stale-cache artifact when hydrating a route BEFORE direct DB script writes (Turbopack dev gives each route bundle its own module instance) — after a clean dev-server restart, PUT→GET round-trips are fully consistent; final state verified canonical.
+- Verification (agent-browser, browser restarted once to clear a CDP input glitch; synthetic input.click() on radios double-fires through the label wrapper — real clicks work correctly):
+  * Edit Pro: 8 feature checkboxes with Comments checked, NO Custom Domains/White Label; AI Tools radio block (Platform AI selected); Usage Limits = Max Sites 10, Storage 10737418240, AI Articles 100, AI Words 200000, AI Images 50; badge 6/9 after unchecking Comments.
+  * Conditional AI UI: real-click Client's Own AI API → mode switches, AI limit inputs hide (2 remain); click Platform AI back → 5 inputs return.
+  * Create Plan dialog: identical Feature Access (10 checkboxes = 8 features + 2 billing periods), no Custom Domains/White Label.
+  * Client Billing page (admin/pro user): plan cards show Comments + AI limits for Platform-AI plans ("25 AI articles / month" etc.), NO Custom Domains/White Label, no subscriber/send/backup-storage limits.
+  * Comments page: free user → locked state ("Comments is not included in your plan" + upgrade button); admin/pro user (page permission + entitlement) → full moderation UI.
+  * Plans & Pricing page cards: no Custom Domains/White Label; Comments label present.
+  * Zero browser console errors, zero page errors, dev.log clean; eslint clean on all 8 changed files; tsc --noEmit shows only pre-existing errors in untouched seed/example files.
+- Test artifacts: freeuser@example.com / free123 kept (CLIENT, free plan — the only free-plan account since all demo users are on paid plans; useful for verifying the locked Comments state). Canonical plan state restored after tests.
+
+Stage Summary:
+- Feature Access is now exactly: Automation, Advanced SEO, Advanced Analytics, Comments, Newsletter, Email Templates, Backups, API Access (8 checkboxes) + the AI Tools two-mode block (Platform AI / Client's Own AI API) — Custom Domains and White Label are fully removed from the plan entitlement system (UI, vocabulary, persistence normalization, INTERNAL_PLAN, DB rows); site creation/domain/branding flows untouched.
+- Comments is a real entitlement: enforced server-side on every /api/comments route via requireFeature('comments') (403 FEATURE_NOT_AVAILABLE; owner bypass) AND client-side via the entitlements/me probe (locked page state).
+- API Access remains an independent plain feature; AI Tools remains the separate mutually-exclusive 3-state config; Usage Limits remain Max Sites, Storage + the 3 Platform-AI-only AI limits — no limits added for Comments/Newsletter/Email Templates/Backups.
+- Legacy custom_domains/white_label keys self-clean: normalizeEntitlementKeys strips them on load and on save, so existing DB rows, stale API payloads, and old caches converge on the new model without any schema change (same JSON entitlements column, same hasFeature/requireFeature chain, no duplicate entitlement system).
+- Key files: src/lib/platform/{feature-config,plan-config,platform-data}.ts, src/modules/platform/platform-plans.tsx, src/modules/comments/comments-page.tsx, src/app/api/comments/{route,[id]/route,bulk-status/route}.ts, scripts/migrate_plan_feature_access.ts.
