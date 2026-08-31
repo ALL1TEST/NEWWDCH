@@ -2,129 +2,118 @@
 
 import React, { useEffect } from 'react';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { useAuthStore } from '@/lib/stores/auth-store';
 import { ProvidersPage } from './providers-page';
+import { PromptsPage } from './prompts-page';
 import { ModelsPage } from './models-page';
-import { ClientAiWorkspace } from './client-ai-workspace';
-import { useAiWorkspace } from '@/hooks/use-ai-workspace';
+import { SettingsPage } from './settings-page';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Sparkles,
   Server,
+  MessageSquare,
   Boxes,
-  Info,
+  Settings,
 } from 'lucide-react';
 
 // ============================================================
-// AI PAGE — the CLIENT AI experience.
+// AI PAGE — the Admin User / client AI page (original design).
 // ============================================================
-// Strictly separated from the Platform Admin AI management page
-// (#platform-ai → Providers / Models / Prompt Library / Settings):
+// Tabs: Providers / Models / Prompt Library / Settings.
 //
-//   AI Tools (always)      — the client USES Platform AI: generate
-//                            articles, titles, outlines, rewrites,
-//                            SEO fields, images and ideas + remaining
-//                            usage. Requires the Platform AI plan
-//                            feature (locked otherwise; enforced
-//                            server-side).
-//   My Providers (ai_client) — the client's OWN AI provider/API
-//                            connections (Client's Own AI API plan
-//                            feature). Server-side, non-staff callers
-//                            only ever see/manage the providers they
-//                            created — never the platform's.
-//   My Models (ai_client)    — models of the client's own providers.
+// The ONE platform rule applied here: the Prompt Library is a
+// Platform Admin control (Platform Admin → AI → Prompt Library).
+// The tab is only rendered for platform staff (OWNER /
+// PLATFORM_ADMIN) — normal clients never see it, and the
+// /api/ai/prompts* routes reject non-staff server-side as well.
 //
-// The Prompt Library, platform AI Settings, Providers/Models of the
-// PLATFORM infrastructure and all prompt management are Platform
-// Admin controls (#platform-ai) — they are NOT part of the client
-// dashboard.
+// Platform AI connection (plan feature "Platform AI"):
+//   • The client's AI tools (content editor assistant, AI Ideas,
+//     AI Generate in Media, …) run on the Platform Admin's
+//     configured provider/model internally — the client never
+//     configures platform API keys. Enforced server-side.
+//   • AI usage counts against the plan's AI Articles/month and
+//     AI Images/month limits.
+//   • The Providers/Models tabs here manage the CLIENT'S OWN AI
+//     connections (plan feature "Client's Own AI API") — usage
+//     never consumes Platform AI limits. Platform staff see and
+//     manage every provider/model.
 // ============================================================
 
+// Simplified AI section — only features relevant to a blogging CMS.
+// Removed: Playground, Jobs, Logs, Marketplace, Usage (provider dashboards handle analytics).
 const AI_SUB_PAGES = [
-  { value: 'tools', label: 'AI Tools', icon: Sparkles },
-  { value: 'providers', label: 'My Providers', icon: Server },
-  { value: 'models', label: 'My Models', icon: Boxes },
+  { value: 'providers', label: 'Providers', icon: Server },
+  { value: 'models', label: 'Models', icon: Boxes },
+  { value: 'prompts', label: 'Prompt Library', icon: MessageSquare },
+  { value: 'settings', label: 'Settings', icon: Settings },
 ] as const;
 
 type AiSubPage = (typeof AI_SUB_PAGES)[number]['value'];
 
-// Legacy sub-pages that no longer exist in the client AI page —
-// Prompt Library, Settings, Playground, Jobs, Logs, Marketplace and
-// Usage are Platform Admin controls or legacy screens: redirect to
-// the AI Tools workspace.
+// Legacy sub-pages that no longer have their own tab — redirect to Providers.
 const LEGACY_REDIRECT: Record<string, AiSubPage> = {
-  prompts: 'tools',
-  settings: 'tools',
-  playground: 'tools',
-  jobs: 'tools',
-  logs: 'tools',
-  marketplace: 'tools',
-  usage: 'tools',
+  playground: 'providers',
+  jobs: 'providers',
+  logs: 'providers',
+  marketplace: 'providers',
+  usage: 'settings',
 };
-
-/** A short explainer shown above the client's own connection tabs. */
-function OwnConnectionNote() {
-  return (
-    <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
-      <Info className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
-      <p className="text-sm text-muted-foreground">
-        Client&apos;s Own AI API — you connect your own AI provider and API key here. Your own
-        API usage is <strong>never counted</strong> against the Platform AI limits, and the
-        platform&apos;s AI infrastructure is never exposed.
-      </p>
-    </div>
-  );
-}
 
 export function AiPage() {
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
-  const { data: workspace, isLoading } = useAiWorkspace();
+  const user = useAuthStore((s) => s.user);
 
-  // The connection tabs exist only for clients whose plan includes
-  // Client's Own AI API (platform staff always see them too).
-  const showConnection = workspace?.entitlements.aiClient ?? false;
-  const availableTabs = AI_SUB_PAGES.filter(
-    (t) => t.value === 'tools' || showConnection,
+  // Platform staff (OWNER / PLATFORM_ADMIN / INTERNAL) — mirrors the
+  // server-side isPlatformStaff check. Only staff get the Prompt
+  // Library tab; the prompts API rejects everyone else server-side.
+  const isStaff = !!user && (
+    user.role === 'OWNER' ||
+    user.role === 'PLATFORM_ADMIN' ||
+    user.billingMode === 'INTERNAL'
   );
-  const validTabs = new Set(availableTabs.map((t) => t.value));
 
-  // Resolve the effective tab: legacy sub-pages redirect to the AI
-  // Tools workspace; tabs the user is not entitled to fall back to
-  // 'tools' as well.
-  const effectiveTab: AiSubPage =
-    currentSubPage && LEGACY_REDIRECT[currentSubPage]
-      ? LEGACY_REDIRECT[currentSubPage]
-      : currentSubPage && validTabs.has(currentSubPage as AiSubPage)
-        ? (currentSubPage as AiSubPage)
-        : 'tools';
+  // The Prompt Library is Platform-Admin-only — hidden from the
+  // normal Admin User/client dashboard.
+  const visibleTabs = AI_SUB_PAGES.filter(
+    (tab) => isStaff || tab.value !== 'prompts',
+  );
+  const validTabs = new Set<string>(visibleTabs.map((tab) => tab.value));
+
+  // Resolve the effective tab: legacy sub-pages redirect to 'providers';
+  // hidden tabs (Prompt Library for non-staff) fall back to 'providers'.
+  const effectiveTab: AiSubPage = currentSubPage && LEGACY_REDIRECT[currentSubPage]
+    ? LEGACY_REDIRECT[currentSubPage]
+    : currentSubPage && !validTabs.has(currentSubPage)
+      ? 'providers'
+      : (currentSubPage as AiSubPage) || 'providers';
 
   const handleTabChange = (value: string) => {
     navigate('ai', null, value);
   };
 
   useEffect(() => {
-    // Redirect legacy sub-pages / non-entitled tabs to the closest valid tab
+    // Redirect legacy sub-pages to the closest valid tab
     if (currentSubPage && LEGACY_REDIRECT[currentSubPage]) {
       navigate('ai', null, LEGACY_REDIRECT[currentSubPage]);
       return;
     }
-    if (currentSubPage && !validTabs.has(currentSubPage as AiSubPage)) {
-      navigate('ai', null, 'tools');
+    // Non-staff landing on the (hidden) prompts tab → Providers
+    if (currentSubPage && !validTabs.has(currentSubPage)) {
+      navigate('ai', null, 'providers');
       return;
     }
     if (!currentSubPage) {
-      navigate('ai', null, 'tools');
+      navigate('ai', null, 'providers');
     }
-     
-  }, [currentSubPage, showConnection, navigate]);
+  }, [currentSubPage, isStaff, navigate]);
 
   return (
     <div className="flex flex-col gap-6">
       <Tabs value={effectiveTab} onValueChange={handleTabChange}>
         <div className="overflow-x-auto">
           <TabsList className="w-full justify-start">
-            {availableTabs.map((tab) => {
+            {visibleTabs.map((tab) => {
               const Icon = tab.icon;
               return (
                 <TabsTrigger
@@ -140,28 +129,19 @@ export function AiPage() {
           </TabsList>
         </div>
 
-        <TabsContent value="tools">
-          <ClientAiWorkspace />
-        </TabsContent>
         <TabsContent value="providers">
-          {isLoading ? (
-            <Skeleton className="h-64 w-full rounded-xl" />
-          ) : showConnection ? (
-            <div className="space-y-6">
-              <OwnConnectionNote />
-              <ProvidersPage />
-            </div>
-          ) : null}
+          <ProvidersPage />
         </TabsContent>
         <TabsContent value="models">
-          {isLoading ? (
-            <Skeleton className="h-64 w-full rounded-xl" />
-          ) : showConnection ? (
-            <div className="space-y-6">
-              <OwnConnectionNote />
-              <ModelsPage />
-            </div>
-          ) : null}
+          <ModelsPage />
+        </TabsContent>
+        {isStaff && (
+          <TabsContent value="prompts">
+            <PromptsPage />
+          </TabsContent>
+        )}
+        <TabsContent value="settings">
+          <SettingsPage />
         </TabsContent>
       </Tabs>
     </div>

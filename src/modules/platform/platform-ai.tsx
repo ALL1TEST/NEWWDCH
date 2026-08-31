@@ -11,13 +11,17 @@
 //   AI → Settings         (default text/image provider + model,
 //                         temperature, max tokens, budgets)
 //
-// This is strictly separated from the CLIENT AI experience
-// (#ai → AI Tools / My Providers / My Models): the client USES
-// Platform AI, never configures it. Server-side, every management
-// endpoint below is gated to platform staff; clients with the
-// Client's Own AI API plan feature manage only their OWN provider
-// connections (row-level ownership), and Prompt Library + Settings
-// return 403 for them.
+// This is strictly separated from the CLIENT AI experience (#ai →
+// Providers / Models / Settings — the client's own connections):
+// the client USES Platform AI, never configures it. Server-side,
+// the prompt library (incl. versions/duplicate/favorite), the
+// platform's global AI settings, marketplace and playground are
+// gated to platform staff; clients with the "Client's Own AI API"
+// plan feature manage only their OWN provider connections
+// (row-level ownership), and the AI tools available to a client
+// are controlled by the plan's "Platform AI" feature (generation
+// runs on the platform's configured provider/model, usage metered
+// against the plan's AI Articles/month + AI Images/month limits).
 //
 // The only adaptations to the Platform Admin context:
 //   1. Navigation module key — this page lives under the

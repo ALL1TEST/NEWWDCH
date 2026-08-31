@@ -58,7 +58,7 @@ import { TiptapEditor, type TiptapEditorRef } from '@/components/editor/tiptap-e
 import { getApi, postApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
-import { useAiWorkspace, consumeAiDraftHandoff } from '@/hooks/use-ai-workspace';
+import { useAiWorkspace } from '@/hooks/use-ai-workspace';
 import { slugify, cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -495,20 +495,6 @@ export function ContentCreatePage() {
   const watchedExcerpt = watch('excerpt');
   const watchedSeoTitle = watch('seoTitle');
   const watchedSeoDescription = watch('seoDescription');
-
-  // AI draft handoff — when the user clicked "Use in new article" in
-  // the AI Tools workspace, prefill the editor with the generated draft.
-  React.useEffect(() => {
-    const handoff = consumeAiDraftHandoff();
-    if (handoff) {
-      setValue('title', handoff.title, { shouldValidate: true });
-      setEditorContent(handoff.content);
-      setSlugValue(slugify(handoff.title));
-      toast.success('AI draft loaded — review and publish when ready');
-    }
-    // Run once on mount — the handoff is a one-shot sessionStorage payload.
-     
-  }, []);
 
   // Auto-slug
   React.useEffect(() => {

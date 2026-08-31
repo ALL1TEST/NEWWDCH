@@ -4,22 +4,55 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
-import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+import { requireAuth, isPlatformStaff } from '@/lib/platform/platform-auth';
 
 // ============================================================
-// AI SETTINGS — Platform Admin ONLY.
-// These settings ARE the internal configuration of the platform's
-// AI service: default text/image provider + model, temperature,
-// max tokens, budgets and rate limits. Platform Admin configures
-// them (Platform Admin → AI → Settings); clients never read or
-// write them — a client simply uses the platform's configured
-// provider/model automatically.
+// AI SETTINGS
+// ============================================================
+// Two strictly separated experiences:
+//   • Platform staff (OWNER / PLATFORM_ADMIN) manage the PLATFORM's
+//     AI infrastructure on the requested scope (default 'global') —
+//     Platform Admin → AI → Settings. The platform's global settings
+//     are what the client AI tools use internally (default text/
+//     image provider + model, temperature, max tokens).
+//   • Clients (Admin Users) get their OWN user-scoped settings row
+//     (`user:<id>`) — the restored client Settings tab loads and
+//     saves exactly like before, but a client can never read or
+//     write the platform's AI configuration, and may only
+//     reference their OWN provider/model connections in it.
 // ============================================================
 
 // ---------- helpers ---------------------------------------------------
 
 function reqId() {
   return 'req_' + crypto.randomUUID().slice(0, 8);
+}
+
+/** Resolve the settings scope for the caller: platform staff operate
+ *  on the requested scope (default 'global' — the platform AI
+ *  infrastructure config); clients are always pinned to their OWN
+ *  user-scoped row and can never touch the platform's. */
+function scopeFor(staff: boolean, requested: unknown, userId: string): string {
+  if (staff) {
+    return typeof requested === 'string' && requested.trim() ? requested.trim() : 'global';
+  }
+  return `user:${userId}`;
+}
+
+/** Non-staff callers may only reference their OWN provider/model
+ *  connections — never the platform's (defense in depth: clients
+ *  can't even see platform provider IDs, the list is row-scoped). */
+async function assertOwnProvider(providerId: string, userId: string): Promise<string | null> {
+  const provider = await db.aiProvider.findUnique({
+    where: { id: providerId },
+    select: { id: true, createdById: true, isActive: true },
+  });
+  if (!provider) return 'Provider not found';
+  if (provider.createdById !== userId) {
+    return 'You can only reference your own AI provider connections';
+  }
+  if (!provider.isActive) return 'Cannot set an inactive provider as the default';
+  return null;
 }
 
 function ok<T>(data: T, meta?: Record<string, unknown>) {
@@ -58,12 +91,14 @@ const upsertSchema = z.object({
 export async function GET(request: NextRequest) {
   const id = reqId();
 
-  const staffAuth = await requirePlatformAdmin(request);
-  if ('response' in staffAuth) return staffAuth.response;
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth.response;
+  const staff = isPlatformStaff(auth.user);
 
   try {
     const sp = new URL(request.url).searchParams;
-    const scope = sp.get('scope')?.trim() || 'global';
+
+    const scope = scopeFor(staff, sp.get('scope'), auth.user.id);
 
     const item = await db.aiSettings.findUnique({ where: { scope } });
     return ok(item);
@@ -80,8 +115,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const id = reqId();
 
-  const staffAuth = await requirePlatformAdmin(request);
-  if ('response' in staffAuth) return staffAuth.response;
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth.response;
+  const staff = isPlatformStaff(auth.user);
 
   try {
     let body: unknown;
@@ -100,18 +136,24 @@ export async function POST(request: NextRequest) {
     }
 
     const d = parsed.data;
-    const scope = typeof (body as Record<string, unknown>).scope === 'string'
-      ? ((body as Record<string, unknown>).scope as string)
-      : 'global';
+    // Platform staff → requested scope (default 'global'); clients →
+    // always their own row (the requested scope is ignored for them).
+    const scope = scopeFor(staff, (body as Record<string, unknown>).scope, auth.user.id);
 
     // Validate FK references + relationships for the 4 provider/model fields.
     // Empty string clears the value (null); a non-empty string must reference an existing active record.
+    // Non-staff callers may only reference their OWN connections.
 
     // Text AI: defaultProviderId + defaultModelId
     if (d.defaultProviderId !== undefined && d.defaultProviderId !== '') {
-      const provider = await db.aiProvider.findUnique({ where: { id: d.defaultProviderId } });
-      if (!provider) return err('Default provider not found', 404, 'NOT_FOUND');
-      if (!provider.isActive) return err('Cannot set an inactive provider as the default', 400, 'PROVIDER_INACTIVE');
+      if (!staff) {
+        const ownErr = await assertOwnProvider(d.defaultProviderId, auth.user.id);
+        if (ownErr) return err(ownErr, ownErr.includes('own AI provider') ? 403 : 400, ownErr.includes('own AI provider') ? 'FORBIDDEN' : 'PROVIDER_INACTIVE');
+      } else {
+        const provider = await db.aiProvider.findUnique({ where: { id: d.defaultProviderId } });
+        if (!provider) return err('Default provider not found', 404, 'NOT_FOUND');
+        if (!provider.isActive) return err('Cannot set an inactive provider as the default', 400, 'PROVIDER_INACTIVE');
+      }
 
       if (d.defaultModelId !== undefined && d.defaultModelId !== '') {
         const model = await db.aiModel.findUnique({ where: { id: d.defaultModelId } });
@@ -128,9 +170,14 @@ export async function POST(request: NextRequest) {
 
     // Image AI: imageProviderId + imageModelId
     if (d.imageProviderId !== undefined && d.imageProviderId !== '') {
-      const provider = await db.aiProvider.findUnique({ where: { id: d.imageProviderId } });
-      if (!provider) return err('Image provider not found', 404, 'NOT_FOUND');
-      if (!provider.isActive) return err('Cannot set an inactive provider as the image default', 400, 'PROVIDER_INACTIVE');
+      if (!staff) {
+        const ownErr = await assertOwnProvider(d.imageProviderId, auth.user.id);
+        if (ownErr) return err(ownErr, ownErr.includes('own AI provider') ? 403 : 400, ownErr.includes('own AI provider') ? 'FORBIDDEN' : 'PROVIDER_INACTIVE');
+      } else {
+        const provider = await db.aiProvider.findUnique({ where: { id: d.imageProviderId } });
+        if (!provider) return err('Image provider not found', 404, 'NOT_FOUND');
+        if (!provider.isActive) return err('Cannot set an inactive provider as the image default', 400, 'PROVIDER_INACTIVE');
+      }
 
       if (d.imageModelId !== undefined && d.imageModelId !== '') {
         const model = await db.aiModel.findUnique({ where: { id: d.imageModelId } });
