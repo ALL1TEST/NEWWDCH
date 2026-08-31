@@ -100,6 +100,31 @@ export async function POST(request: NextRequest) {
     return fail('PLAN_NOT_AVAILABLE', assignable.reason ?? 'Plan is not available.', 403);
   }
 
+  // ---- Enabled billing periods are AUTHORITATIVE (server-side) ----
+  // The plan's enabled periods (admin checkboxes in Create/Edit Plan)
+  // control checkout: a DISABLED period is rejected here no matter what
+  // the client sends. This is the same data the Client Billing page and
+  // the Stripe sync use, so a disabled period can never be charged.
+  const planConfig = getPlanConfigSync(planId);
+  if (interval === 'monthly' && !planConfig.billingMonthly) {
+    return fail(
+      'BILLING_PERIOD_NOT_ENABLED',
+      `Monthly billing is not available for plan "${planId}". This plan only offers ${
+        planConfig.billingYearly ? 'yearly' : 'no'
+      } billing.`,
+      400,
+    );
+  }
+  if (interval === 'yearly' && !planConfig.billingYearly) {
+    return fail(
+      'BILLING_PERIOD_NOT_ENABLED',
+      `Yearly billing is not available for plan "${planId}". This plan only offers ${
+        planConfig.billingMonthly ? 'monthly' : 'no'
+      } billing.`,
+      400,
+    );
+  }
+
   // Stripe must be configured.
   if (!(await isStripeConfiguredAsync())) {
     return fail(

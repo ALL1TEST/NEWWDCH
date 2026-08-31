@@ -10,7 +10,8 @@
 //
 //   Basic Information: Name · Default/Fallback Currency (country/
 //   currency selector: 🇺🇸 United States — USD — $) · Auto Currency
-//   toggle · Monthly Price · Yearly Price · Billing Interval · Active
+//   toggle · Monthly/Yearly Price (only for enabled periods) · Billing
+//   Periods checkboxes · Active
 //   then: Stripe Billing (sync + status) · Feature Access · Usage
 //   Limits.
 //
@@ -95,10 +96,51 @@ import type {
 import {
   SELECTABLE_CURRENCIES,
   formatMoney,
+  type SelectableCurrency,
 } from '@/lib/platform/currency-catalog';
 import { useAuthStore } from '@/lib/stores/auth-store';
 
 type PlanPatch = Partial<PlanConfigData>;
+
+// -------------------- Flag + currency option rendering --------------------
+
+/** REAL flag image (self-hosted /flags/{countryCode}.svg). Emoji
+ *  flags are NOT used — they render as plain country-code text
+ *  ("GB", "US", "MA") on Windows, which reads as a code prefix in
+ *  the "[Flag] Country Name — CODE — Symbol" selector row. */
+function FlagImg({
+  countryCode,
+  className = 'h-3.5 w-5 shrink-0 rounded-[2px] object-cover',
+}: {
+  countryCode: string;
+  className?: string;
+}) {
+  return (
+    <img
+      src={`/flags/${countryCode.toLowerCase()}.svg`}
+      alt=""
+      aria-hidden
+      className={className}
+      loading="lazy"
+    />
+  );
+}
+
+/** One row of the Default Currency selector:
+ *  [flag image] Country Name — Currency Code — Currency Symbol
+ *  (e.g. "[🇬🇧] United Kingdom — GBP — £" — no country-code text
+ *  before the country name). */
+function CurrencyOption({ c }: { c: SelectableCurrency }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <FlagImg countryCode={c.countryCode} />
+      <span>{c.countryName}</span>
+      <span className="text-muted-foreground">
+        — {c.code} — {c.symbol}
+      </span>
+    </span>
+  );
+}
 
 // -------------------- helpers --------------------
 
@@ -110,6 +152,67 @@ function getPlanBadgeId(planId: string): 'free' | 'plus' | 'pro' | 'max' {
   // Legacy 'beta' plan id (pre-migration) → render as 'plus' badge.
   if (planId === 'beta') return 'plus';
   return 'free';
+}
+
+// -------------------- Billing-periods shared UI --------------------
+
+/** Billing Periods checkboxes — control which checkout options EXIST
+ *  for the plan. The selection drives the client billing page (only
+ *  enabled periods are shown), checkout validation (disabled periods
+ *  are rejected 400 server-side), and the Stripe sync (disabled
+ *  periods never get a Stripe Price). At least one must stay on. */
+function BillingPeriodsCheckboxes({
+  monthly,
+  yearly,
+  onMonthlyChange,
+  onYearlyChange,
+  idPrefix,
+}: {
+  monthly: boolean;
+  yearly: boolean;
+  onMonthlyChange: (v: boolean) => void;
+  onYearlyChange: (v: boolean) => void;
+  idPrefix: string;
+}) {
+  const valid = monthly || yearly;
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">Billing Periods</Label>
+      <div className="grid grid-cols-2 gap-2">
+        <label
+          htmlFor={`${idPrefix}-billing-monthly`}
+          className="flex items-center gap-2 rounded-md border p-2 cursor-pointer hover:bg-accent/40 transition-colors"
+        >
+          <input
+            id={`${idPrefix}-billing-monthly`}
+            type="checkbox"
+            className="h-4 w-4 accent-foreground"
+            checked={monthly}
+            onChange={(e) => onMonthlyChange(e.target.checked)}
+          />
+          <span className="text-xs font-medium">Monthly</span>
+        </label>
+        <label
+          htmlFor={`${idPrefix}-billing-yearly`}
+          className="flex items-center gap-2 rounded-md border p-2 cursor-pointer hover:bg-accent/40 transition-colors"
+        >
+          <input
+            id={`${idPrefix}-billing-yearly`}
+            type="checkbox"
+            className="h-4 w-4 accent-foreground"
+            checked={yearly}
+            onChange={(e) => onYearlyChange(e.target.checked)}
+          />
+          <span className="text-xs font-medium">Yearly</span>
+        </label>
+      </div>
+      {!valid && (
+        <p className="text-[10px] text-red-600 font-medium" role="alert">
+          At least one billing period (Monthly or Yearly) must be enabled.
+        </p>
+      )}
+    </div>
+  );
 }
 
 // -------------------- Price formatting --------------------
@@ -186,6 +289,17 @@ function PlanSummaryCard({
       ? plan.features
       : plan.entitlements.map((k) => ENTITLEMENT_LABELS[k as EntitlementKey] ?? k);
 
+  // The card shows the price for the plan's ENABLED billing periods:
+  //   - both periods   → follows the global Monthly/Yearly selector
+  //   - monthly only   → ALWAYS monthly (a disabled period never shows)
+  //   - yearly only    → ALWAYS yearly ("$X / year", no monthly option)
+  const effectiveInterval: 'monthly' | 'yearly' =
+    plan.billingMonthly && plan.billingYearly
+      ? billingInterval
+      : plan.billingMonthly
+        ? 'monthly'
+        : 'yearly';
+
   return (
     <>
       <div
@@ -246,8 +360,19 @@ function PlanSummaryCard({
                 {formatPriceSymbol(0, plan.currency)}
               </span>
             </div>
-          ) : billingInterval === 'yearly' ? (
-            // Yearly — INLINE: [LARGE $X.XX] [small / month]
+          ) : effectiveInterval === 'yearly' && !plan.billingMonthly ? (
+            // YEARLY-ONLY plan — there is no monthly option, so the
+            // yearly total IS the primary price ("$90 / year"). No
+            // monthly-equivalent is shown (that would advertise a
+            // monthly option the plan does not offer).
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
+                {formatPriceSymbol(plan.priceYearly, plan.currency)}
+              </span>
+              <span className="whitespace-nowrap text-sm text-muted-foreground">/ year</span>
+            </div>
+          ) : effectiveInterval === 'yearly' ? (
+            // Both periods — INLINE: [LARGE $X.XX] [small / month]
             // [small $X / year]. The monthly equivalent (priceYearly /
             // 12) is the dominant large price; the real yearly total
             // stays small/muted beside it.
@@ -377,7 +502,10 @@ function EditPlanDialog({
   const [autoCurrency, setAutoCurrency] = useState(plan.autoCurrency ?? true);
   const [priceMonthly, setPriceMonthly] = useState(String(plan.priceMonthly ?? 0));
   const [priceYearly, setPriceYearly] = useState(String(plan.priceYearly ?? 0));
-  const [interval, setInterval] = useState<'monthly' | 'yearly'>(plan.interval);
+  // ENABLED BILLING PERIODS — which checkout options exist for the
+  // plan (replaces the old single-value Billing Interval dropdown).
+  const [billingMonthly, setBillingMonthly] = useState(plan.billingMonthly ?? true);
+  const [billingYearly, setBillingYearly] = useState(plan.billingYearly ?? true);
   const [active, setActive] = useState(plan.active);
   const [entitlements, setEntitlements] = useState<string[]>(plan.entitlements);
   const [limits, setLimits] = useState<PlanLimits>(plan.limits);
@@ -400,6 +528,9 @@ function EditPlanDialog({
 
   const monthlyNum = Number(priceMonthly) || 0;
   const yearlyNum = Number(priceYearly) || 0;
+  // At least one billing period must stay enabled (2D: neither
+  // checked → cannot save — validated here AND server-side).
+  const periodsValid = billingMonthly || billingYearly;
 
   const reset = () => {
     setName(plan.name);
@@ -407,7 +538,8 @@ function EditPlanDialog({
     setAutoCurrency(plan.autoCurrency ?? true);
     setPriceMonthly(String(plan.priceMonthly ?? 0));
     setPriceYearly(String(plan.priceYearly ?? 0));
-    setInterval(plan.interval);
+    setBillingMonthly(plan.billingMonthly ?? true);
+    setBillingYearly(plan.billingYearly ?? true);
     setActive(plan.active);
     setEntitlements(plan.entitlements);
     setLimits(plan.limits);
@@ -470,8 +602,10 @@ function EditPlanDialog({
     },
   });
 
-  // A plan is free when its base price is 0 for both intervals.
-  const isFreeDerived = monthlyNum === 0 && yearlyNum === 0;
+  // A plan is free when the price is 0 for every ENABLED period
+  // (a disabled period's stored price is never charged).
+  const isFreeDerived =
+    (!billingMonthly || monthlyNum === 0) && (!billingYearly || yearlyNum === 0);
 
   const buildPatch = (): PlanPatch => {
     return {
@@ -483,7 +617,12 @@ function EditPlanDialog({
       autoCurrency,
       priceMonthly: monthlyNum,
       priceYearly: yearlyNum,
-      interval,
+      // Enabled billing periods — the backend derives the default
+      // cadence from them (single-period plans are pinned to their
+      // only period). NO interval field: the old Billing Interval
+      // dropdown logic is gone.
+      billingMonthly,
+      billingYearly,
       isFree: isFreeDerived,
       freePlanDurationDays: isFreeDerived ? (freePlanDurationDays.trim() === '' ? null : Number(freePlanDurationDays) || null) : null,
       // No pricesByCurrency / stripePriceIdsByCurrency in the patch:
@@ -520,11 +659,11 @@ function EditPlanDialog({
         <div className="space-y-5">
           {/* -------------------- Basic Information --------------------
               ONE base price configuration: Name · Default/Fallback
-              Currency (country/currency selector) · Auto Currency ·
-              Monthly Price · Yearly Price · Billing Interval · Active.
-              NO per-currency matrix — customers see their detected
-              currency's price server-side, with this currency as the
-              fallback. */}
+              Currency (country/currency selector) · Monthly/Yearly
+              Price (ONLY for enabled periods) · Billing Periods
+              checkboxes · Auto Currency · Active. NO per-currency
+              matrix — customers see their detected currency's price
+              server-side, with this currency as the fallback. */}
           <section className="space-y-3">
             <h4 className="text-sm font-semibold">Basic Information</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -545,13 +684,7 @@ function EditPlanDialog({
                   <SelectContent className="max-h-72">
                     {SELECTABLE_CURRENCIES.map((c) => (
                       <SelectItem key={c.code} value={c.code}>
-                        <span className="flex items-center gap-1.5">
-                          <span aria-hidden>{c.flag}</span>
-                          <span>{c.countryName}</span>
-                          <span className="text-muted-foreground">
-                            — {c.code} — {c.symbol}
-                          </span>
-                        </span>
+                        <CurrencyOption c={c} />
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -559,38 +692,57 @@ function EditPlanDialog({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Monthly Price</Label>
-                  <Badge variant="outline" className="text-[10px] font-mono">
-                    {currency}
-                  </Badge>
-                </div>
-                <Input
-                  type="number"
-                  min={0}
-                  value={priceMonthly}
-                  onChange={(e) => setPriceMonthly(e.target.value)}
-                  className="h-9"
-                />
+            {/* Price inputs — one per ENABLED billing period. A
+                disabled period shows NO price input (its stored value
+                is preserved server-side for when it is re-enabled). */}
+            {(billingMonthly || billingYearly) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {billingMonthly && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Monthly Price</Label>
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        {currency}
+                      </Badge>
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={priceMonthly}
+                      onChange={(e) => setPriceMonthly(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                )}
+                {billingYearly && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Yearly Price</Label>
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        {currency}
+                      </Badge>
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={priceYearly}
+                      onChange={(e) => setPriceYearly(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                )}
               </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Yearly Price</Label>
-                  <Badge variant="outline" className="text-[10px] font-mono">
-                    {currency}
-                  </Badge>
-                </div>
-                <Input
-                  type="number"
-                  min={0}
-                  value={priceYearly}
-                  onChange={(e) => setPriceYearly(e.target.value)}
-                  className="h-9"
-                />
-              </div>
-            </div>
+            )}
+
+            {/* Billing Periods — which checkout options EXIST for the
+                plan (monthly-only / yearly-only / both). */}
+            <BillingPeriodsCheckboxes
+              monthly={billingMonthly}
+              yearly={billingYearly}
+              onMonthlyChange={setBillingMonthly}
+              onYearlyChange={setBillingYearly}
+              idPrefix={`edit-${plan.planId}`}
+            />
 
             {/* Auto Currency — the customer's currency is detected from
                 their location and used when a price exists for it. The
@@ -617,35 +769,18 @@ function EditPlanDialog({
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Billing Interval</Label>
-                <Select
-                  value={interval}
-                  onValueChange={(v) => setInterval(v as 'monthly' | 'yearly')}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="monthly">monthly</SelectItem>
-                    <SelectItem value="yearly">yearly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center justify-between rounded-md border px-3 h-9 sm:mt-5">
-                <Label
-                  htmlFor="dialog-active"
-                  className="text-xs text-muted-foreground cursor-pointer"
-                >
-                  Active
-                </Label>
-                <Switch
-                  id="dialog-active"
-                  checked={active}
-                  onCheckedChange={setActive}
-                />
-              </div>
+            <div className="flex items-center justify-between rounded-md border px-3 h-9">
+              <Label
+                htmlFor="dialog-active"
+                className="text-xs text-muted-foreground cursor-pointer"
+              >
+                Active
+              </Label>
+              <Switch
+                id="dialog-active"
+                checked={active}
+                onCheckedChange={setActive}
+              />
             </div>
 
             {/* Free plan trial duration — shown only when the base
@@ -825,7 +960,7 @@ function EditPlanDialog({
           <Button
             size="sm"
             onClick={() => saveMutation.mutate(buildPatch())}
-            disabled={saveMutation.isPending}
+            disabled={saveMutation.isPending || !periodsValid}
           >
             {saveMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -877,7 +1012,10 @@ function CreatePlanDialog({
   const [autoCurrency, setAutoCurrency] = useState(true);
   const [priceMonthly, setPriceMonthly] = useState('0');
   const [priceYearly, setPriceYearly] = useState('0');
-  const [interval, setInterval] = useState<'monthly' | 'yearly'>('monthly');
+  // ENABLED BILLING PERIODS — same logic as the Edit Plan modal
+  // (which checkout options exist for the new plan).
+  const [billingMonthly, setBillingMonthly] = useState(true);
+  const [billingYearly, setBillingYearly] = useState(true);
   const [active, setActive] = useState(true);
   const [entitlements, setEntitlements] = useState<string[]>([]);
   const [limits, setLimits] = useState<PlanLimits>(EMPTY_LIMITS);
@@ -921,8 +1059,12 @@ function CreatePlanDialog({
 
   const monthlyNum = Number(priceMonthly) || 0;
   const yearlyNum = Number(priceYearly) || 0;
-  // A plan is free when its base price is 0 for both intervals.
-  const isFreeDerived = monthlyNum === 0 && yearlyNum === 0;
+  // At least one billing period must be enabled (2D) — same rule as
+  // the Edit Plan modal and the backend validation.
+  const periodsValid = billingMonthly || billingYearly;
+  // A plan is free when the price is 0 for every ENABLED period.
+  const isFreeDerived =
+    (!billingMonthly || monthlyNum === 0) && (!billingYearly || yearlyNum === 0);
 
   const createMutation = useMutation({
     mutationFn: () => {
@@ -935,7 +1077,10 @@ function CreatePlanDialog({
         autoCurrency,
         priceMonthly: monthlyNum,
         priceYearly: yearlyNum,
-        interval,
+        // Enabled billing periods — the backend derives the default
+        // cadence from them (no interval field).
+        billingMonthly,
+        billingYearly,
         isFree: isFreeDerived,
         freePlanDurationDays: isFreeDerived && freePlanDurationDays.trim() !== '' ? Number(freePlanDurationDays) || null : null,
         active,
@@ -965,6 +1110,7 @@ function CreatePlanDialog({
     name.trim().length > 0 &&
     effectivePlanId.length > 0 &&
     !planIdTaken &&
+    periodsValid &&
     !createMutation.isPending;
 
   return (
@@ -982,7 +1128,10 @@ function CreatePlanDialog({
         <div className="space-y-5">
           {/* -------------------- Basic Information --------------------
               ONE base price configuration — same shape as the Edit
-              Plan modal. NO per-currency matrix. */}
+              Plan modal: Name · Plan ID · Default/Fallback Currency ·
+              Monthly/Yearly Price (only for enabled periods) · Billing
+              Periods checkboxes · Auto Currency · Active. NO
+              per-currency matrix. */}
           <section className="space-y-3">
             <h4 className="text-sm font-semibold">Basic Information</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -995,35 +1144,6 @@ function CreatePlanDialog({
                   placeholder="Enterprise"
                 />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Default / Fallback Currency</Label>
-                <Select
-                  value={currency}
-                  onValueChange={(v) => {
-                    setPickedCurrency(v);
-                    setCurrencyTouched(true);
-                  }}
-                >
-                  <SelectTrigger className="h-9" aria-label="Default currency">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-72">
-                    {SELECTABLE_CURRENCIES.map((c) => (
-                      <SelectItem key={c.code} value={c.code}>
-                        <span className="flex items-center gap-1.5">
-                          <span aria-hidden>{c.flag}</span>
-                          <span>{c.countryName}</span>
-                          <span className="text-muted-foreground">
-                            — {c.code} — {c.symbol}
-                          </span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Plan ID</Label>
                 <Input
@@ -1045,68 +1165,95 @@ function CreatePlanDialog({
                   </p>
                 )}
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Billing Interval</Label>
-                <Select
-                  value={interval}
-                  onValueChange={(v) => setInterval(v as 'monthly' | 'yearly')}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="monthly">monthly</SelectItem>
-                    <SelectItem value="yearly">yearly</SelectItem>
-                  </SelectContent>
-                </Select>
-                <div className="flex items-center justify-between rounded-md border px-3 h-9 mt-1">
-                  <Label
-                    htmlFor="create-active"
-                    className="text-xs text-muted-foreground cursor-pointer"
-                  >
-                    Active
-                  </Label>
-                  <Switch
-                    id="create-active"
-                    checked={active}
-                    onCheckedChange={setActive}
-                  />
-                </div>
-              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Monthly Price</Label>
-                  <Badge variant="outline" className="text-[10px] font-mono">
-                    {currency}
-                  </Badge>
-                </div>
-                <Input
-                  type="number"
-                  min={0}
-                  value={priceMonthly}
-                  onChange={(e) => setPriceMonthly(e.target.value)}
-                  className="h-9"
-                />
+                <Label className="text-xs">Default / Fallback Currency</Label>
+                <Select
+                  value={currency}
+                  onValueChange={(v) => {
+                    setPickedCurrency(v);
+                    setCurrencyTouched(true);
+                  }}
+                >
+                  <SelectTrigger className="h-9" aria-label="Default currency">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {SELECTABLE_CURRENCIES.map((c) => (
+                      <SelectItem key={c.code} value={c.code}>
+                        <CurrencyOption c={c} />
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Yearly Price</Label>
-                  <Badge variant="outline" className="text-[10px] font-mono">
-                    {currency}
-                  </Badge>
-                </div>
-                <Input
-                  type="number"
-                  min={0}
-                  value={priceYearly}
-                  onChange={(e) => setPriceYearly(e.target.value)}
-                  className="h-9"
+              <div className="flex items-center justify-between rounded-md border px-3 h-9 self-end">
+                <Label
+                  htmlFor="create-active"
+                  className="text-xs text-muted-foreground cursor-pointer"
+                >
+                  Active
+                </Label>
+                <Switch
+                  id="create-active"
+                  checked={active}
+                  onCheckedChange={setActive}
                 />
               </div>
             </div>
+
+            {/* Price inputs — one per ENABLED billing period. A
+                disabled period shows NO price input. */}
+            {(billingMonthly || billingYearly) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {billingMonthly && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Monthly Price</Label>
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        {currency}
+                      </Badge>
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={priceMonthly}
+                      onChange={(e) => setPriceMonthly(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                )}
+                {billingYearly && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Yearly Price</Label>
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        {currency}
+                      </Badge>
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={priceYearly}
+                      onChange={(e) => setPriceYearly(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Billing Periods — which checkout options EXIST for the
+                new plan (same logic as the Edit Plan modal). */}
+            <BillingPeriodsCheckboxes
+              monthly={billingMonthly}
+              yearly={billingYearly}
+              onMonthlyChange={setBillingMonthly}
+              onYearlyChange={setBillingYearly}
+              idPrefix="create"
+            />
 
             {/* Auto Currency — same setting as the Edit Plan modal. */}
             <div className="flex items-start justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2.5">

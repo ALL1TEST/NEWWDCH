@@ -2124,7 +2124,14 @@ model PlanConfig {
   // Real Stripe Price IDs per (currency, interval). The default
   // currency's IDs are mirrored in stripePriceIdMonthly/Yearly below.
   stripePriceIdsByCurrency String @default("{}")
-  interval             String   @default("monthly") // monthly | yearly — default cadence; client can pick
+  // ENABLED BILLING PERIODS — control which checkout options exist for
+  // this plan (admin checkboxes in the Create/Edit Plan modal). The
+  // client billing page, the checkout route, and the Stripe sync all
+  // respect them: a disabled period never shows a price, never creates
+  // / selects a Stripe Price, and checkout with it is rejected 400.
+  billingMonthly      Boolean  @default(true)
+  billingYearly       Boolean  @default(true)
+  interval             String   @default("monthly") // DERIVED default cadence — always an ENABLED period (monthly when only monthly is on, yearly when only yearly is on, admin's pick when both)
   isFree               Boolean  @default(false)
   freePlanDurationDays Int? // null = unlimited; positive N = trial duration in days for free plans
   stripePriceIdMonthly String? // snapshot for default currency; authoritative IDs in stripePriceIdsByCurrency

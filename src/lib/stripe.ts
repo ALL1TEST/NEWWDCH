@@ -203,13 +203,25 @@ export async function getPublicStripeConfig(): Promise<{
   };
 }
 
+/** True when the billing period is ENABLED on the plan row (a
+ *  disabled period must never resolve a Stripe Price). Rows written
+ *  before the billing-periods migration default to both enabled. */
+function isIntervalEnabled(
+  row: { billingMonthly: boolean | null; billingYearly: boolean | null },
+  interval: 'monthly' | 'yearly',
+): boolean {
+  if (interval === 'monthly') return row.billingMonthly ?? true;
+  return row.billingYearly ?? true;
+}
+
 /**
  * Resolve the Stripe Price ID for a (planId, billingInterval) pair.
  * Reads from PlanConfig.stripePriceIdMonthly / stripePriceIdYearly
  * (set via Platform Admin → Edit Plan).
  *
  * Returns null when the plan has no Stripe price wired for the
- * requested interval — the caller MUST refuse to fake checkout.
+ * requested interval OR when that billing period is DISABLED on the
+ * plan — the caller MUST refuse to fake checkout.
  *
  * NOTE: this returns the DEFAULT currency's Stripe Price ID. For
  * multi-currency checkout, use resolveStripePriceIdForCurrency()
@@ -223,6 +235,9 @@ export async function resolveStripePriceId(
   const { db } = await import('@/lib/db');
   const row = await db.planConfig.findUnique({ where: { planId } });
   if (!row) return null;
+  // A disabled billing period never resolves a Stripe Price — even a
+  // legacy wired ID is not selectable.
+  if (!isIntervalEnabled(row, interval)) return null;
   if (interval === 'yearly') return row.stripePriceIdYearly ?? null;
   return row.stripePriceIdMonthly ?? null;
 }
@@ -245,6 +260,8 @@ export async function resolveStripePriceIdForCurrency(
   const { db } = await import('@/lib/db');
   const row = await db.planConfig.findUnique({ where: { planId } });
   if (!row) return null;
+  // A disabled billing period never resolves a Stripe Price.
+  if (!isIntervalEnabled(row, interval)) return null;
   const curUpper = currency.trim().toUpperCase();
   // 1. Try the authoritative per-currency map.
   let byCurrency: Record<string, { monthly: string | null; yearly: string | null }> = {};
@@ -287,6 +304,10 @@ export async function resolveStripePriceIdStrict(
   const { db } = await import('@/lib/db');
   const row = await db.planConfig.findUnique({ where: { planId } });
   if (!row) return null;
+  // A disabled billing period NEVER resolves a Stripe Price — checkout
+  // for it is rejected upstream, and even a legacy wired ID is not
+  // selectable (the plan's enabled billing periods are authoritative).
+  if (!isIntervalEnabled(row, interval)) return null;
   const curUpper = currency.trim().toUpperCase();
   let byCurrency: Record<string, { monthly: string | null; yearly: string | null }> = {};
   try {
@@ -635,6 +656,12 @@ export interface SyncMultiInput {
   pricesByCurrency: Record<string, { monthly: number; yearly: number }>;
   /** Existing Stripe Price IDs per currency. */
   stripePriceIdsByCurrency?: Record<string, { monthly: string | null; yearly: string | null }>;
+  /** The plan's ENABLED billing periods. A DISABLED period never gets
+   *  a Stripe Price created — its ID is dropped from the returned map
+   *  (null) so it can never be selected at checkout. The Stripe Price
+   *  OBJECT is left active (existing subscriptions may reference it).
+   *  Defaults to both periods (legacy callers). */
+  enabledIntervals?: ('monthly' | 'yearly')[];
 }
 
 export interface SyncMultiResult {
@@ -677,6 +704,13 @@ export async function syncPlanToStripeMulti(
   // current price config — so we preserve the IDs (legacy compat).
   const existingMap = input.stripePriceIdsByCurrency ?? {};
   const allCurrencies = Array.from(new Set([...currencies, ...Object.keys(existingMap)]));
+  // Enabled billing periods — disabled periods get NO Stripe Price and
+  // their ID is dropped from the returned map (never selectable).
+  const enabled = new Set<'monthly' | 'yearly'>(
+    input.enabledIntervals && input.enabledIntervals.length > 0
+      ? input.enabledIntervals
+      : ['monthly', 'yearly'],
+  );
 
   for (const rawCur of allCurrencies) {
     const curUpper = rawCur.toUpperCase();
@@ -687,6 +721,14 @@ export async function syncPlanToStripeMulti(
       yearly: existing.yearly,
     };
     for (const interval of ['monthly', 'yearly'] as const) {
+      // DISABLED BILLING PERIOD: never create a Stripe Price, and drop
+      // any existing ID from the returned map so checkout can never
+      // select it. The Stripe Price object itself is left untouched
+      // (existing subscriptions may still reference it).
+      if (!enabled.has(interval)) {
+        out[interval] = null;
+        continue;
+      }
       const amount = interval === 'monthly' ? price.monthly : price.yearly;
       const expectedAmount = amount * 100;
       // ZERO PRICE: skip creating a new Price. Keep the existing ID

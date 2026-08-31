@@ -533,6 +533,10 @@ export function validatePlanConfigInput(input: {
   /** Authoritative per-currency Stripe Price IDs. */
   stripePriceIdsByCurrency?: Record<string, { monthly: string | null; yearly: string | null }>;
   interval?: string;
+  /** Monthly billing available for this plan. */
+  billingMonthly?: boolean;
+  /** Yearly billing available for this plan. */
+  billingYearly?: boolean;
   freePlanDurationDays?: number | null;
   limits?: Partial<{
     maxSites: number;
@@ -586,6 +590,23 @@ export function validatePlanConfigInput(input: {
   }
   if (input.interval !== undefined && !['monthly', 'yearly'].includes(input.interval)) {
     errors.push('Billing interval must be "monthly" or "yearly".');
+  }
+  if (input.billingMonthly !== undefined && typeof input.billingMonthly !== 'boolean') {
+    errors.push('billingMonthly must be a boolean.');
+  }
+  if (input.billingYearly !== undefined && typeof input.billingYearly !== 'boolean') {
+    errors.push('billingYearly must be a boolean.');
+  }
+  // At least one billing period must be enabled — both cannot be false
+  // (checked on the MERGED patch state by the API routes; here we only
+  // reject the explicit both-false input).
+  if (
+    input.billingMonthly !== undefined &&
+    input.billingYearly !== undefined &&
+    !input.billingMonthly &&
+    !input.billingYearly
+  ) {
+    errors.push('At least one billing period (Monthly or Yearly) must be enabled.');
   }
   if (
     input.freePlanDurationDays !== undefined &&

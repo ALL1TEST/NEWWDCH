@@ -50,6 +50,17 @@ export async function POST(request: NextRequest) {
   if (errors.length > 0) {
     return fail('VALIDATION_ERROR', errors.join(' '), 400);
   }
+  // At least one billing period must be enabled (omitted fields default
+  // to true — so this only fires when the caller explicitly disabled both).
+  const createMonthly = body.billingMonthly ?? true;
+  const createYearly = body.billingYearly ?? true;
+  if (!createMonthly && !createYearly) {
+    return fail(
+      'VALIDATION_ERROR',
+      'At least one billing period must be enabled — check Monthly and/or Yearly.',
+      400,
+    );
+  }
   try {
     const created = await createPlanConfig({
       planId,
@@ -64,6 +75,8 @@ export async function POST(request: NextRequest) {
       pricesByCurrency: body.pricesByCurrency,
       stripePriceIdsByCurrency: body.stripePriceIdsByCurrency,
       interval: body.interval,
+      billingMonthly: body.billingMonthly,
+      billingYearly: body.billingYearly,
       isFree: body.isFree,
       freePlanDurationDays: body.freePlanDurationDays,
       stripePriceIdMonthly: body.stripePriceIdMonthly,

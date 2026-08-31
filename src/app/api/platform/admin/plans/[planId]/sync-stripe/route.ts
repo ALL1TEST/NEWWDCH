@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { requireOwner, ok, fail, getClientIp } from '@/lib/platform/platform-auth';
-import { getPlanConfigSync, savePlanConfig, type PlanConfigInput } from '@/lib/platform/plan-config';
+import { getPlanConfigSync, savePlanConfig, enabledIntervalsOf, type PlanConfigInput } from '@/lib/platform/plan-config';
 import {
   isStripeConfiguredAsync,
   getStripeClient,
@@ -74,6 +74,9 @@ export async function POST(request: NextRequest) {
       defaultCurrency: plan.currency,
       pricesByCurrency: plan.pricesByCurrency,
       stripePriceIdsByCurrency: plan.stripePriceIdsByCurrency,
+      // Only ENABLED billing periods get Stripe Prices — a disabled
+      // period never creates one and its ID is dropped (unselectable).
+      enabledIntervals: enabledIntervalsOf(plan),
     });
 
     // Snapshot the default currency's IDs so we can mirror them into

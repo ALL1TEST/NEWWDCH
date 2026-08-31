@@ -53,6 +53,10 @@ export interface Plan {
   pricesByCurrency: Record<string, { monthly: number; yearly: number }>;
   /** Per-currency Stripe Price IDs. */
   stripePriceIdsByCurrency: Record<string, { monthly: string | null; yearly: string | null }>;
+  /** Monthly billing available for this plan (admin checkbox). */
+  billingMonthly: boolean;
+  /** Yearly billing available for this plan (admin checkbox). */
+  billingYearly: boolean;
   interval: BillingInterval;
   isFree: boolean;
   active: boolean;
@@ -182,6 +186,8 @@ function toPlan(d: PlanConfigData): Plan {
     autoCurrency: d.autoCurrency,
     pricesByCurrency: d.pricesByCurrency,
     stripePriceIdsByCurrency: d.stripePriceIdsByCurrency,
+    billingMonthly: d.billingMonthly,
+    billingYearly: d.billingYearly,
     interval: d.interval,
     isFree: d.isFree,
     active: d.active,
@@ -1472,6 +1478,8 @@ const INTERNAL_PLAN: Plan = {
     MAD: { monthly: 0, yearly: 0 },
   },
   stripePriceIdsByCurrency: {},
+  billingMonthly: true,
+  billingYearly: false,
   interval: 'monthly',
   isFree: true,
   active: true,

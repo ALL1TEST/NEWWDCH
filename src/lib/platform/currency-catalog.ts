@@ -12,7 +12,10 @@
 // SELECTOR: SELECTABLE_CURRENCIES is the de-duplicated list of
 // currencies (one representative country per currency). The plan
 // stores ONE default/fallback currency code; the selector's value
-// IS that code.
+// IS that code. Flags render as self-hosted SVG images from
+// /flags/{countryCode}.svg — NOT emoji (emoji flags render as
+// plain country-code text like "GB" on Windows, which reads as a
+// duplicate code prefix in "[Flag] Country — CODE — Symbol").
 //
 // PRICE DISPLAY: formatMoney(amount, code) renders "$9" / "€9" /
 // "CHF 9" / "90 MAD" — symbol prefix for symbol currencies, code
@@ -207,6 +210,9 @@ export function currencySymbolOf(code: string): string {
 export interface SelectableCurrency {
   /** The currency code — this is the stored plan default currency. */
   code: string;
+  /** ISO country code of the representative country (drives the
+   *  self-hosted flag image: /flags/{countryCode}.svg). */
+  countryCode: string;
   flag: string;
   countryName: string;
   /** Native symbol shown in the selector (MAD → 'د.م.'). */
@@ -226,6 +232,7 @@ export const SELECTABLE_CURRENCIES: SelectableCurrency[] = (() => {
     seen.add(code);
     out.push({
       code,
+      countryCode: e.country.toUpperCase(),
       flag: e.flag,
       countryName: e.countryName,
       symbol: CURRENCY_SYMBOL[code] ?? e.symbol,

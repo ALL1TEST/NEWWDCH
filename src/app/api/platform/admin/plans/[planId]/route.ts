@@ -27,6 +27,19 @@ export async function PUT(request: NextRequest) {
     return fail('VALIDATION_ERROR', errors.join(' '), 400);
   }
 
+  // Billing periods are validated on the MERGED state: a patch may turn
+  // one off, but at least one of Monthly / Yearly must remain enabled.
+  const currentPlan = getPlanConfigSync(planId);
+  const mergedMonthly = body.billingMonthly ?? currentPlan.billingMonthly;
+  const mergedYearly = body.billingYearly ?? currentPlan.billingYearly;
+  if (!mergedMonthly && !mergedYearly) {
+    return fail(
+      'VALIDATION_ERROR',
+      'At least one billing period must be enabled — check Monthly and/or Yearly.',
+      400,
+    );
+  }
+
   const before = getPlanConfigSync(planId);
   const updated = await savePlanConfig(planId, body);
   if (!updated) return fail('NOT_FOUND', 'Plan not found.', 404);

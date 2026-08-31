@@ -51,6 +51,34 @@ export interface PlanLimits {
 
 export type BillingInterval = 'monthly' | 'yearly';
 
+/** The billing periods enabled on a plan (at least one, enforced).
+ *  A disabled period: not shown on the Client Billing page, rejected
+ *  at checkout (400 BILLING_PERIOD_NOT_ENABLED), and never gets a
+ *  Stripe Price created or selected. */
+export function enabledIntervalsOf(plan: {
+  billingMonthly: boolean;
+  billingYearly: boolean;
+}): BillingInterval[] {
+  const out: BillingInterval[] = [];
+  if (plan.billingMonthly) out.push('monthly');
+  if (plan.billingYearly) out.push('yearly');
+  return out;
+}
+
+/** Clamp a requested default cadence to an ENABLED period:
+ *  only monthly on → 'monthly'; only yearly on → 'yearly'; both on
+ *  → the requested value. (Neither enabled is rejected upstream —
+ *  here it falls back to the requested value.) */
+function normalizeInterval(
+  requested: BillingInterval,
+  billingMonthly: boolean,
+  billingYearly: boolean,
+): BillingInterval {
+  if (billingMonthly && !billingYearly) return 'monthly';
+  if (!billingMonthly && billingYearly) return 'yearly';
+  return requested;
+}
+
 /** Per-currency price for a plan: monthly + yearly in MAJOR units
  *  (e.g. 49 = 49 USD). 0 = free for that interval. */
 export interface CurrencyPrice {
@@ -90,7 +118,16 @@ export interface PlanConfigData {
   pricesByCurrency: PricesByCurrency;
   /** Per-currency Stripe Price IDs (maintained by the Stripe sync). */
   stripePriceIdsByCurrency: StripePriceIdsByCurrency;
-  /** Default cadence; the client can pick monthly/yearly per subscription. */
+  /** ENABLED BILLING PERIODS — which checkout options exist for this
+   *  plan. At least one must be true (enforced on create/update).
+   *  Controls the Client Billing page, checkout validation, and the
+   *  Stripe sync (a disabled period never creates/selects a Price). */
+  billingMonthly: boolean;
+  billingYearly: boolean;
+  /** DERIVED default cadence — always an ENABLED period: 'monthly'
+   *  when only monthly is enabled, 'yearly' when only yearly is
+   *  enabled, and the admin's pick when both are enabled. Clients
+   *  with both periods can switch between them. */
   interval: BillingInterval;
   isFree: boolean;
   /** null = unlimited free access; positive N = trial duration in days for free plans. */
@@ -155,6 +192,8 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     autoCurrency: true,
     pricesByCurrency: { ...PRICES_FREE },
     stripePriceIdsByCurrency: {},
+    billingMonthly: true,
+    billingYearly: true,
     interval: 'monthly',
     isFree: true,
     freePlanDurationDays: null, // unlimited
@@ -176,6 +215,8 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     autoCurrency: true,
     pricesByCurrency: { ...PRICES_PLUS },
     stripePriceIdsByCurrency: {},
+    billingMonthly: true,
+    billingYearly: true,
     interval: 'monthly',
     isFree: false,
     freePlanDurationDays: null,
@@ -197,6 +238,8 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     autoCurrency: true,
     pricesByCurrency: { ...PRICES_PRO },
     stripePriceIdsByCurrency: {},
+    billingMonthly: true,
+    billingYearly: true,
     interval: 'monthly',
     isFree: false,
     freePlanDurationDays: null,
@@ -218,6 +261,8 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     autoCurrency: true,
     pricesByCurrency: { ...PRICES_MAX },
     stripePriceIdsByCurrency: {},
+    billingMonthly: true,
+    billingYearly: true,
     interval: 'monthly',
     isFree: false,
     freePlanDurationDays: null,
@@ -325,6 +370,8 @@ type PlanConfigRow = {
   autoCurrency: boolean;
   pricesByCurrency: string;
   stripePriceIdsByCurrency: string;
+  billingMonthly: boolean;
+  billingYearly: boolean;
   interval: string;
   isFree: boolean;
   freePlanDurationDays: number | null;
@@ -405,7 +452,15 @@ function rowToData(row: PlanConfigRow): PlanConfigData {
     autoCurrency: row.autoCurrency ?? true,
     pricesByCurrency,
     stripePriceIdsByCurrency,
-    interval: (row.interval === 'yearly' ? 'yearly' : 'monthly') as BillingInterval,
+    billingMonthly: row.billingMonthly ?? true,
+    billingYearly: row.billingYearly ?? true,
+    // Normalize the default cadence to an ENABLED period (defensive:
+    // legacy rows / stale values never advertise a disabled period).
+    interval: normalizeInterval(
+      (row.interval === 'yearly' ? 'yearly' : 'monthly') as BillingInterval,
+      row.billingMonthly ?? true,
+      row.billingYearly ?? true,
+    ),
     isFree: row.isFree,
     freePlanDurationDays: row.freePlanDurationDays,
     stripePriceIdMonthly: row.stripePriceIdMonthly,
@@ -429,6 +484,8 @@ function dataToRow(d: PlanConfigData) {
     autoCurrency: d.autoCurrency,
     pricesByCurrency: JSON.stringify(d.pricesByCurrency ?? {}),
     stripePriceIdsByCurrency: JSON.stringify(d.stripePriceIdsByCurrency ?? {}),
+    billingMonthly: d.billingMonthly,
+    billingYearly: d.billingYearly,
     interval: d.interval,
     isFree: d.isFree,
     freePlanDurationDays: d.freePlanDurationDays,
@@ -626,6 +683,10 @@ export interface PlanConfigInput {
   /** Authoritative per-currency Stripe Price IDs: { USD: { monthly, yearly }, ... }. */
   stripePriceIdsByCurrency?: StripePriceIdsByCurrency;
   interval?: BillingInterval;
+  /** Monthly billing available for this plan. */
+  billingMonthly?: boolean;
+  /** Yearly billing available for this plan. */
+  billingYearly?: boolean;
   isFree?: boolean;
   freePlanDurationDays?: number | null;
   active?: boolean;
@@ -703,6 +764,17 @@ function mergePlanPatch(current: PlanConfigData, patch: PlanConfigInput, default
         ? defIds.yearly
         : current.stripePriceIdYearly;
   const isFree = patch.isFree ?? current.isFree;
+  // ---- Billing periods ----
+  const billingMonthly = patch.billingMonthly ?? current.billingMonthly;
+  const billingYearly = patch.billingYearly ?? current.billingYearly;
+  // The default cadence must be an ENABLED period (single-period plans
+  // are pinned to their only period; both-period plans keep the
+  // admin's requested / current cadence).
+  const interval = normalizeInterval(
+    patch.interval ?? current.interval,
+    billingMonthly,
+    billingYearly,
+  );
   return {
     planId: current.planId,
     name: patch.name ?? current.name,
@@ -712,7 +784,9 @@ function mergePlanPatch(current: PlanConfigData, patch: PlanConfigInput, default
     autoCurrency: patch.autoCurrency ?? current.autoCurrency,
     pricesByCurrency,
     stripePriceIdsByCurrency,
-    interval: patch.interval ?? current.interval,
+    billingMonthly,
+    billingYearly,
+    interval,
     isFree,
     freePlanDurationDays: patch.freePlanDurationDays ?? current.freePlanDurationDays,
     stripePriceIdMonthly,
@@ -760,9 +834,12 @@ export async function savePlanConfig(planId: string, patch: PlanConfigInput): Pr
   await hydrate();
 
   // ---- AUTO-SYNC TO STRIPE (multi-currency) ----
-  // Best-effort — never throws.
+  // Best-effort — never throws. Only ENABLED billing periods get
+  // Stripe Prices (a disabled period never creates one).
   const hasAnyPaidCurrency = Object.values(next.pricesByCurrency).some(
-    (p) => p.monthly > 0 || p.yearly > 0,
+    (p) =>
+      (next.billingMonthly && p.monthly > 0) ||
+      (next.billingYearly && p.yearly > 0),
   );
   if (!adminTouchedStripePriceIds && !next.isFree && hasAnyPaidCurrency) {
     try {
@@ -775,6 +852,8 @@ export async function savePlanConfig(planId: string, patch: PlanConfigInput): Pr
           defaultCurrency: finalCurrency,
           pricesByCurrency: next.pricesByCurrency,
           stripePriceIdsByCurrency: next.stripePriceIdsByCurrency,
+          // Only the ENABLED billing periods get Stripe Prices.
+          enabledIntervals: enabledIntervalsOf(next),
         });
         // Persist the resolved Stripe Price IDs back onto the row when they changed.
         const snapshot = syncResult.stripePriceIdsByCurrency[finalCurrency] ?? { monthly: null, yearly: null };
@@ -832,6 +911,8 @@ export async function createPlanConfig(
   pricesByCurrency[curUpper] = { monthly: priceMonthly, yearly: priceYearly };
   const stripePriceIdsByCurrency: StripePriceIdsByCurrency = input.stripePriceIdsByCurrency ?? {};
   const defIds = stripePriceIdsByCurrency[curUpper] ?? { monthly: null, yearly: null };
+  const billingMonthly = input.billingMonthly ?? true;
+  const billingYearly = input.billingYearly ?? true;
   const data: PlanConfigData = {
     planId: input.planId,
     name: input.name,
@@ -841,7 +922,9 @@ export async function createPlanConfig(
     autoCurrency: input.autoCurrency ?? true,
     pricesByCurrency,
     stripePriceIdsByCurrency,
-    interval: input.interval ?? 'monthly',
+    billingMonthly,
+    billingYearly,
+    interval: normalizeInterval(input.interval ?? 'monthly', billingMonthly, billingYearly),
     isFree: input.isFree ?? false,
     freePlanDurationDays: input.freePlanDurationDays ?? null,
     stripePriceIdMonthly: input.stripePriceIdMonthly !== undefined ? input.stripePriceIdMonthly : defIds.monthly,
@@ -869,7 +952,9 @@ export async function createPlanConfig(
     'stripePriceIdYearly' in input ||
     'stripePriceIdsByCurrency' in input;
   const hasAnyPaidCurrency = Object.values(data.pricesByCurrency).some(
-    (p) => p.monthly > 0 || p.yearly > 0,
+    (p) =>
+      (data.billingMonthly && p.monthly > 0) ||
+      (data.billingYearly && p.yearly > 0),
   );
   if (!adminTouchedStripePriceIds && !data.isFree && hasAnyPaidCurrency) {
     try {
@@ -882,6 +967,8 @@ export async function createPlanConfig(
           defaultCurrency: curUpper,
           pricesByCurrency: data.pricesByCurrency,
           stripePriceIdsByCurrency: data.stripePriceIdsByCurrency,
+          // Only the ENABLED billing periods get Stripe Prices.
+          enabledIntervals: enabledIntervalsOf(data),
         });
         const snapshot = syncResult.stripePriceIdsByCurrency[curUpper] ?? { monthly: null, yearly: null };
         const changed =
