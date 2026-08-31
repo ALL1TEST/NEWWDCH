@@ -69,13 +69,13 @@ export interface Plan {
    *  a plan may have either, both, or neither. */
   entitlements: string[];
   /** Plan usage limits. -1 = unlimited. Only platform-controlled resources:
-   *  maxSites, storageBytes, and the Platform AI usage limits (applicable
-   * only while the plan uses Platform AI). */
+   *  maxSites, storageBytes, and the Platform AI usage limits (article +
+   * image generations per month, applicable only while the plan uses
+   * Platform AI — AI words/tokens are never metered). */
   limits: {
     maxSites: number;
     storageBytes: number;
     aiArticlesPerMonth: number;
-    aiWordsPerMonth: number;
     aiImagesPerMonth: number;
   };
 }
@@ -1497,7 +1497,7 @@ const INTERNAL_PLAN: Plan = {
   // as a separate feature: Client's Own AI API already represents the
   // client's own-provider/API access.
   entitlements: ['automation', 'ai_platform', 'ai_client', 'advanced_analytics', 'comments', 'audit_log', 'advanced_seo', 'newsletter', 'email_templates', 'backups'],
-  limits: { maxSites: -1, storageBytes: -1, aiArticlesPerMonth: -1, aiWordsPerMonth: -1, aiImagesPerMonth: -1 },
+  limits: { maxSites: -1, storageBytes: -1, aiArticlesPerMonth: -1, aiImagesPerMonth: -1 },
 };
 
 interface BillingUser {

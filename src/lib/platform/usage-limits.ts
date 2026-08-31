@@ -1,9 +1,13 @@
 // ============================================================
 // USAGE LIMITS — server-side plan-limit enforcement.
 // ============================================================
-// Every resource that is plan-limited (sites, storage, AI words,
-// AI articles, automation runs) is checked here before a new
-// resource is created. Owner / billing-bypass users are unlimited.
+// Every resource that is plan-limited (sites, storage, AI articles,
+// AI images) is checked here before a new resource is created.
+// Owner / billing-bypass users are unlimited.
+//
+// NOTE: AI usage is metered by GENERATIONS only — article and image
+// generations. There is NO AI-words/tokens limit anymore (the former
+// aiWordsPerMonth limit was removed: AI output length is not metered).
 //
 // The plan is resolved via:
 //   1. Owner bypass → unlimited
@@ -24,13 +28,13 @@ import { getUserSubscription } from './subscription-data';
 
 // Only resources with a REAL, server-side enforcement system are listed.
 // maxSites / storageBytes are backed by real tables (Site, Media). The
-// Platform AI usage limits (articles / words / images per month) are
-// backed by the AiLog usage tracker and enforced on every AI route —
-// but ONLY while the user's plan includes Platform AI (Client's Own
-// AI API-only plans are never counted/limited: the client pays their
+// Platform AI usage limits (articles / images per month) are backed by
+// the AiLog usage tracker and enforced on every AI route — but ONLY
+// while the user's plan includes Platform AI (Client's Own AI
+// API-only plans are never counted/limited: the client pays their
 // own provider).
 export type LimitResource = 'sites' | 'storageBytes';
-export type AiLimitResource = 'aiArticles' | 'aiWords' | 'aiImages';
+export type AiLimitResource = 'aiArticles' | 'aiImages';
 
 export interface LimitCheck {
   ok: boolean;
@@ -73,8 +77,6 @@ export async function getEffectiveAiMode(user: EntitlementUser): Promise<Effecti
 export interface AiMonthlyUsage {
   /** successful AI text generations (articles/rewrites/ideas/chat) this calendar month */
   articles: number;
-  /** generated words (sum of output tokens) this calendar month */
-  words: number;
   /** generated images this calendar month */
   images: number;
 }
@@ -84,7 +86,8 @@ export interface AiMonthlyUsage {
  *  "[IMAGE] " marker on the question field (the ai-service convention),
  *  and each image log row's response JSON carries `imagesGenerated` —
  *  so the image count is the SUM of generated images, not the number
- *  of log rows (one row may represent up to 10 images). */
+ *  of log rows (one row may represent up to 10 images). Words/tokens
+ *  are NOT tracked here — AI usage is metered by generations only. */
 export async function getAiMonthlyUsage(userId: string): Promise<AiMonthlyUsage> {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -93,13 +96,12 @@ export async function getAiMonthlyUsage(userId: string): Promise<AiMonthlyUsage>
     createdAt: { gte: monthStart },
     status: 'success',
   } as const;
-  const [imageRows, articles, wordsAgg] = await Promise.all([
+  const [imageRows, articles] = await Promise.all([
     db.aiLog.findMany({
       where: { ...base, question: { startsWith: '[IMAGE]' } },
       select: { response: true },
     }),
     db.aiLog.count({ where: { ...base, NOT: { question: { startsWith: '[IMAGE]' } } } }),
-    db.aiLog.aggregate({ where: base, _sum: { outputTokens: true } }),
   ]);
   let images = 0;
   for (const row of imageRows) {
@@ -113,14 +115,13 @@ export async function getAiMonthlyUsage(userId: string): Promise<AiMonthlyUsage>
   }
   return {
     articles,
-    words: wordsAgg._sum.outputTokens ?? 0,
     images,
   };
 }
 
-/** The requested AI consumption for one operation. `words` cannot be
- *  known before generation — the words limit blocks NEW generations
- *  once the current usage has reached it. */
+/** The requested AI consumption for one operation (generation
+ *  counts — article generations and image generations; words/tokens
+ *  are never metered). */
 export interface AiUsageRequest {
   articles?: number;
   images?: number;
@@ -155,20 +156,6 @@ export async function checkAiLimit(
         message: `Platform AI limit reached: ${usage.articles}/${limit} AI articles this month. Upgrade your plan or connect your own AI API for unlimited use.`,
       };
     }
-  }
-  // AI Words / month — the generation's word count is not known in
-  // advance, so block NEW generations once the usage has reached the
-  // limit (0-word requests are still blocked when at/over the limit).
-  const wordsLimit = limits.aiWordsPerMonth;
-  if (wordsLimit !== -1 && usage.words >= wordsLimit) {
-    return {
-      ok: false,
-      limit: wordsLimit,
-      current: usage.words,
-      requested: 0,
-      resource: 'aiWords',
-      message: `Platform AI limit reached: ${usage.words}/${wordsLimit} AI words this month. Upgrade your plan or connect your own AI API for unlimited use.`,
-    };
   }
   // AI Images / month — count check.
   if (requested.images !== undefined) {
@@ -216,7 +203,7 @@ export function aiLimitExceededResponse(check: LimitCheck) {
  */
 export async function getEffectiveLimitsAsync(user: EntitlementUser): Promise<PlanLimits> {
   if (hasBillingBypass(user)) {
-    return { maxSites: -1, storageBytes: -1, aiArticlesPerMonth: -1, aiWordsPerMonth: -1, aiImagesPerMonth: -1 };
+    return { maxSites: -1, storageBytes: -1, aiArticlesPerMonth: -1, aiImagesPerMonth: -1 };
   }
   const { planId } = await getEffectivePlanIdAsync(user);
   return getPlanConfigSync(planId).limits;
@@ -226,7 +213,7 @@ export async function getEffectiveLimitsAsync(user: EntitlementUser): Promise<Pl
  *  impractical (e.g. initial render). The async version is authoritative. */
 export function getEffectiveLimits(user: EntitlementUser): PlanLimits {
   if (hasBillingBypass(user)) {
-    return { maxSites: -1, storageBytes: -1, aiArticlesPerMonth: -1, aiWordsPerMonth: -1, aiImagesPerMonth: -1 };
+    return { maxSites: -1, storageBytes: -1, aiArticlesPerMonth: -1, aiImagesPerMonth: -1 };
   }
   const customer = getCustomerByEmailSync(user.email);
   const planId = customer?.planId ?? 'free';

@@ -20,7 +20,7 @@
 //     are two INDEPENDENT Feature Access checkboxes — a plan may have
 //     either, both, or neither:
 //       • Platform AI        — the platform provides the AI; the plan's
-//         AI usage limits (articles / words / images per month) apply.
+//         AI usage limits (articles / images per month) apply.
 //       • Client's Own AI API — the client connects their own provider
 //         /API; that usage NEVER consumes the Platform AI limits.
 //
@@ -160,7 +160,11 @@ export function aiModeOfEntitlements(entitlements: readonly string[]): AiMode {
 //   maxSites / storageBytes   — platform infrastructure (Site, Media).
 //   ai*PerMonth               — Platform AI usage (ONLY applicable when
 //                               the plan uses Platform AI; never applied
-//                               to Client's Own AI API plans).
+//                               to Client's Own AI API plans). AI usage
+//                               is metered by GENERATIONS only — article
+//                               and image generations. There is NO
+//                               words/tokens limit: AI output length is
+//                               not metered by the plan.
 // Newsletter subscribers / email sends / backup storage / backup runs /
 // email templates are FEATURE entitlements in this architecture, not
 // platform usage limits.
@@ -168,7 +172,6 @@ export const LIMIT_KEYS = [
   'maxSites',
   'storageBytes',
   'aiArticlesPerMonth',
-  'aiWordsPerMonth',
   'aiImagesPerMonth',
 ] as const;
 export type LimitKey = (typeof LIMIT_KEYS)[number];
@@ -178,15 +181,17 @@ export const CORE_LIMIT_KEYS = ['maxSites', 'storageBytes'] as const;
 export type CoreLimitKey = (typeof CORE_LIMIT_KEYS)[number];
 
 /** Platform AI usage limits — shown/configured ONLY while Platform AI
- *  is enabled. Client's Own AI API usage never consumes them. */
-export const AI_LIMIT_KEYS = ['aiArticlesPerMonth', 'aiWordsPerMonth', 'aiImagesPerMonth'] as const;
+ *  is enabled. Client's Own AI API usage never consumes them. AI usage
+ *  is metered by generations only (articles + images) — the former
+ *  aiWordsPerMonth limit was removed and is stripped from saved rows
+ *  by plan-config's pickLimits (it never leaks back on load/save). */
+export const AI_LIMIT_KEYS = ['aiArticlesPerMonth', 'aiImagesPerMonth'] as const;
 export type AiLimitKey = (typeof AI_LIMIT_KEYS)[number];
 
 export const LIMIT_LABELS: Record<LimitKey, string> = {
   maxSites: 'Max Sites',
   storageBytes: 'Storage (bytes)',
   aiArticlesPerMonth: 'AI Articles / month',
-  aiWordsPerMonth: 'AI Words / month',
   aiImagesPerMonth: 'AI Images / month',
 };
 

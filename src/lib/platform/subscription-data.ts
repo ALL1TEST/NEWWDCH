@@ -542,7 +542,6 @@ export function validatePlanConfigInput(input: {
     maxSites: number;
     storageBytes: number;
     aiArticlesPerMonth: number;
-    aiWordsPerMonth: number;
     aiImagesPerMonth: number;
   }>;
   entitlements?: string[];

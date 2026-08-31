@@ -21,7 +21,7 @@
 // every save, and the other entries hold the platform-level
 // regional prices (CountryPricing.regionalPrices + legacy entries)
 // — preserved across saves so customers in other currencies keep
-// seeing their configured price (e.g. "90 MAD / month").
+// seeing their configured price (e.g. "90 MAD").
 //
 // STRIPE: for each paid plan × supported currency × interval, a real
 // Stripe Price is created on sync and its ID persisted in
@@ -62,11 +62,13 @@ const PLAN_EDITOR_KEY_SET = new Set<string>([
 // USAGE LIMITS — only resources the PLATFORM actually controls.
 //   maxSites / storageBytes — platform infrastructure (Site, Media).
 //   ai*PerMonth — Platform AI usage, enforced against the AiLog usage
-//   tracker. They apply ONLY while the plan includes Platform AI
-//   ('ai_platform'): Client's Own AI API-only plans and AI-disabled
-//   plans store 0 and are never checked. (When both AI features are
-//   enabled the limits apply to usage through Platform AI; the
-//   client's own API usage never consumes them.)
+//   tracker. AI usage is metered by GENERATIONS only (article + image
+//   generations) — there is NO words/tokens limit. The limits apply
+//   ONLY while the plan includes Platform AI ('ai_platform'): Client's
+//   Own AI API-only plans and AI-disabled plans store 0 and are never
+//   checked. (When both AI features are enabled the limits apply to
+//   usage through Platform AI; the client's own API usage never
+//   consumes them.)
 //   Newsletter / Email Templates / Backups are FEATURE entitlements
 //   only — no usage limits by design.
 export interface PlanLimits {
@@ -74,11 +76,9 @@ export interface PlanLimits {
   maxSites: number;
   /** CMS/media storage (uploaded content). NOT backup storage. -1 = unlimited. */
   storageBytes: number;
-  /** Platform AI articles (generations) / month. -1 = unlimited. Only when Platform AI. */
+  /** Platform AI article generations / month. -1 = unlimited. Only when Platform AI. */
   aiArticlesPerMonth: number;
-  /** Platform AI words (output tokens) / month. -1 = unlimited. Only when Platform AI. */
-  aiWordsPerMonth: number;
-  /** Platform AI images / month. -1 = unlimited. Only when Platform AI. */
+  /** Platform AI image generations / month. -1 = unlimited. Only when Platform AI. */
   aiImagesPerMonth: number;
 }
 
@@ -88,7 +88,6 @@ const DEFAULT_LIMITS: PlanLimits = {
   maxSites: 0,
   storageBytes: 0,
   aiArticlesPerMonth: 0,
-  aiWordsPerMonth: 0,
   aiImagesPerMonth: 0,
 };
 
@@ -159,14 +158,16 @@ function zeroAiLimitsIfNotPlatform(limits: PlanLimits, entitlements: readonly st
   return {
     ...limits,
     aiArticlesPerMonth: 0,
-    aiWordsPerMonth: 0,
     aiImagesPerMonth: 0,
   };
 }
 
 /** Pick only the known limit fields from an untyped/partial input —
- *  unknown keys (stale `aiWords` / `automationRuns` from older rows)
- *  never leak into the cache and are not re-serialized on save. */
+ *  unknown keys (stale `aiWords` / `aiWordsPerMonth` / `automationRuns`
+ *  from older rows) never leak into the cache and are not re-serialized
+ *  on save. `aiWordsPerMonth` was REMOVED as a plan limit (AI usage is
+ *  metered by generations only): rows that still carry it self-clean on
+ *  load and the next save strips it permanently. */
 function pickLimits(parsed: unknown): PlanLimits {
   const p = (parsed ?? {}) as Partial<PlanLimits>;
   const num = (v: unknown): number => (typeof v === 'number' && !Number.isNaN(v) ? v : 0);
@@ -174,7 +175,6 @@ function pickLimits(parsed: unknown): PlanLimits {
     maxSites: num(p.maxSites),
     storageBytes: num(p.storageBytes),
     aiArticlesPerMonth: num(p.aiArticlesPerMonth),
-    aiWordsPerMonth: num(p.aiWordsPerMonth),
     aiImagesPerMonth: num(p.aiImagesPerMonth),
   };
 }
@@ -334,7 +334,7 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     // FREE example: AI disabled, Newsletter / Email Templates / Backups
     // disabled, limited sites + storage. No AI limits (AI is off).
     entitlements: [],
-    limits: { maxSites: 3, storageBytes: 1 * GB, aiArticlesPerMonth: 0, aiWordsPerMonth: 0, aiImagesPerMonth: 0 },
+    limits: { maxSites: 3, storageBytes: 1 * GB, aiArticlesPerMonth: 0, aiImagesPerMonth: 0 },
     badgeVariant: 'free',
     sortOrder: 0,
   },
@@ -358,7 +358,7 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     features: [],
     // Plus: Platform AI with modest usage limits.
     entitlements: ['ai_platform', 'advanced_analytics', 'comments', 'newsletter'],
-    limits: { maxSites: 5, storageBytes: 5 * GB, aiArticlesPerMonth: 25, aiWordsPerMonth: 50_000, aiImagesPerMonth: 10 },
+    limits: { maxSites: 5, storageBytes: 5 * GB, aiArticlesPerMonth: 25, aiImagesPerMonth: 10 },
     badgeVariant: 'plus',
     sortOrder: 1,
   },
@@ -380,12 +380,12 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
     stripePriceIdYearly: null,
     active: true,
     features: [],
-    // PRO example: Platform AI — 100 articles / 200k words / 50 images
-    // per month — plus Comments, Newsletter, Email Templates and
-    // Backups enabled. (No custom_domains / white_label: site identity
-    // is client-owned, not a plan entitlement.)
+    // PRO example: Platform AI — 100 article generations + 50 image
+    // generations per month — plus Comments, Newsletter, Email Templates
+    // and Backups enabled. (No custom_domains / white_label: site
+    // identity is client-owned, not a plan entitlement.)
     entitlements: ['ai_platform', 'advanced_analytics', 'automation', 'comments', 'newsletter', 'email_templates', 'backups'],
-    limits: { maxSites: 10, storageBytes: 10 * GB, aiArticlesPerMonth: 100, aiWordsPerMonth: 200_000, aiImagesPerMonth: 50 },
+    limits: { maxSites: 10, storageBytes: 10 * GB, aiArticlesPerMonth: 100, aiImagesPerMonth: 50 },
     badgeVariant: 'pro',
     sortOrder: 2,
   },
@@ -423,7 +423,7 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfigData[] = [
       'email_templates',
       'backups',
     ],
-    limits: { maxSites: -1, storageBytes: 100 * GB, aiArticlesPerMonth: 0, aiWordsPerMonth: 0, aiImagesPerMonth: 0 },
+    limits: { maxSites: -1, storageBytes: 100 * GB, aiArticlesPerMonth: 0, aiImagesPerMonth: 0 },
     badgeVariant: 'max',
     sortOrder: 3,
   },
@@ -553,8 +553,9 @@ function rowToData(row: PlanConfigRow): PlanConfigData {
     entitlements = [];
   }
   // Explicitly pick only the known limit fields. Older DB rows may still
-  // carry stale `aiWords` / `aiArticles` / `automationRuns` keys in the
-  // limits JSON (those were removed because no real enforcement exists).
+  // carry stale `aiWords` / `aiWordsPerMonth` / `automationRuns` keys in the
+  // limits JSON (aiWordsPerMonth was removed — AI usage is metered by
+  // generations only; those other keys never had real enforcement).
   // Picking only the known fields prevents the stale keys from leaking
   // back into the cache and being re-serialized on the next save.
   let limits: PlanLimits = { ...DEFAULT_LIMITS };

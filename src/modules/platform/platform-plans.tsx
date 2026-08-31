@@ -251,12 +251,13 @@ function toggleFeature(cur: string[], key: string): string[] {
  *  full grid width and carries its usage limits NESTED directly
  *  underneath — "AI provided by the platform — usage is subject to
  *  the plan's AI limits." followed by a Usage Limits block (AI
- *  Articles / AI Words / AI Images per month) shown ONLY while
- *  Platform AI is checked (an admin never configures AI limits for
- *  a plan without Platform AI; the payload zeroes them). Client's
- *  Own AI API states the counterpart note: the client connects
- *  their own provider and platform AI usage limits do NOT apply —
- *  so on plans with BOTH keys the two logics stay visibly separate. */
+ *  Articles / AI Images per month — the billable AI resources; AI
+ *  words/tokens are NOT metered) shown ONLY while Platform AI is
+ *  checked (an admin never configures AI limits for a plan without
+ *  Platform AI; the payload zeroes them). Client's Own AI API states
+ *  the counterpart note: the client connects their own provider and
+ *  platform AI usage limits do NOT apply — so on plans with BOTH keys
+ *  the two logics stay visibly separate. */
 function FeatureAccessSection({
   entitlements,
   onChange,
@@ -333,7 +334,7 @@ function FeatureAccessSection({
                         unlimited
                       </span>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {AI_LIMIT_KEYS.map((k) => (
                         <div key={k} className="space-y-1">
                           <Label className="text-xs" htmlFor={`${idPrefix}-limit-${k}`}>
@@ -435,9 +436,9 @@ function UsageLimitsSection({
         ))}
       </div>
       <p className="text-[10px] text-muted-foreground leading-snug">
-        Platform AI usage limits (AI articles / words / images per month) are configured directly
-        with the Platform AI feature in Feature Access — they apply only while Platform AI is
-        enabled and never limit Client&apos;s Own AI API usage.
+        Platform AI usage limits (AI articles / images per month) are configured directly with
+        the Platform AI feature in Feature Access — they apply only while Platform AI is enabled
+        and never limit Client&apos;s Own AI API usage. AI words/tokens are not metered.
       </p>
     </section>
   );
@@ -545,13 +546,17 @@ function PlanSummaryCard({
         </div>
 
         {/* Price — sits BELOW the plan name on its own row. Reflects
-             the global billing-interval selector (Monthly / Yearly).
+             the global billing-interval selector (Monthly / Yearly),
+             which already communicates the billing period — so the
+             price itself carries NO "/ month" suffix (monthly price =
+             plain amount). The "/ year" suffix IS kept on yearly
+             totals to distinguish annual pricing.
              The price's LEFT edge aligns with the plan name's first
              letter — the "$" sits directly under "F" of Free, "P" of
              Plus/Pro, "M" of Max (no left breakout, so the price column
              is flush with the name column above it). A RIGHT-side
              breakout (-mr-6, into the card padding p-8) is kept so the
-             Yearly layout ($X.XX / month   $X / year) still fits on ONE
+             Yearly layout ($X.XX   $X / year) still fits on ONE
              line at wider card widths; flex-wrap lets it wrap gracefully
              at narrower widths. Only the price VALUES change between
              Monthly and Yearly.
@@ -561,26 +566,25 @@ function PlanSummaryCard({
                  smaller than the plan name (text-5xl = 48px), still
                  clearly larger than the labels (so the monthly-equiv
                  reads as the MAIN price)
-               - /month, /year: text-sm text-muted-foreground (14px) —
-                 small muted (the yearly total is smaller/muted beside
-                 the main monthly-equiv price)
+               - /year: text-sm text-muted-foreground (14px) — small
+                 muted (the yearly total is smaller/muted beside the
+                 main monthly-equiv price)
                - Free:    $0
-               - Monthly: $X / month
-               - Yearly:  $X.XX / month   $X / year
+               - Monthly: $X
+               - Yearly:  $X.XX   $X / year
              For Yearly, the monthly equivalent (priceYearly / 12,
              computed dynamically, never hardcoded) is the LARGE primary
              price; the actual yearly total is shown smaller and muted
-             beside it on the same line. "/ month" belongs to the large
-             monthly price; "/ year" belongs to the small yearly total.
-             Width budget (measured): card content (p-8) ≈ 245-269px
-             (varies with viewport) + right -mr-6 breakout (24px) ≈
-             269-293px. Widest case = Max Yearly: $82.50(134) + gap-2(8)
-             + /month(55) + gap-2(8) + $990/year(81) = 286px → fits at
-             wider card widths, wraps to 2 lines at narrower widths
-             (flex-wrap). shrink-0 + whitespace-nowrap + leading-none on
-             each price span keep each span's internals from breaking;
-             uniform gap-2 (8px) between every price element (no ml-2)
-             so wrapped lines stay left-aligned. */}
+             beside it on the same line. "/ year" belongs to the small
+             yearly total. Width budget (measured): card content (p-8) ≈
+             245-269px (varies with viewport) + right -mr-6 breakout
+             (24px) ≈ 269-293px. Widest case = Max Yearly: $82.50(134)
+             + gap-2(8) + $990/year(81) = 223px → fits at wider card
+             widths, wraps to 2 lines at narrower widths (flex-wrap).
+             shrink-0 + whitespace-nowrap + leading-none on each price
+             span keep each span's internals from breaking; uniform
+             gap-2 (8px) between every price element (no ml-2) so
+             wrapped lines stay left-aligned. */}
         <div className="-mr-6 mt-6">
           {plan.isFree ? (
             <div className="flex flex-wrap items-baseline gap-2">
@@ -600,28 +604,31 @@ function PlanSummaryCard({
               <span className="whitespace-nowrap text-sm text-muted-foreground">/ year</span>
             </div>
           ) : effectiveInterval === 'yearly' ? (
-            // Both periods — INLINE: [LARGE $X.XX] [small / month]
-            // [small $X / year]. The monthly equivalent (priceYearly /
-            // 12) is the dominant large price; the real yearly total
-            // stays small/muted beside it.
-            //   e.g. Plus →  $7.50 / month   $90 / year
-            //        Pro  →  $40.83 / month  $490 / year
-            //        Max  →  $82.50 / month  $990 / year
+            // Both periods — INLINE: [LARGE $X.XX] [small $X / year].
+            // The monthly equivalent (priceYearly / 12) is the dominant
+            // large price; the real yearly total stays small/muted
+            // beside it. No "/ month" suffix on the large price — the
+            // global billing-period selector (Yearly) already
+            // communicates the period; the "/ year" label stays on the
+            // yearly total to distinguish annual pricing.
+            //   e.g. Plus →  $7.50   $90 / year
+            //        Pro  →  $40.83  $490 / year
+            //        Max  →  $82.50  $990 / year
             <div className="flex flex-wrap items-baseline gap-2">
               <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
                 {formatPriceSymbolMonthlyEquiv(plan.priceYearly / 12, plan.currency)}
               </span>
-              <span className="whitespace-nowrap text-sm text-muted-foreground">/ month</span>
               <span className="shrink-0 whitespace-nowrap text-sm text-muted-foreground">
                 {formatPriceSymbol(plan.priceYearly, plan.currency)} / year
               </span>
             </div>
           ) : (
+            // Monthly — plain amount, NO "/ month" suffix (the global
+            // Monthly/Yearly selector already communicates the period).
             <div className="flex flex-wrap items-baseline gap-2">
               <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
                 {formatPriceSymbol(plan.priceMonthly, plan.currency)}
               </span>
-              <span className="whitespace-nowrap text-sm text-muted-foreground">/ month</span>
             </div>
           )}
         </div>
@@ -1162,9 +1169,10 @@ function EditPlanDialog({
 // -------------------- Create Plan Dialog --------------------
 
 /** Normalize the limit state into the API payload. The AI usage limits
- *  are part of the saved configuration ONLY while the plan includes
- *  Platform AI — Client's Own AI API-only and AI-disabled plans store 0
- *  (the backend enforces the same rule). */
+ *  (article + image generations per month — words/tokens are never
+ *  metered) are part of the saved configuration ONLY while the plan
+ *  includes Platform AI — Client's Own AI API-only and AI-disabled
+ *  plans store 0 (the backend enforces the same rule). */
 function buildPayloadLimits(limits: PlanLimits, hasPlatformAi: boolean): PlanLimits {
   return {
     maxSites: Number(limits.maxSites) || 0,
@@ -1172,10 +1180,9 @@ function buildPayloadLimits(limits: PlanLimits, hasPlatformAi: boolean): PlanLim
     ...(hasPlatformAi
       ? {
           aiArticlesPerMonth: Number(limits.aiArticlesPerMonth) || 0,
-          aiWordsPerMonth: Number(limits.aiWordsPerMonth) || 0,
           aiImagesPerMonth: Number(limits.aiImagesPerMonth) || 0,
         }
-      : { aiArticlesPerMonth: 0, aiWordsPerMonth: 0, aiImagesPerMonth: 0 }),
+      : { aiArticlesPerMonth: 0, aiImagesPerMonth: 0 }),
   };
 }
 
@@ -1183,7 +1190,6 @@ const EMPTY_LIMITS: PlanLimits = {
   maxSites: 0,
   storageBytes: 0,
   aiArticlesPerMonth: 0,
-  aiWordsPerMonth: 0,
   aiImagesPerMonth: 0,
 };
 

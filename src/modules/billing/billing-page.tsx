@@ -40,13 +40,6 @@ function getStorePlan(planId: string): StorePlan {
   return STORE_PLANS.find((p) => p.id === planId) ?? STORE_PLANS[0];
 }
 
-/** The backend plans use interval 'monthly'/'yearly'; the original billing
- *  page rendered '/month' etc. Strip the trailing 'ly' so the visual stays
- *  identical to the previous subscription-store output ('month'/'year'). */
-function normalizeInterval(interval: string): string {
-  return interval?.replace(/ly$/, '');
-}
-
 // -------------------- Multi-currency + derived feature helpers --------------------
 
 const GB_FACTOR = 1024 * 1024 * 1024;
@@ -148,9 +141,10 @@ function formatAiCount(n: number): string {
  *  marketing list per plan.
  *
  *  PLATFORM AI: the ✓ Platform AI feature item carries its own
- *  description ("AI provided by the platform") plus the plan's three
- *  AI usage limits as nested sub-lines — shown ONLY while Platform AI
- *  is enabled (Client's Own AI API-only plans never show platform AI
+ *  description ("AI provided by the platform") plus the plan's AI
+ *  usage limits (article + image generations per month — words/tokens
+ *  are never metered) as nested sub-lines — shown ONLY while Platform
+ *  AI is enabled (Client's Own AI API-only plans never show platform AI
  *  limits; own-API usage is not counted against them). */
 function derivePlanFeatures(plan: {
   features: string[];
@@ -160,7 +154,6 @@ function derivePlanFeatures(plan: {
     maxSites: number;
     storageBytes: number;
     aiArticlesPerMonth?: number;
-    aiWordsPerMonth?: number;
     aiImagesPerMonth?: number;
   };
 }): PlanFeatureItem[] {
@@ -194,14 +187,12 @@ function derivePlanFeatures(plan: {
     if (!label) continue;
     if (e === 'ai_platform') {
       const articles = plan.limits.aiArticlesPerMonth ?? 0;
-      const words = plan.limits.aiWordsPerMonth ?? 0;
       const images = plan.limits.aiImagesPerMonth ?? 0;
       items.push({
         label,
         subLines: [
           'AI provided by the platform',
           `${formatAiCount(articles)} AI articles / month`,
-          `${formatAiCount(words)} AI words / month`,
           `${formatAiCount(images)} AI images / month`,
         ],
       });
@@ -506,10 +497,14 @@ export function BillingPage() {
   const planPricing = billingState.planPricing;
   const currentPricing = resolvePlanPricing(currentPlan, planPricing?.[currentPlan.id], customerCurrency);
   // The CURRENT subscription's price = the price for the interval the
-  // subscription is actually on (monthly price / month, yearly / year).
+  // subscription is actually on (monthly price / yearly total).
   const currentPrice =
     currentInterval === 'yearly' ? currentPricing.yearly : currentPricing.monthly;
   const currentDisplayCurrency = currentPricing.currency;
+  // Price suffix: monthly prices show the PLAIN amount (the billing
+  // period is already communicated by the interval context); yearly
+  // prices keep the "/ year" label to distinguish annual pricing.
+  const currentPriceSuffix = currentInterval === 'yearly' ? ' / year' : '';
 
   const isHigherPlan = (plan: { price: number }) => plan.price > currentPlan.price;
   const getActionLabel = (plan: { price: number; isFree: boolean }) => {
@@ -625,7 +620,7 @@ export function BillingPage() {
               <p className="text-sm text-muted-foreground ml-7">
                 {currentPrice === 0
                   ? t('billing.free')
-                  : `${formatMoney(currentPrice, currentDisplayCurrency)}/${normalizeInterval(currentInterval)}`}
+                  : `${formatMoney(currentPrice, currentDisplayCurrency)}${currentPriceSuffix}`}
               </p>
               {currentPrice > 0 &&
                 planPricing?.[currentPlan.id] &&
@@ -792,10 +787,12 @@ export function BillingPage() {
                     <span className="text-2xl font-bold">
                       {planPrice === 0 ? t('billing.free') : formatMoney(planPrice, planDisplayCurrency)}
                     </span>
-                    {planPrice > 0 && (
-                      <span className="text-sm text-muted-foreground ml-1">
-                        /{normalizeInterval(cardInterval)}
-                      </span>
+                    {/* Yearly prices keep the "/ year" label to
+                        distinguish annual pricing; monthly prices show
+                        the PLAIN amount — the Monthly/Yearly switch
+                        above already communicates the billing period. */}
+                    {planPrice > 0 && cardInterval === 'yearly' && (
+                      <span className="text-sm text-muted-foreground ml-1">/ year</span>
                     )}
                     {planPrice > 0 && customerCountryName && planSupported && (
                       <p className="text-[11px] text-muted-foreground mt-1">
