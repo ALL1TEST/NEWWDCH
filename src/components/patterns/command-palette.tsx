@@ -12,7 +12,6 @@ import {
   MessageSquare,
   Mail,
   Search,
-  BarChart3,
   Bell,
   Sparkles,
   Settings,
@@ -108,7 +107,9 @@ const NAV_ITEMS: CommandItemDef[] = [
   { id: 'nav-comments', label: 'Comments', icon: MessageSquare, module: 'comments' },
   { id: 'nav-newsletters', label: 'Newsletters', icon: Mail, module: 'newsletter' },
   { id: 'nav-seo', label: 'SEO', icon: Search, module: 'seo' },
-  { id: 'nav-analytics', label: 'Analytics', icon: BarChart3, module: 'analytics' },
+  // NOTE: Analytics was removed from the Admin User (client CMS)
+  // navigation — see sidebar.tsx / admin-app.tsx. Platform Admin's
+  // command list (PLATFORM_NAV_ITEMS below) is unaffected.
   { id: 'nav-automation', label: 'Automation', icon: Zap, module: 'automation' },
   { id: 'nav-notifications', label: 'Notifications', icon: Bell, module: 'notifications' },
   { id: 'nav-ai', label: 'AI', icon: Sparkles, module: 'ai' },

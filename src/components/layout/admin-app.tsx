@@ -33,6 +33,16 @@ export default function AdminApp() {
     if (user && !isPlatformStaff && isPlatformPage(currentModule)) {
       navigate('dashboard');
     }
+    // ANALYTICS REMOVAL (Admin User dashboard only) — the Analytics
+    // module is no longer part of the client CMS: the sidebar entry and
+    // the command palette entry are gone, and this guard closes the
+    // direct-URL path, so a client role manually entering #analytics is
+    // redirected to their dashboard and can never reach the module.
+    // Platform staff were already redirected to platform pages by the
+    // rule above — the Platform Admin dashboard is unaffected.
+    if (user && !isPlatformStaff && currentModule === 'analytics') {
+      navigate('dashboard');
+    }
   }, [user, currentModule, navigate]);
 
   const ModuleComponent = moduleRegistry[currentModule] ?? moduleRegistry.dashboard;

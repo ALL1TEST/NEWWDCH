@@ -258,11 +258,11 @@ const NAV_ITEMS: NavItem[] = [
     href: '#seo',
     icon: 'Search',
   },
-  {
-    label: 'Analytics',
-    href: '#analytics',
-    icon: 'BarChart3',
-  },
+  // NOTE: Analytics was removed from the Admin User (client CMS)
+  // navigation — the module is no longer part of the client dashboard
+  // (sidebar, command palette and direct #analytics URL are all closed
+  // for client roles; see admin-app.tsx route guard). The Platform
+  // Admin navigation below is a separate list and is unaffected.
   {
     label: 'AI',
     href: '#ai',
