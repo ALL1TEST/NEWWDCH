@@ -20,14 +20,13 @@ import {
 } from 'lucide-react';
 import {
   PLANS as STORE_PLANS,
-  getPlanBadgeClasses,
   getPlanCardBorderClasses,
   type Plan as StorePlan,
 } from '@/lib/stores/subscription-store';
 import type { ClientBillingState, Payment, PlanId } from '@/lib/platform/platform-data';
 import { ENTITLEMENT_LABELS, UNLIMITED, type EntitlementKey } from '@/lib/platform/feature-config';
 import { formatMoney } from '@/lib/platform/currency-catalog';
-import { PaymentStatusBadge, formatCurrency, formatDate, ErrorState } from '@/modules/platform/shared';
+import { PaymentStatusBadge, SubStatusBadge, formatDate, ErrorState } from '@/modules/platform/shared';
 
 // -------------------- Helpers --------------------
 
@@ -337,6 +336,55 @@ export function BillingPage() {
     },
   });
 
+  // Stripe Customer Portal mutation — "Manage Payment Method" opens
+  // the REAL Stripe-hosted payment management page (payment method,
+  // card details, billing information, Stripe-supported payment
+  // settings) for the authenticated customer. The endpoint resolves
+  // the Stripe customer SERVER-SIDE (user's own subscription /
+  // customer id) and returns only the portal session URL — no fake
+  // local payment-method page, no Stripe keys on the client.
+  const portalMutation = useMutation<
+    { url: string },
+    Error & { code?: string; status?: number },
+    void
+  >({
+    mutationFn: () => {
+      const res = fetch('/api/billing/portal', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      }).then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          const err = new Error(
+            body?.error?.message ?? 'Unable to open payment management',
+          ) as Error & { code?: string; status?: number };
+          err.code = body?.error?.code;
+          err.status = r.status;
+          throw err;
+        }
+        return r.json();
+      });
+      return res.then((j) => j.data as { url: string });
+    },
+    onSuccess: (data) => {
+      // Open the Stripe Customer Portal.
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    },
+    onError: (err: unknown) => {
+      const e = err as { code?: string; message?: string };
+      if (e?.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
+        toast.error(
+          'Stripe is not configured on this platform. An admin must connect Stripe in Platform Admin → Stripe Settings to enable payment management.',
+        );
+      } else {
+        toast.error(e?.message ?? 'Unable to open payment management. Please try again.');
+      }
+    },
+  });
+
   // -------------------- Loading --------------------
   if (billingQuery.isLoading) {
     return (
@@ -485,18 +533,10 @@ export function BillingPage() {
   const effectivePeriod: 'monthly' | 'yearly' =
     globalPeriod ?? (currentInterval === 'yearly' ? 'yearly' : 'monthly');
 
-  // Display pricing = the plan's CONFIGURED base fields (priceMonthly /
-  // priceYearly / currency) — the SAME source the Platform Admin
-  // Plans & Pricing page reads (checkout still resolves the charged
-  // currency/price server-side from the request).
-  // The CURRENT subscription's price = the price for the interval the
-  // subscription is actually on (monthly price / yearly total).
-  const currentPrice =
-    currentInterval === 'yearly' ? currentPlan.priceYearly : currentPlan.priceMonthly;
-  const currentDisplayCurrency = currentPlan.currency;
-  // Price suffix: explicit "/ month" | "/ year" next to the displayed
-  // amount — consistent with the redesigned plan cards (also removes
-  // any ambiguity when a card's period differs from the global one).
+  // Billing period of the CURRENT subscription (used for the factual
+  // "Billed monthly / Billed yearly" line — the price/currency itself
+  // is NOT duplicated in this section; the plan cards and the Stripe
+  // Customer Portal carry the amounts).
 
   const isHigherPlan = (plan: { price: number }) => plan.price > currentPlan.price;
   const getActionLabel = (plan: { price: number; isFree: boolean }) => {
@@ -572,36 +612,27 @@ export function BillingPage() {
         </Card>
       )}
 
-      {/* Current Subscription */}
+      {/* Current Subscription — clean SaaS billing layout:
+          plan name + subscription status (header), billing period,
+          included features (with Platform AI + its limits when
+          enabled), and the billing actions. Price/currency is NOT
+          duplicated here — the plan cards and the Stripe Customer
+          Portal carry the amounts. */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base">{t('billing.currentPlan')}</CardTitle>
+          {/* Subscription status — the SAME green "Active" badge
+              treatment the dashboard uses for statuses (SubStatusBadge). */}
+          <SubStatusBadge status={status} />
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-3 min-w-0">
-              <span className="text-2xl font-semibold tracking-tight">{currentPlan.name}</span>
-              {/* Same price treatment as the plan cards — large amount +
-                  explicit period suffix for paid plans; a zero price shows
-                  the plain formatted amount ("$0") with no suffix, exactly
-                  like the Platform Admin Plans & Pricing page. */}
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl font-bold tracking-tight">
-                  {formatMoney(currentPrice, currentDisplayCurrency)}
-                </span>
-                {currentPrice > 0 && (
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">
-                    / {currentInterval === 'yearly' ? 'year' : 'month'}
-                  </span>
-                )}
-              </div>
-            </div>
-            <Badge
-              variant={status === 'active' ? 'default' : 'outline'}
-              className="capitalize"
-            >
-              {status}
-            </Badge>
+          <div className="space-y-1 min-w-0">
+            <span className="text-2xl font-semibold tracking-tight">{currentPlan.name}</span>
+            {/* Factual billing period of the current subscription —
+                no price/currency presentation. */}
+            <p className="text-sm text-muted-foreground">
+              {currentInterval === 'yearly' ? 'Billed yearly' : 'Billed monthly'}
+            </p>
           </div>
 
           {trialEnd && (
@@ -641,7 +672,17 @@ export function BillingPage() {
                   card on narrow (mobile) viewports — they wrap as whole
                   units instead (display-only fix; handlers unchanged). */}
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" disabled>
+                {/* Manage Payment Method — opens the REAL Stripe
+                    Customer Portal (payment method, card details,
+                    billing information) for this customer. */}
+                <Button
+                  size="sm"
+                  disabled={portalMutation.isPending}
+                  onClick={() => portalMutation.mutate()}
+                >
+                  {portalMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : null}
                   {t('billing.managePayment')}
                 </Button>
                 <Button
@@ -805,7 +846,10 @@ export function BillingPage() {
         </div>
       </div>
 
-      {/* Payment History */}
+      {/* Payment History — simple 3-column table (Plan | Status |
+          Date) over the REAL payment/subscription history data.
+          Invoice / Amount / Method columns were removed; amounts and
+          invoices are managed in the Stripe Customer Portal. */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">{t('billing.paymentHistory')}</CardTitle>
@@ -823,11 +867,8 @@ export function BillingPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left">
-                    <th className="pb-2 font-medium text-xs text-muted-foreground">{t('billing.invoice')}</th>
                     <th className="pb-2 font-medium text-xs text-muted-foreground">Plan</th>
-                    <th className="pb-2 font-medium text-xs text-muted-foreground text-right">{t('billing.amount')}</th>
                     <th className="pb-2 font-medium text-xs text-muted-foreground">{t('billing.status')}</th>
-                    <th className="pb-2 font-medium text-xs text-muted-foreground">Method</th>
                     <th className="pb-2 font-medium text-xs text-muted-foreground text-right">{t('billing.date')}</th>
                   </tr>
                 </thead>
@@ -836,24 +877,23 @@ export function BillingPage() {
                     const planForPayment = billingState.allPlans.find((pl) => pl.id === p.planId);
                     return (
                       <tr key={p.id} className="hover:bg-accent/30 transition-colors">
-                        <td className="py-2.5 pr-4">
-                          <span className="font-mono text-xs">{p.invoiceNumber}</span>
-                        </td>
+                        {/* Plan — the actual plan name of the payment,
+                            in the page's uniform outline badge
+                            treatment. */}
                         <td className="py-2.5 pr-4">
                           <Badge
                             variant="outline"
-                            className={`text-[10px] font-semibold ${getPlanBadgeClasses(getStorePlan(p.planId).badgeVariant)}`}
+                            className={`text-[10px] font-semibold bg-transparent ${getPlanBadgeOutlineClasses(getStorePlan(p.planId).badgeVariant)}`}
                           >
                             {planForPayment?.name ?? p.planId}
                           </Badge>
                         </td>
-                        <td className="py-2.5 pr-4 text-right font-medium">
-                          {formatCurrency(p.amount, p.currency)}
-                        </td>
+                        {/* Status — existing green/success payment
+                            status badge (Paid). */}
                         <td className="py-2.5 pr-4">
                           <PaymentStatusBadge status={p.status} />
                         </td>
-                        <td className="py-2.5 pr-4 text-xs text-muted-foreground">{p.method}</td>
+                        {/* Date — the actual payment date. */}
                         <td className="py-2.5 text-right text-xs text-muted-foreground">
                           {formatDate(p.date)}
                         </td>

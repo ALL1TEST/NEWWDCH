@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore, type CurrentUser } from '@/lib/stores/auth-store';
 import { useSubscriptionStore, getPlanBadgeClasses, getPlanBadgeStyle } from '@/lib/stores/subscription-store';
-import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useT } from '@/lib/i18n';
 import { getInitials } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -38,9 +37,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi, patchApi } from '@/lib/api-client';
-import { formatDate } from '@/modules/platform/shared';
-import { BILLING_ME_QUERY_KEY } from '@/hooks/use-subscription-sync';
-import type { ClientBillingState } from '@/lib/platform/platform-data';
 
 // ============================================================
 // PROFILE PAGE — Platform Admin personal profile.
@@ -49,7 +45,6 @@ import type { ClientBillingState } from '@/lib/platform/platform-data';
 //   • Profile Header
 //   • Personal Information (Full Name + Email Address read-only
 //     + Change Email button)
-//   • Subscription (hidden for platform staff — internal billing)
 //   • Change Password
 //   • Security → Authenticator App (Enable / Enabled state)
 //
@@ -63,29 +58,12 @@ export function ProfilePage() {
   const user = useAuthStore((s) => s.user);
   const { t } = useT();
   const currentPlan = useSubscriptionStore((s) => s.currentPlan);
-  const subscriptionStatus = useSubscriptionStore((s) => s.status);
-  const navigate = useNavigationStore((s) => s.navigate);
   const queryClient = useQueryClient();
 
   // Platform staff (OWNER / PLATFORM_ADMIN) have INTERNAL billing — no
-  // personal subscription. The plan badge + Subscription card + Manage
-  // Billing action are hidden for them; only account/security info is
-  // shown.
+  // personal subscription. Their header plan badge is hidden; only
+  // account/security info is shown.
   const isPlatformStaff = user?.role === 'OWNER' || user?.role === 'PLATFORM_ADMIN';
-
-  // Next-billing date for the Subscription card — the SAME shared query
-  // (key + endpoint) as the Billing & Subscription page and the app
-  // shell's subscription sync, so the date is already cached, stays in
-  // sync with the billing page, and comes from the server's billing
-  // state (never a hardcoded value). Display-only — no billing data is
-  // modified here.
-  const billingQuery = useQuery<ClientBillingState>({
-    queryKey: BILLING_ME_QUERY_KEY,
-    queryFn: () => getApi<ClientBillingState>('/api/platform/billing/me'),
-    enabled: !!user && !isPlatformStaff,
-  });
-  const currentPeriodEnd = billingQuery.data?.currentPeriodEnd ?? null;
-  const isCancelled = subscriptionStatus === 'cancelled';
 
   // Personal info
   const [name, setName] = useState(user?.name ?? '');
@@ -164,8 +142,6 @@ export function ProfilePage() {
     }
   };
 
-  const handleManageBilling = () => navigate('billing');
-
   if (!user) return null;
 
   const mfaEnabled = !!statusQuery.data?.mfaEnabled;
@@ -240,44 +216,6 @@ export function ProfilePage() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Subscription — hidden for platform staff. */}
-      {!isPlatformStaff && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t('profile.subscription')}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">{t('profile.currentPlan')}</p>
-                {/* Plan name only — the colored plan badge that used to
-                    sit next to the name was removed; the plan identity
-                    itself (name, status, Manage action) is unchanged. */}
-                <span className="font-semibold">{currentPlan.name}</span>
-                {/* Next billing (replaces the old price/currency line) —
-                    the date comes from the shared billing/me query (same
-                    value the Billing & Subscription page uses). Hidden
-                    for cancelled subscriptions and while the date has not
-                    loaded. No price/currency is shown in this card. */}
-                {currentPeriodEnd && !isCancelled && (
-                  <p className="text-sm text-muted-foreground">
-                    Next billing: <span className="font-medium text-foreground">{formatDate(currentPeriodEnd)}</span>
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant={subscriptionStatus === 'active' ? 'default' : 'outline'} className="capitalize">
-                  {subscriptionStatus}
-                </Badge>
-                <Button size="sm" variant="outline" onClick={handleManageBilling}>
-                  {t('billing.manage')}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Change Password */}
       <Card>
