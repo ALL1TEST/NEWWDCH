@@ -91,7 +91,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { SiteSelector } from '@/components/layout/site-selector';
 import { cn } from '@/lib/utils';
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
-import { useSubscriptionStore } from '@/lib/stores/subscription-store';
+import { useSubscriptionStore, getPlanBadgeStyle } from '@/lib/stores/subscription-store';
 import { usePlanEntitlements, isModuleAllowedByPlan, isSmtpSettingsAllowedByPlan } from '@/hooks/use-entitlements';
 import { SMTP_SETTINGS_ROUTE } from '@/lib/platform/feature-config';
 import { NotificationBell } from '@/components/layout/notification-bell';
@@ -916,9 +916,16 @@ function NavGroupSection({
 
 export function AppSidebar() {
   const user = useAuthStore((s) => s.user);
-  // Active plan — the footer role badge shows the plan NAME (e.g. "Beta")
-  // instead of the static user role, styled with the plan's amber accent.
-  const { currentPlan } = useSubscriptionStore();
+  // Active plan — the footer badge shows the plan NAME, colored with
+  // the plan's OWN badge styling (Free → emerald, Plus → amber, Pro →
+  // violet, Max → pink — the same id → styling mapping Billing &
+  // Subscription uses). The value comes from the SERVER-SYNCED
+  // subscription store (same /api/platform/billing/me source as the
+  // Billing page), so it always matches the actual active plan. While
+  // the first sync is in flight the badge stays hidden (`invisible`
+  // keeps the footer layout stable) so a default/stale value is never
+  // displayed.
+  const { currentPlan, serverSynced } = useSubscriptionStore();
   const currentModule = useNavigationStore((s) => s.currentModule);
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const openCommandPalette = useCommandPaletteStore((s) => s.open);
@@ -1136,19 +1143,26 @@ export function AppSidebar() {
             </span>
             {/* Plan badge — SAME shape/size/typography/spacing as the
                 previous role badge (h-4, text-[10px], px-1.5, rounded-md,
-                mt-0.5, w-fit) but rendered with the active plan's amber
-                accent (bg-amber-500 text-white) instead of the generic
-                secondary surface. Shows the plan NAME ("Beta") so it stays
-                in sync with the PlanBadge used in the topbar avatar trigger
-                and the profile dropdown header. Platform admins do not have
-                a personal subscription, so a role badge is shown instead. */}
+                mt-0.5, w-fit) but colored with the active plan's OWN
+                badge styling (getPlanBadgeStyle → Free emerald / Plus
+                amber / Pro violet / Max pink — always in sync with the
+                Billing & Subscription page's plan badge, since both
+                derive from the same server-resolved plan id). Shows the
+                plan NAME so it stays in sync with the PlanBadge used in
+                the profile dropdown header. Platform admins do not have
+                a personal subscription, so a role badge is shown
+                instead. */}
             {isPlatformAdmin ? (
               <Badge className="mt-0.5 h-4 w-fit text-[10px] px-1.5 bg-primary text-primary-foreground border-transparent">
                 PLATFORM
               </Badge>
             ) : (
               <Badge
-                className="mt-0.5 h-4 w-fit text-[10px] px-1.5 bg-amber-500 text-white border-transparent"
+                className={cn(
+                  'mt-0.5 h-4 w-fit text-[10px] px-1.5 border-transparent',
+                  getPlanBadgeStyle(currentPlan).avatar,
+                  !serverSynced && 'invisible',
+                )}
               >
                 {currentPlan.name}
               </Badge>

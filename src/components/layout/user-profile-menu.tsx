@@ -107,7 +107,11 @@ export function UserProfileMenu({
   // (OWNER / PLATFORM_ADMIN) have INTERNAL billing and no personal
   // subscription, so the plan-derived ring + PlanBadge are suppressed
   // for them — a neutral ring is used instead and no badge is shown.
-  const { currentPlan } = useSubscriptionStore();
+  // The plan comes from the SERVER-SYNCED subscription store (the same
+  // /api/platform/billing/me source Billing & Subscription uses); while
+  // the first sync is still in flight the ring stays neutral so a
+  // default/stale plan color is never displayed.
+  const { currentPlan, serverSynced } = useSubscriptionStore();
   const isPlatformStaff = user?.role === 'OWNER' || user?.role === 'PLATFORM_ADMIN';
   // Theme — same next-themes state the old topbar ThemeToggle used. The
   // dropdown is now the single in-header access point for the theme
@@ -193,7 +197,7 @@ export function UserProfileMenu({
             <Avatar className={cn(
               'h-11 w-11 shrink-0 rounded-full ring-2 ring-offset-2 ring-offset-background',
               // Platform staff: neutral ring (no plan-colored ring).
-              isPlatformStaff ? 'ring-border' : getPlanBadgeStyle(currentPlan).ring,
+              isPlatformStaff ? 'ring-border' : serverSynced ? getPlanBadgeStyle(currentPlan).ring : 'ring-border',
             )}>
               <AvatarImage
                 src={user?.avatarUrl ?? undefined}

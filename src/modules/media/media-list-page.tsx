@@ -29,7 +29,6 @@ import { getApi, deleteApi, postApi, patchApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { cn, formatFileSize, truncate } from '@/lib/utils';
 import { useAuthStore } from '@/lib/stores/auth-store';
-import { useAiWorkspace } from '@/hooks/use-ai-workspace';
 import type { MediaProcessingStatus } from '@/shared/types';
 import { toast } from 'sonner';
 
@@ -332,11 +331,6 @@ function MediaListItem({
 export function MediaListPage() {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
-
-  // Platform AI entitlement (client-side hiding only — the media
-  // generate endpoint enforces the plan feature server-side).
-  const { data: aiWorkspace } = useAiWorkspace();
-  const aiToolsEnabled = aiWorkspace?.entitlements.aiPlatform ?? true;
 
   // ---- Folder navigation state (full path) ----
   const [folderPath, setFolderPath] = useState<FolderCrumb[]>([]);
@@ -827,9 +821,7 @@ export function MediaListPage() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">{items.length} file{items.length !== 1 ? 's' : ''}</span>
-          {/* FIX #8: AI Generate button - amber/gold color. Platform AI
-              tools are only exposed to clients whose plan includes it. */}
-          {aiToolsEnabled && (
+          {/* FIX #8: AI Generate button - amber/gold color */}
           <button
             onClick={openAiDialog}
             className="flex items-center gap-2 px-4 py-2 bg-amber-400 text-black text-sm font-semibold rounded-lg hover:bg-amber-500 transition-colors shadow-sm"
@@ -837,7 +829,6 @@ export function MediaListPage() {
             <Sparkles className="h-4 w-4" />
             AI Generate
           </button>
-          )}
           <button
             onClick={() => setUploadDialogOpen(true)}
             className="flex items-center gap-2 px-5 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-neutral-800 transition-colors shadow-sm"

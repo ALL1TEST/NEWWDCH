@@ -20,7 +20,13 @@ import { useSubscriptionStore, getPlanBadgeStyle } from '@/lib/stores/subscripti
  * change the badge's own look — only where/how it sits in its parent.
  */
 export function PlanBadge({ className }: { className?: string }) {
-  const { currentPlan } = useSubscriptionStore();
+  const { currentPlan, serverSynced } = useSubscriptionStore();
+  // Never render a default/stale plan: the active plan is only shown
+  // once it has been synced from the server (the same
+  // /api/platform/billing/me source Billing & Subscription uses) —
+  // until then the badge stays hidden instead of showing a hardcoded
+  // or default value.
+  if (!serverSynced) return null;
   return (
     <span
       className={cn(

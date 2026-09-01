@@ -43,9 +43,31 @@ export interface SubscriptionState {
   currentPlan: Plan;
   otherPlans: Plan[];
 
+  // Server sync
+  /** True once the active plan has been confirmed against the server
+   *  (see syncFromServer) or restored from a previously synced
+   *  snapshot. Badge render sites hide while false — a default or
+   *  stale plan value is never displayed. */
+  serverSynced: boolean;
+
   // Actions
   changePlan: (planId: string) => void;
   setSubscription: (data: Partial<SubscriptionState>) => void;
+  /** Mirror the user's ACTIVE server-side subscription (the same data
+   *  Billing & Subscription shows) into the store. */
+  syncFromServer: (input: ServerPlanSyncInput) => void;
+}
+
+/** Input for syncFromServer — the active plan as resolved by the
+ *  server (DB Subscription → legacy customer → Free default). */
+export interface ServerPlanSyncInput {
+  /** Active plan id (e.g. 'pro'). */
+  planId: string;
+  /** Active plan display name from the server (e.g. 'Pro'). */
+  planName?: string;
+  /** Raw subscription status from the server. */
+  status?: string | null;
+  trialEnd?: string | null;
 }
 
 // -------------------- Plan Definitions --------------------
@@ -143,16 +165,72 @@ export const PLANS: Plan[] = [
 
 const SUBSCRIPTION_STORAGE_KEY = 'cms_subscription';
 
-// -------------------- Helper --------------------
+// -------------------- Badge Styles --------------------
+
+/** Fallback for any plan that ships without explicit badge styling —
+    guarantees a future plan still renders a sensible, theme-aware badge
+    instead of an invisible/unstyled one. */
+const NEUTRAL_PLAN_BADGE: PlanBadgeStyle = {
+  avatar: 'bg-primary text-primary-foreground',
+  soft: 'bg-muted text-muted-foreground border border-border',
+  ring: 'ring-border',
+  cardBorder: 'border-border',
+};
+
+// -------------------- Helpers --------------------
 
 interface StoredSubscription {
   currentPlanId: string;
+  /** Server-provided display name — kept so a refresh shows the exact
+   *  plan name the server returned (Platform Admin can rename plans,
+   * and custom plan ids have no static entry). */
+  planName?: string;
   status: string;
   trialEnd: string | null;
   subscriptionStart: string | null;
 }
 
-function loadFromStorage(): Partial<SubscriptionState> | null {
+/** Resolve the Plan object for a plan id: known ids map to their static
+ *  entry (the SAME id → styling mapping Billing & Subscription uses via
+ *  getStorePlan/getPlanBadgeClasses, so the badge color always matches
+ *  the billing page), with the server-provided name honored (it is the
+ *  display source of truth). Unknown ids (custom plans) get a synthetic
+ *  entry with the neutral fallback styling — never the Free styling. */
+function resolvePlan(planId: string, planName?: string): Plan {
+  const known = PLANS.find((p) => p.id === planId);
+  const name = planName?.trim() || known?.name || planId;
+  if (known) return name === known.name ? known : { ...known, name };
+  return {
+    id: planId,
+    name,
+    price: 0,
+    currency: 'CHF',
+    interval: 'month',
+    features: [],
+    badgeVariant: planId,
+    badgeStyle: NEUTRAL_PLAN_BADGE,
+  };
+}
+
+/** Normalize a raw server subscription status into the store's union.
+ *  Unknown values fall back to 'active' (cosmetic only). */
+function normalizeStatus(raw: string | null | undefined): SubscriptionState['status'] {
+  switch (raw) {
+    case 'active':
+    case 'trialing':
+    case 'canceled':
+    case 'past_due':
+      return raw;
+    case 'cancelled':
+      return 'canceled';
+    case 'trial':
+      return 'trialing';
+    default:
+      return 'active';
+  }
+}
+
+function loadFromStorage(): StoredSubscription | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(SUBSCRIPTION_STORAGE_KEY);
@@ -174,12 +252,12 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => {
   const stored = loadFromStorage();
   const initialPlanId = stored?.currentPlanId ?? 'free';
 
-  const currentPlan = PLANS.find((p) => p.id === initialPlanId) ?? PLANS[0];
+  const currentPlan = resolvePlan(initialPlanId, stored?.planName);
   const otherPlans = PLANS.filter((p) => p.id !== initialPlanId);
 
   return {
     currentPlanId: initialPlanId,
-    status: (stored?.status as SubscriptionState['status']) ?? 'active',
+    status: normalizeStatus(stored?.status),
     trialEnd: stored?.trialEnd ?? null,
     subscriptionStart: stored?.subscriptionStart ?? null,
     paymentMethod: null,
@@ -187,6 +265,12 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => {
     allPlans: PLANS,
     currentPlan,
     otherPlans,
+
+    // A stored snapshot only ever comes from a previous syncFromServer
+    // write, so restoring one counts as synced. No snapshot → not
+    // synced → badge render sites hide until the first server sync
+    // lands (a default plan is never displayed).
+    serverSynced: Boolean(stored),
 
     changePlan: (planId: string) => {
       const plan = PLANS.find((p) => p.id === planId);
@@ -205,6 +289,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => {
 
       saveToStorage({
         currentPlanId: planId,
+        planName: plan.name,
         status: 'active',
         trialEnd: null,
         subscriptionStart: now,
@@ -213,8 +298,13 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => {
 
     setSubscription: (data) => {
       const updated = { ...get(), ...data };
-      // Re-derive computed fields
-      const plan = PLANS.find((p) => p.id === updated.currentPlanId) ?? PLANS[0];
+      // Re-derive computed fields (honor a caller-provided plan name
+      // when it matches the current plan id)
+      const providedName =
+        data.currentPlan && data.currentPlan.id === updated.currentPlanId
+          ? data.currentPlan.name
+          : undefined;
+      const plan = resolvePlan(updated.currentPlanId, providedName);
       updated.currentPlan = plan;
       updated.otherPlans = PLANS.filter((p) => p.id !== updated.currentPlanId);
 
@@ -222,25 +312,53 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => {
 
       saveToStorage({
         currentPlanId: updated.currentPlanId,
+        planName: plan.name,
         status: updated.status,
         trialEnd: updated.trialEnd,
         subscriptionStart: updated.subscriptionStart,
       });
     },
+
+    // SERVER SYNC — the single source of truth for the active plan.
+    // Called by useSubscriptionServerSync (mounted in the admin shell)
+    // with the SAME /api/platform/billing/me data the Billing &
+    // Subscription page renders, so the profile badge and the billing
+    // page can never disagree. Skips no-op updates so re-renders stay
+    // minimal.
+    syncFromServer: ({ planId, planName, status, trialEnd }) => {
+      const prev = get();
+      const plan = resolvePlan(planId, planName);
+      const normalizedStatus = normalizeStatus(status);
+      const normalizedTrialEnd = trialEnd ?? null;
+      if (
+        prev.serverSynced &&
+        prev.currentPlanId === planId &&
+        prev.currentPlan.name === plan.name &&
+        prev.status === normalizedStatus &&
+        (prev.trialEnd ?? null) === normalizedTrialEnd
+      ) {
+        return;
+      }
+      set({
+        currentPlanId: planId,
+        currentPlan: plan,
+        otherPlans: PLANS.filter((p) => p.id !== planId),
+        status: normalizedStatus,
+        trialEnd: normalizedTrialEnd,
+        serverSynced: true,
+      });
+      saveToStorage({
+        currentPlanId: planId,
+        planName: plan.name,
+        status: normalizedStatus,
+        trialEnd: normalizedTrialEnd,
+        subscriptionStart: prev.subscriptionStart,
+      });
+    },
   };
 });
 
-// -------------------- Badge Styles --------------------
-
-/** Fallback for any plan that ships without explicit badge styling —
-    guarantees a future plan still renders a sensible, theme-aware badge
-    instead of an invisible/unstyled one. */
-const NEUTRAL_PLAN_BADGE: PlanBadgeStyle = {
-  avatar: 'bg-primary text-primary-foreground',
-  soft: 'bg-muted text-muted-foreground border border-border',
-  ring: 'ring-border',
-  cardBorder: 'border-border',
-};
+// -------------------- Badge Style Lookups --------------------
 
 /** Resolve the badge style for a plan object (never returns undefined). */
 export function getPlanBadgeStyle(plan: Plan | null | undefined): PlanBadgeStyle {

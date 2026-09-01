@@ -6,6 +6,7 @@ import { AdminShell } from './admin-shell';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { usePlanEntitlements, isModuleAllowedByPlan, isSmtpSettingsAllowedByPlan } from '@/hooks/use-entitlements';
+import { useSubscriptionServerSync } from '@/hooks/use-subscription-sync';
 import { moduleRegistry } from '@/lib/module-registry';
 import { canAccessPage, isPlatformPage } from '@/lib/permissions';
 
@@ -60,6 +61,17 @@ export default function AdminApp() {
   // so no data leaks.
   const { data: planEntitlements } = usePlanEntitlements();
   const isStaff = user?.role === 'PLATFORM_ADMIN' || user?.role === 'OWNER';
+
+  // SUBSCRIPTION SYNC — mirrors the user's ACTIVE server-side plan
+  // (the same /api/platform/billing/me data Billing & Subscription
+  // renders) into the subscription store, so every badge render site
+  // (sidebar footer, profile dropdown header, profile page) shows the
+  // actual plan with the plan's own styling. Shared query key →
+  // plan changes on the billing page refresh the badge immediately;
+  // refresh/login re-sync automatically. Badge sites hide until the
+  // first sync lands (never a default/stale value).
+  useSubscriptionServerSync();
+
   const featureAllowed = isStaff || (pageKey === 'settings'
     ? isSmtpSettingsAllowedByPlan(planEntitlements)
     : isModuleAllowedByPlan(pageKey, planEntitlements));
