@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { getApi, postApi } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { useT } from '@/lib/i18n';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -16,8 +16,6 @@ import {
   Receipt,
   Clock,
   Loader2,
-  AlertCircle,
-  Calendar,
   AlertTriangle,
 } from 'lucide-react';
 import {
@@ -40,6 +38,26 @@ function getStorePlan(planId: string): StorePlan {
   return STORE_PLANS.find((p) => p.id === planId) ?? STORE_PLANS[0];
 }
 
+/** Uniform plan-badge classes — ONE identical outline treatment for
+ *  every plan (text + border color only, NO filled background; the
+ *  plan's identity color lives in the text/border color). Local to
+ *  this page so the store's soft badge styling stays untouched
+ *  elsewhere (topbar/profile/payment history). */
+function getPlanBadgeOutlineClasses(variant: string): string {
+  switch (variant) {
+    case 'free':
+      return 'text-emerald-700 border-emerald-200 dark:text-emerald-400 dark:border-emerald-800';
+    case 'plus':
+      return 'text-amber-700 border-amber-200 dark:text-amber-400 dark:border-amber-800';
+    case 'pro':
+      return 'text-violet-700 border-violet-200 dark:text-violet-400 dark:border-violet-800';
+    case 'max':
+      return 'text-pink-700 border-pink-200 dark:text-pink-400 dark:border-pink-800';
+    default:
+      return 'text-muted-foreground border-border';
+  }
+}
+
 // -------------------- Multi-currency + derived feature helpers --------------------
 
 const GB_FACTOR = 1024 * 1024 * 1024;
@@ -54,10 +72,12 @@ interface CustomerCurrencyResolution {
   source: 'ip' | 'default' | 'local';
 }
 
-/** Server-resolved FINAL price for one plan (from /api/platform/billing/me
- *  → planPricing[planId]). Computed by the same resolveCustomerPricing
- *  the checkout route uses — the price/currency displayed here is exactly
- *  what Stripe charges. */
+/** Server-resolved pricing entry (from /api/platform/billing/me →
+ *  planPricing[planId]) — kept ONLY for the API response type: this
+ *  page DISPLAYS the plan's configured base fields (priceMonthly /
+ *  priceYearly / currency — the same source as Platform Admin Plans
+ *  & Pricing); the charged price/currency is still resolved
+ *  server-side at checkout. */
 interface ServerPlanPricing {
   planId: string;
   currency: string;
@@ -79,35 +99,6 @@ type BillingStateWithCurrency = ClientBillingState & {
   currencySource?: 'ip' | 'default' | 'local';
   planPricing?: Record<string, ServerPlanPricing>;
 };
-
-/** Resolve the price + currency to display for a plan. Prefers the
- *  SERVER-RESOLVED pricing (planPricing — the same values checkout
- *  charges); falls back to a local pricesByCurrency lookup for older
- *  API responses. */
-function resolvePlanPricing(
-  plan: {
-    id: string;
-    pricesByCurrency?: Record<string, { monthly: number; yearly: number }>;
-    priceMonthly: number;
-    priceYearly: number;
-    currency: string;
-    interval: 'monthly' | 'yearly';
-  },
-  serverPricing: ServerPlanPricing | undefined,
-  customerCurrency: string,
-): { monthly: number; yearly: number; currency: string } {
-  if (serverPricing) {
-    return {
-      monthly: serverPricing.monthly,
-      yearly: serverPricing.yearly,
-      currency: serverPricing.currency,
-    };
-  }
-  // Legacy fallback — local lookup (display only).
-  const entry = plan.pricesByCurrency?.[customerCurrency];
-  if (entry) return { monthly: entry.monthly, yearly: entry.yearly, currency: customerCurrency };
-  return { monthly: plan.priceMonthly, yearly: plan.priceYearly, currency: plan.currency };
-}
 
 /** One customer-facing plan feature: a label line (rendered with a ✓)
  *  plus optional indented sub-lines. Used for the Platform AI block —
@@ -352,7 +343,6 @@ export function BillingPage() {
       <div className="max-w-6xl mx-auto space-y-8">
         <div>
           <Skeleton className="h-6 w-48" />
-          <Skeleton className="h-4 w-72 mt-2" />
         </div>
         <Card>
           <CardHeader>
@@ -419,7 +409,6 @@ export function BillingPage() {
       <div className="max-w-6xl mx-auto space-y-8">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-foreground">{t('billing.title')}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t('billing.description')}</p>
         </div>
         <Card>
           <CardContent>
@@ -444,7 +433,6 @@ export function BillingPage() {
       <div className="max-w-6xl mx-auto space-y-8">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-foreground">{t('billing.title')}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t('billing.description')}</p>
         </div>
         <Card>
           <CardHeader>
@@ -474,21 +462,10 @@ export function BillingPage() {
     );
   }
 
-  // Customer's resolved currency + country (server-side IP geolocation
-  // via /api/platform/billing/me → customerCurrencyResolution). Falls
-  // back to the plan's default currency when no resolution is present
-  // (e.g. legacy customer without the new server-side resolution).
-  const customerCurrencyResolution = billingState.customerCurrencyResolution;
-  const customerCurrency =
-    customerCurrencyResolution?.currency ?? billingState.plan.currency;
-  const customerCountryName = customerCurrencyResolution?.countryName;
-  const currencySource = customerCurrencyResolution?.source;
-
   const currentPlan = billingState.plan;
   const otherPlans = billingState.allPlans.filter((p) => p.id !== currentPlan.id);
   const status = billingState.status;
   const trialEnd = billingState.trialEnd;
-  const currentPeriodEnd = billingState.currentPeriodEnd ?? billingState.nextBillingAt;
   const freeTrialExpiresAt = billingState.freeTrialExpiresAt;
   const freeTrialExpired = billingState.freeTrialExpired;
   const isCancelled = status === 'cancelled';
@@ -508,18 +485,15 @@ export function BillingPage() {
   const effectivePeriod: 'monthly' | 'yearly' =
     globalPeriod ?? (currentInterval === 'yearly' ? 'yearly' : 'monthly');
 
-  const currentStorePlan = getStorePlan(currentPlan.id);
-
-  // Server-resolved FINAL pricing per plan — the same resolveCustomerPricing
-  // values the checkout route charges (falls back to a local lookup for
-  // older API responses).
-  const planPricing = billingState.planPricing;
-  const currentPricing = resolvePlanPricing(currentPlan, planPricing?.[currentPlan.id], customerCurrency);
+  // Display pricing = the plan's CONFIGURED base fields (priceMonthly /
+  // priceYearly / currency) — the SAME source the Platform Admin
+  // Plans & Pricing page reads (checkout still resolves the charged
+  // currency/price server-side from the request).
   // The CURRENT subscription's price = the price for the interval the
   // subscription is actually on (monthly price / yearly total).
   const currentPrice =
-    currentInterval === 'yearly' ? currentPricing.yearly : currentPricing.monthly;
-  const currentDisplayCurrency = currentPricing.currency;
+    currentInterval === 'yearly' ? currentPlan.priceYearly : currentPlan.priceMonthly;
+  const currentDisplayCurrency = currentPlan.currency;
   // Price suffix: explicit "/ month" | "/ year" next to the displayed
   // amount — consistent with the redesigned plan cards (also removes
   // any ambiguity when a card's period differs from the global one).
@@ -579,25 +553,6 @@ export function BillingPage() {
       {/* Page Header */}
       <div>
         <h1 className="text-xl font-bold tracking-tight text-foreground">{t('billing.title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">{t('billing.description')}</p>
-        {/* Auto Currency indicator — shows the customer's resolved
-            currency + the source (IP-detected / platform default /
-            local development). The server resolves this from the
-            request IP; the client cannot change currency manually. */}
-        {currencySource && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="text-[10px] font-mono">
-              Currency: {customerCurrency}
-            </Badge>
-            <span className="text-[11px] text-muted-foreground">
-              {currencySource === 'ip'
-                ? `Auto-detected from your location${customerCountryName ? ` (${customerCountryName})` : ''}`
-                : currencySource === 'default'
-                  ? 'Platform default'
-                  : 'Local development'}
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Free-trial-expired banner — surfaces server-side enforcement */}
@@ -625,24 +580,14 @@ export function BillingPage() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-3 min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <CreditCard className="h-5 w-5 text-muted-foreground shrink-0" />
-                <span className="text-2xl font-semibold tracking-tight">{currentPlan.name}</span>
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] font-semibold ${getPlanBadgeClasses(currentStorePlan.badgeVariant)}`}
-                >
-                  {currentPlan.name}
-                </Badge>
-              </div>
-              {/* Same price treatment as the redesigned plan cards —
-                  large amount + explicit period suffix (display only;
-                  the price source and suffix logic are unchanged). */}
-              <div className="flex items-baseline gap-1.5 ml-7">
+              <span className="text-2xl font-semibold tracking-tight">{currentPlan.name}</span>
+              {/* Same price treatment as the plan cards — large amount +
+                  explicit period suffix for paid plans; a zero price shows
+                  the plain formatted amount ("$0") with no suffix, exactly
+                  like the Platform Admin Plans & Pricing page. */}
+              <div className="flex items-baseline gap-1.5">
                 <span className="text-3xl font-bold tracking-tight">
-                  {currentPrice === 0
-                    ? t('billing.free')
-                    : formatMoney(currentPrice, currentDisplayCurrency)}
+                  {formatMoney(currentPrice, currentDisplayCurrency)}
                 </span>
                 {currentPrice > 0 && (
                   <span className="text-sm text-muted-foreground whitespace-nowrap">
@@ -650,14 +595,6 @@ export function BillingPage() {
                   </span>
                 )}
               </div>
-              {currentPrice > 0 &&
-                planPricing?.[currentPlan.id] &&
-                planPricing[currentPlan.id].supported &&
-                customerCountryName && (
-                  <p className="text-[11px] text-muted-foreground ml-7">
-                    Priced for {customerCountryName} ({currentDisplayCurrency})
-                  </p>
-                )}
             </div>
             <Badge
               variant={status === 'active' ? 'default' : 'outline'}
@@ -666,16 +603,6 @@ export function BillingPage() {
               {status}
             </Badge>
           </div>
-
-          {/* Current period end / next billing date (DB Subscription source of truth) */}
-          {currentPeriodEnd && !isCancelled && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-md p-3">
-              <Calendar className="h-4 w-4 shrink-0" />
-              <span>
-                Next billing: <span className="font-medium text-foreground">{formatDate(currentPeriodEnd)}</span>
-              </span>
-            </div>
-          )}
 
           {trialEnd && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-md p-3">
@@ -710,7 +637,10 @@ export function BillingPage() {
           ) : (
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex-1" />
-              <div className="flex gap-2">
+              {/* flex-wrap: the two action buttons never overflow the
+                  card on narrow (mobile) viewports — they wrap as whole
+                  units instead (display-only fix; handlers unchanged). */}
+              <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" disabled>
                   {t('billing.managePayment')}
                 </Button>
@@ -778,10 +708,9 @@ export function BillingPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {otherPlans.map((plan) => {
             const storePlan = getStorePlan(plan.id);
-            // Server-resolved FINAL price — the same values checkout charges.
-            const planPricingResolved = resolvePlanPricing(plan, planPricing?.[plan.id], customerCurrency);
-            const planDisplayCurrency = planPricingResolved.currency;
-            const planSupported = planPricing?.[plan.id]?.supported ?? true;
+            // Display price/currency = the plan's CONFIGURED base fields —
+            // the SAME source the Platform Admin Plans & Pricing page reads.
+            const planDisplayCurrency = plan.currency;
             // ---- Enabled billing periods (admin-configured per plan) ----
             const planHasMonthly = plan.billingMonthly ?? true;
             const planHasYearly = plan.billingYearly ?? true;
@@ -801,7 +730,7 @@ export function BillingPage() {
                   ? 'yearly'
                   : plan.interval;
             const planPrice =
-              cardInterval === 'yearly' ? planPricingResolved.yearly : planPricingResolved.monthly;
+              cardInterval === 'yearly' ? plan.priceYearly : plan.priceMonthly;
             const isBusy =
               (changePlanMutation.isPending && changePlanMutation.variables?.planId === plan.id) ||
               (checkoutMutation.isPending && checkoutMutation.variables?.planId === plan.id);
@@ -812,24 +741,28 @@ export function BillingPage() {
               >
                 <CardContent className="flex flex-col flex-1">
                   {/* Large plan name — keeps the plan's color identity via
-                      the card border + its soft badge. */}
+                      the card border + its outline badge (text + border
+                      color only, NO filled background — one identical
+                      treatment for every plan). */}
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <h3 className="text-2xl font-semibold tracking-tight text-foreground">
                       {plan.name}
                     </h3>
                     <Badge
                       variant="outline"
-                      className={`text-[10px] font-semibold shrink-0 ${getPlanBadgeClasses(storePlan.badgeVariant)}`}
+                      className={`text-[10px] font-semibold shrink-0 bg-transparent ${getPlanBadgeOutlineClasses(storePlan.badgeVariant)}`}
                     >
                       {plan.name}
                     </Badge>
                   </div>
                   {/* Large price — explicit period suffix so the amount is
-                      always unambiguous (also for pinned-period cards). */}
+                      always unambiguous (also for pinned-period cards); a
+                      zero price shows the plain formatted amount ("$0")
+                      with no suffix, like Platform Admin Plans & Pricing. */}
                   <div className="mt-4">
                     <div className="flex items-baseline gap-1.5">
                       <span className="text-4xl font-bold tracking-tight text-foreground">
-                        {planPrice === 0 ? t('billing.free') : formatMoney(planPrice, planDisplayCurrency)}
+                        {formatMoney(planPrice, planDisplayCurrency)}
                       </span>
                       {planPrice > 0 && (
                         <span className="text-sm text-muted-foreground whitespace-nowrap">
@@ -843,17 +776,6 @@ export function BillingPage() {
                     {!plan.isFree && !followsSelection && planHasMonthly !== planHasYearly && (
                       <p className="text-[11px] text-muted-foreground mt-1.5">
                         {planHasMonthly ? 'Monthly billing only' : 'Yearly billing only'}
-                      </p>
-                    )}
-                    {planPrice > 0 && customerCountryName && planSupported && (
-                      <p className="text-[11px] text-muted-foreground mt-1.5">
-                        Priced for {customerCountryName} ({planDisplayCurrency})
-                      </p>
-                    )}
-                    {planPrice > 0 && !planSupported && planPricing?.[plan.id] && (
-                      <p className="text-[11px] text-muted-foreground mt-1.5">
-                        Priced in {planDisplayCurrency} (plan default) — {planPricing[plan.id].detectedCurrency} not
-                        configured for this plan
                       </p>
                     )}
                   </div>
