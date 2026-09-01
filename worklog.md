@@ -9481,3 +9481,33 @@ Work Log:
 Stage Summary:
 - The Admin User Notifications page now has the exact Platform Admin Notifications visual design (header, toolbar+search, card list with date grouping, row design with unread accent bar + icon avatars + hover actions, platform color palette, empty/loading states, responsive layout) — VLM-verified CONSISTENT.
 - Admin User notification logic is untouched: the 6 filters (All / Unread / Info / Success / Warning / Error) remain exactly as before and all verified live (correct counts + correct API params), data stays on the Admin User endpoints (completely separate from Platform Admin data — 403 cross-access), the comment-notifications setting, Read More/Read Less and the Delete-All dialog are all preserved. Platform taxonomy (System/Customers/Payments/Subscriptions/Security) was NOT copied.
+
+---
+Task ID: FIX-PLAN-AUTOCURRENCY
+Agent: main (orchestrator)
+Task: Fix Create Plan backend error "Unknown argument 'autoCurrency' in prisma.planConfig.create()" — make autoCurrency properly supported end-to-end without changing the Create Plan UI or removing the Auto Currency feature.
+
+Work Log:
+- Inspected prisma/schema.prisma: PlanConfig model ALREADY contains `autoCurrency Boolean @default(true)` (line 2117, added in commit 8108e8d 08-31 12:27); project uses the db:push workflow (no migrations folder).
+- Verified generated client (node_modules/.prisma/client): DMMF includes autoCurrency as required scalar; existing DB rows (free/plus/pro/max) all have autoCurrency=1.
+- Traced the full flow — every layer was already correct on disk:
+  - Form: platform-plans.tsx sends autoCurrency (create line 1288, edit line 852); Edit loads plan.autoCurrency ?? true (lines 737/773)
+  - API: POST /api/platform/admin/plans forwards body.autoCurrency (route.ts line 71); PUT plans/[planId] → savePlanConfig
+  - Validation: subscription-data.ts validatePlanConfigInput rejects non-boolean autoCurrency (line 560)
+  - Types: PlanConfigInput.autoCurrency?: boolean (plan-config.ts line 834), PlanConfigData.autoCurrency: boolean (line 524), PlanConfigRow.autoCurrency (line 524 area), platform-data type (line 50)
+  - Handlers: createPlanConfig line 1107 (`input.autoCurrency ?? true`) → dataToRow (line 642) → db.planConfig.create (line 1127); mergePlanPatch line 942 (`patch.autoCurrency ?? current.autoCurrency`) → db.planConfig.update (line 1018)
+  - Reads: rowToData line 606 (`row.autoCurrency ?? true`) → shared cache → platform-data (line 193) → /api/platform/billing/me + checkout + country-pricing (line 542 autoCurrency OFF → plan default currency)
+- ROOT CAUSE: the dev server process that produced the user's error had a STALE in-memory Prisma client (started before the client included autoCurrency); that process later died (nothing was listening on port 3000 at session start — only backup-scheduler mini-services 1828/1916 on 3010).
+- FIX (operational, zero code changes required): `bunx prisma db push` (confirmed "database is already in sync" — formally applied) + client regenerated + dev server restarted fresh (double-fork orphan, PID 23100, port 3000) so the running process loads the current generated client.
+- E2E verified via browser (owner@example.com, exact user flow): Plans & Pricing → Create Plan modal → name "E2E Test" (id auto-derived e2e-test), prices 25/250 CHF, Auto Currency switch ON → submit → dialog closed, plan card appeared; dev.log POST /api/platform/admin/plans 201, ZERO Prisma errors; DB row persisted autoCurrency=1.
+- Edit Plan round-trip verified: opened Edit → Auto Currency switch loaded true (matches DB) → toggled OFF → Save Plan → PUT 200 → DB autoCurrency=0 → re-opened Edit → switch loaded false. 
+- Client Billing verified: GET /api/platform/billing/me (admin session) allPlans listed e2e-test with autoCurrency=false while free/plus/pro/max show true; customerCurrency resolution (CHF/CH, source local) intact.
+- Cleanup: deleted e2e-test via owner API DELETE (UI has no delete button by design; delete is API-only); canonical 4 plans restored (all autoCurrency=1, prices/currency untouched — no existing plans or fields broken).
+- Screenshots: tool-results/autocurrency-create-success.png, tool-results/autocurrency-final-plans.png (untracked).
+- Lint: 0 problems from this task (zero source files changed); the 4 remaining errors are PRE-EXISTING in src/modules/backups/storage-page.tsx (react-hooks/refs, unrelated module from an earlier session).
+
+Stage Summary:
+- Create Plan no longer throws "Unknown argument 'autoCurrency'" — verified end-to-end in the browser (201 Created, no Prisma error, plan visible in UI).
+- autoCurrency is fully supported end-to-end: schema (Boolean @default(true)) → DB column → generated client → API validation → create/update handlers → shared types → Edit Plan load/save round-trip → Client Billing reads the persisted value.
+- Root cause was a stale dev-server process (pre-regeneration Prisma client in memory), not missing model support; fixed by regenerating the client, re-applying the schema sync (no-op), and restarting the server fresh.
+- Existing plans (Free/Plus/Pro/Max) fully intact; Auto Currency UI unchanged and functional.
