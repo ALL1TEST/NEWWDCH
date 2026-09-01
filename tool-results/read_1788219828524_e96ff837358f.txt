@@ -1,0 +1,1263 @@
+     1→'use client';
+     2→
+     3→import React, { createElement, useState, useMemo, useCallback } from 'react';
+     4→import {
+     5→  LayoutDashboard,
+     6→  FileText,
+     7→  Image,
+     8→  FolderOpen,
+     9→  Users,
+    10→  Tag,
+    11→  MessageSquare,
+    12→  Mail,
+    13→  Search,
+    14→  Navigation,
+    15→  BarChart3,
+    16→  Bell,
+    17→  Calendar,
+    18→  Sparkles,
+    19→  Webhook,
+    20→  Settings,
+    21→  Database,
+    22→  Activity,
+    23→  MailPlus,
+    24→  ChevronRight,
+    25→  Plug,
+    26→  Key,
+    27→  ScrollText,
+    28→  Terminal,
+    29→  Link,
+    30→  KeyRound,
+    31→  Clock,
+    32→  RotateCcw,
+    33→  HeartPulse,
+    34→  Cpu,
+    35→  ListTodo,
+    36→  BellRing,
+    37→  Brain,
+    38→  HardDrive,
+    39→  ShieldAlert,
+    40→  Globe,
+    41→  BookOpen,
+    42→  Shield,
+    43→  Layers,
+    44→  Upload,
+    45→  AlertTriangle,
+    46→  Gauge,
+    47→  Zap,
+    48→  Server,
+    49→  PanelLeftClose,
+    50→  PanelLeftOpen,
+    51→  CreditCard,
+    52→  Receipt,
+    53→  Tags,
+    54→  Ticket,
+    55→  Flag,
+    56→  ShieldCheck,
+    57→  type LucideIcon,
+    58→} from 'lucide-react';
+    59→import { getInitials } from '@/lib/utils';
+    60→import { useAuthStore } from '@/lib/stores/auth-store';
+    61→import { useNavigationStore } from '@/lib/stores/navigation-store';
+    62→import { getVisibleNavItems } from '@/lib/permissions';
+    63→import type { NavItem } from '@/shared/types';
+    64→import {
+    65→  Sidebar,
+    66→  SidebarContent,
+    67→  SidebarFooter,
+    68→  SidebarGroup,
+    69→  SidebarGroupContent,
+    70→  SidebarHeader,
+    71→  SidebarMenu,
+    72→  SidebarMenuBadge,
+    73→  SidebarMenuButton,
+    74→  SidebarMenuItem,
+    75→  SidebarMenuSub,
+    76→  SidebarMenuSubButton,
+    77→  SidebarMenuSubItem,
+    78→  SidebarRail,
+    79→  SidebarSeparator,
+    80→  useSidebar,
+    81→} from '@/components/ui/sidebar';
+    82→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+    83→import { Badge } from '@/components/ui/badge';
+    84→import { Button } from '@/components/ui/button';
+    85→import {
+    86→  Tooltip,
+    87→  TooltipContent,
+    88→  TooltipTrigger,
+    89→} from '@/components/ui/tooltip';
+    90→import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+    91→import { SiteSelector } from '@/components/layout/site-selector';
+    92→import { cn } from '@/lib/utils';
+    93→import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
+    94→import { useSubscriptionStore } from '@/lib/stores/subscription-store';
+    95→import { usePlanEntitlements, isModuleAllowedByPlan } from '@/hooks/use-entitlements';
+    96→import { NotificationBell } from '@/components/layout/notification-bell';
+    97→import { UserProfileMenu } from '@/components/layout/user-profile-menu';
+    98→import { ThemeToggle } from '@/components/layout/theme-toggle';
+    99→
+   100→// -------------------- Icon Mapping --------------------
+   101→
+   102→const ICON_MAP: Record<string, LucideIcon> = {
+   103→  'LayoutDashboard': LayoutDashboard,
+   104→  'FileText': FileText,
+   105→  'Image': Image,
+   106→  'FolderOpen': FolderOpen,
+   107→  'Users': Users,
+   108→  'Tag': Tag,
+   109→  'MessageSquare': MessageSquare,
+   110→  'Mail': Mail,
+   111→  'Search': Search,
+   112→  'Navigation': Navigation,
+   113→  'BarChart3': BarChart3,
+   114→  'Bell': Bell,
+   115→  'Calendar': Calendar,
+   116→  'Sparkles': Sparkles,
+   117→  'Webhook': Webhook,
+   118→  'Settings': Settings,
+   119→  'Database': Database,
+   120→  'Activity': Activity,
+   121→  'MailTemplate': MailPlus,
+   122→  'Plug': Plug,
+   123→  'Key': Key,
+   124→  'ScrollText': ScrollText,
+   125→  'Terminal': Terminal,
+   126→  'Link': Link,
+   127→  'KeyRound': KeyRound,
+   128→  'Clock': Clock,
+   129→  'RotateCcw': RotateCcw,
+   130→  'HeartPulse': HeartPulse,
+   131→  'Cpu': Cpu,
+   132→  'ListTodo': ListTodo,
+   133→  'BellRing': BellRing,
+   134→  'Brain': Brain,
+   135→  'HardDrive': HardDrive,
+   136→  'ShieldAlert': ShieldAlert,
+   137→  'Globe': Globe,
+   138→  'BookOpen': BookOpen,
+   139→  'Shield': Shield,
+   140→  'Layers': Layers,
+   141→  'Upload': Upload,
+   142→  'AlertTriangle': AlertTriangle,
+   143→  'Gauge': Gauge,
+   144→  'Zap': Zap,
+   145→  'Server': Server,
+   146→  'CreditCard': CreditCard,
+   147→  'Receipt': Receipt,
+   148→  'Tags': Tags,
+   149→  'Ticket': Ticket,
+   150→  'Flag': Flag,
+   151→  'ShieldCheck': ShieldCheck,
+   152→};
+   153→
+   154→function getIcon(iconName?: string): LucideIcon {
+   155→  if (!iconName) return FileText;
+   156→  return ICON_MAP[iconName] ?? FileText;
+   157→}
+   158→
+   159→// -------------------- Collapsed-Rail Tooltip Positioning -------------------
+   160→/*
+   161→ * SINGLE source of truth for the positioning of every tooltip/label that
+   162→ * appears when the sidebar is collapsed into the 48px icon rail.
+   163→ *
+   164→ *   side="right"         → opens to the RIGHT of the 48px collapsed rail,
+   165→ *                          fully inside the main viewport (never overlaps
+   166→ *                          the rail, never opens to the left/outside).
+   167→ *   align="center"       → vertically centers the bubble on the icon's
+   168→ *                          32×32 hover target so labels line up across
+   169→ *                          every row of the rail (logo, theme, nav items,
+   170→ *                          parent items with submenu).
+   171→ *   sideOffset=8         → ~8px visible gap from the trigger button's right
+   172→ *                          edge (button right edge ~x=40 inside the 48px
+   173→ *                          rail, tooltip left edge ~x=48 = the rail's
+   174→ *                          right edge — flush with the RAIL, NOT with the
+   175→ *                          icon, so the bubble never touches the glyph).
+   176→ *   collisionPadding=12 → 12px viewport-edge collision padding so the
+   177→ *                          bubble can never be clipped at any viewport
+   178→ *                          edge or scroll past the visible area.
+   179→ *
+   180→ * Portal-based rendering (Radix TooltipPrimitive.Portal → document.body,
+   181→ * wired inside src/components/ui/tooltip.tsx) means every tooltip is
+   182→ * rendered OUTSIDE the sidebar DOM tree — so the sidebar's
+   183→ * overflow-hidden / overflow-x-hidden on the rail container can NEVER
+   184→ * clip or hide the bubble. The tooltip floats above every other
+   185→ * element at z-50.
+   186→ *
+   187→ * Used by:
+   188→ *   • CollapsedLogoButton         (header "Expand" tooltip)
+   189→ *   • SimpleNavItem              (leaf nav items: Dashboard, Articles,
+   190→ *                                  Calendar, Media, Users, Comments,
+   191→ *                                  Newsletter, SEO, AI, Automation)
+   192→ *   • ExpandableNavItem          (parent nav items in EXPANDED state —
+   193→ *                                  tooltip is hidden by SidebarMenuButton
+   194→ *                                  when state!=="collapsed", but the
+   195→ *                                  positioning object is still applied
+   196→ *                                  so the prop stays consistent across
+   197→ *                                  every nav item renderer)
+   198→ *   • CollapsedParentNavItem     (parent nav items in COLLAPSED state —
+   199→ *                                  label tooltip shows when the floating
+   200→ *                                  popover is CLOSED; when the popover is
+   201→ *                                  open, no tooltip shows to avoid visual
+   202→ *                                  conflict)
+   203→ *
+   204→ * The ThemeToggle component (src/components/layout/theme-toggle.tsx) lives
+   205→ * in a separate file and inlines the SAME four values — see the comment
+   206→ * there for the rationale.
+   207→ */
+   208→const COLLAPSED_TOOLTIP_PROPS: React.ComponentProps<typeof TooltipContent> = {
+   209→  side: 'right',
+   210→  align: 'center',
+   211→  sideOffset: 8,
+   212→  collisionPadding: 12,
+   213→};
+   214→
+   215→// -------------------- Navigation Config --------------------
+   216→
+   217→const NAV_ITEMS: NavItem[] = [
+   218→  {
+   219→    label: 'Dashboard',
+   220→    href: '#',
+   221→    icon: 'LayoutDashboard',
+   222→  },
+   223→  {
+   224→    label: 'Articles',
+   225→    href: '#content',
+   226→    icon: 'FileText',
+   227→  },
+   228→  {
+   229→    label: 'Calendar',
+   230→    href: '#calendar',
+   231→    icon: 'Calendar',
+   232→  },
+   233→  {
+   234→    label: 'Media',
+   235→    href: '#media',
+   236→    icon: 'Image',
+   237→  },
+   238→  {
+   239→    label: 'Users',
+   240→    href: '#users',
+   241→    icon: 'Users',
+   242→    requiredRole: 'ADMIN',
+   243→  },
+   244→  {
+   245→    label: 'Comments',
+   246→    href: '#comments',
+   247→    icon: 'MessageSquare',
+   248→    requiredPermission: 'comments:read',
+   249→  },
+   250→  {
+   251→    label: 'Newsletter',
+   252→    href: '#newsletter',
+   253→    icon: 'Mail',
+   254→  },
+   255→  {
+   256→    label: 'SEO',
+   257→    href: '#seo',
+   258→    icon: 'Search',
+   259→  },
+   260→  {
+   261→    label: 'Analytics',
+   262→    href: '#analytics',
+   263→    icon: 'BarChart3',
+   264→  },
+   265→  {
+   266→    label: 'AI',
+   267→    href: '#ai',
+   268→    icon: 'Sparkles',
+   269→  },
+   270→  {
+   271→    label: 'Automation',
+   272→    href: '#automation',
+   273→    icon: 'Zap',
+   274→    requiredRole: 'ADMIN',
+   275→  },
+   276→  {
+   277→    label: 'Settings',
+   278→    href: '#settings',
+   279→    icon: 'Settings',
+   280→    requiredRole: 'ADMIN',
+   281→    children: [
+   282→      { label: 'Email Templates', href: '#email-templates', icon: 'MailTemplate' },
+   283→      { label: 'SMTP Settings', href: '#settings/smtp', icon: 'Server' },
+   284→      { label: 'Notifications', href: '#notifications', icon: 'Bell' },
+   285→      { label: 'Backups', href: '#backups', icon: 'Database' },
+   286→    ],
+   287→  },
+   288→];
+   289→
+   290→// -------------------- Platform Admin Navigation --------------------
+   291→// Shown only to PLATFORM_ADMIN users. Completely separate from the
+   292→// client CMS navigation above.
+   293→
+   294→const PLATFORM_NAV_ITEMS: NavItem[] = [
+   295→  {
+   296→    label: 'Overview',
+   297→    href: '#platform-overview',
+   298→    icon: 'LayoutDashboard',
+   299→  },
+   300→  {
+   301→    label: 'Customers',
+   302→    href: '#platform-customers',
+   303→    icon: 'Users',
+   304→  },
+   305→  {
+   306→    label: 'Payments',
+   307→    href: '#platform-payments',
+   308→    icon: 'Receipt',
+   309→  },
+   310→  {
+   311→    label: 'Plans & Pricing',
+   312→    href: '#platform-plans',
+   313→    icon: 'Tags',
+   314→  },
+   315→  {
+   316→    label: 'Coupons',
+   317→    href: '#platform-coupons',
+   318→    icon: 'Ticket',
+   319→  },
+   320→  {
+   321→    label: 'Stripe Settings',
+   322→    href: '#platform-stripe-settings',
+   323→    icon: 'CreditCard',
+   324→  },
+   325→  {
+   326→    label: 'Notifications',
+   327→    href: '#platform-notifications',
+   328→    icon: 'Bell',
+   329→  },
+   330→  {
+   331→    label: 'Email Templates',
+   332→    href: '#platform-email-templates',
+   333→    icon: 'Mail',
+   334→  },
+   335→  {
+   336→    label: 'SMTP Settings',
+   337→    href: '#platform-smtp',
+   338→    icon: 'Server',
+   339→  },
+   340→  {
+   341→    label: 'AI',
+   342→    href: '#platform-ai',
+   343→    icon: 'Sparkles',
+   344→  },
+   345→  {
+   346→    label: 'Backups',
+   347→    href: '#platform-backups',
+   348→    icon: 'Database',
+   349→  },
+   350→];
+   351→
+   352→// -------------------- Explicit Top-Level Section Mapping --------------------
+   353→// This is the SINGLE source of truth for which top-level section a route belongs to.
+   354→// It uses EXPLICIT route prefix matching — NO iteration, NO guessing.
+   355→
+   356→const ROUTE_PREFIX_TO_SECTION: Record<string, string> = {
+   357→  'content': 'Content',
+   358→  'automation': 'Automation',
+   359→  'settings': 'Settings',
+   360→  // Modules moved under Settings — keep them mapped to the Settings section
+   361→  // so the Settings submenu auto-expands when navigating to these pages.
+   362→  'backups': 'Settings',
+   363→  'email-templates': 'Settings',
+   364→  'notifications': 'Settings',
+   365→};
+   366→
+   367→/**
+   368→ * Derive the top-level section ID from the current browser hash.
+   369→ * Uses EXPLICIT prefix matching — #settings/seo always returns 'Settings', never 'SEO'.
+   370→ */
+   371→function getSectionFromHash(hash: string): string | null {
+   372→  const path = hash.replace(/^#\/?,?/, '').trim();
+   373→  if (!path || path === 'dashboard') return null;
+   374→
+   375→  const firstSegment = path.split('/')[0];
+   376→  return ROUTE_PREFIX_TO_SECTION[firstSegment] ?? null;
+   377→}
+   378→
+   379→// -------------------- Group Definitions --------------------
+   380→
+   381→interface NavGroup {
+   382→  label: string;
+   383→  items: NavItem[];
+   384→}
+   385→
+   386→// Flat sidebar: all items in a single group, no section headings.
+   387→function buildNavGroups(items: NavItem[]): NavGroup[] {
+   388→  return [{ label: '', items }];
+   389→}
+   390→
+   391→// -------------------- Helpers --------------------
+   392→
+   393→function hrefToModule(href: string): string {
+   394→  const hash = href.replace(/^#/, '');
+   395→  return hash.split('/')[0] || 'dashboard';
+   396→}
+   397→
+   398→function NavIcon({ name }: { name?: string }) {
+   399→  const Icon = getIcon(name);
+   400→  return createElement(Icon);
+   401→}
+   402→
+   403→// -------------------- Shared Icon Grid -------------------
+   404→/*
+   405→ * ONE icon grid governs every sidebar row:
+   406→ *
+   407→ *   collapsed rail width ......... var(--sidebar-width-icon) = 48px
+   408→ *   cell width (every icon/logo).. 32px × 32px   (h-8 w-8)
+   409→ *   horizontal padding ............ 8px each side
+   410→ *   ⇒ horizontal center-line ..... x = 24px for LOGO, NAV ICONS,
+   411→ *     SETTINGS POPOVER ANCHOR, AVATAR and LOGOUT alike.
+   412→ *
+   413→ * No ad-hoc margins: anything square in the sidebar is exactly this
+   414→ * geometry, so the "C" logo, the collapse control, nav icons (including
+   415→ * the AI star/sparkle) and footer controls share one visual axis.
+   416→ */
+   417→function LogoMark() {
+   418→  return (
+   419→    <div
+   420→      aria-hidden="true"
+   421→      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm select-none"
+   422→    >
+   423→      C
+   424→    </div>
+   425→  );
+   426→}
+   427→
+   428→/**
+   429→ * Collapsed-rail logo cell. Since the extra collapse-toggle icon was removed
+   430→ * from below the logo, THIS cell is the explicit expand control:
+   431→ *   • identical 32×32 grid geometry as every other rail icon
+   432→ *   • click toggles the sidebar open (SidebarRail edge strip still works)
+   433→ * No new icon is introduced and no empty clickable ghost remains.
+   434→ *
+   435→ * HOVER BEHAVIOR (collapsed state only — this button is rendered ONLY
+   436→ * inside the collapsed-rail cluster, so the expanded LogoMark is untouched):
+   437→ * The `hovered` prop is LIFTED to the rail level (see AppSidebar's
+   438→ * `railHovered` state + the onMouseEnter/onMouseLeave handlers on the
+   439→ * <Sidebar> root). This means the swap fires when the mouse is ANYWHERE
+   440→ * over the collapsed 48px rail — NOT only when the pointer is directly
+   441→ * over the logo cell:
+   442→ *   • rail at rest ........  shows the "C" logo mark on its bg-primary
+   443→ *                            black box (NORMAL LOGO — background UNCHANGED,
+   444→ *                            same as the expanded LogoMark).
+   445→ *   • mouse over ANY rail   the "C" is replaced by a PanelLeftOpen icon
+   446→ *     item (Dashboard,       AND the button's background becomes
+   447→ *     Articles, …, Profile,  transparent so ONLY the Expand icon is
+   448→ *     Theme, Settings, …)    visible with no box behind it. The icon
+   449→ *                            color switches to muted-foreground (gray)
+   450→ *                            so it stays visible against the
+   451→ *                            transparent/page bg in both Light and Dark.
+   452→ *   • mouse leaves the     restores the "C" logo mark AND its bg-primary
+   453→ *     entire rail            box (onMouseLeave on the <Sidebar> root).
+   454→ *   • click ............. calls toggleSidebar (existing functionality,
+   455→ *                         unchanged).
+   456→ *
+   457→ * Each rail item keeps its OWN Radix Tooltip label (Dashboard, Articles,
+   458→ * Profile, etc.) — the lifted `hovered` prop ONLY drives the logo cell's
+   459→ * C↔PanelLeftOpen swap; it does NOT touch any item's tooltip. The logo's
+   460→ * own "Expand" Tooltip still fires ONLY when the pointer is directly over
+   461→ * the logo button (the Tooltip trigger is the button itself, independent
+   462→ * of the `hovered` prop).
+   463→ *
+   464→ * Background is removed ONLY from the temporary Expand-icon state; the
+   465→ * normal logo (at rest) keeps its bg-primary background exactly as-is.
+   466→ *
+   467→ * Implementation: React state lifted to AppSidebar (railHovered +
+   468→ * onMouseEnter/onMouseLeave on <Sidebar>) — NOT CSS :hover / group-hover
+   469→ * variants. This is deliberate: Tailwind v4 wraps its hover:/group-hover:
+   470→ * utilities inside @media (hover: hover), so on any browser that reports
+   471→ * (hover: none) (headless, touch, some preview iframes) those utilities
+   472→ * NEVER activate and the swap + bg-transparent would silently fail. React
+   473→ * mouse events fire on ANY pointer input regardless of the hover media
+   474→ * query, so the behavior is identical in every environment. The
+   475→ * conditional className + conditional render swap the bg/color/glyph
+   476→ * atomically per state. Works in both Light and Dark.
+   477→ */
+   478→function CollapsedLogoButton({ hovered }: { hovered: boolean }) {
+   479→  const { toggleSidebar } = useSidebar();
+   480→  return (
+   481→    /* Hover-only "Expand" tooltip: instant (provider delayDuration=0),
+   482→       appears on mouse-enter, disappears on mouse-leave. Radix closes it
+   483→       on any pointer exit — disableHoverableContent guarantees it can
+   484→       never linger or trap the pointer. The Tooltip trigger is the logo
+   485→       button itself, so the "Expand" TEXT fires ONLY on direct logo hover
+   486→       (NOT on rail-level hover of other items) — the C↔PanelLeftOpen ICON
+   487→       swap, by contrast, is driven by the lifted `hovered` prop and fires
+   488→       for ANY rail item. */
+   489→    <Tooltip disableHoverableContent>
+   490→      <TooltipTrigger asChild>
+   491→        <button
+   492→          type="button"
+   493→          onClick={toggleSidebar}
+   494→          aria-label="Expand sidebar"
+   495→          className={cn(
+   496→            'flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg font-bold text-sm outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring select-none',
+   497→            // NORMAL LOGO STATE (at rest): bg-primary black box +
+   498→            // text-primary-foreground white "C" — background UNCHANGED,
+   499→            // same as the expanded LogoMark.
+   500→            // EXPAND-ICON STATE (on hover): bg-transparent (NO background)
+   501→            // + text-muted-foreground gray icon — ONLY this temporary
+   502→            // state loses the background. The icon stays visible (gray
+   503→            // on transparent/page bg) in both Light and Dark mode.
+   504→            hovered
+   505→              ? 'bg-transparent text-muted-foreground'
+   506→              : 'bg-primary text-primary-foreground',
+   507→          )}
+   508→        >
+   509→          {/* Conditional render: "C" logo at rest, PanelLeftOpen icon on
+   510→              hover. h-4 w-4 matches the CollapseToggle's PanelLeftClose
+   511→              icon size; the icon is the visual opposite of the collapse
+   512→              icon so the collapsed logo reads as a clear "expand"
+   513→              affordance when the pointer is over it. */}
+   514→          {hovered ? (
+   515→            <PanelLeftOpen className="h-4 w-4" />
+   516→          ) : (
+   517→            <span>C</span>
+   518→          )}
+   519→          <span className="sr-only">Expand sidebar</span>
+   520→        </button>
+   521→      </TooltipTrigger>
+   522→      {/* Collapsed-rail tooltip — uses the SHARED COLLAPSED_TOOLTIP_PROPS
+   523→          constant so the "Expand" label has IDENTICAL positioning (side,
+   524→          align, sideOffset, collisionPadding) to every other collapsed-
+   525→          rail tooltip (ThemeToggle, SimpleNavItem, ExpandableNavItem,
+   526→          CollapsedParentNavItem). Portal-based rendering means the bubble
+   527→          floats outside the sidebar DOM at z-50 — never clipped by the
+   528→          rail's overflow-hidden. */}
+   529→      <TooltipContent {...COLLAPSED_TOOLTIP_PROPS}>Expand</TooltipContent>
+   530→    </Tooltip>
+   531→  );
+   532→}
+   533→
+   534→/**
+   535→ * Collapse/expand control that lives INSIDE the sidebar header (original
+   536→ * position, restored) — at the far right of the [logo][title] row, with
+   537→ * the Search icon directly to its LEFT (per instruction).
+   538→ * The C logo (collapsed rail) and the invisible SidebarRail edge strip
+   539→ * keep their existing toggle behavior too.
+   540→ */
+   541→function CollapseToggle({ side = 'right' }: { side?: 'left' | 'right' }) {
+   542→  const { toggleSidebar } = useSidebar();
+   543→  return (
+   544→    <Tooltip>
+   545→      <TooltipTrigger asChild>
+   546→        <Button
+   547→          variant="ghost"
+   548→          size="icon"
+   549→          className="h-8 w-8 shrink-0 rounded-md"
+   550→          onClick={toggleSidebar}
+   551→          aria-label="Collapse sidebar"
+   552→        >
+   553→          <PanelLeftClose className="h-4 w-4 text-muted-foreground" />
+   554→          <span className="sr-only">Toggle sidebar</span>
+   555→        </Button>
+   556→      </TooltipTrigger>
+   557→      <TooltipContent side={side}>Collapse</TooltipContent>
+   558→    </Tooltip>
+   559→  );
+   560→}
+   561→
+   562→// This custom component uses CSS grid for smooth open/close animation.
+   563→// It conditionally renders children so closed sections occupy ZERO layout space.
+   564→
+   565→function AccordionSubmenu({
+   566→  isOpen,
+   567→  children,
+   568→  sectionLabel,
+   569→}: {
+   570→  isOpen: boolean;
+   571→  children: React.ReactNode;
+   572→  sectionLabel: string;
+   573→}) {
+   574→  const contentId = `submenu-${sectionLabel.toLowerCase().replace(/\s+/g, '-')}`;
+   575→
+   576→  if (!isOpen) {
+   577→    return null;
+   578→  }
+   579→
+   580→  return (
+   581→    <SidebarMenuSub id={contentId}>
+   582→      {children}
+   583→    </SidebarMenuSub>
+   584→  );
+   585→}
+   586→
+   587→// -------------------- Nav Item Renderers --------------------
+   588→
+   589→/*
+   590→ * STATE RULE (decoupled by design):
+   591→ *   • Inline submenu visibility  → controlled ONLY by openSection/onToggle
+   592→ *     in AppSidebar (route-derived or user-toggled while expanded).
+   593→ *   • Floating popover           → local state per item, ONLY used when the
+   594→ *     rail is collapsed. It never expands the rail and is fully independent.
+   595→ * Nothing here maps settingsExpanded ⇒ sidebarCollapsed (forbidden coupling).
+   596→ */
+   597→function useCollapsedRail(): boolean {
+   598→  const { state, isMobile } = useSidebar();
+   599→  return !isMobile && state === 'collapsed';
+   600→}
+   601→
+   602→/**
+   603→ * Settings parent item rendered on the COLLAPSED 48px rail.
+   604→ * Clicking it opens a portal-based popover to the RIGHT of the icon —
+   605→ * the sidebar itself NEVER expands, and the popover anchors to this
+   606→ * exact button so the "star/sparkle alignment" grid stays intact.
+   607→ */
+   608→function CollapsedParentNavItem({
+   609→  item,
+   610→  currentModule,
+   611→  currentSubPage,
+   612→}: {
+   613→  item: NavItem;
+   614→  currentModule: string;
+   615→  currentSubPage: string | null;
+   616→}) {
+   617→  const [floatOpen, setFloatOpen] = useState(false);
+   618→  const mod = hrefToModule(item.href);
+   619→  const isActive = currentModule === mod;
+   620→
+   621→  const handleChildNavigate = (
+   622→    e: React.MouseEvent<HTMLAnchorElement>,
+   623→    child: NavItem,
+   624→  ) => {
+   625→    e.preventDefault();
+   626→    e.stopPropagation();
+   627→    setFloatOpen(false); // close the floating submenu after navigation…
+   628→    // …but do NOT touch sidebar expansion state (rule #7).
+   629→    const hash = child.href.replace(/^#/, '');
+   630→    const parts = hash.split('/');
+   631→    const childSubPage = parts[1] || null;
+   632→    useNavigationStore.getState().navigate(parts[0], null, childSubPage);
+   633→  };
+   634→
+   635→  return (
+   636→    <SidebarMenuItem>
+   637→      <Popover open={floatOpen} onOpenChange={setFloatOpen}>
+   638→        <PopoverTrigger asChild>
+   639→          <SidebarMenuButton
+   640→            isActive={isActive || floatOpen}
+   641→            aria-expanded={floatOpen}
+   642→            aria-haspopup="menu"
+   643→            // Collapsed-rail tooltip — uses the SHARED COLLAPSED_TOOLTIP_PROPS
+   644→            // so the parent item's label has IDENTICAL positioning (side,
+   645→            // align, sideOffset, collisionPadding) to every other collapsed-
+   646→            // rail tooltip (CollapsedLogoButton, ThemeToggle, SimpleNavItem,
+   647→            // ExpandableNavItem). Suppressed when the popover is open so the
+   648→            // floating submenu never visually conflicts with a lingering
+   649→            // label bubble. Portal-based rendering means the bubble floats
+   650→            // outside the sidebar DOM at z-50 — never clipped by the rail's
+   651→            // overflow-hidden.
+   652→            tooltip={
+   653→              floatOpen
+   654→                ? undefined
+   655→                : { ...COLLAPSED_TOOLTIP_PROPS, children: item.label }
+   656→            }
+   657→            onClick={(e: React.MouseEvent) => {
+   658→              e.preventDefault();
+   659→              setFloatOpen((o) => !o);
+   660→            }}
+   661→          >
+   662→            <NavIcon name={item.icon} />
+   663→            <span>{item.label}</span>
+   664→          </SidebarMenuButton>
+   665→        </PopoverTrigger>
+   666→        {/* Portal → document.body: immune to sidebar overflow clipping.
+   667→            Radix handles Esc + outside-click closing and re-anchors at any
+   668→            viewport size/zoom via avoidCollisions. */}
+   669→        <PopoverContent
+   670→          side="right"
+   671→          align="start"
+   672→          sideOffset={6}
+   673→          collisionPadding={12}
+   674→          className="w-56 rounded-md border bg-popover p-1.5 shadow-md"
+   675→          onEscapeKeyDown={() => setFloatOpen(false)}
+   676→        >
+   677→          <ul
+   678→            role="menu"
+   679→            aria-label={`${item.label} submenu`}
+   680→            className="flex min-w-0 list-none flex-col gap-0.5 p-0 m-0"
+   681→          >
+   682→            {item.children!.map((child) => {
+   683→              const hash = child.href.replace(/^#/, '');
+   684→              const parts = hash.split('/');
+   685→              const childSubPage = parts[1] || null;
+   686→              const isChildActive =
+   687→                currentModule === parts[0] &&
+   688→                (!childSubPage || currentSubPage === childSubPage);
+   689→              return (
+   690→                <SidebarMenuSubItem key={child.label} className="list-none p-0">
+   691→                  <SidebarMenuSubButton asChild isActive={isChildActive}>
+   692→                    <a
+   693→                      href={child.href}
+   694→                      role="menuitem"
+   695→                      onClick={(e) => handleChildNavigate(e, child)}
+   696→                    >
+   697→                      <NavIcon name={child.icon} />
+   698→                      <span>{child.label}</span>
+   699→                    </a>
+   700→                  </SidebarMenuSubButton>
+   701→                </SidebarMenuSubItem>
+   702→              );
+   703→            })}
+   704→          </ul>
+   705→        </PopoverContent>
+   706→      </Popover>
+   707→    </SidebarMenuItem>
+   708→  );
+   709→}
+   710→
+   711→function ExpandableNavItem({
+   712→  item,
+   713→  currentModule,
+   714→  currentSubPage,
+   715→  isExpanded,
+   716→  onToggle,
+   717→}: {
+   718→  item: NavItem;
+   719→  currentModule: string;
+   720→  currentSubPage: string | null;
+   721→  isExpanded: boolean;
+   722→  onToggle: () => void;
+   723→}) {
+   724→  const mod = hrefToModule(item.href);
+   725→  const isActive = currentModule === mod;
+   726→  const sectionId = `submenu-${item.label.toLowerCase().replace(/\s+/g, '-')}`;
+   727→
+   728→  return (
+   729→    <SidebarMenuItem>
+   730→      <SidebarMenuButton
+   731→        // Expandable parent item rendered in EXPANDED state. SidebarMenuButton
+   732→        // hides its tooltip whenever state!=="collapsed" (see ui/sidebar.tsx),
+   733→        // so this label never shows while expanded — but passing the SAME
+   734→        // COLLAPSED_TOOLTIP_PROPS object as every other nav-item renderer
+   735→        // keeps the prop consistent across the codebase. If the sidebar
+   736→        // toggles between expanded and collapsed while this row stays
+   737→        // mounted, the tooltip that appears is identical in positioning to
+   738→        // SimpleNavItem / CollapsedParentNavItem / CollapsedLogoButton.
+   739→        tooltip={{ ...COLLAPSED_TOOLTIP_PROPS, children: item.label }}
+   740→        isActive={isActive}
+   741→        onClick={(e: React.MouseEvent) => {
+   742→          e.preventDefault();
+   743→          onToggle();
+   744→        }}
+   745→        aria-expanded={isExpanded}
+   746→        aria-controls={sectionId}
+   747→      >
+   748→        <NavIcon name={item.icon} />
+   749→        <span>{item.label}</span>
+   750→        <ChevronRight
+   751→          className={cn(
+   752→            'ml-auto h-4 w-4 shrink-0 transition-transform duration-200',
+   753→            isExpanded && 'rotate-90',
+   754→          )}
+   755→        />
+   756→      </SidebarMenuButton>
+   757→
+   758→      {item.badge != null && (
+   759→        <SidebarMenuBadge>
+   760→          {item.badge}
+   761→        </SidebarMenuBadge>
+   762→      )}
+   763→
+   764→      <AccordionSubmenu isOpen={isExpanded} sectionLabel={item.label}>
+   765→        {item.children!.map((child) => {
+   766→          const hash = child.href.replace(/^#/, '');
+   767→          const parts = hash.split('/');
+   768→          const childMod = parts[0];
+   769→          const childSubPage = parts[1] || null;
+   770→          const isChildActive =
+   771→            currentModule === childMod &&
+   772→            (!childSubPage || currentSubPage === childSubPage);
+   773→
+   774→          return (
+   775→            <SidebarMenuSubItem key={child.label}>
+   776→              <SidebarMenuSubButton
+   777→                asChild
+   778→                isActive={isChildActive}
+   779→              >
+   780→                <a
+   781→                  href={child.href}
+   782→                  onClick={(e) => {
+   783→                    e.preventDefault();
+   784→                    e.stopPropagation();
+   785→                    useNavigationStore
+   786→                      .getState()
+   787→                      .navigate(childMod, null, childSubPage);
+   788→                  }}
+   789→                >
+   790→                  <NavIcon name={child.icon} />
+   791→                  <span>{child.label}</span>
+   792→                </a>
+   793→              </SidebarMenuSubButton>
+   794→            </SidebarMenuSubItem>
+   795→          );
+   796→        })}
+   797→      </AccordionSubmenu>
+   798→    </SidebarMenuItem>
+   799→  );
+   800→}
+   801→
+   802→function SimpleNavItem({
+   803→  item,
+   804→  currentModule,
+   805→}: {
+   806→  item: NavItem;
+   807→  currentModule: string;
+   808→}) {
+   809→  const mod = hrefToModule(item.href);
+   810→  const isActive = currentModule === mod;
+   811→
+   812→  return (
+   813→    <SidebarMenuItem>
+   814→      <SidebarMenuButton
+   815→        asChild
+   816→        isActive={isActive}
+   817→        // Collapsed-rail tooltip — uses the SHARED COLLAPSED_TOOLTIP_PROPS
+   818→        // so every leaf nav item (Dashboard, Articles, Calendar, Media,
+   819→        // Users, Comments, Newsletter, SEO, AI, Automation) shows its label
+   820→        // to the RIGHT of the 48px collapsed rail with IDENTICAL positioning
+   821→        // (side, align, sideOffset, collisionPadding) to every other
+   822→        // collapsed-rail tooltip (CollapsedLogoButton, ThemeToggle,
+   823→        // ExpandableNavItem, CollapsedParentNavItem). Portal-based rendering
+   824→        // means the bubble floats outside the sidebar DOM at z-50 — never
+   825→        // clipped by the rail's overflow-hidden.
+   826→        tooltip={{ ...COLLAPSED_TOOLTIP_PROPS, children: item.label }}
+   827→      >
+   828→        <a
+   829→          href={item.href}
+   830→          onClick={(e) => {
+   831→            e.preventDefault();
+   832→            useNavigationStore.getState().navigate(mod);
+   833→          }}
+   834→        >
+   835→          <NavIcon name={item.icon} />
+   836→          <span>{item.label}</span>
+   837→        </a>
+   838→      </SidebarMenuButton>
+   839→
+   840→      {item.badge != null && (
+   841→        <SidebarMenuBadge>
+   842→          {item.badge}
+   843→        </SidebarMenuBadge>
+   844→      )}
+   845→    </SidebarMenuItem>
+   846→  );
+   847→}
+   848→
+   849→// -------------------- NavGroupSection --------------------
+   850→
+   851→function NavGroupSection({
+   852→  group,
+   853→  currentModule,
+   854→  currentSubPage,
+   855→  openSection,
+   856→  onToggleSection,
+   857→}: {
+   858→  group: NavGroup;
+   859→  currentModule: string;
+   860→  currentSubPage: string | null;
+   861→  openSection: string | null;
+   862→  onToggleSection: (label: string) => void;
+   863→}) {
+   864→  const isCollapsedRail = useCollapsedRail();
+   865→
+   866→  return (
+   867→    <SidebarGroup>
+   868→      <SidebarGroupContent>
+   869→        <SidebarMenu>
+   870→          {group.items.map((item) => {
+   871→            const hasChildren = item.children && item.children.length > 0;
+   872→
+   873→            if (hasChildren && isCollapsedRail) {
+   874→              /* Collapsed rail → parents with children become floating
+   875→                 popovers anchored to their own icon. The rail NEVER
+   876→                 auto-expands (#4/#5/#6). */
+   877→              return (
+   878→                <CollapsedParentNavItem
+   879→                  key={item.label}
+   880→                  item={item}
+   881→                  currentModule={currentModule}
+   882→                  currentSubPage={currentSubPage}
+   883→                />
+   884→              );
+   885→            }
+   886→
+   887→            if (hasChildren) {
+   888→              return (
+   889→                <ExpandableNavItem
+   890→                  key={item.label}
+   891→                  item={item}
+   892→                  currentModule={currentModule}
+   893→                  currentSubPage={currentSubPage}
+   894→                  isExpanded={openSection === item.label}
+   895→                  onToggle={() => onToggleSection(item.label)}
+   896→                />
+   897→              );
+   898→            }
+   899→
+   900→            return (
+   901→              <SimpleNavItem
+   902→                key={item.label}
+   903→                item={item}
+   904→                currentModule={currentModule}
+   905→              />
+   906→            );
+   907→          })}
+   908→        </SidebarMenu>
+   909→      </SidebarGroupContent>
+   910→    </SidebarGroup>
+   911→  );
+   912→}
+   913→
+   914→// -------------------- Main Sidebar Component --------------------
+   915→
+   916→export function AppSidebar() {
+   917→  const user = useAuthStore((s) => s.user);
+   918→  // Active plan — the footer role badge shows the plan NAME (e.g. "Beta")
+   919→  // instead of the static user role, styled with the plan's amber accent.
+   920→  const { currentPlan } = useSubscriptionStore();
+   921→  const currentModule = useNavigationStore((s) => s.currentModule);
+   922→  const currentSubPage = useNavigationStore((s) => s.currentSubPage);
+   923→  const openCommandPalette = useCommandPaletteStore((s) => s.open);
+   924→  // Sidebar context hook — MUST run before any early return.
+   925→  const sidebarCtx = useSidebar();
+   926→
+   927→  const userRole = user?.role;
+   928→  const pagePermissions = user?.pagePermissions ?? null;
+   929→  const isPlatformAdmin = userRole === 'PLATFORM_ADMIN' || userRole === 'OWNER';
+   930→  // PLAN FEATURE SYNC — Platform Admin → Plans & Pricing → Feature
+   931→  // Access for the customer's ACTIVE plan is the single source of
+   932→  // truth for the Admin User dashboard (never the plan NAME): nav
+   933→  // items whose module requires a plan feature (MODULE_FEATURE_MAP:
+   934→  // SEO → Advanced SEO, Analytics → Advanced Analytics, Comments,
+   935→  // Newsletter, Automation, Email Templates, Backups, AI → Client's
+   936→  // Own AI API) are hidden when the plan lacks the feature. Settings
+   937→  // children are filtered the same way (Email Templates / Backups).
+   938→  // While the entitlements query loads, items stay visible (cosmetic
+   939→  // fail-open) — routes guard access and the feature APIs enforce
+   940→  // 403 FEATURE_NOT_AVAILABLE server-side.
+   941→  const { data: planEntitlements } = usePlanEntitlements();
+   942→  const pageKeyOf = (href: string) => href.replace(/^#/, '').split('/')[0];
+   943→  const visibleItems = useMemo(() => {
+   944→    if (!userRole) return [];
+   945→    // Platform admins see the dedicated platform nav, not the client CMS nav.
+   946→    const sourceItems = isPlatformAdmin ? PLATFORM_NAV_ITEMS : NAV_ITEMS;
+   947→    const items = getVisibleNavItems(userRole, sourceItems, pagePermissions);
+   948→    if (isPlatformAdmin) return items;
+   949→    return items
+   950→      .map((item) => ({
+   951→        ...item,
+   952→        children: item.children
+   953→          ? item.children.filter((child) => isModuleAllowedByPlan(pageKeyOf(child.href), planEntitlements))
+   954→          : undefined,
+   955→      }))
+   956→      .filter((item) => isModuleAllowedByPlan(pageKeyOf(item.href), planEntitlements));
+   957→  }, [userRole, pagePermissions, isPlatformAdmin, planEntitlements]);
+   958→
+   959→  /*
+   960→   * SINGLE SOURCE OF TRUTH for the expanded top-level section.
+   961→   *
+   962→   * manualOverride is a tri-state:
+   963→   *   null  → not overridden; use route-derived value
+   964→   *   ""   → explicitly closed by user
+   965→   *   "SEO" → explicitly opened by user
+   966→   *
+   967→   * When the module changes (navigation event), we reset manualOverride
+   968→   * to null so the route-derived value takes over.
+   969→   */
+   970→  const [manualOverride, setManualOverride] = useState<string | null>(null);
+   971→  // Track previous module to detect navigation changes synchronously during render.
+   972→  // This is the React-approved pattern for "derived state from props".
+   973→  const [prevModule, setPrevModule] = useState(currentModule);
+   974→  if (currentModule !== prevModule) {
+   975→    setPrevModule(currentModule);
+   976→    setManualOverride(null);
+   977→  }
+   978→
+   979→  // Derive the section from the current route hash (EXPLICIT prefix matching)
+   980→  const routeDerivedSection = useMemo(() => {
+   981→    return getSectionFromHash(window.location.hash);
+   982→  }, [currentModule, currentSubPage]);
+   983→
+   984→  // Compute the actual open section
+   985→  const openSection = useMemo(() => {
+   986→    if (manualOverride !== null) {
+   987→      // User manually toggled: empty string = closed, non-empty = that section
+   988→      return manualOverride || null;
+   989→    }
+   990→    return routeDerivedSection;
+   991→  }, [manualOverride, routeDerivedSection]);
+   992→
+   993→  // Toggle a section open/closed
+   994→  const handleToggleSection = useCallback(
+   995→    (label: string) => {
+   996→      setManualOverride((prev) => {
+   997→        // Determine what's currently open (considering route-derived if no override)
+   998→        const currentlyOpen =
+   999→          prev !== null ? (prev || null) : routeDerivedSection;
+  1000→        // If clicking the same section that's open, close it
+  1001→        if (currentlyOpen === label) {
+  1002→          return ''; // explicitly closed
+  1003→        }
+  1004→        // Otherwise, open the clicked section (closing any other)
+  1005→        return label;
+  1006→      });
+  1007→    },
+  1008→    [routeDerivedSection],
+  1009→  );
+  1010→
+  1011→  // Rail-level hover state for the COLLAPSED sidebar. When the mouse is
+  1012→  // anywhere over the 48px collapsed rail (any icon — logo, nav items,
+  1013→  // Settings, Theme, Notifications, Profile), this flips to true and the
+  1014→  // logo cell swaps "C" → PanelLeftOpen (the Expand affordance) via the
+  1015→  // `hovered` prop passed to CollapsedLogoButton. Lifted here (not inside
+  1016→  // CollapsedLogoButton) so the Expand icon appears on hover of ANY rail
+  1017→  // item, not only the logo. Each item keeps its own Radix Tooltip label
+  1018→  // (independent of this state); the logo's own "Expand" Tooltip still
+  1019→  // fires only on direct logo hover. React mouse events (not CSS :hover)
+  1020→  // so it works in headless / (hover:none) environments too. The
+  1021→  // handlers attach to <Sidebar> which forwards ...props to the visible
+  1022→  // fixed sidebar-container div, so mouseenter fires the moment the
+  1023→  // pointer enters the rail and mouseleave fires only when it leaves the
+  1024→  // entire rail subtree (moving between icons stays "hovered").
+  1025→  const [railHovered, setRailHovered] = useState(false);
+  1026→
+  1027→  if (!user) return null;
+  1028→
+  1029→  const groups = buildNavGroups(visibleItems);
+  1030→
+  1031→  return (
+  1032→    <Sidebar
+  1033→      collapsible="icon"
+  1034→      onMouseEnter={() => setRailHovered(true)}
+  1035→      onMouseLeave={() => setRailHovered(false)}
+  1036→    >
+  1037→      {/* ---- Header: one 32px icon cell per row, all centered at x=24px ---- */}
+  1038→      <SidebarHeader className="px-2 py-3 shrink-0">
+  1039→        {/* Expanded: [logo][title][…spacer…][Search][Collapse toggle].
+  1040→            Per instruction the Search icon sits directly NEXT TO the
+  1041→            Collapse toggle at the far right — NOT next to the "CMS Admin"
+  1042→            name (the old position was removed, never duplicated). */}
+  1043→        <div className="flex h-8 items-center gap-2 group-data-[collapsible=icon]:hidden">
+  1044→          <LogoMark />
+  1045→          <span className="truncate font-semibold text-sm tracking-tight whitespace-nowrap text-text-primary">
+  1046→            {isPlatformAdmin ? 'Platform Admin' : 'CMS Admin'}
+  1047→          </span>
+  1048→          <div className="ml-auto flex shrink-0 items-center gap-1">
+  1049→            <Tooltip>
+  1050→              <TooltipTrigger asChild>
+  1051→                <Button
+  1052→                  variant="ghost"
+  1053→                  size="icon"
+  1054→                  className="h-8 w-8 shrink-0 rounded-md"
+  1055→                  onClick={openCommandPalette}
+  1056→                  aria-label="Search"
+  1057→                >
+  1058→                  <Search className="h-4 w-4" />
+  1059→                  <span className="sr-only">Search</span>
+  1060→                </Button>
+  1061→              </TooltipTrigger>
+  1062→              <TooltipContent side="bottom">Search</TooltipContent>
+  1063→            </Tooltip>
+  1064→            <CollapseToggle side="bottom" />
+  1065→          </div>
+  1066→        </div>
+  1067→        {/* Collapsed rail: ONLY the "C" logo. */}
+  1068→        <div className="hidden flex-col items-center group-data-[collapsible=icon]:flex">
+  1069→          <CollapsedLogoButton hovered={railHovered} />
+  1070→        </div>
+  1071→
+  1072→        {/* All Sites site selector — lives directly BELOW the CMS Admin logo
+  1073→            in BOTH sidebar states. Platform admins do not have "their" site
+  1074→            (they manage all customers), so the selector is hidden for them. */}
+  1075→        {!isPlatformAdmin && <SiteSelector />}
+  1076→      </SidebarHeader>
+  1077→
+  1078→      <SidebarSeparator className="mx-0" />
+  1079→
+  1080→      <SidebarContent className="sidebar-thin-scroll">
+  1081→        {groups.map((group) => (
+  1082→          <NavGroupSection
+  1083→            key={group.label}
+  1084→            group={group}
+  1085→            currentModule={currentModule}
+  1086→            currentSubPage={currentSubPage}
+  1087→            openSection={openSection}
+  1088→            onToggleSection={handleToggleSection}
+  1089→          />
+  1090→        ))}
+  1091→      </SidebarContent>
+  1092→
+  1093→      {/* Bottom separator shows in BOTH states: the collapsed footer now
+  1094→          carries the Search / Bell / avatar utility cluster, so there is
+  1095→          real content to separate below it in both modes. */}
+  1096→      <SidebarSeparator className="mx-0" />
+  1097→
+  1098→      <SidebarFooter className="shrink-0">
+  1099→        {/* Expanded: [profile-menu avatar][name/plan-badge][bell].
+  1100→            The avatar opens the SAME shared UserProfileMenu as the
+  1101→            collapsed rail and the topbar (single source — identical
+  1102→            content/styling), so the profile dropdown works consistently
+  1103→            in BOTH sidebar states. side="top" grows upward from the
+  1104→            bottom-anchored trigger; Radix collision handling keeps it
+  1105→            inside the viewport at any height. */}
+  1106→        <div className="flex items-center gap-3 px-2 py-2 group-data-[collapsible=icon]:hidden">
+  1107→          <UserProfileMenu side="top" align="start" sideOffset={8} alignOffset={8} collisionPadding={12}>
+  1108→            <Button
+  1109→              type="button"
+  1110→              variant="ghost"
+  1111→              className="h-8 w-8 shrink-0 rounded-full"
+  1112→              aria-label={`${user.name} — open profile menu`}
+  1113→              aria-haspopup="menu"
+  1114→            >
+  1115→              <Avatar className="h-8 w-8">
+  1116→                <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} />
+  1117→                <AvatarFallback className="text-xs">
+  1118→                  {getInitials(user.name)}
+  1119→                </AvatarFallback>
+  1120→              </Avatar>
+  1121→            </Button>
+  1122→          </UserProfileMenu>
+  1123→          <div className="flex flex-1 flex-col overflow-hidden">
+  1124→            <span className="truncate text-sm font-medium leading-tight">
+  1125→              {user.name}
+  1126→            </span>
+  1127→            {/* Plan badge — SAME shape/size/typography/spacing as the
+  1128→                previous role badge (h-4, text-[10px], px-1.5, rounded-md,
+  1129→                mt-0.5, w-fit) but rendered with the active plan's amber
+  1130→                accent (bg-amber-500 text-white) instead of the generic
+  1131→                secondary surface. Shows the plan NAME ("Beta") so it stays
+  1132→                in sync with the PlanBadge used in the topbar avatar trigger
+  1133→                and the profile dropdown header. Platform admins do not have
+  1134→                a personal subscription, so a role badge is shown instead. */}
+  1135→            {isPlatformAdmin ? (
+  1136→              <Badge className="mt-0.5 h-4 w-fit text-[10px] px-1.5 bg-primary text-primary-foreground border-transparent">
+  1137→                PLATFORM
+  1138→              </Badge>
+  1139→            ) : (
+  1140→              <Badge
+  1141→                className="mt-0.5 h-4 w-fit text-[10px] px-1.5 bg-amber-500 text-white border-transparent"
+  1142→              >
+  1143→                {currentPlan.name}
+  1144→              </Badge>
+  1145→            )}
+  1146→          </div>
+  1147→          {/* Notifications bell — replaces the previous standalone Log out
+  1148→              button. Uses the SAME NotificationBell component as the
+  1149→              collapsed rail and the topbar (live unread badge + dropdown
+  1150→              panel + polling all reused). Positioning props mirror the
+  1151→              profile dropdown above (side/align/sideOffset/alignOffset/
+  1152→              collisionPadding) so both dropdowns open upward with the
+  1153→              same gap from the sidebar's left edge — never flush, never
+  1154→              clipped. Log out is still reachable via the profile dropdown
+  1155→              menu (UserProfileMenu above) so no functionality is lost. */}
+  1156→          <NotificationBell side="top" align="start" sideOffset={8} alignOffset={8} collisionPadding={12} />
+  1157→        </div>
+  1158→
+  1159→        {/* Collapsed rail: icon-only utility cluster + bare avatar.
+  1160→            Order (top → bottom): Theme, Notifications, Profile.
+  1161→            · Theme    → SAME next-themes state via shared ThemeToggle
+  1162→            · Bell     → the SAME NotificationBell component (unread badge,
+  1163→                         dropdown panel and polling all reused verbatim)
+  1164→            · Avatar   → opens the SAME UserProfileMenu used by the topbar
+  1165→                         (Profile / Language / Manage Subscription / Log out)
+  1166→            One 32px cell per row on the shared x=24 center-line. NO name,
+  1167→            NO email, NO "ADMIN" badge, NO visible logout icon. None of
+  1168→            these controls expand the sidebar — they render popovers via
+  1169→            Radix portals instead (#7: independent of sidebarCollapsed).
+  1170→            While the rail owns these controls the topbar hides them, so
+  1171→            there is never a duplicate. */}
+  1172→        <div className="hidden flex-col items-center gap-1 py-1 group-data-[collapsible=icon]:flex">
+  1173→          {/* Theme toggle — shared component, same theme state as header */}
+  1174→          <ThemeToggle withTooltip />
+  1175→
+  1176→          {/* Collapsed-rail notification bell — icon-only trigger, live
+  1177→              badge. Positioning MIRRORS the collapsed-rail profile menu
+  1178→              directly below (same side / align / sideOffset /
+  1179→              collisionPadding) so both dropdowns behave identically:
+  1180→                side="right"          → opens to the RIGHT of the 48px rail,
+  1181→                                       fully inside the main viewport
+  1182→                align="end"           → dropdown's bottom aligns with the
+  1183→                                       bell's bottom, so it grows UPWARD
+  1184→                                       (Radix collision handling flips /
+  1185→                                       shifts it if it would otherwise clip
+  1186→                                       the top of the viewport)
+  1187→                sideOffset=16         → visible ~8px GAP from the rail's
+  1188→                                       right edge (trigger is centered in the
+  1189→                                       48px rail → right edge ~x=40, rail
+  1190→                                       right edge ~x=48, dropdown left edge
+  1191→                                       ~x=56 → 8px gap)
+  1192→                collisionPadding=12   → 12px viewport collision padding so
+  1193→                                       the 320px-wide panel can never touch
+  1194→                                       the viewport edges or get clipped
+  1195→              The expanded-state positioning (side="top" align="start"
+  1196→              sideOffset=8 alignOffset=8 collisionPadding=12 above) is NOT
+  1197→              touched — only the collapsed rail is fixed here. */}
+  1198→          <NotificationBell
+  1199→            side="right"
+  1200→            align="end"
+  1201→            sideOffset={16}
+  1202→            collisionPadding={12}
+  1203→            withTooltip
+  1204→          />
+  1205→
+  1206→          {/* Collapsed-rail avatar — tapping it opens the shared profile
+  1207→              menu. Positioning is IDENTICAL to the collapsed-rail
+  1208→              NotificationBell directly above (same side / align /
+  1209→              sideOffset / collisionPadding) so both dropdowns behave
+  1210→              identically:
+  1211→                side="right"          → opens to the RIGHT of the 48px rail,
+  1212→                                       fully inside the main viewport (never
+  1213→                                       touches the left edge / never opens
+  1214→                                       outside the viewport)
+  1215→                align="end"           → menu's bottom aligns with the
+  1216→                                       avatar's bottom, so it grows UPWARD
+  1217→                                       from the bottom-corner trigger (Radix
+  1218→                                       collision handling flips / shifts it
+  1219→                                       if it would otherwise clip the top of
+  1220→                                       the viewport)
+  1221→                sideOffset=16         → visible ~8px GAP from the rail's
+  1222→                                       right edge (avatar right edge ~x=40,
+  1223→                                       rail right edge ~x=48, menu left edge
+  1224→                                       ~x=56 → 8px gap; matches the bell)
+  1225→                collisionPadding=12   → 12px viewport collision padding so
+  1226→                                       the 224px-wide menu can never touch
+  1227→                                       the viewport edges or get clipped
+  1228→              The sidebar itself never expands; outside click / Esc close
+  1229→              it (Radix portal, z-50). The expanded-state positioning
+  1230→              (side="top" align="start" sideOffset=8 alignOffset=8
+  1231→              collisionPadding=12 above) is NOT touched — only the collapsed
+  1232→              rail is fixed here. Works identically in Light + Dark mode
+  1233→              (all colors come from theme tokens). */}
+  1234→          <UserProfileMenu
+  1235→            side="right"
+  1236→            align="end"
+  1237→            sideOffset={16}
+  1238→            collisionPadding={12}
+  1239→            withTooltip
+  1240→          >
+  1241→            <Button
+  1242→              type="button"
+  1243→              variant="ghost"
+  1244→              className="h-8 w-8 shrink-0 rounded-full"
+  1245→              aria-label={`${user.name} — open profile menu`}
+  1246→              aria-haspopup="menu"
+  1247→            >
+  1248→              <Avatar className="h-8 w-8">
+  1249→                <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} />
+  1250→                <AvatarFallback className="text-xs">
+  1251→                  {getInitials(user.name)}
+  1252→                </AvatarFallback>
+  1253→              </Avatar>
+  1254→            </Button>
+  1255→          </UserProfileMenu>
+  1256→        </div>
+  1257→      </SidebarFooter>
+  1258→
+  1259→      <SidebarRail />
+  1260→    </Sidebar>
+  1261→  );
+  1262→}
+  1263→

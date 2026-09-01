@@ -5,11 +5,16 @@
 //   - Password resolution mirrors /test route (use saved DB password
 //     when the masked placeholder is submitted or no settings provided).
 // ============================================================
+// ENTITLEMENT GATE — SMTP Settings is derived from Email Templates OR
+// Newsletter (never a plan checkbox): both dependents disabled → 403
+// FEATURE_NOT_AVAILABLE. Platform staff pass (platform SMTP page).
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { decrypt } from '@/lib/encryption';
 import { getSiteWhere } from '@/lib/site-context';
+import { requireAnyFeatureAllowStaff } from '@/lib/platform/platform-auth';
+import { SMTP_DEPENDENT_FEATURES } from '@/lib/platform/feature-config';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import {
@@ -110,6 +115,10 @@ async function resolveSettings(
 
 export async function POST(request: NextRequest) {
   const id = reqId();
+
+  // SMTP Settings derived-entitlement gate (Email Templates OR Newsletter).
+  const featureAuth = await requireAnyFeatureAllowStaff(request, [...SMTP_DEPENDENT_FEATURES]);
+  if ('response' in featureAuth) return featureAuth.response;
 
   try {
     let body: unknown;

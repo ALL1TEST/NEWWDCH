@@ -44,7 +44,7 @@ import {
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
-import { usePlanEntitlements, isModuleAllowedByPlan } from '@/hooks/use-entitlements';
+import { usePlanEntitlements, isModuleAllowedByPlan, isSmtpSettingsAllowedByPlan } from '@/hooks/use-entitlements';
 import { getApi } from '@/lib/api-client';
 import { formatRelativeTime } from '@/lib/utils';
 
@@ -476,11 +476,19 @@ export function CommandPalette() {
     // (admin/editor/author) keep the full CMS nav + actions — except
     // entries whose module requires a plan feature the active plan
     // lacks (MODULE_FEATURE_MAP via the entitlements query): the plan's
-    // Feature Access checkboxes decide what appears here.
+    // Feature Access checkboxes decide what appears here. Every
+    // module 'settings' entry additionally follows the DERIVED SMTP
+    // rule — the settings module renders the SMTP Settings page (its
+    // only page), which is supporting configuration for Email
+    // Templates + Newsletter, so all of those entries are hidden when
+    // the plan enables NEITHER dependent.
     const withoutFeatureLocked = (items: CommandItemDef[]) =>
       isPlatformStaff || !planEntitlements
         ? items
-        : items.filter((i) => isModuleAllowedByPlan(i.module, planEntitlements));
+        : items.filter((i) =>
+            i.module === 'settings'
+              ? isSmtpSettingsAllowedByPlan(planEntitlements)
+              : isModuleAllowedByPlan(i.module, planEntitlements));
 
     if (recentItems.length > 0) {
       result.push({ heading: 'Recent', items: withoutFeatureLocked(recentItems) });

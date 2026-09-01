@@ -2,11 +2,22 @@
 // GET  /api/settings/smtp   — Fetch the default SMTP settings
 // PUT  /api/settings/smtp   — Upsert the default SMTP settings
 // ============================================================
+// ENTITLEMENT GATE — SMTP Settings is NOT an independent plan feature
+// but supporting configuration for the email-sending features: it is
+// reachable only while the plan's Feature Access enables Email
+// Templates OR Newsletter (requireAnyFeatureAllowStaff reads the
+// active plan's saved Feature Access — never the plan name). With
+// both dependents disabled every method denies 403
+// FEATURE_NOT_AVAILABLE. Platform staff pass unconditionally — the
+// platform SMTP page (#platform-smtp) manages the platform's own SMTP
+// through these same endpoints.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { encrypt } from '@/lib/encryption';
 import { getSiteWhere } from '@/lib/site-context';
+import { requireAnyFeatureAllowStaff } from '@/lib/platform/platform-auth';
+import { SMTP_DEPENDENT_FEATURES } from '@/lib/platform/feature-config';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 
@@ -38,6 +49,10 @@ const upsertSchema = z.object({
 
 export async function GET(request: NextRequest) {
   const id = reqId();
+
+  // SMTP Settings derived-entitlement gate (Email Templates OR Newsletter).
+  const featureAuth = await requireAnyFeatureAllowStaff(request, [...SMTP_DEPENDENT_FEATURES]);
+  if ('response' in featureAuth) return featureAuth.response;
 
   try {
     const siteFilter = await getSiteWhere(request);
@@ -105,6 +120,10 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   const id = reqId();
+
+  // SMTP Settings derived-entitlement gate (Email Templates OR Newsletter).
+  const featureAuth = await requireAnyFeatureAllowStaff(request, [...SMTP_DEPENDENT_FEATURES]);
+  if ('response' in featureAuth) return featureAuth.response;
 
   try {
     let body: unknown;

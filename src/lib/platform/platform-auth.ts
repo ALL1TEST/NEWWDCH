@@ -167,6 +167,40 @@ export async function requireFeatureAllowStaff(
   return requireFeature(request, feature);
 }
 
+/** Require an authenticated user with ANY ONE of the given feature
+ *  entitlements (OR semantics), also allowing platform staff. Used for
+ *  DERIVED capabilities that are NOT plan checkboxes themselves but
+ *  supporting configuration for one or more plan features — e.g. SMTP
+ *  Settings, which supports Email Templates and Newsletter: a client
+ *  needs 'email_templates' OR 'newsletter' (the plan's Feature Access
+ *  is the single source of truth — SMTP Settings is never a separate
+ *  checkbox); platform staff pass unconditionally because the platform
+ *  SMTP page (#platform-smtp) manages the platform's own SMTP through
+ *  the same endpoints. Denies with 403 FEATURE_NOT_AVAILABLE when the
+ *  plan includes NONE of the features. */
+export async function requireAnyFeatureAllowStaff(
+  request: NextRequest,
+  features: string[],
+): Promise<{ user: AuthUser } | { response: NextResponse }> {
+  const auth = await requireAuth(request);
+  if ('response' in auth) return auth;
+  if (isPlatformStaff(auth.user)) return { user: auth.user };
+
+  const { hasFeature, getEffectivePlanIdAsync, trialExpiredResponse, forbiddenAnyResponse } =
+    await import('./entitlements');
+  // ANY of the features grants access (per-customer override + plan +
+  // trial rules are all enforced inside hasFeature for each feature).
+  for (const feature of features) {
+    if (await hasFeature(auth.user, feature)) return { user: auth.user };
+  }
+  // Distinguish "none of the features in plan" from "free trial expired".
+  const { freeTrialExpired } = await getEffectivePlanIdAsync(auth.user);
+  if (freeTrialExpired) {
+    return { response: trialExpiredResponse() };
+  }
+  return { response: forbiddenAnyResponse(features, 'SMTP Settings') };
+}
+
 /** Extract client IP for audit logging (never used for auth decisions). */
 export function getClientIp(request: NextRequest): string | null {
   return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;

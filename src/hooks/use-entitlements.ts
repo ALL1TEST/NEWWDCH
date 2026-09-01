@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { getApi } from '@/lib/api-client';
-import { MODULE_FEATURE_MAP } from '@/lib/platform/feature-config';
+import { MODULE_FEATURE_MAP, isSmtpSettingsGranted } from '@/lib/platform/feature-config';
 
 // ============================================================
 // PLAN ENTITLEMENTS — the Admin User dashboard feature state.
@@ -57,6 +57,29 @@ export function isModuleAllowedByPlan(
   if (!required) return true;
   if (!entitlements) return true; // loading → fail-open (cosmetic only)
   return entitlements.entitlements.includes(required);
+}
+
+/**
+ * True when SMTP Settings is available to the current user. SMTP
+ * Settings is NOT an independent plan feature — it is SUPPORTING
+ * configuration for the email-sending features (Email Templates and
+ * Newsletter both deliver through the client's SMTP connection), so
+ * it is visible iff the active plan's Feature Access enables AT
+ * LEAST ONE of them. There is no 'smtp' checkbox in Plans & Pricing:
+ * the Plan Feature Access stays the single source of truth and this
+ * visibility is DERIVED from it (never the plan name).
+ *
+ * Applied to the sidebar child, the command-palette settings entries
+ * and the route guard (#settings / #settings/smtp). While
+ * entitlements load returns true (cosmetic fail-open) — the SMTP APIs
+ * enforce requireAnyFeatureAllowStaff server-side (403
+ * FEATURE_NOT_AVAILABLE when both dependents are disabled).
+ */
+export function isSmtpSettingsAllowedByPlan(
+  entitlements: PlanEntitlementsState | undefined,
+): boolean {
+  if (!entitlements) return true; // loading → fail-open (cosmetic only)
+  return isSmtpSettingsGranted(entitlements.entitlements);
 }
 
 /** Invalidate the entitlements state (e.g. after a plan change). */

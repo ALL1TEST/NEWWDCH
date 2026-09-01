@@ -180,12 +180,55 @@ export const MODULE_FEATURE_MAP: Record<string, string> = {
   'email-templates': 'email_templates',
   backups: 'backups',
   ai: 'ai_client',
+  // NOTE: 'settings' is deliberately NOT in this map — the settings
+  // module (the SMTP Settings page) is gated by the DERIVED rule below
+  // (isSmtpSettingsGranted), not by a single plan feature. Mapping it
+  // here would hide the whole Settings sidebar parent, which must stay
+  // visible for its non-feature Notifications child.
 };
 
 /** The plan feature required to access a dashboard module (page key).
  *  Returns undefined for non-feature modules (always allowed). */
 export function featureForModule(moduleKey: string): string | undefined {
   return MODULE_FEATURE_MAP[moduleKey];
+}
+
+// -------------------- SMTP Settings (derived feature) --------------------
+
+/**
+ * SMTP SETTINGS IS NOT AN INDEPENDENT PLAN FEATURE.
+ *
+ * It is a SUPPORTING configuration required by the email-sending
+ * features — Email Templates and Newsletter both deliver mail through
+ * the client's SMTP connection. Therefore the Admin User sees SMTP
+ * Settings if and only if the plan's Feature Access enables AT LEAST
+ * ONE of its dependents:
+ *
+ *   Email Templates OFF + Newsletter OFF → SMTP Settings hidden
+ *   Email Templates ON  + Newsletter OFF → SMTP Settings visible
+ *   Email Templates OFF + Newsletter ON  → SMTP Settings visible
+ *   Email Templates ON  + Newsletter ON  → SMTP Settings visible
+ *
+ * There is deliberately NO 'smtp' Feature Access checkbox in Plans &
+ * Pricing — the existing Plan Feature Access configuration stays the
+ * single source of truth, and SMTP Settings visibility is DERIVED from
+ * it. The same rule is applied to ALL THREE layers (sidebar, route
+ * guard, server-side requireAnyFeatureAllowStaff), always read from
+ * the active plan's saved entitlements — never the plan name.
+ */
+export const SMTP_DEPENDENT_FEATURES = ['email_templates', 'newsletter'] as const;
+
+/** The hash route of the Admin User SMTP Settings page. The settings
+ *  module renders the SMTP settings page — it is the module's only
+ *  page (both #settings and #settings/smtp land there). */
+export const SMTP_SETTINGS_ROUTE = 'settings/smtp';
+
+/** True when SMTP Settings is available given a granted-entitlement
+ *  list — Email Templates OR Newsletter enabled. The single derived
+ *  rule shared by the sidebar, command palette, route guard and the
+ *  server-side SMTP gates. */
+export function isSmtpSettingsGranted(entitlements: readonly string[]): boolean {
+  return SMTP_DEPENDENT_FEATURES.some((feature) => entitlements.includes(feature));
 }
 
 /** AI feature keys — kept as named constants for server-side checks

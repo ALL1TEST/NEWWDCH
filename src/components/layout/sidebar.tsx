@@ -92,7 +92,8 @@ import { SiteSelector } from '@/components/layout/site-selector';
 import { cn } from '@/lib/utils';
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
 import { useSubscriptionStore } from '@/lib/stores/subscription-store';
-import { usePlanEntitlements, isModuleAllowedByPlan } from '@/hooks/use-entitlements';
+import { usePlanEntitlements, isModuleAllowedByPlan, isSmtpSettingsAllowedByPlan } from '@/hooks/use-entitlements';
+import { SMTP_SETTINGS_ROUTE } from '@/lib/platform/feature-config';
 import { NotificationBell } from '@/components/layout/notification-bell';
 import { UserProfileMenu } from '@/components/layout/user-profile-menu';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
@@ -934,7 +935,12 @@ export function AppSidebar() {
   // SEO → Advanced SEO, Analytics → Advanced Analytics, Comments,
   // Newsletter, Automation, Email Templates, Backups, AI → Client's
   // Own AI API) are hidden when the plan lacks the feature. Settings
-  // children are filtered the same way (Email Templates / Backups).
+  // children are filtered the same way (Email Templates / Backups),
+  // plus the DERIVED SMTP rule: SMTP Settings is NOT a plan feature —
+  // it is supporting configuration for Email Templates + Newsletter,
+  // so the '#settings/smtp' child is hidden unless the plan enables
+  // AT LEAST ONE of them (both OFF → hidden). The Settings parent
+  // itself stays visible for its non-feature Notifications child.
   // While the entitlements query loads, items stay visible (cosmetic
   // fail-open) — routes guard access and the feature APIs enforce
   // 403 FEATURE_NOT_AVAILABLE server-side.
@@ -946,11 +952,15 @@ export function AppSidebar() {
     const sourceItems = isPlatformAdmin ? PLATFORM_NAV_ITEMS : NAV_ITEMS;
     const items = getVisibleNavItems(userRole, sourceItems, pagePermissions);
     if (isPlatformAdmin) return items;
+    const smtpHref = `#${SMTP_SETTINGS_ROUTE}`;
     return items
       .map((item) => ({
         ...item,
         children: item.children
-          ? item.children.filter((child) => isModuleAllowedByPlan(pageKeyOf(child.href), planEntitlements))
+          ? item.children.filter((child) =>
+              child.href === smtpHref
+                ? isSmtpSettingsAllowedByPlan(planEntitlements)
+                : isModuleAllowedByPlan(pageKeyOf(child.href), planEntitlements))
           : undefined,
       }))
       .filter((item) => isModuleAllowedByPlan(pageKeyOf(item.href), planEntitlements));

@@ -2,9 +2,16 @@
 // GET  /api/smtp-settings      — List SMTP settings (paginated, filterable)
 // POST /api/smtp-settings      — Create SMTP settings
 // ============================================================
+// ENTITLEMENT GATE — the SMTP settings management API. SMTP Settings
+// is NOT an independent plan feature but supporting configuration
+// for Email Templates + Newsletter: reachable only while the plan's
+// Feature Access enables at least ONE of them (both disabled → 403
+// FEATURE_NOT_AVAILABLE on every method). Platform staff pass.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireAnyFeatureAllowStaff } from '@/lib/platform/platform-auth';
+import { SMTP_DEPENDENT_FEATURES } from '@/lib/platform/feature-config';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { getSiteWhere } from '@/lib/site-context';
@@ -43,6 +50,10 @@ const SORTABLE = new Set(['createdAt', 'updatedAt', 'name', 'provider', 'isActiv
 
 export async function GET(request: NextRequest) {
   const id = reqId();
+
+  // SMTP Settings derived-entitlement gate (Email Templates OR Newsletter).
+  const featureAuth = await requireAnyFeatureAllowStaff(request, [...SMTP_DEPENDENT_FEATURES]);
+  if ('response' in featureAuth) return featureAuth.response;
 
   try {
     const sp = new URL(request.url).searchParams;
@@ -92,6 +103,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const id = reqId();
+
+  // SMTP Settings derived-entitlement gate (Email Templates OR Newsletter).
+  const featureAuth = await requireAnyFeatureAllowStaff(request, [...SMTP_DEPENDENT_FEATURES]);
+  if ('response' in featureAuth) return featureAuth.response;
 
   try {
     let body: unknown;

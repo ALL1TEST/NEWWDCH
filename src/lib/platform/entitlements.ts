@@ -23,8 +23,10 @@
 // billing state.
 // ============================================================
 
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getPlanConfigSync, getPlanEntitlements, ENTITLEMENT_KEYS, type EntitlementKey } from './plan-config';
+import { ENTITLEMENT_LABELS } from './feature-config';
 import { getCustomerByEmailSync } from './platform-data';
 import { getUserSubscription } from './subscription-data';
 
@@ -158,7 +160,7 @@ export function hasFeatureSyncQuick(user: EntitlementUser, feature: string): boo
 
 /** Throw a 403-shaped error for use in API route guards. */
 export function forbiddenResponse(feature: string) {
-  return Response.json(
+  return NextResponse.json(
     {
       error: {
         code: 'FEATURE_NOT_AVAILABLE',
@@ -170,10 +172,29 @@ export function forbiddenResponse(feature: string) {
   );
 }
 
+/** 403 response for a DERIVED capability that requires ANY ONE of the
+ *  given plan features — e.g. SMTP Settings, which is supporting
+ *  configuration for Email Templates and Newsletter (not an
+ *  independent plan feature). Shape mirrors forbiddenResponse so the
+ *  client surfaces it identically. */
+export function forbiddenAnyResponse(features: readonly string[], subject: string) {
+  const labels = features.map((f) => ENTITLEMENT_LABELS[f as keyof typeof ENTITLEMENT_LABELS] ?? f);
+  return NextResponse.json(
+    {
+      error: {
+        code: 'FEATURE_NOT_AVAILABLE',
+        message: `${subject} requires the ${labels.map((l) => `"${l}"`).join(' or ')} feature. Upgrade to access this capability.`,
+        feature: features.join('|'),
+      },
+    },
+    { status: 403 },
+  );
+}
+
 /** 403 response for an expired free trial — different code so the client
  *  can surface a specific "trial expired" message. */
 export function trialExpiredResponse() {
-  return Response.json(
+  return NextResponse.json(
     {
       error: {
         code: 'FREE_TRIAL_EXPIRED',
