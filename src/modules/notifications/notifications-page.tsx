@@ -1,5 +1,29 @@
 'use client';
 
+// ============================================================
+// ADMIN USER NOTIFICATIONS
+// ============================================================
+// Visual design/layout copied from the Platform Admin Notifications
+// page (src/modules/platform/platform-notifications.tsx): page
+// structure (space-y-6), platform header styling, filter+search
+// toolbar, single Card list with date grouping, row design (unread
+// left accent bar, 8×8 icon avatar, hover actions), icon/color
+// palette (sky / emerald / amber / rose / orange), empty/loading
+// states and responsive layout.
+//
+// ADMIN USER LOGIC — intentionally NOT copied from Platform Admin:
+//   - Filter tabs stay the Admin User taxonomy:
+//     All / Unread / Info / Success / Warning / Error
+//     (Platform's System/Customers/Payments/Subscriptions/Security
+//     categories are NOT used here.)
+//   - Data stays on the Admin User endpoints:
+//     GET/POST /api/notifications, PATCH/DELETE /api/notifications/[id],
+//     GET /api/notifications/unread-count
+//     (completely separate from /api/platform/admin/notifications*).
+//   - Comment-notifications toggle and Read More/Read Less message
+//     expansion are Admin User behaviors, preserved.
+// ============================================================
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   useQuery,
@@ -15,15 +39,20 @@ import {
   Bell,
   BellOff,
   CheckCheck,
+  Check,
+  Undo2,
   Loader2,
   Trash2,
+  Search,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { PageHeader, ConfirmDialog } from '@/components/patterns';
-import { getApi, postApi, deleteApi } from '@/lib/api-client';
+import { ConfirmDialog } from '@/components/patterns';
+import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -40,39 +69,44 @@ interface NotificationItem {
   createdAt: string;
 }
 
+// ADMIN USER filter taxonomy — unchanged.
 type NotificationFilter = 'all' | 'unread' | NotificationType;
 
+// Type → icon + color config — palette copied from the Platform Admin
+// page (emerald / amber / rose / sky / orange; no blue/indigo).
 const NOTIFICATION_TYPE_CONFIG: Record<
   NotificationType,
   { icon: React.ReactNode; color: string; label: string }
 > = {
   INFO: {
-    icon: <Info className="h-5 w-5" />,
-    color: 'text-blue-500 bg-blue-500/10 border-blue-500/20',
+    icon: <Info className="h-4 w-4" />,
+    color: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40 dark:text-sky-400',
     label: 'Info',
   },
   SUCCESS: {
-    icon: <CheckCircle2 className="h-5 w-5" />,
-    color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20',
+    icon: <CheckCircle2 className="h-4 w-4" />,
+    color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400',
     label: 'Success',
   },
   WARNING: {
-    icon: <AlertTriangle className="h-5 w-5" />,
-    color: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
+    icon: <AlertTriangle className="h-4 w-4" />,
+    color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-400',
     label: 'Warning',
   },
   ERROR: {
-    icon: <XCircle className="h-5 w-5" />,
-    color: 'text-red-500 bg-red-500/10 border-red-500/20',
+    icon: <XCircle className="h-4 w-4" />,
+    color: 'text-rose-600 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-400',
     label: 'Error',
   },
   ACTION_REQUIRED: {
-    icon: <Bell className="h-5 w-5" />,
-    color: 'text-orange-500 bg-orange-500/10 border-orange-500/20',
+    icon: <Bell className="h-4 w-4" />,
+    color: 'text-orange-600 bg-orange-50 dark:bg-orange-950/40 dark:text-orange-400',
     label: 'Action Required',
   },
 };
 
+// ADMIN USER filter tabs — All / Unread / Info / Success / Warning /
+// Error. Exactly as before; Platform Admin categories NOT copied.
 const FILTER_TABS: { value: NotificationFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'unread', label: 'Unread' },
@@ -84,11 +118,36 @@ const FILTER_TABS: { value: NotificationFilter; label: string }[] = [
 
 const PAGE_SIZE = 25;
 
+// ==================== Date grouping (Platform Admin design) ====================
+
+type DateGroupKey = 'today' | 'yesterday' | 'thisWeek' | 'older';
+
+const DATE_GROUP_LABEL: Record<DateGroupKey, string> = {
+  today: 'Today',
+  yesterday: 'Yesterday',
+  thisWeek: 'Earlier this week',
+  older: 'Older',
+};
+
+const DATE_GROUP_ORDER: DateGroupKey[] = ['today', 'yesterday', 'thisWeek', 'older'];
+
+function dateGroupKey(iso: string): DateGroupKey {
+  const now = new Date();
+  const d = new Date(iso);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const ts = d.getTime();
+  if (ts >= startOfToday) return 'today';
+  if (ts >= startOfToday - 86_400_000) return 'yesterday';
+  if (ts >= startOfToday - 7 * 86_400_000) return 'thisWeek';
+  return 'older';
+}
+
 // ==================== Notification Message (Read More / Read Less) ====================
-// Uses ResizeObserver to detect whether the message text is actually being
-// truncated by line-clamp-2. "Read More" only appears when the text
-// genuinely overflows the 2-line preview. Each notification expands/collapses
-// independently via its own local state.
+// Admin User behavior preserved: uses ResizeObserver to detect whether
+// the message text is actually truncated by line-clamp-2. "Read More"
+// only appears when the text genuinely overflows the 2-line preview.
+// Base message styling follows the Platform Admin row design
+// (text-xs text-muted-foreground line-clamp-2).
 
 function NotificationMessage({
   message,
@@ -131,7 +190,7 @@ function NotificationMessage({
       <p
         ref={paraRef}
         className={cn(
-          'text-sm text-muted-foreground mt-1',
+          'text-xs text-muted-foreground mt-0.5',
           !isExpanded && 'line-clamp-2',
           isUnread && 'text-foreground/70',
         )}
@@ -154,80 +213,118 @@ function NotificationMessage({
   );
 }
 
-// ==================== Notification Card ====================
+// ==================== Notification Row (Platform Admin design) ====================
 
-interface NotificationCardProps {
+interface NotificationRowProps {
   notification: NotificationItem;
   onMarkRead: (id: string) => void;
+  onMarkUnread: (id: string) => void;
+  onDelete: (id: string) => void;
 }
 
-function NotificationCard({ notification, onMarkRead }: NotificationCardProps) {
+function NotificationRow({
+  notification,
+  onMarkRead,
+  onMarkUnread,
+  onDelete,
+}: NotificationRowProps) {
   const config = NOTIFICATION_TYPE_CONFIG[notification.type] ?? NOTIFICATION_TYPE_CONFIG.INFO;
+  const isUnread = !notification.isRead;
 
   const handleClick = useCallback(() => {
-    if (!notification.isRead) {
-      onMarkRead(notification.id);
-    }
-  }, [notification.id, notification.isRead, onMarkRead]);
+    if (isUnread) onMarkRead(notification.id);
+  }, [isUnread, notification.id, onMarkRead]);
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
       className={cn(
-        'w-full text-left rounded-lg border bg-card p-4 transition-colors hover:bg-accent/50 group',
-        !notification.isRead && 'border-primary/30 bg-primary/[0.02]',
+        'group relative flex items-start gap-3 px-4 py-3 transition-colors cursor-pointer',
+        'hover:bg-accent/40',
+        isUnread ? 'bg-primary/[0.03]' : 'bg-card',
       )}
     >
-      <div className="flex items-start gap-3">
-        {/* Type icon */}
-        <div
-          className={cn(
-            'flex items-center justify-center h-10 w-10 rounded-full border shrink-0',
-            config.color,
-          )}
-        >
-          {config.icon}
-        </div>
+      {/* Unread left accent bar */}
+      {isUnread && (
+        <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary" aria-hidden />
+      )}
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <h3
-              className={cn(
-                'text-sm font-medium truncate',
-                !notification.isRead && 'font-semibold',
-              )}
-            >
-              {notification.title}
-            </h3>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {formatRelativeTime(notification.createdAt)}
-              </span>
-              {/* Unread indicator */}
-              {!notification.isRead && (
-                <span className="h-2.5 w-2.5 rounded-full bg-blue-500 shrink-0" aria-label="Unread" />
-              )}
-            </div>
-          </div>
-          <NotificationMessage
-            message={notification.message}
-            isUnread={!notification.isRead}
-          />
-          <div className="flex items-center gap-2 mt-2">
-            <Badge variant="outline" className="text-[10px]">
-              {config.label}
-            </Badge>
-            {notification.isRead && (
-              <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                <CheckCheck className="h-3 w-3" />
-                Read
-              </span>
-            )}
-          </div>
-        </div>
+      {/* Type icon avatar */}
+      <div
+        className={cn(
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-0.5',
+          config.color,
+        )}
+      >
+        {config.icon}
       </div>
-    </button>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 pr-2">
+        <div className="flex items-center gap-2">
+          <h4
+            className={cn(
+              'text-sm truncate',
+              isUnread ? 'font-semibold' : 'font-medium',
+            )}
+          >
+            {notification.title}
+          </h4>
+        </div>
+        <NotificationMessage
+          message={notification.message}
+          isUnread={isUnread}
+        />
+      </div>
+
+      {/* Timestamp + unread dot */}
+      <div className="shrink-0 flex flex-col items-end gap-1.5 pt-0.5">
+        <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+          {formatRelativeTime(notification.createdAt)}
+        </span>
+        {isUnread && (
+          <span
+            className="h-1.5 w-1.5 rounded-full bg-primary"
+            aria-label="Unread"
+          />
+        )}
+      </div>
+
+      {/* Hover actions */}
+      <div className="absolute right-2 bottom-2 flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+        <button
+          type="button"
+          title={isUnread ? 'Mark as read' : 'Mark as unread'}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isUnread) onMarkRead(notification.id);
+            else onMarkUnread(notification.id);
+          }}
+          className="h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          {isUnread ? <Check className="h-3.5 w-3.5" /> : <Undo2 className="h-3.5 w-3.5" />}
+        </button>
+        <button
+          type="button"
+          title="Delete"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(notification.id);
+          }}
+          className="h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -236,9 +333,10 @@ function NotificationCard({ notification, onMarkRead }: NotificationCardProps) {
 export function NotificationsPage() {
   const queryClient = useQueryClient();
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>('all');
+  const [search, setSearch] = useState('');
   const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
 
-  // Comment Notifications setting (moved from Discussion settings)
+  // Comment Notifications setting (Admin User setting — preserved)
   const { data: commentNotifData } = useQuery({
     queryKey: ['settings', 'discussion', 'comment-notification'],
     queryFn: () => getApi<Record<string, string> | null>('/api/settings?category=DISCUSSION'),
@@ -276,7 +374,8 @@ export function NotificationsPage() {
     },
   });
 
-  // Build query params based on filter
+  // Build query params based on filter — ADMIN USER logic unchanged:
+  // Unread → isRead=false; type tabs → type=<INFO|SUCCESS|WARNING|ERROR>.
   const queryParams = useMemo(() => {
     const params: Record<string, string | number | boolean | undefined> = { pageSize: PAGE_SIZE };
     if (activeFilter === 'unread') {
@@ -287,7 +386,7 @@ export function NotificationsPage() {
     return params;
   }, [activeFilter]);
 
-  // Infinite scroll query
+  // Infinite scroll query — Admin User data source (/api/notifications).
   const {
     data,
     isLoading,
@@ -322,7 +421,7 @@ export function NotificationsPage() {
   const totalPages = data?.pages[0]?.meta?.pagination?.totalPages ?? 0;
   const totalItems = data?.pages[0]?.meta?.pagination?.total ?? 0;
 
-  // Unread count for badge
+  // Unread count for the header subtitle (Admin User endpoint)
   const { data: unreadCountData } = useQuery({
     queryKey: queryKeys.notifications.unreadCount(),
     queryFn: () => getApi<{ count: number }>('/api/notifications/unread-count'),
@@ -330,21 +429,102 @@ export function NotificationsPage() {
   });
   const unreadCount = unreadCountData?.count ?? 0;
 
-  // Mark single as read
+  // Mark single as read — POST /api/notifications (existing Admin
+  // User endpoint). Optimistic row flip matches the Platform Admin
+  // interaction feel; the server call is unchanged.
   const markReadMutation = useMutation({
     mutationFn: (id: string) => postApi('/api/notifications', { notificationIds: [id] }),
+    onMutate: (id: string) => {
+      queryClient.setQueryData(queryKeys.notifications.list(queryParams), (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((p: any) => ({
+            ...p,
+            data: (p?.data ?? []).map((n: NotificationItem) =>
+              n.id === id ? { ...n, isRead: true } : n,
+            ),
+          })),
+        };
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
     },
   });
 
-  // Mark all as read
+  // Mark single as unread — PATCH /api/notifications/[id] (existing
+  // Admin User endpoint; wire-up mirrors the Platform Admin row design).
+  const markUnreadMutation = useMutation({
+    mutationFn: (id: string) => patchApi(`/api/notifications/${id}`, { isRead: false }),
+    onMutate: (id: string) => {
+      queryClient.setQueryData(queryKeys.notifications.list(queryParams), (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((p: any) => ({
+            ...p,
+            data: (p?.data ?? []).map((n: NotificationItem) =>
+              n.id === id ? { ...n, isRead: false } : n,
+            ),
+          })),
+        };
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+    },
+  });
+
+  // Delete single notification — DELETE /api/notifications/[id]
+  // (existing Admin User endpoint; wire-up mirrors the Platform Admin
+  // row design).
+  const deleteSingleMutation = useMutation({
+    mutationFn: (id: string) => deleteApi(`/api/notifications/${id}`),
+    onMutate: (id: string) => {
+      queryClient.setQueryData(queryKeys.notifications.list(queryParams), (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((p: any) => ({
+            ...p,
+            data: (p?.data ?? []).filter((n: NotificationItem) => n.id !== id),
+          })),
+        };
+      });
+    },
+    onSuccess: () => {
+      toast.success('Notification deleted');
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+    },
+  });
+
+  // Mark all as read — Admin User logic unchanged (collects the ids of
+  // all loaded unread rows and POSTs them to /api/notifications).
   const markAllReadMutation = useMutation({
     mutationFn: () => {
       const ids = allNotifications
         .filter((n) => !n.isRead)
         .map((n) => n.id);
       return postApi('/api/notifications', { notificationIds: ids });
+    },
+    onMutate: () => {
+      queryClient.setQueryData(queryKeys.notifications.list(queryParams), (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((p: any) => ({
+            ...p,
+            data: (p?.data ?? []).map((n: NotificationItem) => ({ ...n, isRead: true })),
+          })),
+        };
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
@@ -356,7 +536,17 @@ export function NotificationsPage() {
     [markReadMutation],
   );
 
-  // Delete ALL notifications
+  const handleMarkUnread = useCallback(
+    (id: string) => markUnreadMutation.mutate(id),
+    [markUnreadMutation],
+  );
+
+  const handleDeleteSingle = useCallback(
+    (id: string) => deleteSingleMutation.mutate(id),
+    [deleteSingleMutation],
+  );
+
+  // Delete ALL notifications — Admin User logic unchanged.
   const deleteAllMutation = useMutation({
     mutationFn: () => deleteApi('/api/notifications'),
     onSuccess: () => {
@@ -368,6 +558,35 @@ export function NotificationsPage() {
       toast.error(err.message || 'Failed to delete notifications');
     },
   });
+
+  // Apply search (client-side, Platform Admin toolbar behavior).
+  const displayNotifications = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return allNotifications;
+    return allNotifications.filter(
+      (n) =>
+        n.title.toLowerCase().includes(q) ||
+        n.message.toLowerCase().includes(q),
+    );
+  }, [allNotifications, search]);
+
+  // Group the visible list by date (Platform Admin list design).
+  const grouped = useMemo(() => {
+    const buckets: Record<DateGroupKey, NotificationItem[]> = {
+      today: [],
+      yesterday: [],
+      thisWeek: [],
+      older: [],
+    };
+    for (const n of displayNotifications) {
+      buckets[dateGroupKey(n.createdAt)].push(n);
+    }
+    return DATE_GROUP_ORDER.filter((k) => buckets[k].length > 0).map((k) => ({
+      key: k,
+      label: DATE_GROUP_LABEL[k],
+      items: buckets[k],
+    }));
+  }, [displayNotifications]);
 
   // Intersection observer for infinite scroll
   const observerRef = useCallback(
@@ -388,18 +607,24 @@ export function NotificationsPage() {
     [isFetchingNextPage, hasNextPage, fetchNextPage],
   );
 
+  const subtitle =
+    unreadCount > 0
+      ? `You have ${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}`
+      : 'No unread notifications';
+
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Notifications"
-        description={
-          unreadCount > 0
-            ? `You have ${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}`
-            : 'No unread notifications'
-        }
-        action={
-          <div className="flex items-center gap-3">
-            {/* Comment Notifications toggle (moved from Discussion settings) */}
+    <div className="space-y-6">
+      {/* ==================== Header (Platform Admin styling) ==================== */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-1">
+        <div className="flex items-start gap-3">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Notifications</h1>
+            <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+          </div>
+        </div>
+        {(
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Comment Notifications toggle (Admin User setting — preserved) */}
             <div className="flex items-center gap-2">
               <Switch
                 id="comment-notif-toggle"
@@ -429,7 +654,7 @@ export function NotificationsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950/40"
+              className="text-rose-600 border-rose-300 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-950/40"
               onClick={() => setDeleteAllDialogOpen(true)}
               disabled={deleteAllMutation.isPending || allNotifications.length === 0}
             >
@@ -441,68 +666,123 @@ export function NotificationsPage() {
               Delete All
             </Button>
           </div>
-        }
-      />
-
-      {/* Filter tabs — custom pill buttons (not Radix Tabs, which requires TabsContent) */}
-      <div className="flex flex-wrap gap-1">
-        {FILTER_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            onClick={() => setActiveFilter(tab.value)}
-            className={cn(
-              'text-xs px-3 py-1.5 rounded-md font-medium transition-colors',
-              activeFilter === tab.value
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Notification list */}
-      <div className="space-y-2">
-        {isLoading && allNotifications.length === 0 ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : allNotifications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <BellOff className="h-10 w-10 text-muted-foreground mb-3" />
-            <h3 className="text-sm font-semibold">No Notifications</h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              {activeFilter !== 'all'
-                ? `No ${activeFilter.toLowerCase()} notifications found`
-                : "You're all caught up!"}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {allNotifications.map((notification) => (
-              <NotificationCard
-                key={notification.id}
-                notification={notification}
-                onMarkRead={handleMarkRead}
-              />
-            ))}
-            <div ref={observerRef} className="flex items-center justify-center py-4">
-              {isFetchingNextPage && (
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              )}
-              {!hasNextPage && allNotifications.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {totalItems} notification{totalItems !== 1 ? 's' : ''} total
-                </p>
-              )}
-            </div>
-          </div>
         )}
       </div>
 
-      {/* Delete All Confirmation Dialog */}
+      {/* ==================== Filter + search toolbar (Platform Admin design) ==================== */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        {/* Admin User filter tabs — All / Unread / Info / Success / Warning / Error */}
+        <div className="flex flex-wrap items-center gap-1">
+          {FILTER_TABS.map((tab) => {
+            const active = activeFilter === tab.value;
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setActiveFilter(tab.value)}
+                className={cn(
+                  'text-xs px-3 py-1.5 rounded-md font-medium transition-colors',
+                  active
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
+                )}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+        {/* Search (client-side) */}
+        <div className="relative sm:ml-auto sm:w-64">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search notifications…"
+            className="h-9 pl-8 pr-8"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ==================== Notification list (Platform Admin card design) ==================== */}
+      <Card>
+        <CardContent className="p-0">
+          {isLoading && displayNotifications.length === 0 ? (
+            // Loading state
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : displayNotifications.length === 0 ? (
+            // Empty state
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                <BellOff className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-sm font-semibold">No notifications</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                {search
+                  ? 'No notifications match your search.'
+                  : activeFilter !== 'all'
+                    ? `No ${activeFilter.toLowerCase()} notifications found`
+                    : "You're all caught up!"}
+              </p>
+            </div>
+          ) : (
+            // Grouped list
+            <div className="divide-y">
+              {grouped.map((group) => (
+                <div key={group.key}>
+                  {/* Group header */}
+                  <div className="px-4 py-2 bg-muted/30 flex items-center gap-2">
+                    <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      {group.label}
+                    </h3>
+                    <span className="text-[11px] text-muted-foreground">
+                      · {group.items.length}
+                    </span>
+                  </div>
+                  {/* Group items */}
+                  <div className="divide-y">
+                    {group.items.map((notification) => (
+                      <NotificationRow
+                        key={notification.id}
+                        notification={notification}
+                        onMarkRead={handleMarkRead}
+                        onMarkUnread={handleMarkUnread}
+                        onDelete={handleDeleteSingle}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              {/* Infinite scroll sentinel + summary */}
+              <div ref={observerRef} className="flex items-center justify-center py-4">
+                {isFetchingNextPage && (
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                )}
+                {!hasNextPage && displayNotifications.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {totalItems} notification{totalItems !== 1 ? 's' : ''} total
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Delete All Confirmation Dialog (Admin User text — unchanged) */}
       <ConfirmDialog
         open={deleteAllDialogOpen}
         onOpenChange={setDeleteAllDialogOpen}
