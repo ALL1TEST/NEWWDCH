@@ -188,12 +188,15 @@ function derivePlanFeatures(plan: {
     if (e === 'ai_platform') {
       const articles = plan.limits.aiArticlesPerMonth ?? 0;
       const images = plan.limits.aiImagesPerMonth ?? 0;
+      // Display-only: the monthly usage-limit logic is unchanged; the
+      // customer-facing lines just drop the "/ month" suffix (they are
+      // usage limits, not prices) and render as separate lines.
       items.push({
         label,
         subLines: [
           'AI provided by the platform',
-          `${formatAiCount(articles)} AI articles / month`,
-          `${formatAiCount(images)} AI images / month`,
+          `${formatAiCount(articles)} AI articles`,
+          `${formatAiCount(images)} AI images`,
         ],
       });
       continue;
@@ -239,12 +242,14 @@ export function BillingPage() {
   const { t } = useT();
   const queryClient = useQueryClient();
 
-  // Per-plan selected billing period (ONLY for plans with BOTH periods
-  // enabled — the customer can switch between them). Plans with a
-  // single enabled period have no switch: the card always shows that
-  // period and checkout always uses it. Declared before the early
-  // returns below (hooks order).
-  const [periodByPlan, setPeriodByPlan] = useState<Record<string, 'monthly' | 'yearly'>>({});
+  // ONE global billing period (Monthly / Yearly) shared by ALL plan
+  // cards — selected via the single selector ABOVE the plans grid
+  // (never repeated inside a card). null = not chosen yet → defaults
+  // to the CURRENT subscription's interval until the customer picks.
+  // Plans that don't support the selected period keep showing their
+  // only enabled period (see the card logic below). Declared before
+  // the early returns below (hooks order).
+  const [globalPeriod, setGlobalPeriod] = useState<'monthly' | 'yearly' | null>(null);
 
   const billingQuery = useQuery<BillingStateWithCurrency>({
     queryKey: ['platform-billing-me'],
@@ -344,7 +349,7 @@ export function BillingPage() {
   // -------------------- Loading --------------------
   if (billingQuery.isLoading) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-8">
         <div>
           <Skeleton className="h-6 w-48" />
           <Skeleton className="h-4 w-72 mt-2" />
@@ -369,25 +374,26 @@ export function BillingPage() {
           </CardContent>
         </Card>
         <div>
-          <Skeleton className="h-5 w-32 mb-4" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {Array.from({ length: 2 }).map((_, i) => (
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-9 w-44 rounded-full" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {Array.from({ length: 3 }).map((_, i) => (
               <Card key={i}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <Skeleton className="h-5 w-16" />
+                <CardContent className="flex flex-col flex-1">
+                  <div className="flex items-start justify-between">
+                    <Skeleton className="h-7 w-24" />
                     <Skeleton className="h-5 w-16" />
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Skeleton className="h-8 w-24" />
-                  <Separator />
-                  <div className="space-y-2">
-                    {Array.from({ length: 4 }).map((_, j) => (
+                  <Skeleton className="h-10 w-32 mt-4" />
+                  <Separator className="my-5" />
+                  <div className="space-y-2 flex-1">
+                    {Array.from({ length: 5 }).map((_, j) => (
                       <Skeleton key={j} className="h-4 w-full" />
                     ))}
                   </div>
-                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-9 w-full mt-6" />
                 </CardContent>
               </Card>
             ))}
@@ -410,7 +416,7 @@ export function BillingPage() {
   // -------------------- Error --------------------
   if (billingQuery.isError || !billingQuery.data) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-8">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-foreground">{t('billing.title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t('billing.description')}</p>
@@ -435,7 +441,7 @@ export function BillingPage() {
   // access and are not a paying customer.
   if (billingState.isInternal) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-8">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-foreground">{t('billing.title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t('billing.description')}</p>
@@ -489,6 +495,19 @@ export function BillingPage() {
   // Use the subscription's billing interval when present, otherwise the plan default.
   const currentInterval = billingState.billingInterval ?? currentPlan.interval;
 
+  // ---- ONE global Monthly / Yearly selector (above all plans) ----
+  // Rendered only when at least one OTHER plan supports yearly billing
+  // (when no plan does, the selector is not shown at all). It controls
+  // the displayed billing period for every plan card; plans that don't
+  // support the selected period keep showing their ONLY enabled period
+  // (existing billing logic — a disabled period is never displayed and
+  // never sent to checkout, so no invalid/fake price can appear).
+  // Before the customer picks, it defaults to the current subscription's
+  // interval (the period they are actually billed on).
+  const showPeriodSelector = otherPlans.some((p) => p.billingYearly ?? true);
+  const effectivePeriod: 'monthly' | 'yearly' =
+    globalPeriod ?? (currentInterval === 'yearly' ? 'yearly' : 'monthly');
+
   const currentStorePlan = getStorePlan(currentPlan.id);
 
   // Server-resolved FINAL pricing per plan — the same resolveCustomerPricing
@@ -501,10 +520,9 @@ export function BillingPage() {
   const currentPrice =
     currentInterval === 'yearly' ? currentPricing.yearly : currentPricing.monthly;
   const currentDisplayCurrency = currentPricing.currency;
-  // Price suffix: monthly prices show the PLAIN amount (the billing
-  // period is already communicated by the interval context); yearly
-  // prices keep the "/ year" label to distinguish annual pricing.
-  const currentPriceSuffix = currentInterval === 'yearly' ? ' / year' : '';
+  // Price suffix: explicit "/ month" | "/ year" next to the displayed
+  // amount — consistent with the redesigned plan cards (also removes
+  // any ambiguity when a card's period differs from the global one).
 
   const isHigherPlan = (plan: { price: number }) => plan.price > currentPlan.price;
   const getActionLabel = (plan: { price: number; isFree: boolean }) => {
@@ -525,10 +543,10 @@ export function BillingPage() {
   //   - Paid plan → checkout API (Stripe Checkout Session) — the body
   //     sends ONLY planId + interval; the currency/price is resolved
   //     SERVER-SIDE from the request IP (the frontend cannot pick it).
-  //     The interval is the plan's ENABLED billing period — the same
-  //     one its card displays (single-period plans pin to their only
-  //     period; both-period plans use the customer's toggle choice),
-  //     so the charged amount always matches.
+  //     The interval is the card's DISPLAYED billing period — the
+  //     global Monthly/Yearly selection when the plan supports it,
+  //     otherwise the plan's only enabled period (the backend rejects
+  //     a disabled interval) — so the charged amount always matches.
   const handleSelectPlan = (
     plan: {
       id: PlanId;
@@ -557,7 +575,7 @@ export function BillingPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-8">
       {/* Page Header */}
       <div>
         <h1 className="text-xl font-bold tracking-tight text-foreground">{t('billing.title')}</h1>
@@ -605,11 +623,11 @@ export function BillingPage() {
           <CardTitle className="text-base">{t('billing.currentPlan')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5 text-muted-foreground" />
-                <span className="font-semibold text-lg">{currentPlan.name}</span>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-3 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <CreditCard className="h-5 w-5 text-muted-foreground shrink-0" />
+                <span className="text-2xl font-semibold tracking-tight">{currentPlan.name}</span>
                 <Badge
                   variant="outline"
                   className={`text-[10px] font-semibold ${getPlanBadgeClasses(currentStorePlan.badgeVariant)}`}
@@ -617,11 +635,21 @@ export function BillingPage() {
                   {currentPlan.name}
                 </Badge>
               </div>
-              <p className="text-sm text-muted-foreground ml-7">
-                {currentPrice === 0
-                  ? t('billing.free')
-                  : `${formatMoney(currentPrice, currentDisplayCurrency)}${currentPriceSuffix}`}
-              </p>
+              {/* Same price treatment as the redesigned plan cards —
+                  large amount + explicit period suffix (display only;
+                  the price source and suffix logic are unchanged). */}
+              <div className="flex items-baseline gap-1.5 ml-7">
+                <span className="text-3xl font-bold tracking-tight">
+                  {currentPrice === 0
+                    ? t('billing.free')
+                    : formatMoney(currentPrice, currentDisplayCurrency)}
+                </span>
+                {currentPrice > 0 && (
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">
+                    / {currentInterval === 'yearly' ? 'year' : 'month'}
+                  </span>
+                )}
+              </div>
               {currentPrice > 0 &&
                 planPricing?.[currentPlan.id] &&
                 planPricing[currentPlan.id].supported &&
@@ -704,10 +732,50 @@ export function BillingPage() {
         </CardContent>
       </Card>
 
-      {/* Other Plans */}
+      {/* Other Plans — ONE global Monthly / Yearly selector above ALL
+          cards (never repeated inside a card). Card layout: large plan
+          name → large price → divider → feature list with check icons →
+          action button pinned to the bottom. */}
       <div>
-        <h2 className="text-base font-semibold mb-4">{t('billing.otherPlans')}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <h2 className="text-base font-semibold">{t('billing.otherPlans')}</h2>
+          {/* Global billing-period selector — shown only when at least
+              one available plan supports yearly billing; it then drives
+              the displayed billing period of every plan card below. */}
+          {showPeriodSelector && (
+            <div
+              role="group"
+              aria-label="Billing period"
+              className="inline-flex items-center rounded-full border bg-muted/40 p-1"
+            >
+              <button
+                type="button"
+                onClick={() => setGlobalPeriod('monthly')}
+                aria-pressed={effectivePeriod === 'monthly'}
+                className={`h-8 rounded-full px-5 text-xs font-medium transition-colors ${
+                  effectivePeriod === 'monthly'
+                    ? 'bg-foreground text-background shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                onClick={() => setGlobalPeriod('yearly')}
+                aria-pressed={effectivePeriod === 'yearly'}
+                className={`h-8 rounded-full px-5 text-xs font-medium transition-colors ${
+                  effectivePeriod === 'yearly'
+                    ? 'bg-foreground text-background shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Yearly
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {otherPlans.map((plan) => {
             const storePlan = getStorePlan(plan.id);
             // Server-resolved FINAL price — the same values checkout charges.
@@ -715,19 +783,23 @@ export function BillingPage() {
             const planDisplayCurrency = planPricingResolved.currency;
             const planSupported = planPricing?.[plan.id]?.supported ?? true;
             // ---- Enabled billing periods (admin-configured per plan) ----
-            // A disabled period NEVER appears on the card and is never
-            // sent to checkout (the backend rejects it too — 400).
             const planHasMonthly = plan.billingMonthly ?? true;
             const planHasYearly = plan.billingYearly ?? true;
-            const bothPeriods = planHasMonthly && planHasYearly;
-            // The card's displayed period: the customer's toggle choice
-            // when both are enabled; the ONLY enabled period otherwise
-            // (defaults to the plan's default cadence).
-            const cardInterval: 'monthly' | 'yearly' = bothPeriods
-              ? (periodByPlan[plan.id] ?? plan.interval)
+            // The card's displayed period: the GLOBAL selection when this
+            // plan supports it; otherwise the plan's ONLY enabled period
+            // (pinned — existing billing logic: a disabled period is
+            // never displayed and never sent to checkout, so no
+            // invalid/fake price can appear; the backend rejects a
+            // disabled interval too).
+            const followsSelection =
+              effectivePeriod === 'monthly' ? planHasMonthly : planHasYearly;
+            const cardInterval: 'monthly' | 'yearly' = followsSelection
+              ? effectivePeriod
               : planHasMonthly
                 ? 'monthly'
-                : 'yearly';
+                : planHasYearly
+                  ? 'yearly'
+                  : plan.interval;
             const planPrice =
               cardInterval === 'yearly' ? planPricingResolved.yearly : planPricingResolved.monthly;
             const isBusy =
@@ -736,80 +808,65 @@ export function BillingPage() {
             return (
               <Card
                 key={plan.id}
-                className={`relative ${getPlanCardBorderClasses(storePlan.badgeVariant)}`}
+                className={`relative flex flex-col ${getPlanCardBorderClasses(storePlan.badgeVariant)}`}
               >
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">{plan.name}</CardTitle>
+                <CardContent className="flex flex-col flex-1">
+                  {/* Large plan name — keeps the plan's color identity via
+                      the card border + its soft badge. */}
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <h3 className="text-2xl font-semibold tracking-tight text-foreground">
+                      {plan.name}
+                    </h3>
                     <Badge
                       variant="outline"
-                      className={`text-[10px] font-semibold ${getPlanBadgeClasses(storePlan.badgeVariant)}`}
+                      className={`text-[10px] font-semibold shrink-0 ${getPlanBadgeClasses(storePlan.badgeVariant)}`}
                     >
                       {plan.name}
                     </Badge>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    {/* Monthly / Yearly switch — ONLY for plans with BOTH
-                        periods enabled. Single-period plans have no
-                        switch: their only period is always shown. */}
-                    {bothPeriods && !plan.isFree && (
-                      <div className="inline-flex items-center rounded-full border bg-muted/40 p-0.5 mb-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPeriodByPlan((cur) => ({ ...cur, [plan.id]: 'monthly' }))
-                          }
-                          className={`h-7 rounded-full px-4 text-xs font-medium transition-colors ${
-                            cardInterval === 'monthly'
-                              ? 'bg-foreground text-background'
-                              : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          Monthly
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPeriodByPlan((cur) => ({ ...cur, [plan.id]: 'yearly' }))
-                          }
-                          className={`h-7 rounded-full px-4 text-xs font-medium transition-colors ${
-                            cardInterval === 'yearly'
-                              ? 'bg-foreground text-background'
-                              : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          Yearly
-                        </button>
-                      </div>
-                    )}
-                    <span className="text-2xl font-bold">
-                      {planPrice === 0 ? t('billing.free') : formatMoney(planPrice, planDisplayCurrency)}
-                    </span>
-                    {/* Yearly prices keep the "/ year" label to
-                        distinguish annual pricing; monthly prices show
-                        the PLAIN amount — the Monthly/Yearly switch
-                        above already communicates the billing period. */}
-                    {planPrice > 0 && cardInterval === 'yearly' && (
-                      <span className="text-sm text-muted-foreground ml-1">/ year</span>
+                  {/* Large price — explicit period suffix so the amount is
+                      always unambiguous (also for pinned-period cards). */}
+                  <div className="mt-4">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-4xl font-bold tracking-tight text-foreground">
+                        {planPrice === 0 ? t('billing.free') : formatMoney(planPrice, planDisplayCurrency)}
+                      </span>
+                      {planPrice > 0 && (
+                        <span className="text-sm text-muted-foreground whitespace-nowrap">
+                          / {cardInterval === 'yearly' ? 'year' : 'month'}
+                        </span>
+                      )}
+                    </div>
+                    {/* A plan that cannot follow the global selection keeps
+                        its only enabled period — stated explicitly (never
+                        an invalid price for the selected period). */}
+                    {!plan.isFree && !followsSelection && planHasMonthly !== planHasYearly && (
+                      <p className="text-[11px] text-muted-foreground mt-1.5">
+                        {planHasMonthly ? 'Monthly billing only' : 'Yearly billing only'}
+                      </p>
                     )}
                     {planPrice > 0 && customerCountryName && planSupported && (
-                      <p className="text-[11px] text-muted-foreground mt-1">
+                      <p className="text-[11px] text-muted-foreground mt-1.5">
                         Priced for {customerCountryName} ({planDisplayCurrency})
                       </p>
                     )}
                     {planPrice > 0 && !planSupported && planPricing?.[plan.id] && (
-                      <p className="text-[11px] text-muted-foreground mt-1">
+                      <p className="text-[11px] text-muted-foreground mt-1.5">
                         Priced in {planDisplayCurrency} (plan default) — {planPricing[plan.id].detectedCurrency} not
                         configured for this plan
                       </p>
                     )}
                   </div>
-                  <Separator />
-                  <PlanFeatureList items={derivePlanFeatures(plan)} />
+                  <Separator className="my-5" />
+                  {/* Feature list with check icons */}
+                  <div className="flex-1">
+                    <PlanFeatureList items={derivePlanFeatures(plan)} />
+                  </div>
+                  {/* Action button pinned to the card bottom (label +
+                      behavior unchanged: Upgrade / Downgrade / Change
+                      Plan per the existing subscription logic). */}
                   <Button
-                    className="w-full"
+                    className="mt-6 w-full"
                     variant={isHigherPlan(plan) ? 'default' : 'outline'}
                     disabled={isBusy}
                     onClick={() => handleSelectPlan(plan, cardInterval)}

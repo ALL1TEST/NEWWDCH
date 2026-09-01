@@ -9511,3 +9511,30 @@ Stage Summary:
 - autoCurrency is fully supported end-to-end: schema (Boolean @default(true)) → DB column → generated client → API validation → create/update handlers → shared types → Edit Plan load/save round-trip → Client Billing reads the persisted value.
 - Root cause was a stale dev-server process (pre-regeneration Prisma client in memory), not missing model support; fixed by regenerating the client, re-applying the schema sync (no-op), and restarting the server fresh.
 - Existing plans (Free/Plus/Pro/Max) fully intact; Auto Currency UI unchanged and functional.
+
+---
+Task ID: BILLING-PLAN-CARDS-REDESIGN
+Agent: main (orchestrator)
+Task: Update the Admin User Billing & Subscription page — UI/presentation only: redesigned Other Plans cards (reference: clean card → large plan name → large price → divider → feature list with check icons → action button), ONE global Monthly/Yearly selector above all plans, AI usage text "/ month" removal, Current Plan visual consistency. No subscription/entitlement/Stripe logic changes.
+
+Work Log:
+- Read the full billing-page.tsx (893 lines), subscription-store (color identity: getPlanBadgeClasses/getPlanCardBorderClasses per plan variant), platform-data Plan type (billingMonthly/billingYearly/interval fields).
+- Redesigned Other Plans cards in src/modules/billing/billing-page.tsx: CardHeader removed → single CardContent flex-col flex-1; large plan name (text-2xl) + soft color badge top-right; large price (text-4xl) with explicit "/ month" | "/ year" suffix; Separator divider; PlanFeatureList (check icons, existing) in flex-1 wrapper; full-width action Button (mt-6) pinned to card bottom — verified buttons align across equal-height cards (flex-1 pushes to bottom in grid row).
+- Replaced per-plan periodByPlan state + per-card Monthly/Yearly switches with ONE globalPeriod state + single pill selector above the plans grid (role=group + aria-label="Billing period" + aria-pressed per button). Selector shown iff any OTHER plan supports yearly billing (billingYearly ?? true); hidden entirely otherwise. Default = current subscription's interval (globalPeriod null → currentInterval), customer choice sticks after first pick.
+- Per-card period logic (existing billing rules preserved): cardInterval = global selection when the plan supports it, else the plan's ONLY enabled period (pinned; disabled periods never displayed/sent — backend rejects them); pinned cards show "Monthly billing only"/"Yearly billing only" muted note instead of a fake price; explicit period suffix on all paid prices removes ambiguity; free plans show "Free" (no suffix/note).
+- handleSelectPlan(plan, cardInterval) UNCHANGED — checkout/change-plan mutations, interval validation, action labels (Upgrade/Downgrade/Change Plan via isHigherPlan/getActionLabel) all untouched.
+- AI usage text fix: derivePlanFeatures ai_platform subLines now "N AI articles" / "N AI images" (was "N AI articles / month") — "/ month" removed, separate block lines; monthly usage-limit logic (limits.aiArticlesPerMonth/aiImagesPerMonth) unchanged.
+- Current Plan section: functionality untouched (status badge, next billing, trial, Included-in-your-plan list, Manage Payment/Cancel buttons); visual consistency only — plan name text-lg→text-2xl, price text-sm→text-3xl with explicit "/ month"|"/ year" suffix (currentPriceSuffix var removed, inlined).
+- Responsive: page max-w-4xl→max-w-6xl + space-y-8 (all 4 return paths); grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5; loading skeleton updated to mirror new layout (selector pill + 3-col cards).
+- E2E verified (admin@example.com/Pro, browser): 3 cards (Free/Plus/Max) with divider+checks+buttons (Change Plan/Downgrade/Upgrade); ONE selector (count=1), Monthly default from subscription; Yearly → ALL prices switch (CHF90/yr, CHF990/yr, Free stays); AI lines "0 AI articles"/"0 AI images" (blocks, no "/ month"); Current Plan Pro CHF49/month + buttons intact; Upgrade click → POST /api/billing/checkout (503 Stripe-unconfigured = pre-existing expected, toast correct) proving the action path works.
+- Edge cases E2E (owner API, then RESTORED): Max billingYearly=false → Yearly selected → Max pinned to CHF99/month + "Monthly billing only" note (no fake yearly price); ALL plans yearly=false → selector completely hidden (all cards monthly prices); DB restored to all billingMonthly=1/billingYearly=1, prices 0/9/49/99 + 0/90/490/990 CHF intact.
+- Responsive E2E: 390px — single column, no horizontal overflow, selector wraps next to heading; 1280px — 3 cards one row (top aligned, buttons aligned y=1348).
+- VLM design verification: card layout PASS (name→price→divider→features→button, buttons aligned), global selector PASS, color identity PASS (Free emerald/Plus amber/Max pink), "/ month" PASS, AI usage text PASS, mobile PASS (point 3 initially out-of-fold, re-shot: PASS).
+- Quality gates: eslint billing-page.tsx 0 problems; tsc --noEmit 110 errors = exact pre-existing baseline (0 new, 0 in billing-page).
+
+Stage Summary:
+- Other Plans cards follow the reference: large name → large price → divider → check-icon features → bottom action button; color identity preserved (border + badge per plan); no hardcoded plan data (all from /api/platform/billing/me).
+- ONE global Monthly/Yearly selector above the plans (never per-card); yearly-only filtering via billingYearly; selector hidden when no plan supports yearly; pinned-period cards show their real enabled-period price + note (never invalid prices).
+- AI usage lines display "0 AI articles"/"0 AI images" without "/ month" (display-only; limit logic unchanged).
+- Current Plan functionality unchanged, styling consistent (large name/price + explicit suffix).
+- Zero backend/logic/entitlement/Stripe changes; lint clean; TS baseline unchanged; plan configs restored after edge-case tests; committed and pushed.
