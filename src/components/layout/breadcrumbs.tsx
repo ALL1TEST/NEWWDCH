@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useSiteStore } from '@/lib/stores/site-store';
+import { useT } from '@/lib/i18n';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -66,6 +67,38 @@ const ICON_MAP: Record<string, LucideIcon> = {
   billing: CreditCard,
 };
 
+// i18n — every module id maps to ONE 'title.*' key in the core
+// dictionary (see src/lib/i18n/core/en.ts); the hardcoded English
+// value below is only the fallback for unmapped/unknown ids. The
+// labels resolve through t() at render time so breadcrumbs follow
+// the selected language.
+const MODULE_TITLE_KEYS: Record<string, string> = {
+  dashboard: 'title.dashboard',
+  'all-sites': 'title.executiveDashboard',
+  content: 'title.articles',
+  media: 'title.media',
+  users: 'title.users',
+  categories: 'title.categories',
+  tags: 'title.tags',
+  comments: 'title.comments',
+  newsletters: 'title.newsletters',
+  seo: 'title.seo',
+  analytics: 'title.analytics',
+  notifications: 'title.notifications',
+  ai: 'title.ai',
+  settings: 'title.settings',
+  calendar: 'title.calendar',
+  security: 'title.settings',
+  backups: 'title.backups',
+  automation: 'title.automation',
+  jobs: 'title.jobs',
+  'email-templates': 'title.emailTemplates',
+  profile: 'title.profile',
+  billing: 'title.billing',
+};
+
+// English fallback labels (used only for ids missing from
+// MODULE_TITLE_KEYS — none of the current modules).
 const MODULE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   'all-sites': 'Executive Dashboard',
@@ -187,14 +220,22 @@ export function Breadcrumbs() {
   const navigate = useNavigationStore((s) => s.navigate);
   const activeSite = useSiteStore((s) => s.getActiveSite());
   const isAllSites = useSiteStore((s) => s.isAllSites());
+  const { t } = useT();
 
   const crumbs = useMemo(() => {
+    // Label resolver lives INSIDE the memo so the React Compiler can
+    // preserve it: MODULE_TITLE_KEYS / MODULE_LABELS are stable module
+    // constants and t is a dep of this useMemo.
+    const moduleLabel = (id: string): string => {
+      const key = MODULE_TITLE_KEYS[id];
+      return key ? t(key) : (MODULE_LABELS[id] ?? id);
+    };
     const items: { label: string; href?: string; icon?: LucideIcon; isCurrent?: boolean }[] = [];
 
     if (currentModule && currentModule !== 'dashboard') {
       const Icon = ICON_MAP[currentModule];
       items.push({
-        label: MODULE_LABELS[currentModule] ?? currentModule,
+        label: moduleLabel(currentModule),
         href: `#${currentModule}`,
         icon: Icon,
       });
@@ -220,7 +261,7 @@ export function Breadcrumbs() {
         if (currentSubPage) {
           const subLabel =
             currentSubPage === 'edit'
-              ? 'Edit'
+              ? t('common.edit')
               : currentSubPage.charAt(0).toUpperCase() + currentSubPage.slice(1);
           items.push({
             label: subLabel,
@@ -230,14 +271,14 @@ export function Breadcrumbs() {
       }
     } else {
       items.push({
-        label: isAllSites ? 'Executive Dashboard' : 'Dashboard',
+        label: isAllSites ? t('title.executiveDashboard') : t('title.dashboard'),
         icon: isAllSites ? LayoutGrid : LayoutDashboard,
         isCurrent: true,
       });
     }
 
     return items;
-  }, [currentModule, currentItemId, currentSubPage, isAllSites]);
+  }, [currentModule, currentItemId, currentSubPage, isAllSites, t]);
 
   // Platform Admin modules (`platform-*`) are handled by `hasBreadcrumb`
   // above (returns `false`), so the guard immediately below short-circuits
@@ -281,7 +322,7 @@ export function Breadcrumbs() {
             <>
               <BreadcrumbItem>
                 <span className="flex items-center gap-1 text-muted-foreground">
-                  All Sites
+                  {t('topbar.allSites')}
                 </span>
               </BreadcrumbItem>
               <BreadcrumbSeparator />
@@ -311,7 +352,7 @@ export function Breadcrumbs() {
         {isAllSites && crumbs.length > 0 && (
           <>
             <BreadcrumbItem>
-              <span className="text-xs text-muted-foreground font-medium">All Sites</span>
+              <span className="text-xs text-muted-foreground font-medium">{t('topbar.allSites')}</span>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
           </>

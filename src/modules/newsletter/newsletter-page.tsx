@@ -59,6 +59,7 @@ import {
 import { getApi, postApi, deleteApi, patchApi } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { queryKeys } from '@/lib/query-keys';
+import { useT } from '@/lib/i18n';
 import { formatDate, cn } from '@/lib/utils';
 import type {
   SubscriberStatus,
@@ -146,6 +147,7 @@ type NewsletterSubPage = 'subscribers' | 'campaigns';
 
 export function NewsletterPage() {
   const queryClient = useQueryClient();
+  const { t } = useT();
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
 
@@ -194,36 +196,36 @@ export function NewsletterPage() {
     () => [
       ColumnDefHelper.textColumn<SubscriberRow>({
         id: 'email',
-        header: 'Email',
+        header: t('common.email'),
         accessorKey: 'email',
         className: 'font-medium',
       }),
       ColumnDefHelper.textColumn<SubscriberRow>({
         id: 'name',
-        header: 'Name',
+        header: t('common.name'),
         accessorKey: 'name',
         enableSorting: false,
       }),
       ColumnDefHelper.statusColumn<SubscriberRow>({
         id: 'status',
-        header: 'Status',
+        header: t('common.status'),
         accessorKey: 'status',
         renderStatus: (status) => <StatusBadge status={status} size="sm" />,
       }),
       ColumnDefHelper.textColumn<SubscriberRow>({
         id: 'source',
-        header: 'Source',
+        header: t('newsletter.source'),
         accessorKey: 'source',
         enableSorting: false,
       }),
       ColumnDefHelper.dateColumn<SubscriberRow>({
         id: 'subscribedAt',
-        header: 'Subscribed',
+        header: t('newsletter.subscribed'),
         accessorKey: 'subscribedAt',
         format: (d) => formatDate(d),
       }),
     ],
-    [],
+    [t],
   );
 
   // ======================== CAMPAIGNS ========================
@@ -298,10 +300,10 @@ export function NewsletterPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.newsletterCampaigns.all });
       setDeleteCampaignTarget(null);
-      toast.success('Campaign deleted');
+      toast.success(t('newsletter.campaignDeleted'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to delete campaign');
+      toast.error(err.message || t('newsletter.deleteCampaignFailed'));
     },
   });
 
@@ -310,10 +312,10 @@ export function NewsletterPage() {
     mutationFn: (id: string) => postApi(`/api/campaigns/${id}/duplicate`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.newsletterCampaigns.all });
-      toast.success('Campaign duplicated');
+      toast.success(t('newsletter.campaignDuplicated'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to duplicate campaign');
+      toast.error(err.message || t('newsletter.duplicateFailed'));
     },
   });
 
@@ -350,10 +352,10 @@ export function NewsletterPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.newsletterCampaigns.all });
       setCreateOpen(false);
       setCampaignForm(INITIAL_CAMPAIGN_FORM);
-      toast.success('Campaign created');
+      toast.success(t('newsletter.campaignCreated'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to create campaign');
+      toast.error(err.message || t('newsletter.createFailed'));
     },
   });
 
@@ -362,10 +364,10 @@ export function NewsletterPage() {
     mutationFn: (id: string) => postApi(`/api/campaigns/${id}/send`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.newsletterCampaigns.all });
-      toast.success('Campaign sent');
+      toast.success(t('newsletter.campaignSent'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to send campaign');
+      toast.error(err.message || t('newsletter.sendFailed'));
     },
   });
 
@@ -374,10 +376,10 @@ export function NewsletterPage() {
     mutationFn: (id: string) => postApi(`/api/campaigns/${id}/cancel`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.newsletterCampaigns.all });
-      toast.success('Campaign cancelled');
+      toast.success(t('newsletter.campaignCancelled'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to cancel campaign');
+      toast.error(err.message || t('newsletter.cancelFailed'));
     },
   });
 
@@ -386,10 +388,10 @@ export function NewsletterPage() {
     mutationFn: (id: string) => postApi(`/api/campaigns/${id}/retry`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.newsletterCampaigns.all });
-      toast.success('Campaign retry started');
+      toast.success(t('newsletter.campaignRetryStarted'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to retry campaign');
+      toast.error(err.message || t('newsletter.retryFailed'));
     },
   });
 
@@ -415,10 +417,10 @@ export function NewsletterPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.newsletterCampaigns.all });
       setEditOpen(false);
       setEditingId(null);
-      toast.success('Campaign updated');
+      toast.success(t('newsletter.campaignUpdated'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to update campaign');
+      toast.error(err.message || t('newsletter.updateFailed'));
     },
   });
 
@@ -441,20 +443,20 @@ export function NewsletterPage() {
     () => [
       ColumnDefHelper.textColumn<CampaignRow>({
         id: 'subject',
-        header: 'Subject',
+        header: t('newsletter.subject'),
         accessorKey: 'subject',
         truncate: 50,
         className: 'font-medium',
       }),
       ColumnDefHelper.statusColumn<CampaignRow>({
         id: 'status',
-        header: 'Status',
+        header: t('common.status'),
         accessorKey: 'status',
         renderStatus: (status) => <StatusBadge status={status} size="sm" />,
       }),
       {
         id: 'recipientCount',
-        header: 'Recipients',
+        header: t('newsletter.recipients'),
         size: 110,
         cell: ({ row }) => (
           <span className="text-sm tabular-nums">{row.original.recipientCount.toLocaleString()}</span>
@@ -462,7 +464,7 @@ export function NewsletterPage() {
       } as ColumnDef<CampaignRow>,
       {
         id: 'openRate',
-        header: 'Open Rate',
+        header: t('newsletter.openRate'),
         size: 100,
         enableSorting: false,
         cell: ({ row }) => {
@@ -480,7 +482,7 @@ export function NewsletterPage() {
       } as ColumnDef<CampaignRow>,
       {
         id: 'clickRate',
-        header: 'Click Rate',
+        header: t('newsletter.clickRate'),
         size: 100,
         enableSorting: false,
         cell: ({ row }) => {
@@ -498,7 +500,7 @@ export function NewsletterPage() {
       } as ColumnDef<CampaignRow>,
       ColumnDefHelper.dateColumn<CampaignRow>({
         id: 'scheduledAt',
-        header: 'Scheduled',
+        header: t('newsletter.scheduled'),
         accessorKey: 'scheduledAt',
         format: (d) => formatDate(d),
       }),
@@ -509,7 +511,7 @@ export function NewsletterPage() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8">
                 <MoreHorizontal className="h-4 w-4" />
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t('common.actions')}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
@@ -518,12 +520,12 @@ export function NewsletterPage() {
                 <>
                   <DropdownMenuItem onClick={() => openEditModal(row)}>
                     <Pencil className="h-4 w-4 mr-2" />
-                    Edit
+                    {t('common.edit')}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onClick={() => setDeleteCampaignTarget(row)}>
                     <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
+                    {t('common.delete')}
                   </DropdownMenuItem>
                 </>
               )}
@@ -533,23 +535,23 @@ export function NewsletterPage() {
                 <>
                   <DropdownMenuItem onClick={() => setViewCampaign(row)}>
                     <Eye className="h-4 w-4 mr-2" />
-                    View
+                    {t('common.view')}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => openEditModal(row)}>
                     <Pencil className="h-4 w-4 mr-2" />
-                    Edit
+                    {t('common.edit')}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => cancelCampaignMutation.mutate(row.id)}
                     disabled={cancelCampaignMutation.isPending}
                   >
                     <Ban className="h-4 w-4 mr-2" />
-                    Cancel
+                    {t('common.cancel')}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onClick={() => setDeleteCampaignTarget(row)}>
                     <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
+                    {t('common.delete')}
                   </DropdownMenuItem>
                 </>
               )}
@@ -558,7 +560,7 @@ export function NewsletterPage() {
               {row.status === 'SENDING' && (
                 <DropdownMenuItem onClick={() => setViewCampaign(row)}>
                   <Eye className="h-4 w-4 mr-2" />
-                  View
+                  {t('common.view')}
                 </DropdownMenuItem>
               )}
 
@@ -567,11 +569,11 @@ export function NewsletterPage() {
                 <>
                   <DropdownMenuItem onClick={() => setViewCampaign(row)}>
                     <Eye className="h-4 w-4 mr-2" />
-                    View
+                    {t('common.view')}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => duplicateCampaignMutation.mutate(row.id)}>
                     <Copy className="h-4 w-4 mr-2" />
-                    Duplicate
+                    {t('newsletter.duplicate')}
                   </DropdownMenuItem>
                 </>
               )}
@@ -584,20 +586,20 @@ export function NewsletterPage() {
                     disabled={retryCampaignMutation.isPending}
                   >
                     {retryCampaignMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
-                    Retry
+                    {t('common.retry')}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => openEditModal(row)}>
                     <Pencil className="h-4 w-4 mr-2" />
-                    Edit
+                    {t('common.edit')}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setViewCampaign(row)}>
                     <Eye className="h-4 w-4 mr-2" />
-                    View
+                    {t('common.view')}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onClick={() => setDeleteCampaignTarget(row)}>
                     <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
+                    {t('common.delete')}
                   </DropdownMenuItem>
                 </>
               )}
@@ -607,12 +609,12 @@ export function NewsletterPage() {
                 <>
                   <DropdownMenuItem onClick={() => duplicateCampaignMutation.mutate(row.id)}>
                     <Copy className="h-4 w-4 mr-2" />
-                    Duplicate
+                    {t('newsletter.duplicate')}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onClick={() => setDeleteCampaignTarget(row)}>
                     <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
+                    {t('common.delete')}
                   </DropdownMenuItem>
                 </>
               )}
@@ -621,7 +623,7 @@ export function NewsletterPage() {
         ),
       }),
     ],
-    [duplicateCampaignMutation, cancelCampaignMutation, retryCampaignMutation],
+    [duplicateCampaignMutation, cancelCampaignMutation, retryCampaignMutation, t],
   );
 
   // Campaign filter content
@@ -634,12 +636,24 @@ export function NewsletterPage() {
       }}
     >
       <SelectTrigger size="sm" className="w-[140px] h-9">
-        <SelectValue placeholder="All Statuses" />
+        <SelectValue placeholder={t('newsletter.allStatuses')} />
       </SelectTrigger>
       <SelectContent>
         {CAMPAIGN_STATUS_OPTIONS.map((opt) => (
           <SelectItem key={opt.value} value={opt.value}>
-            {opt.label}
+            {opt.value === 'all'
+              ? t('newsletter.allStatuses')
+              : opt.value === 'DRAFT'
+                ? t('newsletter.statusDraft')
+                : opt.value === 'SCHEDULED'
+                  ? t('newsletter.statusScheduled')
+                  : opt.value === 'SENDING'
+                    ? t('newsletter.statusSending')
+                    : opt.value === 'SENT'
+                      ? t('newsletter.statusSent')
+                      : opt.value === 'FAILED'
+                        ? t('newsletter.statusFailed')
+                        : t('newsletter.statusCancelled')}
           </SelectItem>
         ))}
       </SelectContent>
@@ -649,8 +663,8 @@ export function NewsletterPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Newsletter"
-        description="Manage subscribers and campaigns"
+        title={t('title.newsletters')}
+        description={t('newsletter.pageDescription')}
         breadcrumbs={false}
       />
 
@@ -658,11 +672,11 @@ export function NewsletterPage() {
         <TabsList>
           <TabsTrigger value="subscribers">
             <Users className="h-4 w-4 mr-1" />
-            Subscribers
+            {t('newsletter.subscribers')}
           </TabsTrigger>
           <TabsTrigger value="campaigns">
             <Mail className="h-4 w-4 mr-1" />
-            Campaigns
+            {t('newsletter.campaigns')}
           </TabsTrigger>
         </TabsList>
 
@@ -679,11 +693,11 @@ export function NewsletterPage() {
             onSortChange={(field, order) => subTable.setSortField(field, order)}
             sortField={subTable.sortField}
             sortOrder={subTable.sortOrder}
-            searchPlaceholder="Search by email..."
+            searchPlaceholder={t('newsletter.searchByEmail')}
             searchValue={subTable.searchValue}
             onSearch={(v) => { subTable.setSearchValue(v); subTable.setCurrentPage(1); }}
             getRowId={(row) => row.id}
-            emptyMessage="No subscribers found."
+            emptyMessage={t('newsletter.noSubscribers')}
           />
         </TabsContent>
 
@@ -694,20 +708,20 @@ export function NewsletterPage() {
               <DialogTrigger asChild>
                 <Button size="sm">
                   <Plus className="h-4 w-4 mr-2" />
-                  Create Campaign
+                  {t('newsletter.createCampaign')}
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Create Campaign</DialogTitle>
+                  <DialogTitle>{t('newsletter.createCampaign')}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
                   {/* Campaign Name */}
                   <div className="space-y-1.5">
-                    <Label htmlFor="camp-name">Campaign Name <span className="text-destructive">*</span></Label>
+                    <Label htmlFor="camp-name">{t('newsletter.campaignName')} <span className="text-destructive">*</span></Label>
                     <Input
                       id="camp-name"
-                      placeholder="e.g. August Newsletter"
+                      placeholder={t('newsletter.campaignNamePlaceholder')}
                       value={campaignForm.name}
                       onChange={(e) => setCampaignForm((f) => ({ ...f, name: e.target.value }))}
                     />
@@ -715,15 +729,15 @@ export function NewsletterPage() {
 
                   {/* Email Template Selector — dynamically loads from Email Templates API */}
                   <div className="space-y-1.5">
-                    <Label htmlFor="camp-template">Email Template <span className="text-destructive">*</span></Label>
+                    <Label htmlFor="camp-template">{t('newsletter.emailTemplate')} <span className="text-destructive">*</span></Label>
                     {templatesLoading ? (
                       <div className="flex items-center gap-2 h-9 px-3 rounded-md border text-sm text-muted-foreground">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Loading templates...
+                        {t('newsletter.loadingTemplates')}
                       </div>
                     ) : emailTemplates.length === 0 ? (
                       <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-400">
-                        No eligible templates found. Create a Marketing or Newsletter template in Settings → Email Templates.
+                        {t('newsletter.noTemplatesHint')}
                       </div>
                     ) : (
                       <Select
@@ -731,7 +745,7 @@ export function NewsletterPage() {
                         onValueChange={(v) => setCampaignForm((f) => ({ ...f, templateId: v }))}
                       >
                         <SelectTrigger id="camp-template">
-                          <SelectValue placeholder="Select a template" />
+                          <SelectValue placeholder={t('newsletter.selectTemplate')} />
                         </SelectTrigger>
                         <SelectContent>
                           {emailTemplates.map((tpl) => (
@@ -746,10 +760,10 @@ export function NewsletterPage() {
 
                   {/* Subject Line */}
                   <div className="space-y-1.5">
-                    <Label htmlFor="camp-subject">Subject Line <span className="text-destructive">*</span></Label>
+                    <Label htmlFor="camp-subject">{t('newsletter.subjectLine')} <span className="text-destructive">*</span></Label>
                     <Input
                       id="camp-subject"
-                      placeholder="e.g. Your weekly updates"
+                      placeholder={t('newsletter.subjectPlaceholder')}
                       value={campaignForm.subject}
                       onChange={(e) => setCampaignForm((f) => ({ ...f, subject: e.target.value }))}
                     />
@@ -757,10 +771,10 @@ export function NewsletterPage() {
 
                   {/* Content Override (optional) */}
                   <div className="space-y-1.5">
-                    <Label htmlFor="camp-content">Content Override <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                    <Label htmlFor="camp-content">{t('newsletter.contentOverride')} <span className="text-muted-foreground font-normal">{t('newsletter.optional')}</span></Label>
                     <Textarea
                       id="camp-content"
-                      placeholder="Enter custom HTML (optional)"
+                      placeholder={t('newsletter.contentOverridePlaceholder')}
                       rows={3}
                       value={campaignForm.contentOverride}
                       onChange={(e) => setCampaignForm((f) => ({ ...f, contentOverride: e.target.value }))}
@@ -769,7 +783,7 @@ export function NewsletterPage() {
 
                   {/* Recipients */}
                   <div className="space-y-1.5">
-                    <Label>Recipients <span className="text-destructive">*</span></Label>
+                    <Label>{t('newsletter.recipients')} <span className="text-destructive">*</span></Label>
                     <div className="flex items-center gap-4">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -779,7 +793,7 @@ export function NewsletterPage() {
                           onChange={() => setCampaignForm((f) => ({ ...f, audience: 'all' }))}
                           className="h-4 w-4"
                         />
-                        <span className="text-sm">All subscribed</span>
+                        <span className="text-sm">{t('newsletter.allSubscribed')}</span>
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -789,21 +803,21 @@ export function NewsletterPage() {
                           onChange={() => setCampaignForm((f) => ({ ...f, audience: 'selected' }))}
                           className="h-4 w-4"
                         />
-                        <span className="text-sm">Select specific</span>
+                        <span className="text-sm">{t('newsletter.selectSpecific')}</span>
                       </label>
                     </div>
 
                     {/* Live recipient count */}
                     <div className="rounded-md bg-muted/50 px-3 py-1.5 text-sm">
                       <strong className="text-foreground">{liveRecipientCount}</strong>
-                      <span className="text-muted-foreground"> subscriber{liveRecipientCount !== 1 ? 's' : ''} will receive this campaign</span>
+                      <span className="text-muted-foreground"> {liveRecipientCount !== 1 ? t('newsletter.subscribersPlural') : t('newsletter.subscriberSingular')} {t(liveRecipientCount !== 1 ? 'newsletter.willReceivePlural' : 'newsletter.willReceiveSingular')}</span>
                     </div>
 
                     {/* Selected subscribers list (only when audience=selected) */}
                     {campaignForm.audience === 'selected' && (
                       <div className="border rounded-md max-h-48 overflow-y-auto">
                         {eligibleSubscribers.length === 0 ? (
-                          <p className="px-3 py-2 text-sm text-muted-foreground">No eligible subscribers.</p>
+                          <p className="px-3 py-2 text-sm text-muted-foreground">{t('newsletter.noEligibleSubscribers')}</p>
                         ) : (
                           eligibleSubscribers.map((sub) => (
                             <label key={sub.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/30 cursor-pointer border-b last:border-b-0">
@@ -829,11 +843,11 @@ export function NewsletterPage() {
 
                   {/* Schedule (optional) */}
                   <div className="space-y-1.5">
-                    <Label htmlFor="camp-schedule">Schedule <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                    <Label htmlFor="camp-schedule">{t('newsletter.schedule')} <span className="text-muted-foreground font-normal">{t('newsletter.optional')}</span></Label>
                     <Input
                       id="camp-schedule"
                       type="datetime-local"
-                      placeholder="Select date & time"
+                      placeholder={t('newsletter.selectDateTime')}
                       value={campaignForm.scheduledAt}
                       onChange={(e) => setCampaignForm((f) => ({ ...f, scheduledAt: e.target.value }))}
                     />
@@ -841,7 +855,7 @@ export function NewsletterPage() {
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setCreateOpen(false)}>
-                    Cancel
+                    {t('common.cancel')}
                   </Button>
                   <Button
                     onClick={() => createCampaignMutation.mutate(campaignForm)}
@@ -854,7 +868,7 @@ export function NewsletterPage() {
                       (campaignForm.audience === 'selected' && campaignForm.selectedSubscriberIds.length === 0)
                     }
                   >
-                    {createCampaignMutation.isPending ? 'Creating...' : 'Create Campaign'}
+                    {createCampaignMutation.isPending ? t('newsletter.creating') : t('newsletter.createCampaign')}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -874,7 +888,7 @@ export function NewsletterPage() {
             sortOrder={campTable.sortOrder}
             filterContent={campaignFilterContent}
             getRowId={(row) => row.id}
-            emptyMessage="No campaigns found."
+            emptyMessage={t('newsletter.noCampaigns')}
           />
         </TabsContent>
       </Tabs>
@@ -883,13 +897,13 @@ export function NewsletterPage() {
       <ConfirmDialog
         open={!!deleteCampaignTarget}
         onOpenChange={(open) => !open && setDeleteCampaignTarget(null)}
-        title="Delete Campaign"
+        title={t('newsletter.deleteCampaign')}
         description={
           deleteCampaignTarget
-            ? `Are you sure you want to delete the campaign "${deleteCampaignTarget.name}"? This action cannot be undone.`
+            ? `${t('newsletter.deleteConfirmPrefix')}${deleteCampaignTarget.name}${t('newsletter.deleteConfirmSuffix')}`
             : undefined
         }
-        confirmLabel="Delete"
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => {
           if (deleteCampaignTarget) deleteCampaignMutation.mutate(deleteCampaignTarget.id);
@@ -901,54 +915,54 @@ export function NewsletterPage() {
       <Dialog open={!!viewCampaign} onOpenChange={(open) => !open && setViewCampaign(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Campaign Details</DialogTitle>
+            <DialogTitle>{t('newsletter.campaignDetails')}</DialogTitle>
           </DialogHeader>
           {viewCampaign && (
             <div className="space-y-3 py-2">
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <span className="text-muted-foreground">Name</span>
+                  <span className="text-muted-foreground">{t('common.name')}</span>
                   <p className="font-medium">{viewCampaign.name}</p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Status</span>
+                  <span className="text-muted-foreground">{t('common.status')}</span>
                   <p><StatusBadge status={viewCampaign.status} size="sm" /></p>
                 </div>
                 <div className="col-span-2">
-                  <span className="text-muted-foreground">Subject</span>
+                  <span className="text-muted-foreground">{t('newsletter.subject')}</span>
                   <p className="font-medium">{viewCampaign.subject}</p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Template</span>
+                  <span className="text-muted-foreground">{t('newsletter.template')}</span>
                   <p className="font-medium">{viewCampaign.template?.name || '—'}</p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Recipients</span>
+                  <span className="text-muted-foreground">{t('newsletter.recipients')}</span>
                   <p className="font-medium tabular-nums">{viewCampaign.recipientCount}</p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Scheduled</span>
+                  <span className="text-muted-foreground">{t('newsletter.scheduled')}</span>
                   <p className="font-medium">{viewCampaign.scheduledAt ? formatDate(viewCampaign.scheduledAt) : '—'}</p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Sent</span>
+                  <span className="text-muted-foreground">{t('newsletter.sent')}</span>
                   <p className="font-medium">{viewCampaign.sentAt ? formatDate(viewCampaign.sentAt) : '—'}</p>
                 </div>
                 {viewCampaign.status === 'SENT' && (
                   <>
                     <div>
-                      <span className="text-muted-foreground">Open Rate</span>
+                      <span className="text-muted-foreground">{t('newsletter.openRate')}</span>
                       <p className="font-medium tabular-nums">{viewCampaign.openRate !== undefined ? `${viewCampaign.openRate}%` : '—'}</p>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Click Rate</span>
+                      <span className="text-muted-foreground">{t('newsletter.clickRate')}</span>
                       <p className="font-medium tabular-nums">{viewCampaign.clickRate !== undefined ? `${viewCampaign.clickRate}%` : '—'}</p>
                     </div>
                   </>
                 )}
                 {viewCampaign.errorMessage && (
                   <div className="col-span-2">
-                    <span className="text-muted-foreground">Error</span>
+                    <span className="text-muted-foreground">{t('newsletter.error')}</span>
                     <p className="text-sm text-red-600 dark:text-red-400">{viewCampaign.errorMessage}</p>
                   </div>
                 )}
@@ -956,7 +970,7 @@ export function NewsletterPage() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setViewCampaign(null)}>Close</Button>
+            <Button variant="outline" onClick={() => setViewCampaign(null)}>{t('common.close')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -965,28 +979,28 @@ export function NewsletterPage() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Campaign</DialogTitle>
+            <DialogTitle>{t('newsletter.editCampaign')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-name">Campaign Name <span className="text-destructive">*</span></Label>
+              <Label htmlFor="edit-name">{t('newsletter.campaignName')} <span className="text-destructive">*</span></Label>
               <Input
                 id="edit-name"
-                placeholder="e.g. August Newsletter"
+                placeholder={t('newsletter.campaignNamePlaceholder')}
                 value={editForm.name}
                 onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-template">Email Template <span className="text-destructive">*</span></Label>
+              <Label htmlFor="edit-template">{t('newsletter.emailTemplate')} <span className="text-destructive">*</span></Label>
               {templatesLoading ? (
                 <div className="flex items-center gap-2 h-9 px-3 rounded-md border text-sm text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Loading templates...
+                  {t('newsletter.loadingTemplates')}
                 </div>
               ) : emailTemplates.length === 0 ? (
                 <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-400">
-                  No eligible templates found.
+                  {t('newsletter.noTemplates')}
                 </div>
               ) : (
               <Select
@@ -994,7 +1008,7 @@ export function NewsletterPage() {
                 onValueChange={(v) => setEditForm((f) => ({ ...f, templateId: v }))}
               >
                 <SelectTrigger id="edit-template">
-                  <SelectValue placeholder="Select a template" />
+                  <SelectValue placeholder={t('newsletter.selectTemplate')} />
                 </SelectTrigger>
                 <SelectContent>
                   {emailTemplates.map((tpl) => (
@@ -1007,26 +1021,26 @@ export function NewsletterPage() {
               )}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-subject">Subject Line <span className="text-destructive">*</span></Label>
+              <Label htmlFor="edit-subject">{t('newsletter.subjectLine')} <span className="text-destructive">*</span></Label>
               <Input
                 id="edit-subject"
-                placeholder="e.g. Your weekly updates"
+                placeholder={t('newsletter.subjectPlaceholder')}
                 value={editForm.subject}
                 onChange={(e) => setEditForm((f) => ({ ...f, subject: e.target.value }))}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-content">Content Override <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Label htmlFor="edit-content">{t('newsletter.contentOverride')} <span className="text-muted-foreground font-normal">{t('newsletter.optional')}</span></Label>
               <Textarea
                 id="edit-content"
-                placeholder="Enter custom HTML (optional)"
+                placeholder={t('newsletter.contentOverridePlaceholder')}
                 rows={3}
                 value={editForm.contentOverride}
                 onChange={(e) => setEditForm((f) => ({ ...f, contentOverride: e.target.value }))}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-schedule">Schedule <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Label htmlFor="edit-schedule">{t('newsletter.schedule')} <span className="text-muted-foreground font-normal">{t('newsletter.optional')}</span></Label>
               <Input
                 id="edit-schedule"
                 type="datetime-local"
@@ -1036,7 +1050,7 @@ export function NewsletterPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>{t('common.cancel')}</Button>
             <Button
               onClick={() => {
                 if (editingId) {
@@ -1045,7 +1059,7 @@ export function NewsletterPage() {
               }}
               disabled={updateCampaignMutation.isPending || !editForm.name || !editForm.subject || !editForm.templateId}
             >
-              {updateCampaignMutation.isPending ? 'Saving...' : 'Save Changes'}
+              {updateCampaignMutation.isPending ? t('newsletter.saving') : t('common.saveChanges')}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -35,7 +35,7 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getApi, postApi, putApi } from '@/lib/api-client';
+import { getApi, postApi, putApi, deleteApi } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -75,6 +75,7 @@ import {
   ShieldAlert,
   RefreshCw,
   CheckCircle2,
+  Trash2,
 } from 'lucide-react';
 import {
   ErrorState,
@@ -101,6 +102,7 @@ import {
   type SelectableCurrency,
 } from '@/lib/platform/currency-catalog';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useT } from '@/lib/i18n';
 
 type PlanPatch = Partial<PlanConfigData>;
 
@@ -176,10 +178,11 @@ function BillingPeriodsCheckboxes({
   onYearlyChange: (v: boolean) => void;
   idPrefix: string;
 }) {
+  const { t } = useT();
   const valid = monthly || yearly;
   return (
     <div className="space-y-1">
-      <Label className="text-xs">Billing Periods</Label>
+      <Label className="text-xs">{t('platformPlans.billingPeriods')}</Label>
       <div className="grid grid-cols-2 gap-2">
         <label
           htmlFor={`${idPrefix}-billing-monthly`}
@@ -192,7 +195,7 @@ function BillingPeriodsCheckboxes({
             checked={monthly}
             onChange={(e) => onMonthlyChange(e.target.checked)}
           />
-          <span className="text-xs font-medium">Monthly</span>
+          <span className="text-xs font-medium">{t('platformPlans.monthly')}</span>
         </label>
         <label
           htmlFor={`${idPrefix}-billing-yearly`}
@@ -205,12 +208,12 @@ function BillingPeriodsCheckboxes({
             checked={yearly}
             onChange={(e) => onYearlyChange(e.target.checked)}
           />
-          <span className="text-xs font-medium">Yearly</span>
+          <span className="text-xs font-medium">{t('platformPlans.yearly')}</span>
         </label>
       </div>
       {!valid && (
         <p className="text-[10px] text-red-600 font-medium" role="alert">
-          At least one billing period (Monthly or Yearly) must be enabled.
+          {t('platformPlans.periodsRequired')}
         </p>
       )}
     </div>
@@ -273,14 +276,15 @@ function FeatureAccessSection({
   onLimitsChange: (next: PlanLimits) => void;
   idPrefix: string;
 }) {
+  const { t } = useT();
   const platformAiOn = entitlements.includes('ai_platform');
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h4 className="text-sm font-semibold">Feature Access</h4>
+          <h4 className="text-sm font-semibold">{t('platformPlans.featureAccess')}</h4>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Server-side enforced. Disabled features return 403 to clients.
+            {t('platformPlans.featureAccessHint')}
           </p>
         </div>
         <Badge variant="outline" className="text-[10px] font-mono shrink-0">
@@ -326,12 +330,12 @@ function FeatureAccessSection({
                   <div className="mx-2 mb-2 rounded-md border bg-muted/30 px-2.5 py-2 space-y-2">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="text-[10px] font-semibold uppercase tracking-wide">
-                        Usage Limits
+                        {t('platformPlans.usageLimits')}
                       </span>
                       <span className="text-[10px] text-muted-foreground">
-                        Apply to Platform AI usage · use{' '}
-                        <code className="font-mono px-1 py-0.5 rounded bg-muted">-1</code> for
-                        unlimited
+                        {t('platformPlans.applyToPlatformAi')} · {t('platformPlans.use')}{' '}
+                        <code className="font-mono px-1 py-0.5 rounded bg-muted">-1</code>{' '}
+                        {t('platformPlans.forUnlimited')}
                       </span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -350,14 +354,13 @@ function FeatureAccessSection({
                             className="h-9 bg-background"
                           />
                           {limits[k] === UNLIMITED && (
-                            <p className="text-[10px] text-emerald-600 font-medium">Unlimited</p>
+                            <p className="text-[10px] text-emerald-600 font-medium">{t('platformPlans.unlimited')}</p>
                           )}
                         </div>
                       ))}
                     </div>
                     <p className="text-[10px] text-muted-foreground leading-snug">
-                      These limits apply to Platform AI usage. Client&apos;s Own AI API usage is
-                      never counted against them.
+                      {t('platformPlans.aiLimitsNote')}
                     </p>
                   </div>
                 )}
@@ -411,12 +414,13 @@ function UsageLimitsSection({
   limits: PlanLimits;
   onChange: (next: PlanLimits) => void;
 }) {
+  const { t } = useT();
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold">Usage Limits</h4>
+        <h4 className="text-sm font-semibold">{t('platformPlans.usageLimits')}</h4>
         <span className="text-[10px] text-muted-foreground">
-          Use <code className="font-mono px-1 py-0.5 rounded bg-muted">-1</code> for unlimited
+          {t('platformPlans.use')} <code className="font-mono px-1 py-0.5 rounded bg-muted">-1</code> {t('platformPlans.forUnlimited')}
         </span>
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -430,15 +434,13 @@ function UsageLimitsSection({
               className="h-9"
             />
             {limits[k] === UNLIMITED && (
-              <p className="text-[10px] text-emerald-600 font-medium">Unlimited</p>
+              <p className="text-[10px] text-emerald-600 font-medium">{t('platformPlans.unlimited')}</p>
             )}
           </div>
         ))}
       </div>
       <p className="text-[10px] text-muted-foreground leading-snug">
-        Platform AI usage limits (AI articles / images per month) are configured directly with
-        the Platform AI feature in Feature Access — they apply only while Platform AI is enabled
-        and never limit Client&apos;s Own AI API usage. AI words/tokens are not metered.
+        {t('platformPlans.coreLimitsNote')}
       </p>
     </section>
   );
@@ -483,8 +485,12 @@ function PlanSummaryCard({
   canEdit: boolean;
   billingInterval: 'monthly' | 'yearly';
 }) {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
+  // Delete confirmation — the icon button opens the dialog; the dialog
+  // confirms BEFORE the DELETE call fires (see DeletePlanDialog below).
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Quick active toggle — auto-saves immediately (owner-only).
   // Reuses the same PUT endpoint and the same invalidation chain
@@ -498,14 +504,39 @@ function PlanSummaryCard({
       queryClient.invalidateQueries({ queryKey: ['platform-billing-me'] });
       queryClient.invalidateQueries({ queryKey: ['platform-overview'] });
       toast.success(
-        `${data.name} ${data.active ? 'activated' : 'deactivated'} — changes are live for clients.`,
+        `${data.name} ${data.active ? t('platformPlans.activated') : t('platformPlans.deactivated')} — ${t('platformPlans.changesLive')}`,
       );
     },
     onError: (err: unknown) => {
       const e = err as { error?: { message?: string }; message?: string };
       toast.error(
-        e?.error?.message ?? e?.message ?? 'Unable to change plan status. OWNER access required.',
+        e?.error?.message ?? e?.message ?? t('platformPlans.statusChangeError'),
       );
+    },
+  });
+
+  // Plan DELETION — reuses the EXISTING owner-only backend route
+  // (DELETE /api/platform/admin/plans/[planId] → deletePlanConfig),
+  // which already refuses to delete the last remaining plan or a plan
+  // still referenced by active subscriptions (409 DELETE_REFUSED).
+  // The same shared cache invalidation chain as the active toggle
+  // runs on success so clients see the removal on the next read.
+  const deleteMutation = useMutation({
+    mutationFn: () =>
+      deleteApi<{ deleted: boolean; planId: string }>(`/api/platform/admin/plans/${plan.planId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['platform-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-billing-me'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-overview'] });
+      toast.success(`${plan.name} ${t('platformPlans.deletedToast')}`);
+      setConfirmingDelete(false);
+    },
+    onError: (err: unknown) => {
+      const e = err as { error?: { message?: string }; message?: string };
+      toast.error(
+        e?.error?.message ?? e?.message ?? t('platformPlans.deleteError'),
+      );
+      setConfirmingDelete(false);
     },
   });
 
@@ -601,7 +632,7 @@ function PlanSummaryCard({
               <span className="shrink-0 whitespace-nowrap text-4xl font-semibold leading-none tracking-tight text-foreground">
                 {formatPriceSymbol(plan.priceYearly, plan.currency)}
               </span>
-              <span className="whitespace-nowrap text-sm text-muted-foreground">/ year</span>
+              <span className="whitespace-nowrap text-sm text-muted-foreground">{t('platformPlans.perYear')}</span>
             </div>
           ) : effectiveInterval === 'yearly' ? (
             // Both periods — INLINE: [LARGE $X.XX] [small $X / year].
@@ -619,7 +650,7 @@ function PlanSummaryCard({
                 {formatPriceSymbolMonthlyEquiv(plan.priceYearly / 12, plan.currency)}
               </span>
               <span className="shrink-0 whitespace-nowrap text-sm text-muted-foreground">
-                {formatPriceSymbol(plan.priceYearly, plan.currency)} / year
+                {formatPriceSymbol(plan.priceYearly, plan.currency)} {t('platformPlans.perYear')}
               </span>
             </div>
           ) : (
@@ -655,7 +686,7 @@ function PlanSummaryCard({
         <div className="mt-6">
           <ul className="space-y-2.5">
             {featureItems.length === 0 ? (
-              <li className="text-[15px] leading-normal text-muted-foreground">No features configured</li>
+              <li className="text-[15px] leading-normal text-muted-foreground">{t('platformPlans.noFeatures')}</li>
             ) : (
               featureItems.map((f, i) => (
                 <li key={`${f}-${i}`} className="flex items-start gap-2.5 text-[15px] leading-normal text-card-foreground">
@@ -668,13 +699,17 @@ function PlanSummaryCard({
         </div>
 
         {/* Bottom row — Edit Plan (left, flex-1) + quick active toggle
-             (right, shrink-0), pinned to the card bottom. The toggle used
-             to live in the header's top-right; it was relocated here so the
-             name + price row above can use the full card width and the
-             price can sit on the same line as the name. The Edit button
-             changed from w-full to flex-1 to share the row with the toggle.
-             The toggle's logic (auto-save PUT to /api/platform/admin/plans/
-             [planId] with { active }) is unchanged. */}
+             (right, shrink-0) + Delete icon (far right, shrink-0), pinned
+             to the card bottom. The toggle used to live in the header's
+             top-right; it was relocated here so the name + price row above
+             can use the full card width and the price can sit on the same
+             line as the name. The Edit button changed from w-full to flex-1
+             to share the row with the toggle. The toggle's logic (auto-save
+             PUT to /api/platform/admin/plans/[planId] with { active }) is
+             unchanged. The Delete icon OPENS A CONFIRMATION DIALOG before
+             calling the existing DELETE endpoint — same owner-only guard,
+             styled with the destructive color pattern (muted → red on
+             hover) used by every other delete action in the app. */}
         <div className="mt-auto flex items-center gap-3 pt-8">
           <Button
             variant="outline"
@@ -684,14 +719,14 @@ function PlanSummaryCard({
             onClick={() => setEditing(true)}
           >
             <Pencil className="h-4 w-4 mr-2" />
-            Edit Plan
+            {t('platformPlans.editPlan')}
           </Button>
           <div className="flex shrink-0 items-center gap-2">
             <Label
               htmlFor={`active-${plan.planId}`}
               className="cursor-pointer text-xs text-muted-foreground"
             >
-              {plan.active ? 'Active' : 'Inactive'}
+              {plan.active ? t('common.active') : t('common.inactive')}
             </Label>
             <Switch
               id={`active-${plan.planId}`}
@@ -699,11 +734,25 @@ function PlanSummaryCard({
               disabled={!canEdit || activeMutation.isPending}
               onCheckedChange={(v) => activeMutation.mutate(v)}
             />
+            <button
+              type="button"
+              aria-label={`${plan.name} — ${t('platformPlans.deletePlan')}`}
+              title={t('platformPlans.deletePlan')}
+              disabled={!canEdit || deleteMutation.isPending}
+              onClick={() => setConfirmingDelete(true)}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </button>
           </div>
         </div>
         {!canEdit && (
           <p className="mt-2 text-center text-[10px] text-muted-foreground">
-            Editing is restricted to the OWNER role.
+            {t('platformPlans.ownerOnlyHint')}
           </p>
         )}
       </div>
@@ -711,7 +760,80 @@ function PlanSummaryCard({
       {editing && (
         <EditPlanDialog plan={plan} open={editing} onOpenChange={setEditing} />
       )}
+
+      {confirmingDelete && (
+        <DeletePlanDialog
+          plan={plan}
+          open={confirmingDelete}
+          onOpenChange={setConfirmingDelete}
+          onConfirm={() => deleteMutation.mutate()}
+          isPending={deleteMutation.isPending}
+        />
+      )}
     </>
+  );
+}
+
+// -------------------- Delete Plan Confirmation Dialog --------------------
+
+/**
+ * Confirmation dialog for deleting a plan card. Purely a guard in front
+ * of the EXISTING owner-only DELETE /api/platform/admin/plans/[planId]
+ * endpoint (deletePlanConfig) — no new backend logic. The copy is honest
+ * about the server's own safety rules: deletion is refused (409
+ * DELETE_REFUSED) while active subscriptions still reference the plan or
+ * when it is the last remaining plan, in which case the error toast
+ * surfaces the server's message. Follows the same Dialog layout as the
+ * app's other destructive confirmations (DialogHeader + description +
+ * Cancel / destructive confirm buttons in the DialogFooter).
+ */
+function DeletePlanDialog({
+  plan,
+  open,
+  onOpenChange,
+  onConfirm,
+  isPending,
+}: {
+  plan: PlanConfigData;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onConfirm: () => void;
+  isPending: boolean;
+}) {
+  const { t } = useT();
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!isPending) onOpenChange(v); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Trash2 className="h-4 w-4 text-destructive" />
+            {t('platformPlans.deletePlan')}
+          </DialogTitle>
+          <DialogDescription>
+            {t('platformPlans.deleteConfirmPrefix')}{' '}
+            <span className="font-medium text-foreground">{plan.name}</span>{' '}
+            {t('platformPlans.deleteConfirmSuffix')}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isPending}
+          >
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={onConfirm}
+            disabled={isPending}
+          >
+            {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {t('platformPlans.deletePlan')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -726,6 +848,7 @@ function EditPlanDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [name, setName] = useState(plan.name);
   // ONE base price configuration — the plan's default/fallback
@@ -789,13 +912,13 @@ function EditPlanDialog({
       queryClient.invalidateQueries({ queryKey: ['platform-plans'] });
       queryClient.invalidateQueries({ queryKey: ['platform-billing-me'] });
       queryClient.invalidateQueries({ queryKey: ['platform-overview'] });
-      toast.success(`${data.name} updated — changes are now live for clients.`);
+      toast.success(`${data.name} ${t('platformPlans.updatedToast')}`);
       onOpenChange(false);
     },
     onError: (err: unknown) => {
       const e = err as { error?: { message?: string }; message?: string };
       toast.error(
-        e?.error?.message ?? e?.message ?? 'Unable to save plan. You may need OWNER access.',
+        e?.error?.message ?? e?.message ?? t('platformPlans.saveError'),
       );
     },
   });
@@ -819,8 +942,8 @@ function EditPlanDialog({
       queryClient.invalidateQueries({ queryKey: ['platform-plans'] });
       toast.success(
         data.created > 0
-          ? `Synced to Stripe — ${data.created} new Price(s) created.`
-          : 'Stripe Prices are already in sync.',
+          ? `${t('platformPlans.syncedToast')} ${data.created} ${t('platformPlans.pricesCreated')}`
+          : t('platformPlans.alreadySynced'),
       );
     },
     onError: (err: unknown) => {
@@ -828,11 +951,11 @@ function EditPlanDialog({
       const code = e?.code ?? e?.error?.code;
       const msg = e?.message ?? e?.error?.message;
       if (code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
-        toast.error('Stripe is not connected. Configure credentials in Platform Admin → Stripe Settings first.');
+        toast.error(t('platformPlans.stripeNotConfigured'));
       } else if (code === 'VALIDATION_ERROR') {
-        toast.error(msg || 'Free plans do not need Stripe — set a price above 0 first.');
+        toast.error(msg || t('platformPlans.freeNoStripe'));
       } else {
-        toast.error(msg || 'Unable to sync plan to Stripe.');
+        toast.error(msg || t('platformPlans.syncError'));
       }
     },
   });
@@ -885,12 +1008,11 @@ function EditPlanDialog({
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <DialogTitle className="text-base">Edit {plan.name}</DialogTitle>
+            <DialogTitle className="text-base">{t('common.edit')} {plan.name}</DialogTitle>
             <PlanBadge planId={getPlanBadgeId(plan.planId)} />
           </div>
           <DialogDescription className="text-xs">
-            Single source of truth — changes propagate to the Client Billing page, MRR and
-            server-side entitlement enforcement.
+            {t('platformPlans.editDescription')}
           </DialogDescription>
         </DialogHeader>
 
@@ -903,10 +1025,10 @@ function EditPlanDialog({
               matrix — customers see their detected currency's price
               server-side, with this currency as the fallback. */}
           <section className="space-y-3">
-            <h4 className="text-sm font-semibold">Basic Information</h4>
+            <h4 className="text-sm font-semibold">{t('platformPlans.basicInformation')}</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Name</Label>
+                <Label className="text-xs">{t('common.name')}</Label>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -914,9 +1036,9 @@ function EditPlanDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Default / Fallback Currency</Label>
+                <Label className="text-xs">{t('platformPlans.defaultCurrency')}</Label>
                 <Select value={currency} onValueChange={setCurrency}>
-                  <SelectTrigger className="h-9" aria-label="Default currency">
+                  <SelectTrigger className="h-9" aria-label={t('platformPlans.defaultCurrencyAria')}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
@@ -938,7 +1060,7 @@ function EditPlanDialog({
                 {billingMonthly && (
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs">Monthly Price</Label>
+                      <Label className="text-xs">{t('platformPlans.monthlyPrice')}</Label>
                       <Badge variant="outline" className="text-[10px] font-mono">
                         {currency}
                       </Badge>
@@ -955,7 +1077,7 @@ function EditPlanDialog({
                 {billingYearly && (
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs">Yearly Price</Label>
+                      <Label className="text-xs">{t('platformPlans.yearlyPrice')}</Label>
                       <Badge variant="outline" className="text-[10px] font-mono">
                         {currency}
                       </Badge>
@@ -992,11 +1114,10 @@ function EditPlanDialog({
                   htmlFor={`auto-currency-${plan.planId}`}
                   className="cursor-pointer text-xs font-medium"
                 >
-                  Auto Currency
+                  {t('platformPlans.autoCurrency')}
                 </Label>
                 <p className="text-[10px] leading-snug text-muted-foreground">
-                  Customer currency is detected from their location (IP) and used when a price
-                  exists for it. Otherwise this plan&apos;s default currency applies.
+                  {t('platformPlans.autoCurrencyHint')}
                 </p>
               </div>
               <Switch
@@ -1012,7 +1133,7 @@ function EditPlanDialog({
                 htmlFor="dialog-active"
                 className="text-xs text-muted-foreground cursor-pointer"
               >
-                Active
+                {t('common.active')}
               </Label>
               <Switch
                 id="dialog-active"
@@ -1026,17 +1147,16 @@ function EditPlanDialog({
             {isFreeDerived && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs">Free Access Duration (days)</Label>
+                  <Label className="text-xs">{t('platformPlans.freeDuration')}</Label>
                   <Input
                     type="number"
                     value={freePlanDurationDays}
                     onChange={(e) => setFreePlanDurationDays(e.target.value)}
                     className="h-9"
-                    placeholder="empty = unlimited"
+                    placeholder={t('platformPlans.emptyEqualsUnlimited')}
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Server-side enforced: when set, the user&apos;s free trial expires N days after activation.
-                    Empty = unlimited free access.
+                    {t('platformPlans.freeDurationHint')}
                   </p>
                 </div>
               </div>
@@ -1051,9 +1171,9 @@ function EditPlanDialog({
                 className="flex items-center justify-between w-full rounded-md hover:bg-accent/30 px-2 py-1.5 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">Stripe Billing</span>
+                  <span className="text-sm font-semibold">{t('platformPlans.stripeBilling')}</span>
                   <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                    optional
+                    {t('platformPlans.optional')}
                   </Badge>
                 </div>
                 <ChevronDown
@@ -1082,16 +1202,16 @@ function EditPlanDialog({
                   ) : (
                     <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
                   )}
-                  Sync to Stripe
+                  {t('platformPlans.syncToStripe')}
                 </Button>
                 <div className="text-[11px] text-muted-foreground ml-auto">
                   {wiredCurrencies.length > 0 ? (
                     <span className="inline-flex items-center gap-1 text-emerald-700">
                       <CheckCircle2 className="h-3 w-3" />
-                      Wired — {wiredCurrencies.length} currency{wiredCurrencies.length > 1 ? 'ies' : ''}:
+                      {`${t('platformPlans.wired')} — ${wiredCurrencies.length} ${wiredCurrencies.length > 1 ? t('platformPlans.currencies') : t('platformPlans.currency')}:`}
                     </span>
                   ) : (
-                    <span>Not yet wired. Click the button to create Stripe Prices.</span>
+                    <span>{t('platformPlans.notWired')}</span>
                   )}
                 </div>
               </div>
@@ -1146,7 +1266,7 @@ function EditPlanDialog({
             disabled={saveMutation.isPending}
           >
             <RotateCcw className="h-4 w-4 mr-2" />
-            Reset
+            {t('platformPlans.reset')}
           </Button>
           <Button
             size="sm"
@@ -1158,7 +1278,7 @@ function EditPlanDialog({
             ) : (
               <Save className="h-4 w-4 mr-2" />
             )}
-            Save Plan
+            {t('platformPlans.savePlan')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1211,6 +1331,7 @@ function CreatePlanDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [planId, setPlanId] = useState('');
@@ -1309,13 +1430,13 @@ function CreatePlanDialog({
       queryClient.invalidateQueries({ queryKey: ['platform-plans'] });
       queryClient.invalidateQueries({ queryKey: ['platform-billing-me'] });
       queryClient.invalidateQueries({ queryKey: ['platform-overview'] });
-      toast.success(`${data.name} created — now visible to clients on the Client Billing page.`);
+      toast.success(`${data.name} ${t('platformPlans.createdToast')}`);
       onOpenChange(false);
     },
     onError: (err: unknown) => {
       const e = err as { error?: { message?: string }; message?: string };
       toast.error(
-        e?.error?.message ?? e?.message ?? 'Unable to create plan. You may need OWNER access.',
+        e?.error?.message ?? e?.message ?? t('platformPlans.createError'),
       );
     },
   });
@@ -1331,11 +1452,9 @@ function CreatePlanDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-base">Create Plan</DialogTitle>
+          <DialogTitle className="text-base">{t('platformPlans.createPlan')}</DialogTitle>
           <DialogDescription className="text-xs">
-            Add a new subscription plan. It becomes part of the same shared plan configuration —
-            visible to clients on the Client Billing page and enforced server-side via
-            hasFeature / checkLimit.
+            {t('platformPlans.createDescription')}
           </DialogDescription>
         </DialogHeader>
 
@@ -1347,19 +1466,19 @@ function CreatePlanDialog({
               Periods checkboxes · Auto Currency · Active. NO
               per-currency matrix. */}
           <section className="space-y-3">
-            <h4 className="text-sm font-semibold">Basic Information</h4>
+            <h4 className="text-sm font-semibold">{t('platformPlans.basicInformation')}</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Plan Name *</Label>
+                <Label className="text-xs">{t('platformPlans.planName')} *</Label>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="h-9"
-                  placeholder="Enterprise"
+                  placeholder={t('platformPlans.planNamePlaceholder')}
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Plan ID</Label>
+                <Label className="text-xs">{t('platformPlans.planId')}</Label>
                 <Input
                   value={effectivePlanId}
                   onChange={(e) => {
@@ -1367,15 +1486,16 @@ function CreatePlanDialog({
                     setPlanIdTouched(true);
                   }}
                   className={`h-9 font-mono text-xs ${planIdTaken ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                  placeholder="auto-derived from name"
+                  placeholder={t('platformPlans.planIdPlaceholder')}
                 />
                 {planIdTaken ? (
                   <p className="text-[10px] text-red-600 font-medium">
-                    Plan ID &quot;{effectivePlanId}&quot; is already taken. Choose a unique ID.
+                    {t('platformPlans.planId')} &quot;{effectivePlanId}&quot;{' '}
+                    {t('platformPlans.planIdTakenSuffix')}
                   </p>
                 ) : (
                   <p className="text-[10px] text-muted-foreground">
-                    Lowercase, hyphenated. Used as the unique key in the shared plan cache.
+                    {t('platformPlans.planIdHint')}
                   </p>
                 )}
               </div>
@@ -1383,7 +1503,7 @@ function CreatePlanDialog({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Default / Fallback Currency</Label>
+                <Label className="text-xs">{t('platformPlans.defaultCurrency')}</Label>
                 <Select
                   value={currency}
                   onValueChange={(v) => {
@@ -1391,7 +1511,7 @@ function CreatePlanDialog({
                     setCurrencyTouched(true);
                   }}
                 >
-                  <SelectTrigger className="h-9" aria-label="Default currency">
+                  <SelectTrigger className="h-9" aria-label={t('platformPlans.defaultCurrencyAria')}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
@@ -1408,7 +1528,7 @@ function CreatePlanDialog({
                   htmlFor="create-active"
                   className="text-xs text-muted-foreground cursor-pointer"
                 >
-                  Active
+                  {t('common.active')}
                 </Label>
                 <Switch
                   id="create-active"
@@ -1425,7 +1545,7 @@ function CreatePlanDialog({
                 {billingMonthly && (
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs">Monthly Price</Label>
+                      <Label className="text-xs">{t('platformPlans.monthlyPrice')}</Label>
                       <Badge variant="outline" className="text-[10px] font-mono">
                         {currency}
                       </Badge>
@@ -1442,7 +1562,7 @@ function CreatePlanDialog({
                 {billingYearly && (
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs">Yearly Price</Label>
+                      <Label className="text-xs">{t('platformPlans.yearlyPrice')}</Label>
                       <Badge variant="outline" className="text-[10px] font-mono">
                         {currency}
                       </Badge>
@@ -1476,11 +1596,10 @@ function CreatePlanDialog({
                   htmlFor="create-auto-currency"
                   className="cursor-pointer text-xs font-medium"
                 >
-                  Auto Currency
+                  {t('platformPlans.autoCurrency')}
                 </Label>
                 <p className="text-[10px] leading-snug text-muted-foreground">
-                  Customer currency is detected from their location (IP) and used when a price
-                  exists for it. Otherwise this plan&apos;s default currency applies.
+                  {t('platformPlans.autoCurrencyHint')}
                 </p>
               </div>
               <Switch
@@ -1496,17 +1615,16 @@ function CreatePlanDialog({
             {isFreeDerived && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs">Free Access Duration (days)</Label>
+                  <Label className="text-xs">{t('platformPlans.freeDuration')}</Label>
                   <Input
                     type="number"
                     value={freePlanDurationDays}
                     onChange={(e) => setFreePlanDurationDays(e.target.value)}
                     className="h-9"
-                    placeholder="empty = unlimited"
+                    placeholder={t('platformPlans.emptyEqualsUnlimited')}
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Server-side enforced: when set, the user&apos;s free trial expires N days
-                    after activation. Empty = unlimited free access.
+                    {t('platformPlans.freeDurationHint')}
                   </p>
                 </div>
               </div>
@@ -1521,9 +1639,9 @@ function CreatePlanDialog({
                 className="flex items-center justify-between w-full rounded-md hover:bg-accent/30 px-2 py-1.5 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">Stripe Billing</span>
+                  <span className="text-sm font-semibold">{t('platformPlans.stripeBilling')}</span>
                   <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                    optional
+                    {t('platformPlans.optional')}
                   </Badge>
                 </div>
                 <ChevronDown
@@ -1535,9 +1653,7 @@ function CreatePlanDialog({
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-2">
               <p className="text-[11px] text-muted-foreground px-1">
-                Stripe Prices are created automatically when the plan is saved (Stripe connected)
-                — one real Price per (currency, interval) pair. Use “Sync to Stripe” in the Edit
-                Plan dialog afterwards to refresh or surface errors.
+                {t('platformPlans.createStripeNote')}
               </p>
             </CollapsibleContent>
           </Collapsible>
@@ -1572,7 +1688,7 @@ function CreatePlanDialog({
             onClick={() => onOpenChange(false)}
             disabled={createMutation.isPending}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             size="sm"
@@ -1584,7 +1700,7 @@ function CreatePlanDialog({
             ) : (
               <Plus className="h-4 w-4 mr-2" />
             )}
-            Create Plan
+            {t('platformPlans.createPlan')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1595,6 +1711,7 @@ function CreatePlanDialog({
 // -------------------- Main module --------------------
 
 export function PlatformPlansModule() {
+  const { t } = useT();
   const user = useAuthStore((s) => s.user);
   const isOwner = user?.role === 'OWNER';
   const [showCreate, setShowCreate] = useState(false);
@@ -1624,11 +1741,10 @@ export function PlatformPlansModule() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-            Plans &amp; Pricing
+            {t('title.platformPlans')}
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-[15px]">
-            Manage plans, pricing, features and usage limits. Changes are shared with the
-            Client Billing page.
+            {t('platformPlans.subtitle')}
           </p>
         </div>
         {isOwner ? (
@@ -1637,7 +1753,7 @@ export function PlatformPlansModule() {
             className="h-10 shrink-0 rounded-full bg-foreground px-5 text-sm font-medium text-background transition-opacity hover:opacity-90"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Create Plan
+            {t('platformPlans.createPlan')}
           </Button>
         ) : null}
       </div>
@@ -1654,7 +1770,7 @@ export function PlatformPlansModule() {
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            Monthly
+            {t('platformPlans.monthly')}
           </button>
           <button
             type="button"
@@ -1665,7 +1781,7 @@ export function PlatformPlansModule() {
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            Yearly
+            {t('platformPlans.yearly')}
           </button>
         </div>
       </div>
@@ -1674,9 +1790,9 @@ export function PlatformPlansModule() {
         <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-50 p-4 dark:bg-amber-950/40">
           <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div className="text-sm">
-            <p className="font-medium text-amber-700 dark:text-amber-300">View-only</p>
+            <p className="font-medium text-amber-700 dark:text-amber-300">{t('platformPlans.viewOnly')}</p>
             <p className="text-muted-foreground">
-              Editing plan pricing, entitlements and limits is restricted to the OWNER role.
+              {t('platformPlans.viewOnlyDescription')}
             </p>
           </div>
         </div>
@@ -1684,9 +1800,9 @@ export function PlatformPlansModule() {
 
       {/* Premium plan summary */}
       <div className="flex flex-wrap items-center gap-3">
-        <PlanSummaryTile label="Plans" value={summary.total} />
-        <PlanSummaryTile label="Paid Plans" value={summary.paid} />
-        <PlanSummaryTile label="Free Plan" value={summary.free} />
+        <PlanSummaryTile label={t('platformPlans.plans')} value={summary.total} />
+        <PlanSummaryTile label={t('platformPlans.paidPlans')} value={summary.paid} />
+        <PlanSummaryTile label={t('platformPlans.freePlan')} value={summary.free} />
       </div>
 
       {plansQuery.isLoading ? (
@@ -1714,7 +1830,7 @@ export function PlatformPlansModule() {
       ) : plansQuery.isError || !plansQuery.data ? (
         <div className="rounded-3xl border bg-card p-4">
           <ErrorState
-            message="Unable to load plan configuration."
+            message={t('platformPlans.loadError')}
             onRetry={() => plansQuery.refetch()}
           />
         </div>

@@ -28,6 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Plus, Trash2, Ticket } from 'lucide-react';
 import { PlatformPageHeader, ErrorState, EmptyState, formatCurrency, formatDate } from '@/modules/platform/shared';
+import { useT } from '@/lib/i18n';
 
 interface CouponRow {
   id: string;
@@ -60,6 +61,7 @@ function FieldError({ message }: { message: string | null }) {
 }
 
 export function PlatformCouponsModule() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
 
@@ -90,19 +92,19 @@ export function PlatformCouponsModule() {
   );
 
   const codeError = !codeTrimmed
-    ? 'Code is required.'
+    ? t('platformCoupons.codeRequired')
     : existingCodes.has(codeUpper)
-      ? 'This code is already in use.'
+      ? t('platformCoupons.codeInUse')
       : null;
 
   const valueNum = Number(value);
   const valueError = (() => {
-    if (!value.trim()) return 'Value is required.';
-    if (Number.isNaN(valueNum) || !Number.isFinite(valueNum)) return 'Value must be a number.';
+    if (!value.trim()) return t('platformCoupons.valueRequired');
+    if (Number.isNaN(valueNum) || !Number.isFinite(valueNum)) return t('platformCoupons.valueMustBeNumber');
     if (type === 'percent') {
-      if (valueNum < 1 || valueNum > 100) return 'Percentage must be between 1 and 100.';
+      if (valueNum < 1 || valueNum > 100) return t('platformCoupons.percentageRange');
     } else if (valueNum <= 0) {
-      return 'Fixed amount must be greater than 0.';
+      return t('platformCoupons.fixedAmountPositive');
     }
     return null;
   })();
@@ -114,7 +116,7 @@ export function PlatformCouponsModule() {
   }, []);
   const expiresAtError = expiresAt
     ? new Date(expiresAt) < todayMidnight
-      ? 'Expiration date cannot be in the past.'
+      ? t('platformCoupons.expirationNotPast')
       : null
     : null;
 
@@ -123,7 +125,7 @@ export function PlatformCouponsModule() {
     if (!v) return null; // empty = unlimited (allowed)
     const n = Number(v);
     if (Number.isNaN(n) || !Number.isInteger(n) || n < 1) {
-      return 'Must be a positive integer (or empty for unlimited).';
+      return t('platformCoupons.maxRedemptionsInvalid');
     }
     return null;
   })();
@@ -149,7 +151,7 @@ export function PlatformCouponsModule() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['platform-coupons'] });
-      toast.success('Coupon created.');
+      toast.success(t('platformCoupons.couponCreated'));
       resetForm();
       setShowForm(false);
     },
@@ -162,7 +164,7 @@ export function PlatformCouponsModule() {
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Unable to create coupon.';
+            : t('platformCoupons.unableToCreate');
       toast.error(message);
     },
   });
@@ -197,18 +199,18 @@ export function PlatformCouponsModule() {
     mutationFn: (id: string) => deleteApi(`/api/platform/admin/coupons/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['platform-coupons'] });
-      toast.success('Coupon deleted.');
+      toast.success(t('platformCoupons.couponDeleted'));
     },
   });
 
   return (
     <div className="space-y-4">
       <PlatformPageHeader
-        title="Coupons"
-        subtitle="Promo codes for checkout. Validation is server-side — the client checkout flow uses the same coupon system."
+        title={t('title.platformCoupons')}
+        subtitle={t('platformCoupons.subtitle')}
         actions={
           <Button size="sm" onClick={() => setShowForm((v) => !v)}>
-            <Plus className="h-4 w-4 mr-2" /> New Coupon
+            <Plus className="h-4 w-4 mr-2" /> {t('platformCoupons.newCoupon')}
           </Button>
         }
       />
@@ -220,7 +222,7 @@ export function PlatformCouponsModule() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">
-                  Coupon Code <span className="text-rose-500">*</span>
+                  {t('platformCoupons.couponCode')} <span className="text-rose-500">*</span>
                 </Label>
                 <Input
                   value={code}
@@ -240,14 +242,14 @@ export function PlatformCouponsModule() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs">Discount Type</Label>
+                <Label className="text-xs">{t('platformCoupons.discountType')}</Label>
                 <Select value={type} onValueChange={(v) => setType(v as 'percent' | 'fixed')}>
                   <SelectTrigger className="h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="percent">Percentage (%)</SelectItem>
-                    <SelectItem value="fixed">Fixed Amount</SelectItem>
+                    <SelectItem value="percent">{t('platformCoupons.percentage')}</SelectItem>
+                    <SelectItem value="fixed">{t('platformCoupons.fixedAmount')}</SelectItem>
                   </SelectContent>
                 </Select>
                 <FieldError message={null} />
@@ -255,7 +257,7 @@ export function PlatformCouponsModule() {
 
               <div className="space-y-1">
                 <Label className="text-xs">
-                  Discount Value <span className="text-rose-500">*</span>
+                  {t('platformCoupons.discountValue')} <span className="text-rose-500">*</span>
                 </Label>
                 <div className="relative">
                   <Input
@@ -267,7 +269,7 @@ export function PlatformCouponsModule() {
                     value={value}
                     onChange={(e) => setValue(e.target.value)}
                     onBlur={() => markTouched('value')}
-                    placeholder={type === 'percent' ? 'e.g. 10' : 'e.g. 25'}
+                    placeholder={type === 'percent' ? t('platformCoupons.examplePercent') : t('platformCoupons.exampleFixed')}
                     className="h-9 pr-8"
                   />
                   <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
@@ -282,8 +284,8 @@ export function PlatformCouponsModule() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">
-                  Applicable Plans
-                  <span className="text-muted-foreground font-normal ml-1">(empty = all)</span>
+                  {t('platformCoupons.applicablePlans')}
+                  <span className="text-muted-foreground font-normal ml-1">{t('platformCoupons.emptyEqualsAll')}</span>
                 </Label>
                 <div className="flex h-9 items-center gap-1.5">
                   {PLANS.map((p) => {
@@ -311,8 +313,8 @@ export function PlatformCouponsModule() {
 
               <div className="space-y-1">
                 <Label className="text-xs">
-                  Expiration Date
-                  <span className="text-muted-foreground font-normal ml-1">(optional)</span>
+                  {t('platformCoupons.expirationDate')}
+                  <span className="text-muted-foreground font-normal ml-1">{t('platformCoupons.optional')}</span>
                 </Label>
                 <Input
                   type="date"
@@ -327,8 +329,8 @@ export function PlatformCouponsModule() {
 
               <div className="space-y-1">
                 <Label className="text-xs">
-                  Max Redemptions
-                  <span className="text-muted-foreground font-normal ml-1">(empty = unlimited)</span>
+                  {t('platformCoupons.maxRedemptions')}
+                  <span className="text-muted-foreground font-normal ml-1">{t('platformCoupons.emptyEqualsUnlimited')}</span>
                 </Label>
                 <Input
                   type="number"
@@ -338,7 +340,7 @@ export function PlatformCouponsModule() {
                   value={maxRedemptions}
                   onChange={(e) => setMaxRedemptions(e.target.value)}
                   onBlur={() => markTouched('maxRedemptions')}
-                  placeholder="unlimited"
+                  placeholder={t('platformCoupons.unlimited')}
                   className="h-9"
                 />
                 <FieldError message={shouldShow('maxRedemptions') ? maxRedemptionsError : null} />
@@ -355,7 +357,7 @@ export function PlatformCouponsModule() {
                   setShowForm(false);
                 }}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button
                 size="sm"
@@ -363,7 +365,7 @@ export function PlatformCouponsModule() {
                 disabled={!isFormValid || createMutation.isPending}
               >
                 {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Create Coupon
+                {t('platformCoupons.createCoupon')}
               </Button>
             </div>
           </CardContent>
@@ -375,21 +377,21 @@ export function PlatformCouponsModule() {
           {couponsQuery.isLoading ? (
             <div className="space-y-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
           ) : couponsQuery.isError || !couponsQuery.data ? (
-            <ErrorState message="Unable to load coupons." onRetry={() => couponsQuery.refetch()} />
+            <ErrorState message={t('platformCoupons.unableToLoad')} onRetry={() => couponsQuery.refetch()} />
           ) : couponsQuery.data.length === 0 ? (
-            <EmptyState message="No coupons yet." icon={<Ticket className="h-5 w-5 opacity-50" />} />
+            <EmptyState message={t('platformCoupons.noCoupons')} icon={<Ticket className="h-5 w-5 opacity-50" />} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left">
-                    <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Code</th>
-                    <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Discount</th>
-                    <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Plans</th>
-                    <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Redemptions</th>
-                    <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Expires</th>
-                    <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Active</th>
-                    <th className="pb-2 font-medium text-xs text-muted-foreground text-right">Actions</th>
+                    <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformCoupons.code')}</th>
+                    <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformCoupons.discount')}</th>
+                    <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformCoupons.plans')}</th>
+                    <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformCoupons.redemptions')}</th>
+                    <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformCoupons.expires')}</th>
+                    <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('common.active')}</th>
+                    <th className="pb-2 font-medium text-xs text-muted-foreground text-right">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -400,7 +402,7 @@ export function PlatformCouponsModule() {
                         {c.type === 'percent' ? `${c.value}%` : formatCurrency(c.value, c.currency)}
                       </td>
                       <td className="py-2.5 pr-4 text-xs text-muted-foreground">
-                        {c.applicablePlans.length === 0 ? 'all' : c.applicablePlans.join(', ')}
+                        {c.applicablePlans.length === 0 ? t('platformCoupons.allPlans') : c.applicablePlans.join(', ')}
                       </td>
                       <td className="py-2.5 pr-4 text-xs">{c.timesRedeemed}{c.maxRedemptions !== null ? `/${c.maxRedemptions}` : ''}</td>
                       <td className="py-2.5 pr-4 text-xs text-muted-foreground">{formatDate(c.expiresAt)}</td>

@@ -61,6 +61,7 @@ import {
   PlatformPageHeader,
   ErrorState,
 } from '@/modules/platform/shared';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -111,6 +112,7 @@ const ENCRYPTION_OPTIONS: {
 // -------------------- Page --------------------
 
 export function PlatformSmtpModule() {
+  const { t } = useT();
   const queryClient = useQueryClient();
 
   // ---------- Load saved settings ----------
@@ -190,12 +192,12 @@ export function PlatformSmtpModule() {
       queryClient.invalidateQueries({ queryKey: ['platform', 'smtp'] });
       setDraft({});
       setPasswordInput(PASSWORD_PLACEHOLDER);
-      toast.success('SMTP settings saved.');
+      toast.success(t('platformSmtp.settingsSaved'));
     },
     onError: (err: unknown) => {
       const message =
         (err as ApiErrorPayload)?.error?.message ??
-        (err instanceof Error ? err.message : 'Failed to save SMTP settings');
+        (err instanceof Error ? err.message : t('platformSmtp.saveFailed'));
       toast.error(message);
     },
   });
@@ -228,16 +230,16 @@ export function PlatformSmtpModule() {
       return postApi<TestResponse>('/api/settings/smtp/test', payload);
     },
     onSuccess: (responseData) => {
-      const message = responseData?.message ?? 'SMTP connection successful.';
+      const message = responseData?.message ?? t('platformSmtp.connectionSuccessful');
       setTestResult({ ok: true, message });
-      toast.success('SMTP connection successful.');
+      toast.success(t('platformSmtp.connectionSuccessful'));
     },
     onError: (err: unknown) => {
       const message =
         (err as ApiErrorPayload)?.error?.message ??
-        (err instanceof Error ? err.message : 'SMTP connection failed');
+        (err instanceof Error ? err.message : t('platformSmtp.connectionFailed'));
       setTestResult({ ok: false, message });
-      toast.error(`SMTP connection failed: ${message}`);
+      toast.error(`${t('platformSmtp.connectionFailed')}: ${message}`);
     },
   });
 
@@ -272,14 +274,14 @@ export function PlatformSmtpModule() {
       return postApi<TestResponse>('/api/settings/smtp/test-email', payload);
     },
     onSuccess: (responseData) => {
-      const message = responseData?.message ?? `Test email sent to ${testEmail}.`;
+      const message = responseData?.message ?? `${t('platformSmtp.testEmailSentTo')} ${testEmail}.`;
       setEmailResult({ ok: true, message });
-      toast.success(`Test email sent to ${testEmail}.`);
+      toast.success(`${t('platformSmtp.testEmailSentTo')} ${testEmail}.`);
     },
     onError: (err: unknown) => {
       const message =
         (err as ApiErrorPayload)?.error?.message ??
-        (err instanceof Error ? err.message : 'Failed to send test email');
+        (err instanceof Error ? err.message : t('platformSmtp.sendFailed'));
       setEmailResult({ ok: false, message });
       toast.error(message);
     },
@@ -291,7 +293,7 @@ export function PlatformSmtpModule() {
     setPasswordInput(PASSWORD_PLACEHOLDER);
     setTestResult(null);
     setEmailResult(null);
-    toast.info('Changes discarded');
+    toast.info(t('platformSmtp.changesDiscarded'));
   };
 
   // ---------- Loading skeleton ----------
@@ -299,8 +301,8 @@ export function PlatformSmtpModule() {
     return (
       <div className="space-y-6">
         <PlatformPageHeader
-          title="SMTP Settings"
-          subtitle="Platform-wide outbound email configuration. Credentials are encrypted at rest and never exposed in plain text."
+          title={t('title.platformSmtp')}
+          subtitle={t('platformSmtp.subtitle')}
         />
         {Array.from({ length: 3 }).map((_, i) => (
           <Card key={i}>
@@ -323,13 +325,13 @@ export function PlatformSmtpModule() {
     return (
       <div className="space-y-6">
         <PlatformPageHeader
-          title="SMTP Settings"
-          subtitle="Platform-wide outbound email configuration. Credentials are encrypted at rest and never exposed in plain text."
+          title={t('title.platformSmtp')}
+          subtitle={t('platformSmtp.subtitle')}
         />
         <Card>
           <CardContent className="p-4">
             <ErrorState
-              message="Unable to load SMTP settings. Please retry."
+              message={t('platformSmtp.unableToLoad')}
               onRetry={() => refetch()}
             />
           </CardContent>
@@ -346,8 +348,8 @@ export function PlatformSmtpModule() {
     <div className="space-y-6">
       {/* ==================== Page Header (PLATFORM badge) ==================== */}
       <PlatformPageHeader
-        title="SMTP Settings"
-        subtitle="Platform-wide outbound email configuration. Credentials are encrypted at rest and never exposed in plain text."
+        title={t('title.platformSmtp')}
+        subtitle={t('platformSmtp.subtitle')}
       />
 
       {/* 1. Email Sending */}
@@ -355,20 +357,20 @@ export function PlatformSmtpModule() {
         <CardHeader className="pb-4">
           <div className="flex items-center gap-2">
             <SettingsIcon className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-semibold">Email Sending</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('platformSmtp.emailSending')}</CardTitle>
           </div>
           <CardDescription>
-            Toggle email delivery on or off for the entire platform.
+            {t('platformSmtp.emailSendingDescription')}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between rounded-lg border p-4">
             <div className="space-y-0.5">
               <Label htmlFor="isActive" className="text-sm font-medium">
-                Enable Email Sending
+                {t('platformSmtp.enableEmailSending')}
               </Label>
               <p className="text-xs text-muted-foreground">
-                When disabled, the platform will not attempt to send any outgoing emails.
+                {t('platformSmtp.emailSendingHint')}
               </p>
             </div>
             <Switch
@@ -385,17 +387,17 @@ export function PlatformSmtpModule() {
         <CardHeader className="pb-4">
           <div className="flex items-center gap-2">
             <Server className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-semibold">SMTP Connection</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('platformSmtp.connection')}</CardTitle>
           </div>
           <CardDescription>
-            Mail server endpoint details and encryption mode.
+            {t('platformSmtp.connectionDescription')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="host" className="text-sm font-medium">
-                SMTP Host
+                {t('platformSmtp.host')}
               </Label>
               <Input
                 id="host"
@@ -406,13 +408,13 @@ export function PlatformSmtpModule() {
                 spellCheck={false}
               />
               <p className="text-xs text-muted-foreground">
-                The hostname or IP address of your SMTP server.
+                {t('platformSmtp.hostHint')}
               </p>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="port" className="text-sm font-medium">
-                Port
+                {t('platformSmtp.port')}
               </Label>
               <Input
                 id="port"
@@ -424,14 +426,14 @@ export function PlatformSmtpModule() {
                 max={65535}
               />
               <p className="text-xs text-muted-foreground">
-                Suggested: <span className="font-medium">{encryptionOption?.port ?? 587}</span> for{' '}
+                {t('platformSmtp.suggested')} <span className="font-medium">{encryptionOption?.port ?? 587}</span> {t('platformSmtp.forWord')}{' '}
                 {encryptionOption?.label ?? 'STARTTLS'}.
               </p>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="encryption" className="text-sm font-medium">
-                Encryption
+                {t('platformSmtp.encryption')}
               </Label>
               <Select
                 value={current.encryption}
@@ -444,9 +446,9 @@ export function PlatformSmtpModule() {
                   {ENCRYPTION_OPTIONS.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
                       <div className="flex flex-col">
-                        <span className="font-medium">{opt.label}</span>
+                        <span className="font-medium">{opt.value === 'none' ? t('platformSmtp.encryptionNone') : opt.label}</span>
                         <span className="text-xs text-muted-foreground">
-                          {opt.hint}
+                          {opt.value === 'STARTTLS' ? t('platformSmtp.hintStarttls') : opt.value === 'SSL' ? t('platformSmtp.hintSsl') : t('platformSmtp.hintNone')}
                         </span>
                       </div>
                     </SelectItem>
@@ -454,13 +456,13 @@ export function PlatformSmtpModule() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                STARTTLS is recommended for modern mail servers.
+                {t('platformSmtp.encryptionHint')}
               </p>
             </div>
 
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="timeout" className="text-sm font-medium">
-                Connection Timeout (seconds)
+                {t('platformSmtp.timeout')}
               </Label>
               <Input
                 id="timeout"
@@ -472,7 +474,7 @@ export function PlatformSmtpModule() {
                 className="sm:w-40"
               />
               <p className="text-xs text-muted-foreground">
-                How long to wait before aborting a connection attempt. Default is 10 seconds.
+                {t('platformSmtp.timeoutHint')}
               </p>
             </div>
           </div>
@@ -484,17 +486,17 @@ export function PlatformSmtpModule() {
         <CardHeader className="pb-4">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-semibold">Authentication</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('platformSmtp.authentication')}</CardTitle>
           </div>
           <CardDescription>
-            Credentials used to authenticate with the SMTP server.
+            {t('platformSmtp.authenticationDescription')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="username" className="text-sm font-medium">
-                Username
+                {t('platformSmtp.username')}
               </Label>
               <Input
                 id="username"
@@ -505,13 +507,13 @@ export function PlatformSmtpModule() {
                 spellCheck={false}
               />
               <p className="text-xs text-muted-foreground">
-                Often the same as your From Email address.
+                {t('platformSmtp.usernameHint')}
               </p>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="password" className="text-sm font-medium">
-                Password
+                {t('platformSmtp.password')}
               </Label>
               {passwordInput === PASSWORD_PLACEHOLDER ? (
                 // Saved password — show masked placeholder + "Change" button
@@ -528,7 +530,7 @@ export function PlatformSmtpModule() {
                     size="sm"
                     onClick={() => setPasswordInput('')}
                   >
-                    Change
+                    {t('platformSmtp.change')}
                   </Button>
                 </div>
               ) : (
@@ -548,7 +550,7 @@ export function PlatformSmtpModule() {
                         setPasswordInput(val);
                       }
                     }}
-                    placeholder="Enter new password"
+                    placeholder={t('platformSmtp.enterNewPassword')}
                     autoComplete="new-password"
                     spellCheck={false}
                     className="pr-10"
@@ -559,7 +561,7 @@ export function PlatformSmtpModule() {
                     size="icon"
                     className="absolute right-0 top-0 h-9 w-9 hover:bg-transparent"
                     onClick={() => setShowPassword((s) => !s)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showPassword ? t('platformSmtp.hidePassword') : t('platformSmtp.showPassword')}
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4 text-muted-foreground" />
@@ -572,13 +574,13 @@ export function PlatformSmtpModule() {
               <div className="flex items-center gap-2 text-xs">
                 {hasSavedPassword ? (
                   <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-500">
-                    <CheckCircle2 className="h-3 w-3" />• saved
+                    <CheckCircle2 className="h-3 w-3" />{t('platformSmtp.saved')}
                   </span>
                 ) : (
-                  <span className="text-muted-foreground">No password saved yet</span>
+                  <span className="text-muted-foreground">{t('platformSmtp.noPasswordSaved')}</span>
                 )}
                 <span className="text-muted-foreground">
-                  · Encrypted at rest with AES-256-GCM
+                  {t('platformSmtp.encryptedAtRest')}
                 </span>
               </div>
             </div>
@@ -591,17 +593,17 @@ export function PlatformSmtpModule() {
         <CardHeader className="pb-4">
           <div className="flex items-center gap-2">
             <Mail className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-semibold">Sender Identity</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('platformSmtp.senderIdentity')}</CardTitle>
           </div>
           <CardDescription>
-            The From and Reply-To addresses used for outgoing emails.
+            {t('platformSmtp.senderIdentityDescription')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="fromName" className="text-sm font-medium">
-                From Name
+                {t('platformSmtp.fromName')}
               </Label>
               <Input
                 id="fromName"
@@ -610,13 +612,13 @@ export function PlatformSmtpModule() {
                 placeholder="Acme Inc."
               />
               <p className="text-xs text-muted-foreground">
-                Display name shown in the recipient&apos;s inbox.
+                {t('platformSmtp.fromNameHint')}
               </p>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="fromEmail" className="text-sm font-medium">
-                From Email
+                {t('platformSmtp.fromEmail')}
               </Label>
               <Input
                 id="fromEmail"
@@ -628,13 +630,13 @@ export function PlatformSmtpModule() {
                 spellCheck={false}
               />
               <p className="text-xs text-muted-foreground">
-                Address that sends the emails. Must be allowed by your SMTP provider.
+                {t('platformSmtp.fromEmailHint')}
               </p>
             </div>
 
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="replyTo" className="text-sm font-medium">
-                Reply-To (optional)
+                {t('platformSmtp.replyTo')}
               </Label>
               <Input
                 id="replyTo"
@@ -646,7 +648,7 @@ export function PlatformSmtpModule() {
                 spellCheck={false}
               />
               <p className="text-xs text-muted-foreground">
-                Where replies should go. Defaults to the From Email when left blank.
+                {t('platformSmtp.replyToHint')}
               </p>
             </div>
           </div>
@@ -660,7 +662,7 @@ export function PlatformSmtpModule() {
           onClick={handleDiscard}
           disabled={!isDirty || saveMutation.isPending}
         >
-          Discard
+          {t('platformSmtp.discard')}
         </Button>
         <Button
           onClick={() => saveMutation.mutate()}
@@ -672,7 +674,7 @@ export function PlatformSmtpModule() {
           ) : (
             <Save className="h-4 w-4" />
           )}
-          Save Settings
+          {t('platformSmtp.saveSettings')}
         </Button>
       </div>
 
@@ -683,10 +685,10 @@ export function PlatformSmtpModule() {
         <CardHeader className="pb-4">
           <div className="flex items-center gap-2">
             <Plug className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-semibold">Diagnostics</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('platformSmtp.diagnostics')}</CardTitle>
           </div>
           <CardDescription>
-            Verify your SMTP connection and send a test email before going live.
+            {t('platformSmtp.diagnosticsDescription')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -694,9 +696,9 @@ export function PlatformSmtpModule() {
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="space-y-0.5">
-                <Label className="text-sm font-medium">Test SMTP Connection</Label>
+                <Label className="text-sm font-medium">{t('platformSmtp.testConnectionLabel')}</Label>
                 <p className="text-xs text-muted-foreground">
-                  Connects and authenticates without sending an email. Validates your credentials.
+                  {t('platformSmtp.testConnectionHint')}
                 </p>
               </div>
               <Button
@@ -713,7 +715,7 @@ export function PlatformSmtpModule() {
                 ) : (
                   <Plug className="h-4 w-4" />
                 )}
-                Test Connection
+                {t('platformSmtp.testConnection')}
               </Button>
             </div>
             {testResult && (
@@ -741,10 +743,10 @@ export function PlatformSmtpModule() {
           <div className="space-y-3">
             <div className="space-y-0.5">
               <Label htmlFor="testEmail" className="text-sm font-medium">
-                Send Test Email
+                {t('platformSmtp.sendTestEmail')}
               </Label>
               <p className="text-xs text-muted-foreground">
-                Sends a styled confirmation email to the address below using your current settings.
+                {t('platformSmtp.sendTestEmailHint')}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -771,7 +773,7 @@ export function PlatformSmtpModule() {
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
-                Send Test Email
+                {t('platformSmtp.sendTestEmail')}
               </Button>
             </div>
             {emailResult && (
@@ -799,14 +801,10 @@ export function PlatformSmtpModule() {
       <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
         <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0" />
         <div className="text-xs leading-relaxed">
-          <p className="font-medium">Security Note</p>
+          <p className="font-medium">{t('platformSmtp.securityNote')}</p>
           <p className="mt-1">
-            SMTP credentials are encrypted at rest using <strong>AES-256-GCM</strong>.
-            Passwords are never returned in plain text — the API returns a masked
-            placeholder. The masked placeholder is preserved on save unless you type
-            a new password. Never share credentials over insecure channels. Use an
-            app-specific password when your provider supports two-factor
-            authentication.
+            {t('platformSmtp.securityNoteBody1')} <strong>AES-256-GCM</strong>
+            {t('platformSmtp.securityNoteBody2')}
           </p>
         </div>
       </div>

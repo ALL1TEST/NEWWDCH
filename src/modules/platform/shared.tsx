@@ -23,6 +23,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getApi } from '@/lib/api-client';
 import { ArrowLeft, Search, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Page Header --------------------
 
@@ -67,6 +68,7 @@ export function PlatformKpi({
   color?: 'emerald' | 'amber' | 'violet' | 'rose' | 'sky' | 'default';
   trend?: 'up' | 'down' | 'neutral';
 }) {
+  const { t } = useT();
   const colorMap: Record<string, string> = {
     emerald: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400',
     amber: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400',
@@ -90,9 +92,9 @@ export function PlatformKpi({
         </div>
         {trend && (
           <div className="flex items-center gap-1 mt-2">
-            {trend === 'up' && <span className="text-xs font-medium text-emerald-500">Trending up</span>}
-            {trend === 'down' && <span className="text-xs font-medium text-rose-500">Needs attention</span>}
-            {trend === 'neutral' && <span className="text-xs font-medium text-muted-foreground">Stable</span>}
+            {trend === 'up' && <span className="text-xs font-medium text-emerald-500">{t('platformShared.trendingUp')}</span>}
+            {trend === 'down' && <span className="text-xs font-medium text-rose-500">{t('platformShared.needsAttention')}</span>}
+            {trend === 'neutral' && <span className="text-xs font-medium text-muted-foreground">{t('platformShared.stable')}</span>}
           </div>
         )}
       </CardContent>
@@ -109,18 +111,28 @@ export function PlanBadge({ planId }: { planId: 'free' | 'plus' | 'pro' | 'max' 
     pro: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300 border-violet-200 dark:border-violet-800',
     max: 'bg-pink-100 text-pink-800 dark:bg-pink-950 dark:text-pink-300 border-pink-200 dark:border-pink-800',
   };
+  const { t } = useT();
   const name =
-    planId === 'free' ? 'Free' : planId === 'plus' ? 'Plus' : planId === 'pro' ? 'Pro' : planId === 'max' ? 'Max' : planId;
+    planId === 'free'
+      ? t('platformShared.planFree')
+      : planId === 'plus'
+        ? t('platformShared.planPlus')
+        : planId === 'pro'
+          ? t('platformShared.planPro')
+          : planId === 'max'
+            ? t('platformShared.planMax')
+            : planId;
   return <Badge variant="outline" className={cn('text-[10px] font-semibold capitalize', map[planId])}>{name}</Badge>;
 }
 
 export function SubStatusBadge({ status }: { status: string }) {
+  const { t } = useT();
   const map: Record<string, { label: string; cls: string }> = {
-    active: { label: 'Active', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 border-0' },
-    trial: { label: 'Trial', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400 border-0' },
-    past_due: { label: 'Past Due', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 border-0' },
-    cancelled: { label: 'Cancelled', cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400 border-0' },
-    expired: { label: 'Expired', cls: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 border-0' },
+    active: { label: t('common.active'), cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 border-0' },
+    trial: { label: t('platformShared.trial'), cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400 border-0' },
+    past_due: { label: t('platformShared.pastDue'), cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 border-0' },
+    cancelled: { label: t('platformShared.cancelled'), cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400 border-0' },
+    expired: { label: t('platformShared.expired'), cls: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 border-0' },
   };
   const s = map[status] ?? { label: status, cls: '' };
   return <Badge className={cn('text-[10px] font-semibold capitalize', s.cls)}>{s.label}</Badge>;
@@ -150,11 +162,12 @@ export function CustomerStatusBadge({ status }: { status: string }) {
 // -------------------- Health badge --------------------
 
 export function HealthBadge({ status }: { status: 'operational' | 'degraded' | 'down' | 'unknown' }) {
+  const { t } = useT();
   const map = {
-    operational: { dot: 'bg-emerald-500', label: 'Operational', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 border-0' },
-    degraded: { dot: 'bg-amber-500', label: 'Degraded', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 border-0' },
-    down: { dot: 'bg-rose-500', label: 'Down', cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400 border-0' },
-    unknown: { dot: 'bg-zinc-400', label: 'Unknown', cls: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-400 border-0' },
+    operational: { dot: 'bg-emerald-500', label: t('platformShared.operational'), cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 border-0' },
+    degraded: { dot: 'bg-amber-500', label: t('platformShared.degraded'), cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 border-0' },
+    down: { dot: 'bg-rose-500', label: t('platformShared.down'), cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400 border-0' },
+    unknown: { dot: 'bg-zinc-400', label: t('platformShared.unknown'), cls: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-400 border-0' },
   };
   const s = map[status];
   return (
@@ -168,19 +181,20 @@ export function HealthBadge({ status }: { status: 'operational' | 'degraded' | '
 // -------------------- Filters --------------------
 
 export function SearchInput({
-  value, onChange, placeholder = 'Search…',
+  value, onChange, placeholder,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
 }) {
+  const { t } = useT();
   return (
     <div className="relative">
       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t('platformShared.searchPlaceholder')}
         className="h-9 pl-8 w-full sm:w-64"
       />
     </div>
@@ -188,20 +202,21 @@ export function SearchInput({
 }
 
 export function FilterSelect<T extends string>({
-  value, onChange, options, allLabel = 'All',
+  value, onChange, options, allLabel,
 }: {
   value: T | 'all';
   onChange: (v: T | 'all') => void;
   options: { value: T; label: string }[];
   allLabel?: string;
 }) {
+  const { t } = useT();
   return (
     <Select value={value} onValueChange={(v) => onChange(v as T | 'all')}>
       <SelectTrigger className="h-9 w-full sm:w-40">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="all">{allLabel}</SelectItem>
+        <SelectItem value="all">{allLabel ?? t('platformShared.all')}</SelectItem>
         {options.map((o) => (
           <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
         ))}
@@ -244,15 +259,16 @@ export function TableSkeleton({ rows = 6, cols = 5 }: { rows?: number; cols?: nu
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const { t } = useT();
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
       <div className="h-12 w-12 rounded-full bg-rose-50 dark:bg-rose-950/30 flex items-center justify-center mb-3">
         <AlertCircle className="h-6 w-6 text-rose-500" />
       </div>
-      <p className="text-sm font-medium mb-1">Unable to load data</p>
+      <p className="text-sm font-medium mb-1">{t('platformShared.errorTitle')}</p>
       <p className="text-xs text-muted-foreground max-w-sm mb-3">{message}</p>
       {onRetry && (
-        <Button variant="outline" size="sm" onClick={onRetry}>Retry</Button>
+        <Button variant="outline" size="sm" onClick={onRetry}>{t('common.retry')}</Button>
       )}
     </div>
   );
@@ -326,10 +342,11 @@ export function formatRelative(iso: string | null): string {
 // -------------------- Loading overlay (for mutations) --------------------
 
 export function MutationLoader({ label }: { label?: string }) {
+  const { t } = useT();
   return (
     <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      {label ?? 'Working…'}
+      {label ?? t('platformShared.working')}
     </span>
   );
 }

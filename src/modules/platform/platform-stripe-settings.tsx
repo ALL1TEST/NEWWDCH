@@ -67,6 +67,7 @@ import {
   PlatformPageHeader,
   ErrorState,
 } from '@/modules/platform/shared';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -110,6 +111,7 @@ interface TestResult {
 // -------------------- Page (loader shell) --------------------
 
 export function PlatformStripeSettingsModule() {
+  const { t } = useT();
   const queryClient = useQueryClient();
 
   // ---------- Load saved settings ----------
@@ -124,8 +126,8 @@ export function PlatformStripeSettingsModule() {
     return (
       <div className="space-y-6">
         <PlatformPageHeader
-          title="Stripe Settings"
-          subtitle="Connect your Stripe account to enable real subscription billing."
+          title={t('title.platformStripe')}
+          subtitle={t('platformStripe.subtitle')}
         />
         <Card>
           <CardContent className="p-6 flex items-center justify-center h-64">
@@ -140,12 +142,12 @@ export function PlatformStripeSettingsModule() {
     return (
       <div className="space-y-6">
         <PlatformPageHeader
-          title="Stripe Settings"
-          subtitle="Connect your Stripe account to enable real subscription billing."
+          title={t('title.platformStripe')}
+          subtitle={t('platformStripe.subtitle')}
         />
         <Card>
           <CardContent className="p-6">
-            <ErrorState message="Could not load Stripe settings. Please retry." onRetry={() => refetch()} />
+            <ErrorState message={t('platformStripe.couldNotLoad')} onRetry={() => refetch()} />
           </CardContent>
         </Card>
       </div>
@@ -174,6 +176,7 @@ function StripeSettingsForm({
   data: StripeSettingsView;
   queryClient: ReturnType<typeof useQueryClient>;
 }) {
+  const { t } = useT();
   // ---------- Local form state (initialized ONCE from data on mount) ----------
   const [mode, setMode] = useState<'test' | 'live'>(data.mode);
   const [secretKeyTest, setSecretKeyTest] = useState(''); // never pre-fill secret keys
@@ -218,7 +221,7 @@ function StripeSettingsForm({
       });
     },
     onSuccess: () => {
-      toast.success('Stripe settings saved.');
+      toast.success(t('platformStripe.settingsSaved'));
       queryClient.invalidateQueries({ queryKey: ['platform', 'stripe-settings'] });
       // Clear the secret-key inputs after a successful save — the admin
       // must re-enter the key to view/modify it (defensive: prevents
@@ -230,7 +233,7 @@ function StripeSettingsForm({
     },
     onError: (err: unknown) => {
       const e = err as { code?: string; message?: string };
-      toast.error(e?.message || 'Unable to save Stripe settings.');
+      toast.error(e?.message || t('platformStripe.unableToSave'));
     },
   });
 
@@ -253,16 +256,16 @@ function StripeSettingsForm({
     onSuccess: (res) => {
       if (res.success) {
         toast.success(
-          `Stripe ${res.mode.toUpperCase()} connection successful. Account: ${res.accountInfo?.id ?? 'unknown'} (${res.accountInfo?.country ?? '?'})`,
+          `${t('platformStripe.connOkPrefix')} ${res.mode.toUpperCase()} ${t('platformStripe.connOkSuffix')}. ${t('platformStripe.account')}: ${res.accountInfo?.id ?? t('platformStripe.unknown')} (${res.accountInfo?.country ?? '?'})`,
         );
       } else {
-        toast.error(`Connection failed (${res.code}): ${res.message}`);
+        toast.error(`${t('platformStripe.connectionFailed')} (${res.code}): ${res.message}`);
       }
       queryClient.invalidateQueries({ queryKey: ['platform', 'stripe-settings'] });
     },
     onError: (err: unknown) => {
       const e = err as { code?: string; message?: string };
-      toast.error(e?.message || 'Unable to test Stripe connection.');
+      toast.error(e?.message || t('platformStripe.unableToTest'));
     },
   });
 
@@ -273,9 +276,9 @@ function StripeSettingsForm({
       await navigator.clipboard.writeText(data.webhookUrlHint);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-      toast.success('Webhook URL copied to clipboard.');
+      toast.success(t('platformStripe.webhookCopied'));
     } catch {
-      toast.error('Could not copy. Select and copy manually.');
+      toast.error(t('platformStripe.copyFailed'));
     }
   };
 
@@ -298,7 +301,7 @@ function StripeSettingsForm({
             ) : (
               <Plug className="h-4 w-4 mr-2" />
             )}
-            Test Connection
+            {t('platformStripe.testConnection')}
           </Button>
         }
       />
@@ -316,13 +319,13 @@ function StripeSettingsForm({
               <div>
                 <p className="text-sm font-medium">
                   {data.isConfigured
-                    ? `Stripe is connected (${data.mode.toUpperCase()} mode)`
-                    : 'Stripe is not connected'}
+                    ? `${t('platformStripe.connected')} (${data.mode === 'live' ? t('platformStripe.liveModeBanner') : t('platformStripe.testModeBanner')})`
+                    : t('platformStripe.notConnected')}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {data.isConfigured
-                    ? `Credentials source: ${data.activeSource === 'db' ? 'Admin Settings' : '.env'}`
-                    : 'Configure credentials below or set them in .env to enable checkout.'}
+                    ? `${t('platformStripe.credentialsSource')}: ${data.activeSource === 'db' ? t('platformStripe.sourceAdminSettings') : '.env'}`
+                    : t('platformStripe.configureHint')}
                 </p>
               </div>
             </div>
@@ -331,13 +334,13 @@ function StripeSettingsForm({
               {data.lastTestStatus === 'success' && (
                 <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">
                   <CheckCircle2 className="h-3 w-3 mr-1" />
-                  Last test: OK
+                  {t('platformStripe.lastTestOk')}
                 </Badge>
               )}
               {data.lastTestStatus === 'error' && (
                 <Badge className="bg-rose-50 text-rose-700 border-rose-200">
                   <XCircle className="h-3 w-3 mr-1" />
-                  Last test: Failed
+                  {t('platformStripe.lastTestFailed')}
                 </Badge>
               )}
               {data.lastTestedAt && (
@@ -360,22 +363,19 @@ function StripeSettingsForm({
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <CreditCard className="h-4 w-4" />
-            Account Credentials
+            {t('platformStripe.accountCredentials')}
           </CardTitle>
           <CardDescription>
-            Enter your Stripe keys for each mode. Secret keys are AES-256-GCM encrypted at rest and never
-            sent back to the frontend in plaintext. Leave a secret field empty to keep the existing value;
-            enter a new value to rotate.
+            {t('platformStripe.credentialsDescription')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           {/* Mode toggle */}
           <div className="flex items-center justify-between rounded-md border bg-muted/30 px-4 py-3">
             <div>
-              <p className="text-sm font-medium">Mode</p>
+              <p className="text-sm font-medium">{t('platformStripe.mode')}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Test mode uses your Stripe sandbox keys (sk_test_…). Live mode uses real production keys
-                (sk_live_…). Switch modes any time — credentials are stored separately per mode.
+                {t('platformStripe.modeDescription')}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -404,16 +404,16 @@ function StripeSettingsForm({
                 )}>
                   TEST
                 </span>
-                Test Mode Credentials
+                {t('platformStripe.testModeCredentials')}
               </h4>
               {data.hasSecretKeyTest && (
                 <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50">
-                  Configured
+                  {t('platformStripe.configured')}
                 </Badge>
               )}
             </div>
             <SecretKeyInput
-              label="Secret Key"
+              label={t('platformStripe.secretKey')}
               prefix="sk_test_"
               value={secretKeyTest}
               onChange={setSecretKeyTest}
@@ -424,7 +424,7 @@ function StripeSettingsForm({
               placeholder="sk_test_…"
             />
             <div className="space-y-1.5">
-              <Label className="text-xs">Publishable Key</Label>
+              <Label className="text-xs">{t('platformStripe.publishableKey')}</Label>
               <Input
                 value={publishableKeyTest}
                 onChange={(e) => setPublishableKeyTest(e.target.value)}
@@ -432,11 +432,11 @@ function StripeSettingsForm({
                 placeholder="pk_test_…"
               />
               <p className="text-[11px] text-muted-foreground">
-                Non-secret — safe to expose to the client for Stripe.js.
+                {t('platformStripe.publishableHint')}
               </p>
             </div>
             <SecretKeyInput
-              label="Webhook Signing Secret"
+              label={t('platformStripe.webhookSigningSecret')}
               prefix="whsec_"
               value={webhookSecretTest}
               onChange={setWebhookSecretTest}
@@ -460,16 +460,16 @@ function StripeSettingsForm({
                 )}>
                   LIVE
                 </span>
-                Live Mode Credentials
+                {t('platformStripe.liveModeCredentials')}
               </h4>
               {data.hasSecretKeyLive && (
                 <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50">
-                  Configured
+                  {t('platformStripe.configured')}
                 </Badge>
               )}
             </div>
             <SecretKeyInput
-              label="Secret Key"
+              label={t('platformStripe.secretKey')}
               prefix="sk_live_"
               value={secretKeyLive}
               onChange={setSecretKeyLive}
@@ -480,7 +480,7 @@ function StripeSettingsForm({
               placeholder="sk_live_…"
             />
             <div className="space-y-1.5">
-              <Label className="text-xs">Publishable Key</Label>
+              <Label className="text-xs">{t('platformStripe.publishableKey')}</Label>
               <Input
                 value={publishableKeyLive}
                 onChange={(e) => setPublishableKeyLive(e.target.value)}
@@ -488,11 +488,11 @@ function StripeSettingsForm({
                 placeholder="pk_live_…"
               />
               <p className="text-[11px] text-muted-foreground">
-                Non-secret — safe to expose to the client for Stripe.js.
+                {t('platformStripe.publishableHint')}
               </p>
             </div>
             <SecretKeyInput
-              label="Webhook Signing Secret"
+              label={t('platformStripe.webhookSigningSecret')}
               prefix="whsec_"
               value={webhookSecretLive}
               onChange={setWebhookSecretLive}
@@ -508,7 +508,7 @@ function StripeSettingsForm({
 
           {/* App URL */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Public App URL</Label>
+            <Label className="text-xs">{t('platformStripe.publicAppUrl')}</Label>
             <Input
               value={appUrl}
               onChange={(e) => setAppUrl(e.target.value)}
@@ -516,8 +516,7 @@ function StripeSettingsForm({
               placeholder="https://your-platform.com"
             />
             <p className="text-[11px] text-muted-foreground">
-              Base URL for Stripe Checkout success / cancel redirects. Falls back to STRIPE_APP_URL env
-              var or http://localhost:3000.
+              {t('platformStripe.appUrlHint')}
             </p>
           </div>
 
@@ -532,7 +531,7 @@ function StripeSettingsForm({
               ) : (
                 <Save className="h-4 w-4 mr-2" />
               )}
-              Save Settings
+              {t('platformStripe.saveSettings')}
             </Button>
           </div>
         </CardContent>
@@ -543,11 +542,10 @@ function StripeSettingsForm({
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Webhook className="h-4 w-4" />
-            Webhook Endpoint
+            {t('platformStripe.webhookEndpoint')}
           </CardTitle>
           <CardDescription>
-            Add this URL to your Stripe Dashboard → Developers → Webhooks. Stripe will fire events
-            here when subscriptions change, invoices are paid, payments fail, etc.
+            {t('platformStripe.webhookDescription')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -555,21 +553,23 @@ function StripeSettingsForm({
             <code className="flex-1 rounded-md border bg-muted px-3 py-2 text-xs font-mono break-all">
               {data.webhookUrlHint}
             </code>
-            <Button variant="outline" size="icon" onClick={copyWebhookUrl} title="Copy">
+            <Button variant="outline" size="icon" onClick={copyWebhookUrl} title={t('common.copy')}>
               {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
             </Button>
           </div>
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
             <p className="text-xs text-amber-900 leading-relaxed">
-              <strong>Important:</strong> Use the Webhook Signing Secret (<code className="font-mono">whsec_…</code>)
-              that Stripe generates for THIS endpoint — paste it into the {mode === 'live' ? 'Live' : 'Test'} Mode Webhook Signing Secret field above.
-              Never use the same signing secret across environments.
+              <strong>{t('platformStripe.important')}</strong>{' '}
+              {t('platformStripe.webhookSecretUse')} (<code className="font-mono">whsec_…</code>){' '}
+              {t('platformStripe.webhookSecretLead')}{' '}
+              {mode === 'live' ? t('platformStripe.liveModeWord') : t('platformStripe.testModeWord')}{' '}
+              {t('platformStripe.webhookSecretField')} {t('platformStripe.webhookNeverReuse')}
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Sparkles className="h-3 w-3" />
             <span>
-              Events handled: <code className="font-mono">checkout.session.completed</code>,{' '}
+              {t('platformStripe.eventsHandled')} <code className="font-mono">checkout.session.completed</code>,{' '}
               <code className="font-mono">customer.subscription.created/updated/deleted</code>,{' '}
               <code className="font-mono">invoice.paid</code>,{' '}
               <code className="font-mono">invoice.payment_failed</code>,{' '}
@@ -583,35 +583,29 @@ function StripeSettingsForm({
       {/* -------------------- How it works -------------------- */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">How it works</CardTitle>
+          <CardTitle className="text-base">{t('platformStripe.howItWorks')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-xs text-muted-foreground">
           <p>
-            <strong className="text-foreground">1. Connect Stripe</strong> — enter your Test or Live
-            keys above and click Test Connection. Stripe is the source of truth for paid subscription
-            state; this platform mirrors it via webhooks.
+            <strong className="text-foreground">{t('platformStripe.howTitle1')}</strong>{' '}
+            {t('platformStripe.howBody1')}
           </p>
           <p>
-            <strong className="text-foreground">2. Plans & Pricing auto-sync</strong> — when you create
-            or edit a paid plan, the backend automatically creates the corresponding Stripe Product and
-            monthly + yearly Prices and stores the resolved Stripe Price IDs on the plan row. You can
-            also manually trigger <em>Sync to Stripe</em> from the Edit Plan dialog.
+            <strong className="text-foreground">{t('platformStripe.howTitle2')}</strong>{' '}
+            {t('platformStripe.howBody2a')} <em>{t('platformStripe.syncToStripe')}</em>{' '}
+            {t('platformStripe.howBody2b')}
           </p>
           <p>
-            <strong className="text-foreground">3. Checkout is server-side</strong> — the client
-            redirects to a Stripe-hosted Checkout Session created by the backend. The frontend and
-            backend never touch raw card data.
+            <strong className="text-foreground">{t('platformStripe.howTitle3')}</strong>{' '}
+            {t('platformStripe.howBody3')}
           </p>
           <p>
-            <strong className="text-foreground">4. Webhooks keep everything in sync</strong> — every
-            checkout, payment, subscription update, refund, and cancellation is reflected in the local
-            DB (Customers, Payments, Dashboard) via idempotent webhook handlers. No mock data — your
-            real Stripe state is the only source.
+            <strong className="text-foreground">{t('platformStripe.howTitle4')}</strong>{' '}
+            {t('platformStripe.howBody4')}
           </p>
           <p>
-            <strong className="text-foreground">5. Free plans never touch Stripe</strong> — free
-            subscriptions are recorded directly in the DB; no Stripe charges or objects are created.
-            Configurable trial periods apply only to paid plans.
+            <strong className="text-foreground">{t('platformStripe.howTitle5')}</strong>{' '}
+            {t('platformStripe.howBody5')}
           </p>
           <div className="pt-2">
             <a
@@ -620,7 +614,7 @@ function StripeSettingsForm({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
             >
-              Open Stripe API Keys dashboard
+              {t('platformStripe.openApiKeysDashboard')}
               <ExternalLink className="h-3 w-3" />
             </a>
           </div>
@@ -653,13 +647,14 @@ function SecretKeyInput({
   isSet: boolean;
   placeholder: string;
 }) {
+  const { t } = useT();
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <Label className="text-xs">{label}</Label>
         {isSet && masked && (
           <span className="text-[11px] text-muted-foreground font-mono">
-            Current: {masked}
+            {t('platformStripe.current')}: {masked}
           </span>
         )}
       </div>
@@ -670,7 +665,7 @@ function SecretKeyInput({
             value={value}
             onChange={(e) => onChange(e.target.value)}
             className="h-9 font-mono text-xs pr-9"
-            placeholder={isSet ? '•••••••• (leave empty to keep current)' : placeholder}
+            placeholder={isSet ? t('platformStripe.keepCurrentPlaceholder') : placeholder}
             autoComplete="off"
           />
           <button
@@ -684,8 +679,8 @@ function SecretKeyInput({
         </div>
       </div>
       <p className="text-[11px] text-muted-foreground">
-        Starts with <code className="font-mono">{prefix}</code>. Encrypted at rest; never returned in
-        plaintext.
+        {t('platformStripe.startsWith')} <code className="font-mono">{prefix}</code>
+        {t('platformStripe.encryptedAtRest')}
       </p>
     </div>
   );

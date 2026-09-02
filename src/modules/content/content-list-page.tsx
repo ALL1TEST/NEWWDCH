@@ -62,6 +62,7 @@ import { AvatarWithFallback } from '@/components/shared';
 import { getApi, postApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { useT } from '@/lib/i18n';
 import { cn, formatRelativeTime, truncate } from '@/lib/utils';
 import type { PaginatedResponse, PostStatus } from '@/shared/types';
 import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
@@ -124,12 +125,12 @@ const SAVED_IDEAS_STORAGE_KEY = 'cms_saved_ideas';
 
 // -------------------- Status Config --------------------
 
-const STATUS_TABS: { label: string; value: string }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Published', value: 'PUBLISHED' },
-  { label: 'Drafts', value: 'DRAFT' },
-  { label: 'In Review', value: 'IN_REVIEW' },
-  { label: 'Scheduled', value: 'APPROVED' },
+const STATUS_TABS: { labelKey: string; value: string }[] = [
+  { labelKey: 'articles.tabAll', value: 'all' },
+  { labelKey: 'articles.tabPublished', value: 'PUBLISHED' },
+  { labelKey: 'articles.tabDrafts', value: 'DRAFT' },
+  { labelKey: 'articles.tabInReview', value: 'IN_REVIEW' },
+  { labelKey: 'articles.tabScheduled', value: 'APPROVED' },
 ];
 
 const STATUS_BADGE_STYLES: Record<string, string> = {
@@ -141,13 +142,15 @@ const STATUS_BADGE_STYLES: Record<string, string> = {
   ARCHIVED: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500',
 };
 
+// Values are i18n keys — resolve with t() at the call sites. An unknown
+// status falls back to the raw status value (t() echoes unknown keys).
 const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Draft',
-  IN_REVIEW: 'In Review',
-  APPROVED: 'Approved',
-  PUBLISHED: 'Published',
-  UNPUBLISHED: 'Unpublished',
-  ARCHIVED: 'Archived',
+  DRAFT: 'articles.statusDraft',
+  IN_REVIEW: 'articles.statusInReview',
+  APPROVED: 'articles.statusApproved',
+  PUBLISHED: 'articles.statusPublished',
+  UNPUBLISHED: 'articles.statusUnpublished',
+  ARCHIVED: 'articles.statusArchived',
 };
 
 const INTENT_COLORS: Record<string, string> = {
@@ -200,6 +203,8 @@ function IdeaCard({
   onCreateArticle: () => void;
   isSaved: boolean;
 }) {
+  const { t } = useT();
+
   return (
     <div className="border rounded-xl overflow-hidden transition-all duration-200 hover:shadow-sm">
       {/* Collapsed Header */}
@@ -232,7 +237,7 @@ function IdeaCard({
               </span>
             )}
             <span className={cn('inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full', COMPETITION_COLORS[idea.competition] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400')}>
-              {idea.competition} comp.
+              {idea.competition} {t('articles.compAbbr')}
             </span>
           </div>
         </div>
@@ -256,7 +261,7 @@ function IdeaCard({
           <div className="grid grid-cols-2 gap-2">
             {/* Search Intent */}
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-muted-foreground">Intent:</span>
+              <span className="text-muted-foreground">{t('articles.intentLabel')}</span>
               <span className={cn('font-medium px-1.5 py-0.5 rounded text-[10px]', INTENT_COLORS[idea.searchIntent] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400')}>
                 {idea.searchIntent}
               </span>
@@ -264,14 +269,14 @@ function IdeaCard({
             {/* Topic Relevance */}
             <div className="flex items-center gap-1.5 text-xs">
               <Target className="h-3 w-3 text-muted-foreground" />
-              <span className="text-muted-foreground">Relevance:</span>
+              <span className="text-muted-foreground">{t('articles.relevanceLabel')}</span>
               <span className={cn('font-semibold', getSeoScoreColor(idea.topicRelevance))}>{idea.topicRelevance}/100</span>
             </div>
           </div>
 
           {/* Content Potential */}
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-muted-foreground">Content potential:</span>
+            <span className="text-muted-foreground">{t('articles.contentPotentialLabel')}</span>
             <span className={cn('font-medium px-1.5 py-0.5 rounded text-[10px]', CONTENT_POTENTIAL_COLORS[idea.contentPotential] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400')}>
               {idea.contentPotential}
             </span>
@@ -280,7 +285,7 @@ function IdeaCard({
           {/* Suggested Angle */}
           {idea.suggestedAngle && (
             <div>
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Suggested Angle</p>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">{t('articles.suggestedAngle')}</p>
               <p className="text-xs text-foreground/90 leading-relaxed">{idea.suggestedAngle}</p>
             </div>
           )}
@@ -288,7 +293,7 @@ function IdeaCard({
           {/* Keywords */}
           {idea.keywords.length > 0 && (
             <div>
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">Keywords</p>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">{t('articles.keywords')}</p>
               <div className="flex flex-wrap gap-1">
                 {idea.keywords.map((kw) => (
                   <span key={kw} className="inline-flex items-center px-2 py-0.5 text-[10px] font-medium rounded-full bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200/50 dark:border-amber-800/30">
@@ -302,7 +307,7 @@ function IdeaCard({
           {/* Tags */}
           {idea.tags.length > 0 && (
             <div>
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">Tags</p>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">{t('articles.tags')}</p>
               <div className="flex flex-wrap gap-1">
                 {idea.tags.map((tag) => (
                   <span key={tag} className="inline-flex items-center px-2 py-0.5 text-[10px] rounded-full bg-muted text-muted-foreground">
@@ -323,7 +328,7 @@ function IdeaCard({
               disabled={isSaved}
             >
               <Save className="h-3 w-3" />
-              {isSaved ? 'Saved' : 'Save'}
+              {isSaved ? t('articles.savedIdea') : t('common.save')}
             </Button>
             <Button
               size="sm"
@@ -331,7 +336,7 @@ function IdeaCard({
               onClick={(e) => { e.stopPropagation(); onCreateArticle(); }}
             >
               <FileText className="h-3 w-3" />
-              + Create Article
+              {t('articles.createArticle')}
             </Button>
           </div>
         </div>
@@ -349,6 +354,8 @@ function CategoriesTagsDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useT();
+
   const queryClient = useQueryClient();
   const [newCategory, setNewCategory] = useState('');
   const [newTag, setNewTag] = useState('');
@@ -387,23 +394,23 @@ function CategoriesTagsDialog({
 
   const createCategoryMutation = useMutation({
     mutationFn: (name: string) => postApi('/api/categories', { name }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.categories.all }); toast.success('Category created'); },
-    onError: (err: Error) => toast.error(err.message || 'Failed to create category'),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.categories.all }); toast.success(t('articles.categoryCreated')); },
+    onError: (err: Error) => toast.error(err.message || t('articles.categoryCreateFailed')),
   });
   const createTagMutation = useMutation({
     mutationFn: (name: string) => postApi('/api/tags', { name }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }); toast.success('Tag created'); },
-    onError: (err: Error) => toast.error(err.message || 'Failed to create tag'),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }); toast.success(t('articles.tagCreated')); },
+    onError: (err: Error) => toast.error(err.message || t('articles.tagCreateFailed')),
   });
   const deleteCategoryMutation = useMutation({
     mutationFn: (id: string) => deleteApi(`/api/categories/${id}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.categories.all }); toast.success('Category deleted'); },
-    onError: (err: Error) => toast.error(err.message || 'Failed to delete category'),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.categories.all }); toast.success(t('articles.categoryDeleted')); },
+    onError: (err: Error) => toast.error(err.message || t('articles.categoryDeleteFailed')),
   });
   const deleteTagMutation = useMutation({
     mutationFn: (id: string) => deleteApi(`/api/tags/${id}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }); toast.success('Tag deleted'); },
-    onError: (err: Error) => toast.error(err.message || 'Failed to delete tag'),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }); toast.success(t('articles.tagDeleted')); },
+    onError: (err: Error) => toast.error(err.message || t('articles.tagDeleteFailed')),
   });
 
   const handleAddCategory = useCallback(() => {
@@ -425,10 +432,10 @@ function CategoriesTagsDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FolderOpen className="h-5 w-5" />
-            Categories &amp; Tags
+            {t('articles.categoriesTags')}
           </DialogTitle>
           <DialogDescription>
-            Organize your articles with categories and tags. These are managed here instead of having separate pages.
+            {t('articles.categoriesTagsDescription')}
           </DialogDescription>
         </DialogHeader>
 
@@ -436,11 +443,11 @@ function CategoriesTagsDialog({
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="categories">
               <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
-              Categories ({categories.length})
+              {`${t('articles.categoriesLabel')} (${categories.length})`}
             </TabsTrigger>
             <TabsTrigger value="tags">
               <Tag className="h-3.5 w-3.5 mr-1.5" />
-              Tags ({tags.length})
+              {`${t('articles.tags')} (${tags.length})`}
             </TabsTrigger>
           </TabsList>
 
@@ -451,7 +458,7 @@ function CategoriesTagsDialog({
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCategory(); } }}
-                placeholder="New category name..."
+                placeholder={t('articles.newCategoryPlaceholder')}
                 className="h-9 text-sm"
               />
               <Button
@@ -461,7 +468,7 @@ function CategoriesTagsDialog({
                 disabled={createCategoryMutation.isPending || !newCategory.trim()}
               >
                 {createCategoryMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                Add
+                {t('articles.add')}
               </Button>
             </div>
             <div className="max-h-72 overflow-y-auto rounded-md border">
@@ -472,7 +479,7 @@ function CategoriesTagsDialog({
               ) : categories.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                   <FolderOpen className="h-8 w-8 text-muted-foreground/40 mb-2" />
-                  <p className="text-sm text-muted-foreground">No categories yet</p>
+                  <p className="text-sm text-muted-foreground">{t('articles.noCategories')}</p>
                 </div>
               ) : (
                 <ul className="divide-y">
@@ -488,7 +495,7 @@ function CategoriesTagsDialog({
                         className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
                         onClick={() => deleteCategoryMutation.mutate(cat.id)}
                         disabled={deleteCategoryMutation.isPending}
-                        title="Delete"
+                        title={t('common.delete')}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -506,7 +513,7 @@ function CategoriesTagsDialog({
                 value={newTag}
                 onChange={(e) => setNewTag(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
-                placeholder="New tag name..."
+                placeholder={t('articles.newTagPlaceholder')}
                 className="h-9 text-sm"
               />
               <Button
@@ -516,7 +523,7 @@ function CategoriesTagsDialog({
                 disabled={createTagMutation.isPending || !newTag.trim()}
               >
                 {createTagMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                Add
+                {t('articles.add')}
               </Button>
             </div>
             <div className="max-h-72 overflow-y-auto rounded-md border">
@@ -527,7 +534,7 @@ function CategoriesTagsDialog({
               ) : tags.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                   <Tag className="h-8 w-8 text-muted-foreground/40 mb-2" />
-                  <p className="text-sm text-muted-foreground">No tags yet</p>
+                  <p className="text-sm text-muted-foreground">{t('articles.noTags')}</p>
                 </div>
               ) : (
                 <ul className="divide-y">
@@ -543,7 +550,7 @@ function CategoriesTagsDialog({
                         className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
                         onClick={() => deleteTagMutation.mutate(tag.id)}
                         disabled={deleteTagMutation.isPending}
-                        title="Delete"
+                        title={t('common.delete')}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -556,7 +563,7 @@ function CategoriesTagsDialog({
         </Tabs>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Done</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('articles.done')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -566,6 +573,8 @@ function CategoriesTagsDialog({
 // -------------------- Main Component --------------------
 
 export function ContentListPage() {
+  const { t } = useT();
+
   const navigate = useNavigationStore((s) => s.navigate);
   const queryClient = useQueryClient();
 
@@ -637,11 +646,11 @@ export function ContentListPage() {
       } catch {
         // storage may be full or disabled; ignore silently
       }
-      toast.success('Idea saved!');
+      toast.success(t('articles.ideaSaved'));
     } else {
-      toast.info('Idea already saved');
+      toast.info(t('articles.ideaAlreadySaved'));
     }
-  }, [ideas, savedTitles]);
+  }, [ideas, savedTitles, t]);
 
   // Build query params
   const queryParams = useMemo(
@@ -684,10 +693,10 @@ export function ContentListPage() {
     onSuccess: (result, vars) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
       const count = (result as { updatedCount?: number })?.updatedCount ?? vars.ids.length;
-      toast.success(`${count} article(s) set to ${STATUS_LABELS[vars.status] ?? vars.status}`);
+      toast.success(`${count} ${t('articles.setToInfix')} ${t(STATUS_LABELS[vars.status] ?? vars.status)}`);
       setSelectedIds([]);
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to update statuses'),
+    onError: (err: Error) => toast.error(err.message || t('articles.updateStatusesFailed')),
   });
 
   // Bulk delete mutation — deletes all selected in parallel
@@ -697,10 +706,10 @@ export function ContentListPage() {
     },
     onSuccess: (_data, ids) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
-      toast.success(`${ids.length} article(s) deleted`);
+      toast.success(`${ids.length} ${t('articles.deletedToastSuffix')}`);
       setSelectedIds([]);
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to delete articles'),
+    onError: (err: Error) => toast.error(err.message || t('articles.deleteFailed')),
   });
 
   // AI Ideas generation mutation
@@ -722,9 +731,9 @@ export function ContentListPage() {
         setIdeasEmpty(true);
         if (ideas.length === 0) {
           // No existing ideas to fall back on — toast informs the user.
-          toast.info('No strong topic ideas found. Try refining your niche or keywords.');
+          toast.info(t('articles.noStrongIdeasToast'));
         } else {
-          toast.info('No new ideas returned. Try refining your niche or keywords.');
+          toast.info(t('articles.noNewIdeasToast'));
         }
         return;
       }
@@ -734,11 +743,11 @@ export function ContentListPage() {
       setIdeas((prev) => [...prev, ...generatedIdeas]);
       // Expand the first newly-appended idea so the user sees fresh content immediately
       setExpandedIdea(prevLen === 0 ? 0 : prevLen);
-      toast.success(`Generated ${generatedIdeas.length} new article ideas!`);
+      toast.success(`${t('articles.generatedPrefix')} ${generatedIdeas.length} ${t('articles.generatedSuffix')}`);
     },
     onError: (err: Error) => {
       setIdeasEmpty(false);
-      toast.error(err.message || 'Failed to generate ideas');
+      toast.error(err.message || t('articles.generateFailed'));
     },
   });
 
@@ -801,9 +810,9 @@ export function ContentListPage() {
         {/* Page Header */}
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="min-w-0">
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Articles</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{t('title.articles')}</h1>
             <p className="mt-1 truncate text-sm text-muted-foreground">
-              Manage your blog articles for The Efficient You
+              {t('articles.description')}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -812,37 +821,37 @@ export function ContentListPage() {
               variant="outline"
               className="h-9 px-4 gap-2 border-amber-400/40 text-amber-700 hover:bg-amber-400/10 hover:text-amber-700"
               onClick={() => setAiIdeasOpen(true)}
-              title="Generate AI article ideas"
+              title={t('articles.generateAiIdeas')}
             >
               <Sparkles className="h-4 w-4" />
-              AI Ideas
+              {t('articles.aiIdeas')}
             </Button>
             {/* Categories & Tags manager */}
             <Button
               variant="outline"
               className="h-9 px-4 gap-2"
               onClick={() => setCatTagOpen(true)}
-              title="Manage categories and tags"
+              title={t('articles.manageCategoriesTags')}
             >
               <FolderOpen className="h-4 w-4" />
-              Categories &amp; Tags
+              {t('articles.categoriesTags')}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button className="h-9 px-4 gap-2">
                   <Plus className="h-4 w-4" />
-                  Create New
+                  {t('articles.createNew')}
                   <ChevronDown className="h-4 w-4 opacity-70" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={goToCreate}>
                   <Pencil className="mr-2 h-4 w-4" />
-                  Article from scratch
+                  {t('articles.fromScratch')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleCreateFromIdea()}>
                   <Sparkles className="mr-2 h-4 w-4" />
-                  Generate with AI
+                  {t('articles.generateWithAi')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -861,7 +870,7 @@ export function ContentListPage() {
                       : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
-                  {tab.label}
+                  {t(tab.labelKey)}
                   {statusTab === tab.value && (
                     <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-amber-400" />
                   )}
@@ -874,7 +883,7 @@ export function ContentListPage() {
               <div className="relative w-full sm:w-56">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search articles..."
+                  placeholder={t('articles.searchPlaceholder')}
                   value={search}
                   onChange={(e) => handleSearch(e.target.value)}
                   className="h-9 w-full rounded-lg pl-9 pr-3"
@@ -893,11 +902,11 @@ export function ContentListPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="updatedAt-desc">Newest First</SelectItem>
-                  <SelectItem value="updatedAt-asc">Oldest First</SelectItem>
-                  <SelectItem value="createdAt-desc">Newest Created</SelectItem>
-                  <SelectItem value="title-asc">Title A-Z</SelectItem>
-                  <SelectItem value="title-desc">Title Z-A</SelectItem>
+                  <SelectItem value="updatedAt-desc">{t('articles.sortNewestFirst')}</SelectItem>
+                  <SelectItem value="updatedAt-asc">{t('articles.sortOldestFirst')}</SelectItem>
+                  <SelectItem value="createdAt-desc">{t('articles.sortNewestCreated')}</SelectItem>
+                  <SelectItem value="title-asc">{t('articles.sortTitleAsc')}</SelectItem>
+                  <SelectItem value="title-desc">{t('articles.sortTitleDesc')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -925,8 +934,8 @@ export function ContentListPage() {
               <div className="flex flex-col gap-3 rounded-xl border border-dashed p-12 text-center">
                 <div className="flex flex-col items-center gap-2">
                   <FileText className="h-10 w-10 text-muted-foreground/50" />
-                  <h3 className="text-lg font-semibold">No articles yet</h3>
-                  <p className="text-sm text-muted-foreground">Create your first article to get started</p>
+                  <h3 className="text-lg font-semibold">{t('articles.noArticles')}</h3>
+                  <p className="text-sm text-muted-foreground">{t('articles.createFirst')}</p>
                 </div>
               </div>
             ) : (
@@ -948,17 +957,17 @@ export function ContentListPage() {
                           <button
                             className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
                           >
-                            Title <ArrowUpDown className="inline h-3 w-3 ml-1 opacity-40" />
+                            {t('articles.title')} <ArrowUpDown className="inline h-3 w-3 ml-1 opacity-40" />
                           </button>
                         </th>
                         <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          Status
+                          {t('common.status')}
                         </th>
                         <th className="text-left px-3 py-3 hidden md:table-cell text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          Author
+                          {t('articles.author')}
                         </th>
                         <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          Updated
+                          {t('articles.updated')}
                         </th>
                         <th className="w-28 px-3 py-3"></th>
                       </tr>
@@ -993,7 +1002,7 @@ export function ContentListPage() {
                                   STATUS_BADGE_STYLES[item.status] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400',
                                 )}
                               >
-                                {STATUS_LABELS[item.status] ?? item.status}
+                                {t(STATUS_LABELS[item.status] ?? item.status)}
                               </span>
                             </td>
                             <td className="px-3 py-3 hidden md:table-cell">
@@ -1019,7 +1028,7 @@ export function ContentListPage() {
                                   size="icon"
                                   className="h-8 w-8"
                                   onClick={() => goToEdit(item.id)}
-                                  title="Edit"
+                                  title={t('common.edit')}
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
@@ -1028,7 +1037,7 @@ export function ContentListPage() {
                                   size="icon"
                                   className="h-8 w-8"
                                   onClick={() => goToDetail(item.id)}
-                                  title="View"
+                                  title={t('common.view')}
                                 >
                                   <Eye className="h-3.5 w-3.5" />
                                 </Button>
@@ -1037,7 +1046,7 @@ export function ContentListPage() {
                                   size="icon"
                                   className="h-8 w-8 text-destructive hover:text-destructive"
                                   onClick={() => setDeleteTarget(item)}
-                                  title="Delete"
+                                  title={t('common.delete')}
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
@@ -1053,7 +1062,7 @@ export function ContentListPage() {
                 {/* Pagination */}
                 <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/10">
                   <span className="text-sm text-muted-foreground">
-                    Showing {fromItem} to {toItem} of {totalItems} articles
+                    {`${t('common.showing')} ${fromItem} ${t('articles.paginationTo')} ${toItem} ${t('common.of')} ${totalItems} ${t('articles.articles')}`}
                   </span>
                   <div className="flex items-center gap-1">
                     {pageNumbers.map((p, i) =>
@@ -1097,12 +1106,12 @@ export function ContentListPage() {
               <Sparkles className="h-[18px] w-[18px]" />
             </span>
             <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-semibold text-foreground">AI Ideas</h3>
-              <p className="truncate text-xs text-muted-foreground">SEO-scored topics for your site</p>
+              <h3 className="text-sm font-semibold text-foreground">{t('articles.aiIdeas')}</h3>
+              <p className="truncate text-xs text-muted-foreground">{t('articles.aiIdeasSubtitle')}</p>
             </div>
             <button
               type="button"
-              aria-label="Collapse AI Ideas panel"
+              aria-label={t('articles.collapseAiPanel')}
               onClick={() => setAiIdeasOpen(false)}
               className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
@@ -1118,22 +1127,22 @@ export function ContentListPage() {
                 <span className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400">
                   <AlertCircle className="h-[22px] w-[22px]" />
                 </span>
-                <p className="text-sm font-semibold text-foreground">Couldn&apos;t generate ideas</p>
-                <p className="text-xs text-muted-foreground">Something went wrong. Please try again.</p>
+                <p className="text-sm font-semibold text-foreground">{t('articles.couldntGenerate')}</p>
+                <p className="text-xs text-muted-foreground">{t('articles.somethingWrong')}</p>
                 <Button
                   className="rounded-full bg-amber-400 text-zinc-900 text-xs font-semibold hover:bg-amber-400/90 gap-1.5 w-full mt-2"
                   onClick={() => ideasMutation.mutate()}
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
-                  Try Again
+                  {t('articles.tryAgain')}
                 </Button>
               </div>
             ) : ideasMutation.isPending ? (
               /* Generating state */
               <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
                 <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
-                <p className="text-sm font-medium text-foreground">Generating SEO content ideas…</p>
-                <p className="text-xs text-muted-foreground">Analyzing your niche and keywords</p>
+                <p className="text-sm font-medium text-foreground">{t('articles.generatingIdeas')}</p>
+                <p className="text-xs text-muted-foreground">{t('articles.analyzingNiche')}</p>
               </div>
             ) : ideasEmpty && ideas.length === 0 ? (
               /* No ideas returned state */
@@ -1141,19 +1150,19 @@ export function ContentListPage() {
                 <span className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400/10 text-amber-700">
                   <Lightbulb className="h-[22px] w-[22px]" />
                 </span>
-                <p className="text-sm font-semibold text-foreground">No strong topic ideas found.</p>
-                <p className="text-xs text-muted-foreground">Try changing your niche or target keywords.</p>
+                <p className="text-sm font-semibold text-foreground">{t('articles.noStrongIdeas')}</p>
+                <p className="text-xs text-muted-foreground">{t('articles.tryChangingNiche')}</p>
                 <div className="w-full space-y-2 mt-2">
                   <Input
                     value={ideaNiche}
                     onChange={(e) => setIdeaNiche(e.target.value)}
-                    placeholder="Your niche (e.g., productivity)"
+                    placeholder={t('articles.nichePlaceholder')}
                     className="h-8 text-xs"
                   />
                   <Input
                     value={ideaKeywords}
                     onChange={(e) => setIdeaKeywords(e.target.value)}
-                    placeholder="Target keywords (optional)"
+                    placeholder={t('articles.keywordsPlaceholder')}
                     className="h-8 text-xs"
                   />
                 </div>
@@ -1162,7 +1171,7 @@ export function ContentListPage() {
                   onClick={() => ideasMutation.mutate()}
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
-                  Try Again
+                  {t('articles.tryAgain')}
                 </Button>
               </div>
             ) : ideas.length === 0 ? (
@@ -1171,9 +1180,9 @@ export function ContentListPage() {
                 <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400/10 text-amber-700">
                   <Sparkles className="h-[22px] w-[22px]" />
                 </span>
-                <p className="text-sm font-semibold text-foreground">Need Content Ideas? Let AI Help!</p>
+                <p className="text-sm font-semibold text-foreground">{t('articles.needIdeasTitle')}</p>
                 <p className="mb-2 text-xs text-muted-foreground">
-                  Get AI-generated article topic suggestions based on your site&apos;s niche and target audience.
+                  {t('articles.needIdeasDescription')}
                 </p>
 
                 {/* Niche + Keywords Inputs */}
@@ -1181,13 +1190,13 @@ export function ContentListPage() {
                   <Input
                     value={ideaNiche}
                     onChange={(e) => setIdeaNiche(e.target.value)}
-                    placeholder="Your niche (e.g., productivity)"
+                    placeholder={t('articles.nichePlaceholder')}
                     className="h-8 text-xs"
                   />
                   <Input
                     value={ideaKeywords}
                     onChange={(e) => setIdeaKeywords(e.target.value)}
-                    placeholder="Target keywords (optional)"
+                    placeholder={t('articles.keywordsPlaceholder')}
                     className="h-8 text-xs"
                   />
                 </div>
@@ -1202,7 +1211,7 @@ export function ContentListPage() {
                   ) : (
                     <Sparkles className="h-3.5 w-3.5" />
                   )}
-                  Generate Article Ideas
+                  {t('articles.generateIdeas')}
                 </Button>
               </div>
             ) : (
@@ -1233,7 +1242,7 @@ export function ContentListPage() {
                     disabled={ideasMutation.isPending}
                   >
                     {ideasMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
-                    Generate More
+                    {t('articles.generateMore')}
                   </Button>
                   <Button
                     variant="ghost"
@@ -1242,7 +1251,7 @@ export function ContentListPage() {
                     onClick={() => { setIdeas([]); setExpandedIdea(null); setIdeasEmpty(false); }}
                   >
                     <X className="h-3 w-3" />
-                    Clear
+                    {t('articles.clear')}
                   </Button>
                 </div>
               </div>
@@ -1257,14 +1266,14 @@ export function ContentListPage() {
       {/* Bulk Actions Bar */}
       {selectedIds.length > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-xl border bg-background px-4 py-3 shadow-lg">
-          <span className="text-sm font-medium">{selectedIds.length} selected</span>
+          <span className="text-sm font-medium">{`${selectedIds.length} ${t('articles.selectedSuffix')}`}</span>
           <Button
             size="sm"
             variant="outline"
             onClick={() => bulkStatusMutation.mutate({ ids: selectedIds, status: 'DRAFT' })}
             disabled={bulkStatusMutation.isPending}
           >
-            Set Draft
+            {t('articles.setDraft')}
           </Button>
           <Button
             size="sm"
@@ -1272,7 +1281,7 @@ export function ContentListPage() {
             onClick={() => bulkStatusMutation.mutate({ ids: selectedIds, status: 'PUBLISHED' })}
             disabled={bulkStatusMutation.isPending}
           >
-            Set Published
+            {t('articles.setPublished')}
           </Button>
           <Button
             size="sm"
@@ -1281,10 +1290,10 @@ export function ContentListPage() {
             disabled={bulkDeleteMutation.isPending}
           >
             {bulkDeleteMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-            Delete Selected
+            {t('articles.deleteSelected')}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds([])}>
-            Clear
+            {t('articles.clear')}
           </Button>
         </div>
       )}
@@ -1293,13 +1302,13 @@ export function ContentListPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Content"
+        title={t('articles.deleteContentTitle')}
         description={
           deleteTarget
-            ? `Are you sure you want to delete "${truncate(deleteTarget.title, 50)}"? This action cannot be undone.`
+            ? `${t('articles.deleteConfirmPrefix')}${truncate(deleteTarget.title, 50)}${t('articles.deleteConfirmSuffix')}`
             : undefined
         }
-        confirmLabel="Delete"
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => {
           if (deleteTarget) deleteMutation.mutate(deleteTarget.id);

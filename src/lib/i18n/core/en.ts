@@ -1,0 +1,215 @@
+// ============================================================
+// i18n — CORE ENGLISH DICTIONARY (source of truth for core keys)
+// ============================================================
+// The CORE key set is shared by every supported locale in
+// src/lib/i18n/locales.ts. It covers the shared application chrome:
+// common actions, sidebar navigation (client CMS + Platform Admin),
+// profile-menu labels, theme + language toasts, topbar strings,
+// auth basics and module/page titles (used by breadcrumbs and page
+// headers).
+//
+// Deep page-level strings live in fragment dictionaries
+// (src/lib/i18n/fragments/en/*) which are only provided for the
+// fully-translated locales (en + fr). Every other locale falls back
+// to this dictionary per key via the t() fallback chain
+//   dict[locale][key] ?? dict.en[key] ?? key
+// so no locale can ever produce a runtime "missing key" error.
+//
+// NOTE: every key that existed in the previous single-file
+// src/lib/i18n.tsx is preserved here (same names, same values) so
+// existing t() call sites keep resolving.
+// ============================================================
+
+export const coreEn: Record<string, string> = {
+  // ---- Common actions & labels ----
+  'common.save': 'Save',
+  'common.saveChanges': 'Save Changes',
+  'common.cancel': 'Cancel',
+  'common.delete': 'Delete',
+  'common.edit': 'Edit',
+  'common.create': 'Create',
+  'common.search': 'Search...',
+  'common.loading': 'Loading...',
+  'common.noData': 'No data',
+  'common.actions': 'Actions',
+  'common.status': 'Status',
+  'common.name': 'Name',
+  'common.email': 'Email',
+  'common.back': 'Back',
+  'common.close': 'Close',
+  'common.confirm': 'Confirm',
+  'common.manage': 'Manage',
+  'common.active': 'Active',
+  'common.inactive': 'Inactive',
+  'common.yes': 'Yes',
+  'common.no': 'No',
+  'common.view': 'View',
+  'common.refresh': 'Refresh',
+  'common.retry': 'Retry',
+  'common.copy': 'Copy',
+  'common.copied': 'Copied',
+  'common.showing': 'Showing',
+  'common.of': 'of',
+  'common.results': 'results',
+
+  // ---- Sidebar navigation: groups ----
+  'nav.overview': 'Overview',
+  'nav.content': 'Content',
+  'nav.media': 'Media',
+  'nav.users': 'Users',
+  'nav.engagement': 'Engagement',
+  'nav.platform': 'Platform',
+  'nav.ai': 'AI',
+  'nav.system': 'System',
+
+  // ---- Sidebar navigation: items (client CMS) ----
+  'nav.dashboard': 'Dashboard',
+  'nav.allContent': 'All Content',
+  'nav.articles': 'Articles',
+  'nav.calendar': 'Calendar',
+  'nav.categories': 'Categories',
+  'nav.tags': 'Tags',
+  'nav.comments': 'Comments',
+  'nav.newsletter': 'Newsletter',
+  'nav.emailTemplates': 'Email Templates',
+  'nav.seo': 'SEO',
+  'nav.navigation': 'Navigation',
+  'nav.analytics': 'Analytics',
+  'nav.notifications': 'Notifications',
+  'nav.webhooks': 'Webhooks',
+  'nav.backups': 'Backups',
+  'nav.monitoring': 'Monitoring',
+  'nav.api': 'API',
+  'nav.settings': 'Settings',
+  'nav.profile': 'Profile',
+  'nav.billing': 'Billing',
+  'nav.automation': 'Automation',
+  'nav.smtpSettings': 'SMTP Settings',
+
+  // ---- Sidebar navigation: items (Platform Admin) ----
+  'nav.executiveDashboard': 'Executive Dashboard',
+  'nav.customers': 'Customers',
+  'nav.payments': 'Payments',
+  'nav.plans': 'Plans & Pricing',
+  'nav.coupons': 'Coupons',
+  'nav.stripeSettings': 'Stripe Settings',
+
+  // ---- Profile dropdown menu ----
+  'menu.profile': 'Profile',
+  'menu.language': 'Language',
+  'menu.theme': 'Theme',
+  'menu.manageSubscription': 'Manage Subscription',
+  'menu.logOut': 'Log out',
+  'menu.light': 'Light',
+  'menu.dark': 'Dark',
+  'menu.system': 'System',
+  'menu.default': 'Default',
+
+  // ---- Theme toasts ----
+  'theme.setLight': 'Theme set to Light',
+  'theme.setDark': 'Theme set to Dark',
+  'theme.setSystem': 'Theme set to System',
+
+  // ---- Language ----
+  'language.title': 'Language',
+  'language.set': 'Language set to',
+
+  // ---- Topbar / site selector ----
+  'topbar.search': 'Search...',
+  'topbar.toggleTheme': 'Toggle theme',
+  'topbar.notifications': 'Notifications',
+  'topbar.switchSite': 'Switch Site',
+  'topbar.allSites': 'All Sites',
+  'topbar.createSite': 'Create New Site',
+  'topbar.editSite': 'Edit site',
+  'topbar.noSites': 'No sites yet',
+
+  // ---- Auth (login screen) ----
+  'auth.login': 'Log in',
+  'auth.logout': 'Log out',
+  'auth.email': 'Email',
+  'auth.password': 'Password',
+  'auth.signIn': 'Sign in',
+  'auth.signingIn': 'Signing in...',
+
+  // ---- App-level messages ----
+  'app.accessDenied': 'Access Denied',
+  'app.accessDeniedDescription':
+    "You don't have permission to view this page. Contact an administrator if you believe this is an error.",
+  'app.search': 'Search',
+
+  // ---- Module / page titles (breadcrumbs + page headers) ----
+  'title.dashboard': 'Dashboard',
+  'title.executiveDashboard': 'Executive Dashboard',
+  'title.articles': 'Articles',
+  'title.calendar': 'Calendar',
+  'title.media': 'Media',
+  'title.users': 'Users',
+  'title.comments': 'Comments',
+  'title.newsletters': 'Newsletters',
+  'title.categories': 'Categories',
+  'title.tags': 'Tags',
+  'title.jobs': 'Jobs',
+  'title.seo': 'SEO',
+  'title.ai': 'AI',
+  'title.automation': 'Automation',
+  'title.settings': 'Settings',
+  'title.emailTemplates': 'Email Templates',
+  'title.notifications': 'Notifications',
+  'title.backups': 'Backups',
+  'title.profile': 'Profile',
+  'title.billing': 'Billing & Subscription',
+  'title.platformOverview': 'Overview',
+  'title.platformCustomers': 'Customers',
+  'title.platformPayments': 'Payments',
+  'title.platformPlans': 'Plans & Pricing',
+  'title.platformCoupons': 'Coupons',
+  'title.platformStripe': 'Stripe Settings',
+  'title.platformNotifications': 'Notifications',
+  'title.platformEmailTemplates': 'Email Templates',
+  'title.platformSmtp': 'SMTP Settings',
+  'title.platformAi': 'AI',
+  'title.platformBackups': 'Backups',
+
+  // ---- Profile page (pre-existing keys, kept for compatibility) ----
+  'profile.title': 'Profile',
+  'profile.personalInfo': 'Personal Information',
+  'profile.fullName': 'Full Name',
+  'profile.emailAddress': 'Email Address',
+  'profile.saveChanges': 'Save Changes',
+  'profile.subscription': 'Subscription',
+  'profile.currentPlan': 'Current Plan',
+  'profile.price': 'Price',
+  'profile.trialStatus': 'Trial Status',
+  'profile.manageSubscription': 'Manage Subscription',
+  'profile.account': 'Account',
+  'profile.memberSince': 'Member Since',
+  'profile.verified': 'Verified',
+  'profile.notVerified': 'Not Verified',
+  'profile.nameSaved': 'Profile updated successfully',
+  'profile.memberSinceUnknown': 'N/A',
+
+  // ---- Billing page (pre-existing keys, kept for compatibility) ----
+  'billing.title': 'Billing & Subscription',
+  'billing.description': 'Manage your subscription and billing information',
+  'billing.subscription': 'Subscription',
+  'billing.currentPlan': 'Current Plan',
+  'billing.price': 'Price',
+  'billing.trial': 'Trial',
+  'billing.trialActive': 'Trial Active',
+  'billing.trialExpired': 'Trial Expired',
+  'billing.managePayment': 'Manage Payment Method',
+  'billing.cancelSubscription': 'Cancel Subscription',
+  'billing.paymentHistory': 'Payment History',
+  'billing.noPayments': 'No payment history yet. When you make a payment, it will appear here.',
+  'billing.date': 'Date',
+  'billing.amount': 'Amount',
+  'billing.status': 'Status',
+  'billing.invoice': 'Invoice',
+  'billing.manage': 'Manage',
+  'billing.otherPlans': 'Other Plans',
+  'billing.upgrade': 'Upgrade',
+  'billing.downgrade': 'Downgrade',
+  'billing.changePlan': 'Change Plan',
+  'billing.free': 'Free',
+};

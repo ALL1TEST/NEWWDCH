@@ -54,6 +54,7 @@ import { Label } from '@/components/ui/label';
 import { ConfirmDialog } from '@/components/patterns';
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
+import { useT } from '@/lib/i18n';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { NotificationType, ApiResponse } from '@/shared/types';
@@ -122,11 +123,13 @@ const PAGE_SIZE = 25;
 
 type DateGroupKey = 'today' | 'yesterday' | 'thisWeek' | 'older';
 
+// Date-group headings resolve through i18n — each group maps to a
+// notifications.* key; the rendered label comes from t().
 const DATE_GROUP_LABEL: Record<DateGroupKey, string> = {
-  today: 'Today',
-  yesterday: 'Yesterday',
-  thisWeek: 'Earlier this week',
-  older: 'Older',
+  today: 'notifications.today',
+  yesterday: 'notifications.yesterday',
+  thisWeek: 'notifications.thisWeek',
+  older: 'notifications.older',
 };
 
 const DATE_GROUP_ORDER: DateGroupKey[] = ['today', 'yesterday', 'thisWeek', 'older'];
@@ -156,6 +159,7 @@ function NotificationMessage({
   message: string;
   isUnread: boolean;
 }) {
+  const { t } = useT();
   const paraRef = useRef<HTMLParagraphElement>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
@@ -206,7 +210,7 @@ function NotificationMessage({
             setIsExpanded((prev) => !prev);
           }}
         >
-          {isExpanded ? 'Read Less' : 'Read More'}
+          {isExpanded ? t('notifications.readLess') : t('notifications.readMore')}
         </button>
       )}
     </>
@@ -228,6 +232,7 @@ function NotificationRow({
   onMarkUnread,
   onDelete,
 }: NotificationRowProps) {
+  const { t } = useT();
   const config = NOTIFICATION_TYPE_CONFIG[notification.type] ?? NOTIFICATION_TYPE_CONFIG.INFO;
   const isUnread = !notification.isRead;
 
@@ -293,7 +298,7 @@ function NotificationRow({
         {isUnread && (
           <span
             className="h-1.5 w-1.5 rounded-full bg-primary"
-            aria-label="Unread"
+            aria-label={t('notifications.unread')}
           />
         )}
       </div>
@@ -302,7 +307,7 @@ function NotificationRow({
       <div className="absolute right-2 bottom-2 flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         <button
           type="button"
-          title={isUnread ? 'Mark as read' : 'Mark as unread'}
+          title={isUnread ? t('notifications.markAsRead') : t('notifications.markAsUnread')}
           onClick={(e) => {
             e.stopPropagation();
             if (isUnread) onMarkRead(notification.id);
@@ -314,7 +319,7 @@ function NotificationRow({
         </button>
         <button
           type="button"
-          title="Delete"
+          title={t('common.delete')}
           onClick={(e) => {
             e.stopPropagation();
             onDelete(notification.id);
@@ -332,6 +337,7 @@ function NotificationRow({
 
 export function NotificationsPage() {
   const queryClient = useQueryClient();
+  const { t } = useT();
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>('all');
   const [search, setSearch] = useState('');
   const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
@@ -361,11 +367,11 @@ export function NotificationsPage() {
     },
     onSuccess: (_data, variables) => {
       // Use 'variables' (the new value) for the toast, not 'commentNotifsOn' (the old value)
-      toast.success(`Comment notifications ${variables ? 'enabled' : 'disabled'}`);
+      toast.success(`${t('notifications.commentNotifications')} ${variables ? t('notifications.enabled') : t('notifications.disabled')}`);
       queryClient.invalidateQueries({ queryKey: ['settings'] });
     },
     onError: (err: Error, _variables, context) => {
-      toast.error(err.message || 'Failed to update setting');
+      toast.error(err.message || t('notifications.settingUpdateFailed'));
       // Rollback to previous data
       if (context?.prevData) {
         queryClient.setQueryData(['settings', 'discussion', 'comment-notification'], context.prevData);
@@ -497,7 +503,7 @@ export function NotificationsPage() {
       });
     },
     onSuccess: () => {
-      toast.success('Notification deleted');
+      toast.success(t('notifications.notificationDeleted'));
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
     },
     onError: () => {
@@ -550,12 +556,12 @@ export function NotificationsPage() {
   const deleteAllMutation = useMutation({
     mutationFn: () => deleteApi('/api/notifications'),
     onSuccess: () => {
-      toast.success('All notifications deleted');
+      toast.success(t('notifications.allDeleted'));
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
       setDeleteAllDialogOpen(false);
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to delete notifications');
+      toast.error(err.message || t('notifications.deleteFailed'));
     },
   });
 
@@ -583,10 +589,10 @@ export function NotificationsPage() {
     }
     return DATE_GROUP_ORDER.filter((k) => buckets[k].length > 0).map((k) => ({
       key: k,
-      label: DATE_GROUP_LABEL[k],
+      label: t(DATE_GROUP_LABEL[k]),
       items: buckets[k],
     }));
-  }, [displayNotifications]);
+  }, [displayNotifications, t]);
 
   // Intersection observer for infinite scroll
   const observerRef = useCallback(
@@ -609,8 +615,8 @@ export function NotificationsPage() {
 
   const subtitle =
     unreadCount > 0
-      ? `You have ${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}`
-      : 'No unread notifications';
+      ? `${t('notifications.youHave')} ${unreadCount} ${unreadCount > 1 ? t('notifications.unreadPlural') : t('notifications.unreadSingular')}`
+      : t('notifications.noUnread');
 
   return (
     <div className="space-y-6">
@@ -618,7 +624,7 @@ export function NotificationsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-1">
         <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Notifications</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{t('title.notifications')}</h1>
             <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
           </div>
         </div>
@@ -633,7 +639,7 @@ export function NotificationsPage() {
                 disabled={toggleCommentNotifs.isPending}
               />
               <Label htmlFor="comment-notif-toggle" className="text-xs text-muted-foreground whitespace-nowrap cursor-pointer hidden sm:inline">
-                Comment Notifications
+                {t('notifications.commentNotifications')}
               </Label>
             </div>
             {/* Mark All Read */}
@@ -648,7 +654,7 @@ export function NotificationsPage() {
               ) : (
                 <CheckCheck className="h-4 w-4 mr-2" />
               )}
-              Mark All Read
+              {t('notifications.markAllRead')}
             </Button>
             {/* Delete All */}
             <Button
@@ -663,7 +669,7 @@ export function NotificationsPage() {
               ) : (
                 <Trash2 className="h-4 w-4 mr-2" />
               )}
-              Delete All
+              {t('notifications.deleteAll')}
             </Button>
           </div>
         )}
@@ -687,7 +693,17 @@ export function NotificationsPage() {
                     : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
                 )}
               >
-                {tab.label}
+                {tab.value === 'all'
+                  ? t('notifications.all')
+                  : tab.value === 'unread'
+                    ? t('notifications.unread')
+                    : tab.value === 'INFO'
+                      ? t('notifications.info')
+                      : tab.value === 'SUCCESS'
+                        ? t('notifications.success')
+                        : tab.value === 'WARNING'
+                          ? t('notifications.warning')
+                          : t('notifications.error')}
               </button>
             );
           })}
@@ -698,7 +714,7 @@ export function NotificationsPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search notifications…"
+            placeholder={t('notifications.searchPlaceholder')}
             className="h-9 pl-8 pr-8"
           />
           {search && (
@@ -706,7 +722,7 @@ export function NotificationsPage() {
               type="button"
               onClick={() => setSearch('')}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label="Clear search"
+              aria-label={t('notifications.clearSearch')}
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -728,13 +744,25 @@ export function NotificationsPage() {
               <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
                 <BellOff className="h-6 w-6 text-muted-foreground" />
               </div>
-              <h3 className="text-sm font-semibold">No notifications</h3>
+              <h3 className="text-sm font-semibold">{t('notifications.noNotifications')}</h3>
               <p className="text-xs text-muted-foreground mt-1">
                 {search
-                  ? 'No notifications match your search.'
+                  ? t('notifications.noResults')
                   : activeFilter !== 'all'
-                    ? `No ${activeFilter.toLowerCase()} notifications found`
-                    : "You're all caught up!"}
+                    ? `${t('notifications.noFilterPrefix')}${(
+                        activeFilter === 'all'
+                          ? ''
+                          : activeFilter === 'unread'
+                            ? t('notifications.unread')
+                            : activeFilter === 'INFO'
+                              ? t('notifications.info')
+                              : activeFilter === 'SUCCESS'
+                                ? t('notifications.success')
+                                : activeFilter === 'WARNING'
+                                  ? t('notifications.warning')
+                                  : t('notifications.error')
+                      ).toLowerCase()}${t('notifications.noFilterSuffix')}`
+                    : t('notifications.allCaughtUp')}
               </p>
             </div>
           ) : (
@@ -773,7 +801,7 @@ export function NotificationsPage() {
                 )}
                 {!hasNextPage && displayNotifications.length > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    {totalItems} notification{totalItems !== 1 ? 's' : ''} total
+                    {totalItems} {totalItems !== 1 ? t('notifications.notificationsPlural') : t('notifications.notificationSingular')} {t('notifications.totalLabel')}
                   </p>
                 )}
               </div>
@@ -786,9 +814,9 @@ export function NotificationsPage() {
       <ConfirmDialog
         open={deleteAllDialogOpen}
         onOpenChange={setDeleteAllDialogOpen}
-        title="Delete All Notifications"
-        description="Are you sure you want to delete ALL notifications? This action cannot be undone and will permanently remove every notification."
-        confirmLabel="Delete All"
+        title={t('notifications.deleteAllTitle')}
+        description={t('notifications.deleteAllDescription')}
+        confirmLabel={t('notifications.deleteAll')}
         variant="destructive"
         onConfirm={() => deleteAllMutation.mutate()}
         isLoading={deleteAllMutation.isPending}

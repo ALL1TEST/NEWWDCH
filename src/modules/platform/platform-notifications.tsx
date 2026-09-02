@@ -56,6 +56,7 @@ import { cn, formatRelativeTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { NotificationType, ApiResponse } from '@/shared/types';
 import { PlatformPageHeader } from '@/modules/platform/shared';
+import { useT } from '@/lib/i18n';
 
 // ==================== Types ====================
 
@@ -122,13 +123,13 @@ const NOTIFICATION_TYPE_CONFIG: Record<
 // ==================== Category filter tabs ====================
 
 const FILTER_TABS: { value: NotificationCategory; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'unread', label: 'Unread' },
-  { value: 'system', label: 'System' },
-  { value: 'customers', label: 'Customers' },
-  { value: 'payments', label: 'Payments' },
-  { value: 'subscriptions', label: 'Subscriptions' },
-  { value: 'security', label: 'Security' },
+  { value: 'all', label: 'platformShared.all' },
+  { value: 'unread', label: 'platformNotifications.unread' },
+  { value: 'system', label: 'platformNotifications.system' },
+  { value: 'customers', label: 'platformNotifications.customers' },
+  { value: 'payments', label: 'platformNotifications.payments' },
+  { value: 'subscriptions', label: 'platformNotifications.subscriptions' },
+  { value: 'security', label: 'platformNotifications.security' },
 ];
 
 // Map the API `relatedEntityType` to the UI category. 'security' is
@@ -160,10 +161,10 @@ const PAGE_SIZE = 25;
 type DateGroupKey = 'today' | 'yesterday' | 'thisWeek' | 'older';
 
 const DATE_GROUP_LABEL: Record<DateGroupKey, string> = {
-  today: 'Today',
-  yesterday: 'Yesterday',
-  thisWeek: 'Earlier this week',
-  older: 'Older',
+  today: 'platformNotifications.today',
+  yesterday: 'platformNotifications.yesterday',
+  thisWeek: 'platformNotifications.thisWeek',
+  older: 'platformNotifications.older',
 };
 
 const DATE_GROUP_ORDER: DateGroupKey[] = ['today', 'yesterday', 'thisWeek', 'older'];
@@ -182,6 +183,7 @@ function dateGroupKey(iso: string): DateGroupKey {
 // ==================== Main Platform Notifications Page ====================
 
 export function PlatformNotificationsModule() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [activeFilter, setActiveFilter] = useState<NotificationCategory>('all');
   const [search, setSearch] = useState('');
@@ -369,7 +371,7 @@ export function PlatformNotificationsModule() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['platform-notifications'] });
       queryClient.invalidateQueries({ queryKey: ['platform-admin', 'notifications'] });
-      toast.success('All platform notifications marked as read');
+      toast.success(t('platformNotifications.allMarkedRead'));
     },
   });
 
@@ -393,7 +395,7 @@ export function PlatformNotificationsModule() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['platform-notifications'] });
       queryClient.invalidateQueries({ queryKey: ['platform-admin', 'notifications'] });
-      toast.success('Notification deleted');
+      toast.success(t('platformNotifications.notificationDeleted'));
     },
   });
 
@@ -401,13 +403,13 @@ export function PlatformNotificationsModule() {
   const deleteAllMutation = useMutation({
     mutationFn: () => deleteApi('/api/platform/admin/notifications'),
     onSuccess: () => {
-      toast.success('All platform notifications deleted');
+      toast.success(t('platformNotifications.allDeleted'));
       queryClient.invalidateQueries({ queryKey: ['platform-notifications'] });
       queryClient.invalidateQueries({ queryKey: ['platform-admin', 'notifications'] });
       setDeleteAllDialogOpen(false);
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to delete notifications');
+      toast.error(err.message || t('platformNotifications.deleteFailed'));
     },
   });
 
@@ -445,15 +447,21 @@ export function PlatformNotificationsModule() {
     [isFetchingNextPage, hasNextPage, fetchNextPage],
   );
 
+  // Display label for a filter tab value (translated at render time).
+  const filterLabel = (value: NotificationCategory): string => {
+    const tab = FILTER_TABS.find((x) => x.value === value);
+    return tab ? t(tab.label) : t('platformShared.all');
+  };
+
   const subtitle =
     unreadCount > 0
-      ? `Stay updated with important platform activity and alerts. · ${unreadCount} unread`
-      : 'Stay updated with important platform activity and alerts.';
+      ? `${t('platformNotifications.subtitle')} · ${unreadCount} ${t('platformNotifications.unreadCountLabel')}`
+      : t('platformNotifications.subtitle');
 
   return (
     <div className="space-y-6">
       <PlatformPageHeader
-        title="Notifications"
+        title={t('title.platformNotifications')}
         subtitle={subtitle}
         actions={
           <div className="flex items-center gap-2">
@@ -469,7 +477,7 @@ export function PlatformNotificationsModule() {
               ) : (
                 <CheckCheck className="h-4 w-4 mr-2" />
               )}
-              Mark All Read
+              {t('platformNotifications.markAllRead')}
             </Button>
             {/* Delete All */}
             <Button
@@ -484,7 +492,7 @@ export function PlatformNotificationsModule() {
               ) : (
                 <Trash2 className="h-4 w-4 mr-2" />
               )}
-              Delete All
+              {t('platformNotifications.deleteAll')}
             </Button>
           </div>
         }
@@ -507,7 +515,7 @@ export function PlatformNotificationsModule() {
                     : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
                 )}
               >
-                {tab.label}
+                {t(tab.label)}
               </button>
             );
           })}
@@ -518,7 +526,7 @@ export function PlatformNotificationsModule() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search notifications…"
+            placeholder={t('platformNotifications.searchPlaceholder')}
             className="h-9 pl-8 pr-8"
           />
           {search && (
@@ -526,7 +534,7 @@ export function PlatformNotificationsModule() {
               type="button"
               onClick={() => setSearch('')}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label="Clear search"
+              aria-label={t('platformNotifications.clearSearch')}
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -548,13 +556,13 @@ export function PlatformNotificationsModule() {
               <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
                 <BellOff className="h-6 w-6 text-muted-foreground" />
               </div>
-              <h3 className="text-sm font-semibold">No notifications</h3>
+              <h3 className="text-sm font-semibold">{t('platformNotifications.noNotifications')}</h3>
               <p className="text-xs text-muted-foreground mt-1">
                 {search
-                  ? 'No notifications match your search.'
+                  ? t('platformNotifications.noSearchResults')
                   : activeFilter !== 'all'
-                    ? `No ${activeFilter} notifications. You're all caught up.`
-                    : "You're all caught up."}
+                    ? `${t('platformNotifications.noCategoryLead')} ${filterLabel(activeFilter)}${t('platformNotifications.noCategoryTail')} ${t('platformNotifications.allCaughtUp')}`
+                    : t('platformNotifications.allCaughtUp')}
               </p>
             </div>
           ) : (
@@ -565,7 +573,7 @@ export function PlatformNotificationsModule() {
                   {/* Group header */}
                   <div className="px-4 py-2 bg-muted/30 flex items-center gap-2">
                     <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      {group.label}
+                      {t(group.label)}
                     </h3>
                     <span className="text-[11px] text-muted-foreground">
                       · {group.items.length}
@@ -593,7 +601,7 @@ export function PlatformNotificationsModule() {
                 )}
                 {!hasNextPage && displayNotifications.length > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    {totalItems} notification{totalItems !== 1 ? 's' : ''} total
+                    {totalItems} {totalItems !== 1 ? t('platformNotifications.notificationsWord') : t('platformNotifications.notificationWord')} {t('platformNotifications.totalWord')}
                   </p>
                 )}
               </div>
@@ -606,9 +614,9 @@ export function PlatformNotificationsModule() {
       <ConfirmDialog
         open={deleteAllDialogOpen}
         onOpenChange={setDeleteAllDialogOpen}
-        title="Delete All Platform Notifications"
-        description="Are you sure you want to permanently delete all platform notifications? This action cannot be undone. New notifications will be created when the next platform event occurs (Stripe webhook, failed payment, past-due subscription, etc.)."
-        confirmLabel="Delete All"
+        title={t('platformNotifications.deleteAllTitle')}
+        description={t('platformNotifications.deleteAllDescription')}
+        confirmLabel={t('platformNotifications.deleteAll')}
         variant="destructive"
         onConfirm={() => deleteAllMutation.mutate()}
         isLoading={deleteAllMutation.isPending}
@@ -632,6 +640,7 @@ function NotificationRow({
   onMarkUnread,
   onDelete,
 }: NotificationRowProps) {
+  const { t } = useT();
   const config = NOTIFICATION_TYPE_CONFIG[notification.type] ?? NOTIFICATION_TYPE_CONFIG.INFO;
   const isUnread = !notification.isRead;
 
@@ -696,7 +705,7 @@ function NotificationRow({
         {isUnread && (
           <span
             className="h-1.5 w-1.5 rounded-full bg-primary"
-            aria-label="Unread"
+            aria-label={t('platformNotifications.unreadDot')}
           />
         )}
       </div>
@@ -705,7 +714,7 @@ function NotificationRow({
       <div className="absolute right-2 bottom-2 flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         <button
           type="button"
-          title={isUnread ? 'Mark as read' : 'Mark as unread'}
+          title={isUnread ? t('platformNotifications.markAsRead') : t('platformNotifications.markAsUnread')}
           onClick={(e) => {
             e.stopPropagation();
             if (isUnread) onMarkRead(notification.id);
@@ -717,7 +726,7 @@ function NotificationRow({
         </button>
         <button
           type="button"
-          title="Delete"
+          title={t('common.delete')}
           onClick={(e) => {
             e.stopPropagation();
             onDelete(notification.id);

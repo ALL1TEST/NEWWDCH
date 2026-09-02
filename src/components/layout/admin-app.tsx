@@ -9,12 +9,14 @@ import { usePlanEntitlements, isModuleAllowedByPlan, isSmtpSettingsAllowedByPlan
 import { useSubscriptionServerSync } from '@/hooks/use-subscription-sync';
 import { moduleRegistry } from '@/lib/module-registry';
 import { canAccessPage, isPlatformPage } from '@/lib/permissions';
+import { useT } from '@/lib/i18n';
 
 export default function AdminApp() {
   const currentModule = useNavigationStore((s) => s.currentModule);
   const currentItemId = useNavigationStore((s) => s.currentItemId);
   const navigate = useNavigationStore((s) => s.navigate);
   const user = useAuthStore((s) => s.user);
+  const { t } = useT();
 
   // PLATFORM_ADMIN and OWNER users land on the Platform Overview by default
   // (the hash defaults to 'dashboard' which is a client page they
@@ -102,10 +104,9 @@ export default function AdminApp() {
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
             <ShieldAlert className="h-7 w-7" />
           </div>
-          <h2 className="text-xl font-semibold tracking-tight">Access Denied</h2>
+          <h2 className="text-xl font-semibold tracking-tight">{t('app.accessDenied')}</h2>
           <p className="text-sm text-muted-foreground max-w-md">
-            You don&apos;t have permission to view this page.
-            Contact an administrator if you believe this is an error.
+            {t('app.accessDeniedDescription')}
           </p>
         </div>
       )}

@@ -71,6 +71,7 @@ import {
 import { StatusBadge, EmptyState } from '@/components/patterns';
 import { getApi } from '@/lib/api-client';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { PaginatedResponse, PostStatus, CampaignStatus } from '@/shared/types';
 
@@ -120,22 +121,31 @@ interface CampaignRow {
 
 // -------------------- Constants --------------------
 
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-const VIEW_OPTIONS: { value: CalendarView; label: string; icon: LucideIcon }[] = [
-  { value: 'month', label: 'Month', icon: CalendarDays },
-  { value: 'week', label: 'Week', icon: CalendarRange },
-  { value: 'day', label: 'Day', icon: CalendarIcon },
+// Values are i18n keys — resolved with t() at the call sites.
+const WEEKDAYS = [
+  'calendar.weekdaySun',
+  'calendar.weekdayMon',
+  'calendar.weekdayTue',
+  'calendar.weekdayWed',
+  'calendar.weekdayThu',
+  'calendar.weekdayFri',
+  'calendar.weekdaySat',
 ];
 
-const FILTER_OPTIONS: { value: FilterKey; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'articles', label: 'Articles' },
-  { value: 'campaigns', label: 'Newsletter' },
-  { value: 'drafts', label: 'Drafts' },
-  { value: 'scheduled', label: 'Scheduled' },
-  { value: 'published', label: 'Published' },
-  { value: 'cancelled', label: 'Cancelled' },
+const VIEW_OPTIONS: { value: CalendarView; labelKey: string; icon: LucideIcon }[] = [
+  { value: 'month', labelKey: 'calendar.viewMonth', icon: CalendarDays },
+  { value: 'week', labelKey: 'calendar.viewWeek', icon: CalendarRange },
+  { value: 'day', labelKey: 'calendar.viewDay', icon: CalendarIcon },
+];
+
+const FILTER_OPTIONS: { value: FilterKey; labelKey: string }[] = [
+  { value: 'all', labelKey: 'calendar.filterAll' },
+  { value: 'articles', labelKey: 'title.articles' },
+  { value: 'campaigns', labelKey: 'calendar.filterCampaigns' },
+  { value: 'drafts', labelKey: 'calendar.filterDrafts' },
+  { value: 'scheduled', labelKey: 'calendar.filterScheduled' },
+  { value: 'published', labelKey: 'calendar.filterPublished' },
+  { value: 'cancelled', labelKey: 'calendar.filterCancelled' },
 ];
 
 // Week / Day view time grid
@@ -165,8 +175,9 @@ function EventTypeIcon({
   return <Icon className={className} />;
 }
 
+// Returns an i18n key — resolve with t() at the call sites.
 function eventTypeLabel(type: CalendarEvent['type']) {
-  return type === 'article' ? 'Article' : 'Campaign';
+  return type === 'article' ? 'calendar.eventTypeArticle' : 'calendar.eventTypeCampaign';
 }
 
 // -------------------- Data mapping --------------------
@@ -240,6 +251,8 @@ function eventMatchesFilter(ev: CalendarEvent, filter: FilterKey): boolean {
 // ============================================================
 
 export function CalendarPage() {
+  const { t } = useT();
+
   const navigate = useNavigationStore((s) => s.navigate);
 
   const [view, setView] = useState<CalendarView>('month');
@@ -369,8 +382,8 @@ export function CalendarPage() {
         ) : filteredEvents.length === 0 ? (
           <EmptyState
             icon={CalendarIcon}
-            title="No scheduled content"
-            description="Schedule an article or newsletter campaign to see it here."
+            title={t('calendar.noScheduled')}
+            description={t('calendar.noScheduledDescription')}
             className="py-20"
           />
         ) : view === 'month' ? (
@@ -429,15 +442,17 @@ function CalendarHeader({
   onNewArticle,
   onNewCampaign,
 }: CalendarHeaderProps) {
+  const { t } = useT();
+
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       {/* Title block */}
       <div className="min-w-0">
         <h1 className="text-xl font-bold tracking-tight text-foreground">
-          Calendar
+          {t('title.calendar')}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Manage and organize your scheduled content
+          {t('calendar.description')}
         </p>
       </div>
 
@@ -445,15 +460,15 @@ function CalendarHeader({
       <div className="flex flex-wrap items-center gap-2">
         {/* Today */}
         <Button variant="outline" size="sm" onClick={onToday}>
-          Today
+          {t('calendar.today')}
         </Button>
 
         {/* Prev / Next */}
         <div className="flex items-center">
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={onPrev} aria-label="Previous">
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={onPrev} aria-label={t('calendar.previous')}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="icon" className="h-8 w-8 -ml-px rounded-l-none" onClick={onNext} aria-label="Next">
+          <Button variant="outline" size="icon" className="h-8 w-8 -ml-px rounded-l-none" onClick={onNext} aria-label={t('calendar.next')}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -484,7 +499,7 @@ function CalendarHeader({
                 aria-pressed={active}
               >
                 <Icon className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{opt.label}</span>
+                <span className="hidden sm:inline">{t(opt.labelKey)}</span>
               </button>
             );
           })}
@@ -495,17 +510,17 @@ function CalendarHeader({
           <DropdownMenuTrigger asChild>
             <Button size="sm" className="bg-amber-500 text-white hover:bg-amber-600">
               <Plus className="h-4 w-4" />
-              Schedule Content
+              {t('calendar.scheduleContent')}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem onClick={onNewArticle}>
               <FileText className="mr-2 h-4 w-4" />
-              New Article
+              {t('calendar.newArticle')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onNewCampaign}>
               <Mail className="mr-2 h-4 w-4" />
-              New Campaign
+              {t('calendar.newCampaign')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -525,6 +540,8 @@ interface FilterBarProps {
 }
 
 function FilterBar({ value, onChange, counts }: FilterBarProps) {
+  const { t } = useT();
+
   const countFor = useCallback(
     (key: FilterKey) => counts.filter((ev) => eventMatchesFilter(ev, key)).length,
     [counts],
@@ -548,7 +565,7 @@ function FilterBar({ value, onChange, counts }: FilterBarProps) {
             )}
             aria-pressed={active}
           >
-            {opt.label}
+            {t(opt.labelKey)}
             <span
               className={cn(
                 'rounded-full px-1.5 text-[10px] font-semibold leading-4',
@@ -613,6 +630,8 @@ interface MonthViewProps {
 }
 
 function MonthView({ referenceDate, events, onSelectEvent }: MonthViewProps) {
+  const { t } = useT();
+
   const monthStart = startOfMonth(referenceDate);
   const monthEnd = endOfMonth(referenceDate);
   const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
@@ -639,8 +658,8 @@ function MonthView({ referenceDate, events, onSelectEvent }: MonthViewProps) {
             key={d}
             className="px-2 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
           >
-            <span className="hidden sm:inline">{d}</span>
-            <span className="sm:hidden">{d.charAt(0)}</span>
+            <span className="hidden sm:inline">{t(d)}</span>
+            <span className="sm:hidden">{t(d).charAt(0)}</span>
           </div>
         ))}
       </div>
@@ -703,7 +722,7 @@ function MonthView({ referenceDate, events, onSelectEvent }: MonthViewProps) {
                     }}
                     className="px-1 text-[10px] font-medium text-muted-foreground hover:text-foreground"
                   >
-                    +{overflow} more
+                    +{overflow} {t('calendar.moreSuffix')}
                   </button>
                 )}
               </div>
@@ -858,6 +877,8 @@ interface DayViewProps {
 }
 
 function DayView({ referenceDate, events, onSelectEvent }: DayViewProps) {
+  const { t } = useT();
+
   const hours = Array.from({ length: TOTAL_HOURS }, (_, i) => START_HOUR + i);
 
   const dayEvents = useMemo(() => {
@@ -896,7 +917,7 @@ function DayView({ referenceDate, events, onSelectEvent }: DayViewProps) {
               {format(referenceDate, 'EEEE, MMMM d, yyyy')}
             </div>
             <div className="text-xs text-muted-foreground">
-              {dayEvents.length} scheduled {dayEvents.length === 1 ? 'item' : 'items'}
+              {dayEvents.length} {t(dayEvents.length === 1 ? 'calendar.scheduledItemOne' : 'calendar.scheduledItemsMany')}
             </div>
           </div>
         </div>
@@ -906,7 +927,7 @@ function DayView({ referenceDate, events, onSelectEvent }: DayViewProps) {
       {outOfRangeEvents.length > 0 && (
         <div className="border-b border-border bg-muted/20 px-4 py-2">
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Outside 6 AM – 11 PM
+            {t('calendar.outsideHours')}
           </div>
           <div className="flex flex-col gap-1">
             {outOfRangeEvents.map((ev) => (
@@ -965,7 +986,7 @@ function DayView({ referenceDate, events, onSelectEvent }: DayViewProps) {
                     <span className="truncate font-semibold">{ev.title}</span>
                   </div>
                   <div className="mt-0.5 text-[10px] opacity-70">
-                    {format(ev.date, 'h:mm a')} · {eventTypeLabel(ev.type)}
+                    {format(ev.date, 'h:mm a')} · {t(eventTypeLabel(ev.type))}
                   </div>
                 </button>
               );
@@ -987,6 +1008,8 @@ interface EventDetailsModalProps {
 }
 
 function EventDetailsModal({ event, onClose, onNavigate }: EventDetailsModalProps) {
+  const { t } = useT();
+
   const isArticle = event?.type === 'article';
   const isCampaign = event?.type === 'campaign';
 
@@ -1020,10 +1043,10 @@ function EventDetailsModal({ event, onClose, onNavigate }: EventDetailsModalProp
             {event && (
               <EventTypeIcon type={event.type} className="h-5 w-5 text-muted-foreground" />
             )}
-            <span className="truncate">{event?.title ?? 'Event details'}</span>
+            <span className="truncate">{event?.title ?? t('calendar.eventDetails')}</span>
           </DialogTitle>
           <DialogDescription>
-            View and manage this scheduled item.
+            {t('calendar.eventDetailsDescription')}
           </DialogDescription>
         </DialogHeader>
 
@@ -1035,7 +1058,7 @@ function EventDetailsModal({ event, onClose, onNavigate }: EventDetailsModalProp
                 variant="outline"
                 className={cn('border-transparent', eventColorClasses(event.type))}
               >
-                {eventTypeLabel(event.type)}
+                {t(eventTypeLabel(event.type))}
               </Badge>
               <StatusBadge status={event.status} size="md" />
             </div>
@@ -1043,7 +1066,7 @@ function EventDetailsModal({ event, onClose, onNavigate }: EventDetailsModalProp
             {/* Scheduled date / time */}
             <div className="rounded-lg border border-border bg-muted/30 p-3">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Scheduled
+                {t('calendar.scheduledLabel')}
               </div>
               <div className="mt-1 text-sm font-medium text-foreground">
                 {format(event.date, 'EEEE, MMMM d, yyyy')}
@@ -1056,17 +1079,17 @@ function EventDetailsModal({ event, onClose, onNavigate }: EventDetailsModalProp
             {/* Type-specific info */}
             {isArticle && event.raw && (
               <div className="space-y-1.5 text-sm">
-                <DetailRow label="Slug" value={event.raw.slug ?? '—'} />
+                <DetailRow label={t('calendar.slug')} value={event.raw.slug ?? '—'} />
                 {event.raw.excerpt && (
-                  <DetailRow label="Excerpt" value={event.raw.excerpt} />
+                  <DetailRow label={t('calendar.excerpt')} value={event.raw.excerpt} />
                 )}
               </div>
             )}
             {isCampaign && event.raw && (
               <div className="space-y-1.5 text-sm">
-                <DetailRow label="Subject" value={event.raw.subject ?? '—'} />
+                <DetailRow label={t('calendar.subject')} value={event.raw.subject ?? '—'} />
                 <DetailRow
-                  label="Template"
+                  label={t('calendar.template')}
                   value={event.raw.template?.name ?? '—'}
                 />
               </div>
@@ -1076,18 +1099,18 @@ function EventDetailsModal({ event, onClose, onNavigate }: EventDetailsModalProp
 
         <DialogFooter className="gap-2 sm:gap-2">
           <Button variant="outline" onClick={onClose}>
-            Close
+            {t('common.close')}
           </Button>
           <Button variant="outline" onClick={handleView}>
             <Eye className="h-4 w-4" />
-            View
+            {t('common.view')}
           </Button>
           <Button
             onClick={handleEdit}
             className="bg-amber-500 text-white hover:bg-amber-600"
           >
             <Pencil className="h-4 w-4" />
-            Edit
+            {t('common.edit')}
           </Button>
         </DialogFooter>
       </DialogContent>

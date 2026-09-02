@@ -28,6 +28,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/patterns';
 import { useSiteStore } from '@/lib/stores/site-store';
+import { useT } from '@/lib/i18n';
 import { cn, formatRelativeTime, truncate } from '@/lib/utils';
 import {
   BarChart,
@@ -75,6 +76,8 @@ function KpiCard({
   trend?: 'up' | 'down' | 'neutral';
   color?: 'emerald' | 'amber' | 'violet' | 'rose' | 'default';
 }) {
+  const { t } = useT();
+
   const colorMap = {
     emerald: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400',
     amber: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400',
@@ -100,9 +103,9 @@ function KpiCard({
         </div>
         {trend && (
           <div className="flex items-center gap-1 mt-2">
-            {trend === 'up' && <span className="text-xs font-medium text-emerald-500">Trending up</span>}
-            {trend === 'down' && <span className="text-xs font-medium text-rose-500">Needs attention</span>}
-            {trend === 'neutral' && <span className="text-xs font-medium text-muted-foreground">Stable</span>}
+            {trend === 'up' && <span className="text-xs font-medium text-emerald-500">{t('dashboard.trendingUp')}</span>}
+            {trend === 'down' && <span className="text-xs font-medium text-rose-500">{t('dashboard.needsAttention')}</span>}
+            {trend === 'neutral' && <span className="text-xs font-medium text-muted-foreground">{t('dashboard.stable')}</span>}
           </div>
         )}
       </CardContent>
@@ -112,6 +115,8 @@ function KpiCard({
 
 // -------------------- Site Grid (All Sites mode) --------------------
 function SiteGrid({ sites, onSiteClick }: { sites: SiteBreakdown[]; onSiteClick: (site: SiteBreakdown) => void }) {
+  const { t } = useT();
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
       {sites.map((site, i) => (
@@ -141,15 +146,15 @@ function SiteGrid({ sites, onSiteClick }: { sites: SiteBreakdown[]; onSiteClick:
             <div className="grid grid-cols-3 gap-2 text-center">
               <div>
                 <p className="text-sm font-semibold">{site._count.contentItems}</p>
-                <p className="text-[10px] text-muted-foreground uppercase">Articles</p>
+                <p className="text-[10px] text-muted-foreground uppercase">{t('title.articles')}</p>
               </div>
               <div>
                 <p className="text-sm font-semibold">{site._count.media}</p>
-                <p className="text-[10px] text-muted-foreground uppercase">Media</p>
+                <p className="text-[10px] text-muted-foreground uppercase">{t('title.media')}</p>
               </div>
               <div>
                 <p className="text-sm font-semibold">{site._count.comments}</p>
-                <p className="text-[10px] text-muted-foreground uppercase">Comments</p>
+                <p className="text-[10px] text-muted-foreground uppercase">{t('title.comments')}</p>
               </div>
             </div>
           </CardContent>
@@ -165,21 +170,23 @@ function PendingActionItem({
 }: {
   action: ReturnType<typeof getDashboardData>['pendingActions'][number];
 }) {
+  const { t } = useT();
+
   const typeStyles = {
     CRITICAL: {
       bg: 'bg-red-50 dark:bg-red-950/30',
       icon: <AlertCircle className="h-4 w-4 text-red-500" />,
-      badge: <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Critical</Badge>,
+      badge: <Badge variant="destructive" className="text-[10px] px-1.5 py-0">{t('dashboard.critical')}</Badge>,
     },
     WARNING: {
       bg: 'bg-amber-50 dark:bg-amber-950/30',
       icon: <AlertTriangle className="h-4 w-4 text-amber-500" />,
-      badge: <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 text-[10px] px-1.5 py-0 border-0">Warning</Badge>,
+      badge: <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 text-[10px] px-1.5 py-0 border-0">{t('dashboard.warning')}</Badge>,
     },
     INFO: {
       bg: '',
       icon: <Info className="h-4 w-4 text-sky-500" />,
-      badge: <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Info</Badge>,
+      badge: <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{t('dashboard.info')}</Badge>,
     },
   };
 
@@ -190,7 +197,7 @@ function PendingActionItem({
       <div className="shrink-0">{style.icon}</div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground truncate">{action.siteName || 'Network'}</span>
+          <span className="text-xs font-medium text-muted-foreground truncate">{action.siteName || t('dashboard.network')}</span>
           {style.badge}
         </div>
         <p className="text-sm truncate mt-0.5">{action.message}</p>
@@ -220,6 +227,8 @@ function KpiGridSkeleton() {
 
 // -------------------- Component --------------------
 export function DashboardPage() {
+  const { t } = useT();
+
   const isAllSites = useSiteStore((s) => s.isAllSites());
   const activeSite = useSiteStore((s) => s.getActiveSite());
   const setActiveSite = useSiteStore((s) => s.setActiveSite);
@@ -262,7 +271,11 @@ export function DashboardPage() {
   );
 
   // Title
-  const pageTitle = isAllSites ? 'Executive Dashboard' : activeSite ? `${activeSite.name} Dashboard` : 'Dashboard';
+  const pageTitle = isAllSites
+    ? t('title.executiveDashboard')
+    : activeSite
+      ? `${activeSite.name} ${t('dashboard.dashboardSuffix')}`
+      : t('title.dashboard');
 
   // Handle clicking a site card in All Sites mode → switch to that site
   const handleSiteClick = (site: SiteBreakdown) => {
@@ -276,8 +289,8 @@ export function DashboardPage() {
         <h1 className="text-xl font-bold tracking-tight text-foreground">{pageTitle}</h1>
         <p className="text-sm text-muted-foreground mt-1">
           {isAllSites
-            ? 'Monitor all sites, manage operations, and track performance across your network.'
-            : `Managing content, media, and analytics for ${activeSite?.name ?? 'this site'}.`}
+            ? t('dashboard.descriptionAll')
+            : `${t('dashboard.managingForPrefix')} ${activeSite?.name ?? t('dashboard.thisSite')}.`}
         </p>
       </div>
 
@@ -288,40 +301,40 @@ export function DashboardPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3">
           {isAllSites && (
             <KpiCard
-              label="Network Health"
+              label={t('dashboard.networkHealth')}
               value={`${data.activeSites} / ${data.totalSites}`}
-              sublabel="Sites Online"
+              sublabel={t('dashboard.sitesOnline')}
               icon={<Server className="h-4 w-4" />}
               trend="up"
               color="emerald"
             />
           )}
           <KpiCard
-            label="Total Visitors"
+            label={t('dashboard.totalVisitors')}
             value={data.uniqueVisitors7d.toLocaleString()}
-            sublabel="Last 7 days"
+            sublabel={t('dashboard.last7Days')}
             icon={<Eye className="h-4 w-4" />}
             trend="up"
             color="violet"
           />
           <KpiCard
-            label="Total Content"
+            label={t('dashboard.totalContent')}
             value={data.totalContent}
-            sublabel={`${data.publishedContent} published`}
+            sublabel={`${data.publishedContent} ${t('dashboard.publishedSuffix')}`}
             icon={<FileText className="h-4 w-4" />}
             color="default"
           />
           <KpiCard
-            label="AI Production"
+            label={t('dashboard.aiProduction')}
             value={`${data.aiArticlesToday}`}
-            sublabel={`${data.aiWordsToday.toLocaleString()} words today`}
+            sublabel={`${data.aiWordsToday.toLocaleString()} ${t('dashboard.wordsTodaySuffix')}`}
             icon={<Sparkles className="h-4 w-4" />}
             color="amber"
           />
           <KpiCard
-            label="Health Score"
+            label={t('dashboard.healthScore')}
             value={`${data.healthScore}%`}
-            sublabel="SEO + Performance + Uptime"
+            sublabel={t('dashboard.healthScoreSub')}
             icon={<HeartPulse className="h-4 w-4" />}
             trend="up"
             color="emerald"
@@ -335,12 +348,12 @@ export function DashboardPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base">Site Network</CardTitle>
-                <CardDescription className="text-xs mt-0.5">Overview of all websites in your network</CardDescription>
+                <CardTitle className="text-base">{t('dashboard.siteNetwork')}</CardTitle>
+                <CardDescription className="text-xs mt-0.5">{t('dashboard.siteNetworkDescription')}</CardDescription>
               </div>
               <Badge variant="outline" className="text-xs">
                 <Wifi className="h-3 w-3 mr-1" />
-                {data.activeSites} Online
+                {data.activeSites} {t('dashboard.onlineSuffix')}
               </Badge>
             </div>
           </CardHeader>
@@ -357,18 +370,18 @@ export function DashboardPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base">Pending Actions</CardTitle>
-                <CardDescription className="text-xs mt-0.5">Items requiring your attention</CardDescription>
+                <CardTitle className="text-base">{t('dashboard.pendingActions')}</CardTitle>
+                <CardDescription className="text-xs mt-0.5">{t('dashboard.pendingActionsDescription')}</CardDescription>
               </div>
               <div className="flex gap-1.5">
                 {data.pendingActionsSummary.critical > 0 && (
                   <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
-                    {data.pendingActionsSummary.critical} Critical
+                    {data.pendingActionsSummary.critical} {t('dashboard.criticalCount')}
                   </Badge>
                 )}
                 {data.pendingActionsSummary.warning > 0 && (
                   <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 text-[10px] px-1.5 py-0 border-0">
-                    {data.pendingActionsSummary.warning} Warning
+                    {data.pendingActionsSummary.warning} {t('dashboard.warningCount')}
                   </Badge>
                 )}
               </div>
@@ -384,7 +397,7 @@ export function DashboardPage() {
             ) : (
               <div className="text-center py-12 text-muted-foreground">
                 <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No pending actions. You&apos;re all caught up.</p>
+                <p className="text-sm">{t('dashboard.noPendingActions')}</p>
               </div>
             )}
           </CardContent>
@@ -395,12 +408,12 @@ export function DashboardPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base">Traffic Overview</CardTitle>
-                <CardDescription className="text-xs mt-0.5">Visitors, sessions, and page views (last 14 days)</CardDescription>
+                <CardTitle className="text-base">{t('dashboard.trafficOverview')}</CardTitle>
+                <CardDescription className="text-xs mt-0.5">{t('dashboard.trafficDescription')}</CardDescription>
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> Visitors</span>
-                <span className="flex items-center gap-1"><MousePointer className="h-3 w-3" /> Sessions</span>
+                <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {t('dashboard.visitors')}</span>
+                <span className="flex items-center gap-1"><MousePointer className="h-3 w-3" /> {t('dashboard.sessions')}</span>
               </div>
             </div>
           </CardHeader>
@@ -439,7 +452,7 @@ export function DashboardPage() {
             ) : (
               <div className="text-center py-12 text-muted-foreground">
                 <BarChart3 className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No traffic data yet.</p>
+                <p className="text-sm">{t('dashboard.noTrafficData')}</p>
               </div>
             )}
           </CardContent>
@@ -453,8 +466,8 @@ export function DashboardPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base">Recent Content</CardTitle>
-                <CardDescription className="text-xs mt-0.5">Latest articles across {isAllSites ? 'all sites' : 'this site'}</CardDescription>
+                <CardTitle className="text-base">{t('dashboard.recentContent')}</CardTitle>
+                <CardDescription className="text-xs mt-0.5">{`${t('dashboard.latestArticlesPrefix')} ${isAllSites ? t('dashboard.allSites') : t('dashboard.thisSite')}`}</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -464,10 +477,10 @@ export function DashboardPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left">
-                      <th className="pb-2 font-medium text-xs text-muted-foreground">Title</th>
-                      <th className="pb-2 font-medium text-xs text-muted-foreground">Status</th>
-                      <th className="pb-2 font-medium text-xs text-muted-foreground hidden sm:table-cell">Author</th>
-                      <th className="pb-2 font-medium text-xs text-muted-foreground text-right">Date</th>
+                      <th className="pb-2 font-medium text-xs text-muted-foreground">{t('dashboard.title')}</th>
+                      <th className="pb-2 font-medium text-xs text-muted-foreground">{t('common.status')}</th>
+                      <th className="pb-2 font-medium text-xs text-muted-foreground hidden sm:table-cell">{t('dashboard.author')}</th>
+                      <th className="pb-2 font-medium text-xs text-muted-foreground text-right">{t('dashboard.date')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -493,7 +506,7 @@ export function DashboardPage() {
             ) : (
               <div className="text-center py-12 text-muted-foreground">
                 <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No content yet. Create your first article.</p>
+                <p className="text-sm">{t('dashboard.noContentYet')}</p>
               </div>
             )}
           </CardContent>
@@ -502,9 +515,9 @@ export function DashboardPage() {
         {/* Content Pipeline Chart */}
         <Card className="xl:col-span-2">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Content Pipeline</CardTitle>
+            <CardTitle className="text-base">{t('dashboard.contentPipeline')}</CardTitle>
             <CardDescription className="text-xs mt-0.5">
-              Articles by status ({statusChartData.reduce((acc, s) => acc + s.value, 0)} total)
+              {`${t('dashboard.articlesByStatus')} (${statusChartData.reduce((acc, s) => acc + s.value, 0)} ${t('dashboard.totalSuffix')})`}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -533,7 +546,7 @@ export function DashboardPage() {
                     itemStyle={{ color: 'var(--popover-foreground)' }}
                     cursor={{ fill: 'var(--muted)', radius: 4 }}
                   />
-                  <Bar dataKey="value" name="Articles" radius={[0, 4, 4, 0]} maxBarSize={28}>
+                  <Bar dataKey="value" name={t('title.articles')} radius={[0, 4, 4, 0]} maxBarSize={28}>
                     {statusChartData.map((entry) => (
                       <Cell key={entry.status} fill={STATUS_CHART_COLORS[entry.status] ?? '#a1a1aa'} />
                     ))}
@@ -543,7 +556,7 @@ export function DashboardPage() {
             ) : (
               <div className="text-center py-12 text-muted-foreground">
                 <BarChart3 className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No content data yet.</p>
+                <p className="text-sm">{t('dashboard.noContentData')}</p>
               </div>
             )}
           </CardContent>

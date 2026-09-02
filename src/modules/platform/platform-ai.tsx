@@ -58,6 +58,7 @@ import {
   Boxes,
   Settings,
 } from 'lucide-react';
+import { useT } from '@/lib/i18n';
 
 // Simplified AI section — only features relevant to a blogging CMS.
 // Removed: Playground, Jobs, Logs, Marketplace, Usage (provider dashboards handle analytics).
@@ -82,8 +83,21 @@ const LEGACY_REDIRECT: Record<string, AiSubPage> = {
 };
 
 export function PlatformAiModule() {
+  const { t } = useT();
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
+
+  // Translated tab labels (keys resolved at render time).
+  const tabLabel = (value: AiSubPage): string => {
+    switch (value) {
+      case 'providers':
+        return t('platformAi.providers');
+      case 'models':
+        return t('platformAi.models');
+      case 'settings':
+        return t('platformAi.settings');
+    }
+  };
 
   // Resolve the effective tab: legacy/removed sub-pages redirect to 'providers'
   const effectiveTab: AiSubPage = currentSubPage && LEGACY_REDIRECT[currentSubPage]
@@ -119,7 +133,7 @@ export function PlatformAiModule() {
                   className="flex items-center gap-2 text-xs sm:text-sm whitespace-nowrap"
                 >
                   <Icon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{tab.label}</span>
+                  <span className="hidden sm:inline">{tabLabel(tab.value)}</span>
                 </TabsTrigger>
               );
             })}

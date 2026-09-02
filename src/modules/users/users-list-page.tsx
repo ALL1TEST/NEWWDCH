@@ -52,11 +52,11 @@ import {
 import { AvatarWithFallback } from '@/components/shared';
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
+import { useT } from '@/lib/i18n';
 import {
   cn,
   formatDate,
   formatRelativeTime,
-  labelize,
 } from '@/lib/utils';
 import type {
   PaginatedResponse,
@@ -127,6 +127,7 @@ const STATUS_OPTIONS: SelectOption<UserStatus>[] = [
 // -------------------- Helpers --------------------
 
 function RoleBadge({ role }: { role: UserRole }) {
+  const { t } = useT();
   return (
     <Badge
       variant="outline"
@@ -135,7 +136,7 @@ function RoleBadge({ role }: { role: UserRole }) {
         ROLE_COLORS[role],
       )}
     >
-      {labelize(role)}
+      {t(role === 'ADMIN' ? 'users.roleAdmin' : 'users.roleEditor')}
     </Badge>
   );
 }
@@ -166,6 +167,7 @@ function InviteUserDialog({
   editMode?: boolean;
   initialData?: InviteFormData | null;
 }) {
+  const { t } = useT();
   const [form, setForm] = useState<InviteFormData>({
     email: '',
     name: '',
@@ -210,8 +212,8 @@ function InviteUserDialog({
 
   const handleSubmit = () => {
     const errs: Record<string, string> = {};
-    if (!form.email.trim()) errs.email = 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = 'Invalid email address';
+    if (!form.email.trim()) errs.email = t('users.emailRequired');
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = t('users.invalidEmail');
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
@@ -226,17 +228,17 @@ function InviteUserDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editMode ? 'Edit User' : 'Invite User'}</DialogTitle>
+            <DialogTitle>{editMode ? t('users.editUser') : t('users.inviteUser')}</DialogTitle>
             <DialogDescription>
               {editMode
-                ? 'Update user details, role, and page access.'
-                : 'Send an invitation email to add a new team member to your organization.'}
+                ? t('users.editUserDescription')
+                : t('users.inviteUserDescription')}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-6 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="invite-email">Email <span className="text-destructive">*</span></Label>
+                <Label htmlFor="invite-email">{t('common.email')} <span className="text-destructive">*</span></Label>
                 <Input
                   id="invite-email"
                   type="email"
@@ -251,42 +253,42 @@ function InviteUserDialog({
                 {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="invite-name">Name</Label>
+                <Label htmlFor="invite-name">{t('common.name')}</Label>
                 <Input
                   id="invite-name"
                   value={form.name}
                   onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="Full name (optional)"
+                  placeholder={t('users.fullNameOptional')}
                 />
               </div>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="invite-role">Role</Label>
+              <Label htmlFor="invite-role">{t('users.role')}</Label>
               <Select value={form.role} onValueChange={handleRoleChange}>
                 <SelectTrigger id="invite-role">
-                  <SelectValue placeholder="Select a role" />
+                  <SelectValue placeholder={t('users.selectRole')} />
                 </SelectTrigger>
                 <SelectContent>
                   {ROLE_OPTIONS.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
+                      {t(opt.value === 'ADMIN' ? 'users.roleAdmin' : 'users.roleEditor')}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                <strong>Admin</strong> has full access to all pages. <strong>Editor</strong> only sees the pages
-                selected below.
+                <strong>{t('users.roleAdmin')}</strong>{t('users.adminAccessHint')}{' '}
+                <strong>{t('users.roleEditor')}</strong>{t('users.editorAccessHint')}
               </p>
             </div>
 
             {isEditor ? (
               <div className="grid gap-2">
                 <div className="flex items-center justify-between">
-                  <Label>Page Access</Label>
+                  <Label>{t('users.pageAccess')}</Label>
                   <span className="text-xs text-muted-foreground">
-                    {form.pagePermissions.length} selected
+                    {form.pagePermissions.length} {t('users.selectedCount')}
                   </span>
                 </div>
                 <div className="border rounded-lg divide-y max-h-72 overflow-y-auto">
@@ -303,7 +305,7 @@ function InviteUserDialog({
                           <span className="text-sm font-medium flex-1">{page.label}</span>
                           {isSettings && (
                             <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                              grants all sub-pages
+                              {t('users.grantsSubpages')}
                             </span>
                           )}
                         </label>
@@ -335,18 +337,18 @@ function InviteUserDialog({
               <div className="flex items-center gap-2 p-3 rounded-md bg-orange-50 border border-orange-200 text-orange-800 dark:bg-orange-950/30 dark:border-orange-900/50 dark:text-orange-300">
                 <ShieldCheck className="h-4 w-4 shrink-0" />
                 <span className="text-sm">
-                  Admin users have full access to every page — no per-page configuration needed.
+                  {t('users.adminFullAccessNote')}
                 </span>
               </div>
             )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleSubmit} disabled={isLoading || !form.email.trim()}>
               {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editMode ? 'Save Changes' : 'Send Invitation'}
+              {editMode ? t('common.saveChanges') : t('users.sendInvitation')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -359,6 +361,7 @@ function InviteUserDialog({
 
 export function UsersListPage() {
   const queryClient = useQueryClient();
+  const { t } = useT();
 
   // Table state
   const table = useDataTable({
@@ -445,10 +448,10 @@ export function UsersListPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
       setInviteDialogOpen(false);
-      toast.success('Invitation sent');
+      toast.success(t('users.invitationSent'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to invite user');
+      toast.error(err.message || t('users.inviteFailed'));
     },
   });
 
@@ -474,10 +477,10 @@ export function UsersListPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
       setEditDialogOpen(false);
       setEditingUser(null);
-      toast.success('User updated successfully');
+      toast.success(t('users.userUpdated'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to update user');
+      toast.error(err.message || t('users.updateFailed'));
     },
   });
 
@@ -503,7 +506,7 @@ export function UsersListPage() {
               column.toggleSorting(column.getIsSorted() === 'asc')
             }
           >
-            <span className="font-medium">User</span>
+            <span className="font-medium">{t('users.user')}</span>
           </button>
         ),
         accessorFn: (row) => row.name ?? row.email,
@@ -526,7 +529,7 @@ export function UsersListPage() {
               />
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium text-sm">
-                  {user.name || 'Unnamed'}
+                  {user.name || t('users.unnamed')}
                 </div>
               </div>
             </button>
@@ -535,14 +538,14 @@ export function UsersListPage() {
       } as ColumnDef<UserRow>,
       ColumnDefHelper.textColumn<UserRow>({
         id: 'email',
-        header: 'Email',
+        header: t('common.email'),
         accessorKey: 'email',
         truncate: 40,
         enableSorting: false,
       }),
       {
         id: 'role',
-        header: 'Role',
+        header: t('users.role'),
         accessorKey: 'role',
         size: 130,
         enableSorting: true,
@@ -553,7 +556,7 @@ export function UsersListPage() {
       } as ColumnDef<UserRow>,
       {
         id: 'status',
-        header: 'Status',
+        header: t('common.status'),
         accessorKey: 'status',
         size: 120,
         enableSorting: true,
@@ -564,7 +567,7 @@ export function UsersListPage() {
       } as ColumnDef<UserRow>,
       {
         id: 'access',
-        header: 'Page Access',
+        header: t('users.pageAccess'),
         size: 200,
         enableSorting: false,
         cell: ({ row }) => {
@@ -572,27 +575,27 @@ export function UsersListPage() {
           if (user.role === 'ADMIN') {
             return (
               <Badge variant="secondary" className="text-xs font-normal">
-                Full access
+                {t('users.fullAccess')}
               </Badge>
             );
           }
           const count = user.pagePermissions?.length ?? 0;
           return (
             <span className="text-xs text-muted-foreground">
-              {count === 0 ? 'No access' : `${count} page${count === 1 ? '' : 's'}`}
+              {count === 0 ? t('users.noAccess') : `${count} ${count === 1 ? t('users.pageSingular') : t('users.pagePlural')}`}
             </span>
           );
         },
       } as ColumnDef<UserRow>,
       ColumnDefHelper.dateColumn<UserRow>({
         id: 'lastLoginAt',
-        header: 'Last Login',
+        header: t('users.lastLogin'),
         accessorKey: 'lastLoginAt',
         format: (d) => formatRelativeTime(d),
       }),
       ColumnDefHelper.dateColumn<UserRow>({
         id: 'createdAt',
-        header: 'Created',
+        header: t('users.created'),
         accessorKey: 'createdAt',
         format: (d) => formatDate(d),
       }),
@@ -609,25 +612,25 @@ export function UsersListPage() {
                 onClick={(e) => e.stopPropagation()}
               >
                 <MoreHorizontal className="h-4 w-4" />
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t('common.actions')}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => openEditDialog(row)}>
                 <Pencil className="h-4 w-4 mr-2" />
-                Edit
+                {t('common.edit')}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setSuspendTarget(row)}>
                 {row.status === 'SUSPENDED' ? (
                   <>
                     <UserCheck className="h-4 w-4 mr-2" />
-                    Activate
+                    {t('users.activate')}
                   </>
                 ) : (
                   <>
                     <UserX className="h-4 w-4 mr-2" />
-                    Suspend
+                    {t('users.suspend')}
                   </>
                 )}
               </DropdownMenuItem>
@@ -637,14 +640,14 @@ export function UsersListPage() {
                 onClick={() => setDeleteTarget(row)}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                Delete
+                {t('common.delete')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         ),
       }),
     ],
-    [openEditDialog],
+    [openEditDialog, t],
   );
 
   // Filter controls
@@ -658,13 +661,13 @@ export function UsersListPage() {
         }}
       >
         <SelectTrigger size="sm" className="w-[130px] h-9">
-          <SelectValue placeholder="All Roles" />
+          <SelectValue placeholder={t('users.allRoles')} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Roles</SelectItem>
+          <SelectItem value="all">{t('users.allRoles')}</SelectItem>
           {ROLE_OPTIONS.map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
+              {t(opt.value === 'ADMIN' ? 'users.roleAdmin' : 'users.roleEditor')}
             </SelectItem>
           ))}
         </SelectContent>
@@ -677,13 +680,19 @@ export function UsersListPage() {
         }}
       >
         <SelectTrigger size="sm" className="w-[130px] h-9">
-          <SelectValue placeholder="All Statuses" />
+          <SelectValue placeholder={t('users.allStatuses')} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Statuses</SelectItem>
+          <SelectItem value="all">{t('users.allStatuses')}</SelectItem>
           {STATUS_OPTIONS.map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
+              {opt.value === 'ACTIVE'
+                ? t('common.active')
+                : opt.value === 'INVITED'
+                  ? t('users.statusInvited')
+                  : opt.value === 'SUSPENDED'
+                    ? t('users.statusSuspended')
+                    : t('users.statusDeactivated')}
             </SelectItem>
           ))}
         </SelectContent>
@@ -694,13 +703,13 @@ export function UsersListPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Users"
-        description="Manage user accounts and permissions"
+        title={t('title.users')}
+        description={t('users.pageDescription')}
         breadcrumbs={false}
         action={
           <Button size="sm" onClick={() => setInviteDialogOpen(true)}>
             <UserPlus className="h-4 w-4 mr-2" />
-            Invite User
+            {t('users.inviteUser')}
           </Button>
         }
       />
@@ -717,7 +726,7 @@ export function UsersListPage() {
         sortField={table.sortField}
         sortOrder={table.sortOrder}
         onRowClick={(row) => openEditDialog(row)}
-        searchPlaceholder="Search users..."
+        searchPlaceholder={t('users.searchPlaceholder')}
         searchValue={table.searchValue}
         onSearch={(v) => {
           table.setSearchValue(v);
@@ -725,7 +734,7 @@ export function UsersListPage() {
         }}
         filterContent={filterContent}
         getRowId={(row) => row.id}
-        emptyMessage="No users found."
+        emptyMessage={t('users.noUsersFound')}
       />
 
       {/* Invite Dialog */}
@@ -766,13 +775,13 @@ export function UsersListPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete User"
+        title={t('users.deleteUser')}
         description={
           deleteTarget
-            ? `Are you sure you want to delete "${deleteTarget.name || deleteTarget.email}"? This action cannot be undone.`
+            ? `${t('users.deleteConfirmPrefix')}${deleteTarget.name || deleteTarget.email}${t('users.deleteConfirmSuffix')}`
             : undefined
         }
-        confirmLabel="Delete"
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => {
           if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
@@ -785,16 +794,16 @@ export function UsersListPage() {
         open={!!suspendTarget}
         onOpenChange={(open) => !open && setSuspendTarget(null)}
         title={
-          suspendTarget?.status === 'SUSPENDED' ? 'Activate User' : 'Suspend User'
+          suspendTarget?.status === 'SUSPENDED' ? t('users.activateUser') : t('users.suspendUser')
         }
         description={
           suspendTarget
             ? suspendTarget.status === 'SUSPENDED'
-              ? `Are you sure you want to activate "${suspendTarget.name || suspendTarget.email}"? They will regain access.`
-              : `Are you sure you want to suspend "${suspendTarget.name || suspendTarget.email}"? They will lose access immediately.`
+              ? `${t('users.activateConfirmPrefix')}${suspendTarget.name || suspendTarget.email}${t('users.activateConfirmSuffix')}`
+              : `${t('users.suspendConfirmPrefix')}${suspendTarget.name || suspendTarget.email}${t('users.suspendConfirmSuffix')}`
             : undefined
         }
-        confirmLabel={suspendTarget?.status === 'SUSPENDED' ? 'Activate' : 'Suspend'}
+        confirmLabel={suspendTarget?.status === 'SUSPENDED' ? t('users.activate') : t('users.suspend')}
         variant={suspendTarget?.status === 'SUSPENDED' ? 'default' : 'destructive'}
         onConfirm={() => {
           if (suspendTarget) handleSuspendToggle(suspendTarget);

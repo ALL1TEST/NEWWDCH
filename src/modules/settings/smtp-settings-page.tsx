@@ -52,6 +52,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { getApi, putApi, postApi } from '@/lib/api-client';
+import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 // -------------------- Types --------------------
@@ -91,18 +92,19 @@ const PASSWORD_PLACEHOLDER = '••••••••';
 
 const ENCRYPTION_OPTIONS: {
   value: Encryption;
-  label: string;
-  hint: string;
+  labelKey: string;
+  hintKey: string;
   port: number;
 }[] = [
-  { value: 'STARTTLS', label: 'STARTTLS', hint: 'Recommended · port 587', port: 587 },
-  { value: 'SSL', label: 'SSL/TLS', hint: 'Implicit TLS · port 465', port: 465 },
-  { value: 'none', label: 'None', hint: 'No encryption · port 25', port: 25 },
+  { value: 'STARTTLS', labelKey: 'smtp.encryptionStarttls', hintKey: 'smtp.hintStarttls', port: 587 },
+  { value: 'SSL', labelKey: 'smtp.encryptionSsl', hintKey: 'smtp.hintSsl', port: 465 },
+  { value: 'none', labelKey: 'smtp.encryptionNone', hintKey: 'smtp.hintNone', port: 25 },
 ];
 
 // -------------------- Page --------------------
 
 export function SmtpSettingsPage() {
+  const { t } = useT();
   const queryClient = useQueryClient();
 
   // ---------- Load saved settings ----------
@@ -184,12 +186,12 @@ export function SmtpSettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['settings', 'smtp'] });
       setDraft({});
       setPasswordInput(PASSWORD_PLACEHOLDER);
-      toast.success('SMTP settings saved successfully');
+      toast.success(t('smtp.savedSuccess'));
     },
     onError: (err: unknown) => {
       const message =
         (err as ApiErrorPayload)?.error?.message ??
-        (err instanceof Error ? err.message : 'Failed to save SMTP settings');
+        (err instanceof Error ? err.message : t('smtp.saveFailed'));
       toast.error(message);
     },
   });
@@ -228,7 +230,7 @@ export function SmtpSettingsPage() {
     onError: (err: unknown) => {
       const message =
         (err as ApiErrorPayload)?.error?.message ??
-        (err instanceof Error ? err.message : 'SMTP connection test failed');
+        (err instanceof Error ? err.message : t('smtp.testFailed'));
       setTestResult({ ok: false, message });
       toast.error(message);
     },
@@ -271,7 +273,7 @@ export function SmtpSettingsPage() {
     onError: (err: unknown) => {
       const message =
         (err as ApiErrorPayload)?.error?.message ??
-        (err instanceof Error ? err.message : 'Failed to send test email');
+        (err instanceof Error ? err.message : t('smtp.sendTestFailed'));
       setEmailResult({ ok: false, message });
       toast.error(message);
     },
@@ -283,7 +285,7 @@ export function SmtpSettingsPage() {
     setPasswordInput(PASSWORD_PLACEHOLDER);
     setTestResult(null);
     setEmailResult(null);
-    toast.info('Changes discarded');
+    toast.info(t('smtp.changesDiscarded'));
   };
 
   // ---------- Loading skeleton ----------
@@ -313,10 +315,10 @@ export function SmtpSettingsPage() {
       {/* Page Header */}
       <div>
         <h1 className="text-xl font-bold tracking-tight text-foreground">
-          SMTP Settings
+          {t('smtp.title')}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Configure email delivery for transactional messages, notifications, and newsletters.
+          {t('smtp.description')}
         </p>
       </div>
 
@@ -325,20 +327,20 @@ export function SmtpSettingsPage() {
         <CardHeader className="pb-4">
           <div className="flex items-center gap-2">
             <SettingsIcon className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-semibold">Email Sending</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('smtp.emailSending')}</CardTitle>
           </div>
           <CardDescription>
-            Toggle email delivery on or off for the entire site.
+            {t('smtp.emailSendingDesc')}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between rounded-lg border p-4">
             <div className="space-y-0.5">
               <Label htmlFor="isActive" className="text-sm font-medium">
-                Enable Email Sending
+                {t('smtp.enableEmailSending')}
               </Label>
               <p className="text-xs text-muted-foreground">
-                When disabled, the CMS will not attempt to send any outgoing emails.
+                {t('smtp.enableEmailSendingHint')}
               </p>
             </div>
             <Switch
@@ -355,17 +357,17 @@ export function SmtpSettingsPage() {
         <CardHeader className="pb-4">
           <div className="flex items-center gap-2">
             <Server className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-semibold">SMTP Connection</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('smtp.connection')}</CardTitle>
           </div>
           <CardDescription>
-            Mail server endpoint details and encryption mode.
+            {t('smtp.connectionDesc')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="host" className="text-sm font-medium">
-                SMTP Host
+                {t('smtp.host')}
               </Label>
               <Input
                 id="host"
@@ -376,13 +378,13 @@ export function SmtpSettingsPage() {
                 spellCheck={false}
               />
               <p className="text-xs text-muted-foreground">
-                The hostname or IP address of your SMTP server.
+                {t('smtp.hostHint')}
               </p>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="port" className="text-sm font-medium">
-                Port
+                {t('smtp.port')}
               </Label>
               <Input
                 id="port"
@@ -394,14 +396,14 @@ export function SmtpSettingsPage() {
                 max={65535}
               />
               <p className="text-xs text-muted-foreground">
-                Suggested: <span className="font-medium">{encryptionOption?.port ?? 587}</span> for{' '}
-                {encryptionOption?.label ?? 'STARTTLS'}.
+                {t('smtp.suggested')}{' '}<span className="font-medium">{encryptionOption?.port ?? 587}</span>{' '}{t('smtp.suggestedFor')}{' '}
+                {encryptionOption ? t(encryptionOption.labelKey) : 'STARTTLS'}.
               </p>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="encryption" className="text-sm font-medium">
-                Encryption
+                {t('smtp.encryption')}
               </Label>
               <Select
                 value={current.encryption}
@@ -414,9 +416,9 @@ export function SmtpSettingsPage() {
                   {ENCRYPTION_OPTIONS.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
                       <div className="flex flex-col">
-                        <span className="font-medium">{opt.label}</span>
+                        <span className="font-medium">{t(opt.labelKey)}</span>
                         <span className="text-xs text-muted-foreground">
-                          {opt.hint}
+                          {t(opt.hintKey)}
                         </span>
                       </div>
                     </SelectItem>
@@ -424,13 +426,13 @@ export function SmtpSettingsPage() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                STARTTLS is recommended for modern mail servers.
+                {t('smtp.encryptionHint')}
               </p>
             </div>
 
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="timeout" className="text-sm font-medium">
-                Connection Timeout (seconds)
+                {t('smtp.timeout')}
               </Label>
               <Input
                 id="timeout"
@@ -442,7 +444,7 @@ export function SmtpSettingsPage() {
                 className="sm:w-40"
               />
               <p className="text-xs text-muted-foreground">
-                How long to wait before aborting a connection attempt. Default is 10 seconds.
+                {t('smtp.timeoutHint')}
               </p>
             </div>
           </div>
@@ -454,17 +456,17 @@ export function SmtpSettingsPage() {
         <CardHeader className="pb-4">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-semibold">Authentication</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('smtp.authentication')}</CardTitle>
           </div>
           <CardDescription>
-            Credentials used to authenticate with the SMTP server.
+            {t('smtp.authenticationDesc')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="username" className="text-sm font-medium">
-                Username
+                {t('smtp.username')}
               </Label>
               <Input
                 id="username"
@@ -475,13 +477,13 @@ export function SmtpSettingsPage() {
                 spellCheck={false}
               />
               <p className="text-xs text-muted-foreground">
-                Often the same as your From Email address.
+                {t('smtp.usernameHint')}
               </p>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="password" className="text-sm font-medium">
-                Password
+                {t('smtp.password')}
               </Label>
               {passwordInput === PASSWORD_PLACEHOLDER ? (
                 // Saved password — show masked placeholder + "Change" button
@@ -498,7 +500,7 @@ export function SmtpSettingsPage() {
                     size="sm"
                     onClick={() => setPasswordInput('')}
                   >
-                    Change
+                    {t('smtp.change')}
                   </Button>
                 </div>
               ) : (
@@ -518,7 +520,7 @@ export function SmtpSettingsPage() {
                         setPasswordInput(val);
                       }
                     }}
-                    placeholder="Enter new password"
+                    placeholder={t('smtp.enterNewPassword')}
                     autoComplete="new-password"
                     spellCheck={false}
                     className="pr-10"
@@ -529,7 +531,7 @@ export function SmtpSettingsPage() {
                     size="icon"
                     className="absolute right-0 top-0 h-9 w-9 hover:bg-transparent"
                     onClick={() => setShowPassword((s) => !s)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showPassword ? t('smtp.hidePassword') : t('smtp.showPassword')}
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4 text-muted-foreground" />
@@ -542,13 +544,13 @@ export function SmtpSettingsPage() {
               <div className="flex items-center gap-2 text-xs">
                 {hasSavedPassword ? (
                   <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-500">
-                    <CheckCircle2 className="h-3 w-3" />• saved
+                    <CheckCircle2 className="h-3 w-3" />{t('smtp.saved')}
                   </span>
                 ) : (
-                  <span className="text-muted-foreground">No password saved yet</span>
+                  <span className="text-muted-foreground">{t('smtp.noPasswordSaved')}</span>
                 )}
                 <span className="text-muted-foreground">
-                  · Encrypted at rest with AES-256-GCM
+                  {t('smtp.encryptedAtRest')}
                 </span>
               </div>
             </div>
@@ -561,17 +563,17 @@ export function SmtpSettingsPage() {
         <CardHeader className="pb-4">
           <div className="flex items-center gap-2">
             <Mail className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-semibold">Sender Identity</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('smtp.senderIdentity')}</CardTitle>
           </div>
           <CardDescription>
-            The From and Reply-To addresses used for outgoing emails.
+            {t('smtp.senderIdentityDesc')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="fromName" className="text-sm font-medium">
-                From Name
+                {t('smtp.fromName')}
               </Label>
               <Input
                 id="fromName"
@@ -580,13 +582,13 @@ export function SmtpSettingsPage() {
                 placeholder="Acme Inc."
               />
               <p className="text-xs text-muted-foreground">
-                Display name shown in the recipient&apos;s inbox.
+                {t('smtp.fromNameHint')}
               </p>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="fromEmail" className="text-sm font-medium">
-                From Email
+                {t('smtp.fromEmail')}
               </Label>
               <Input
                 id="fromEmail"
@@ -598,13 +600,13 @@ export function SmtpSettingsPage() {
                 spellCheck={false}
               />
               <p className="text-xs text-muted-foreground">
-                Address that sends the emails. Must be allowed by your SMTP provider.
+                {t('smtp.fromEmailHint')}
               </p>
             </div>
 
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="replyTo" className="text-sm font-medium">
-                Reply-To (optional)
+                {t('smtp.replyTo')}
               </Label>
               <Input
                 id="replyTo"
@@ -616,7 +618,7 @@ export function SmtpSettingsPage() {
                 spellCheck={false}
               />
               <p className="text-xs text-muted-foreground">
-                Where replies should go. Defaults to the From Email when left blank.
+                {t('smtp.replyToHint')}
               </p>
             </div>
           </div>
@@ -630,7 +632,7 @@ export function SmtpSettingsPage() {
           onClick={handleDiscard}
           disabled={!isDirty || saveMutation.isPending}
         >
-          Discard
+          {t('smtp.discard')}
         </Button>
         <Button
           onClick={() => saveMutation.mutate()}
@@ -642,7 +644,7 @@ export function SmtpSettingsPage() {
           ) : (
             <Save className="h-4 w-4" />
           )}
-          Save Settings
+          {t('smtp.saveSettings')}
         </Button>
       </div>
 
@@ -653,10 +655,10 @@ export function SmtpSettingsPage() {
         <CardHeader className="pb-4">
           <div className="flex items-center gap-2">
             <Plug className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-semibold">Diagnostics</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('smtp.diagnostics')}</CardTitle>
           </div>
           <CardDescription>
-            Verify your SMTP connection and send a test email before going live.
+            {t('smtp.diagnosticsDesc')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -664,9 +666,9 @@ export function SmtpSettingsPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="space-y-0.5">
-                <Label className="text-sm font-medium">Test SMTP Connection</Label>
+                <Label className="text-sm font-medium">{t('smtp.testConnection')}</Label>
                 <p className="text-xs text-muted-foreground">
-                  Connects and authenticates without sending an email. Validates your credentials.
+                  {t('smtp.testConnectionHint')}
                 </p>
               </div>
               <Button
@@ -683,7 +685,7 @@ export function SmtpSettingsPage() {
                 ) : (
                   <Plug className="h-4 w-4" />
                 )}
-                Test Connection
+                {t('smtp.testConnectionAction')}
               </Button>
             </div>
             {testResult && (
@@ -711,10 +713,10 @@ export function SmtpSettingsPage() {
           <div className="space-y-3">
             <div className="space-y-0.5">
               <Label htmlFor="testEmail" className="text-sm font-medium">
-                Send Test Email
+                {t('smtp.sendTestEmail')}
               </Label>
               <p className="text-xs text-muted-foreground">
-                Sends a styled confirmation email to the address below using your current settings.
+                {t('smtp.sendTestEmailHint')}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -741,7 +743,7 @@ export function SmtpSettingsPage() {
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
-                Send Test Email
+                {t('smtp.sendTestEmail')}
               </Button>
             </div>
             {emailResult && (
@@ -769,12 +771,9 @@ export function SmtpSettingsPage() {
       <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
         <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0" />
         <div className="text-xs leading-relaxed">
-          <p className="font-medium">Security Note</p>
+          <p className="font-medium">{t('smtp.securityNote')}</p>
           <p className="mt-1">
-            SMTP passwords are encrypted at rest using <strong>AES-256-GCM</strong> and only
-            decrypted in memory when sending emails. Never share credentials over insecure
-            channels. Use an app-specific password when your provider supports two-factor
-            authentication.
+            {t('smtp.securityNotePrefix')} <strong>AES-256-GCM</strong>{t('smtp.securityNoteSuffix')}
           </p>
         </div>
       </div>

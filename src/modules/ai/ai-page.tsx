@@ -7,6 +7,7 @@ import { PromptsPage } from './prompts-page';
 import { ModelsPage } from './models-page';
 import { SettingsPage } from './settings-page';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useT } from '@/lib/i18n';
 import {
   Server,
   MessageSquare,
@@ -17,10 +18,10 @@ import {
 // Simplified AI section — only features relevant to a blogging CMS.
 // Removed: Playground, Jobs, Logs, Marketplace, Usage (provider dashboards handle analytics).
 const AI_SUB_PAGES = [
-  { value: 'providers', label: 'Providers', icon: Server },
-  { value: 'models', label: 'Models', icon: Boxes },
-  { value: 'prompts', label: 'Prompt Library', icon: MessageSquare },
-  { value: 'settings', label: 'Settings', icon: Settings },
+  { value: 'providers', labelKey: 'ai.providers', icon: Server },
+  { value: 'models', labelKey: 'ai.models', icon: Boxes },
+  { value: 'prompts', labelKey: 'ai.promptLibrary', icon: MessageSquare },
+  { value: 'settings', labelKey: 'ai.settings', icon: Settings },
 ] as const;
 
 type AiSubPage = (typeof AI_SUB_PAGES)[number]['value'];
@@ -35,6 +36,7 @@ const LEGACY_REDIRECT: Record<string, AiSubPage> = {
 };
 
 export function AiPage() {
+  const { t } = useT();
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
 
@@ -72,7 +74,7 @@ export function AiPage() {
                   className="flex items-center gap-2 text-xs sm:text-sm whitespace-nowrap"
                 >
                   <Icon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{tab.label}</span>
+                  <span className="hidden sm:inline">{t(tab.labelKey)}</span>
                 </TabsTrigger>
               );
             })}

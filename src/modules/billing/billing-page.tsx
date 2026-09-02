@@ -113,8 +113,8 @@ interface PlanFeatureItem {
 /** Compact AI-limit number for the customer-facing plan cards:
  *  200000 → "200K", 25000 → "25K", 1500 → "1.5K", 100 → "100",
  *  -1 → "Unlimited". */
-function formatAiCount(n: number): string {
-  if (n === UNLIMITED) return 'Unlimited';
+function formatAiCount(n: number, t: (key: string) => string): string {
+  if (n === UNLIMITED) return t('billing.unlimited');
   if (n >= 1000) {
     const k = n / 1000;
     return `${k % 1 === 0 ? String(k) : k.toFixed(1)}K`;
@@ -146,7 +146,7 @@ function derivePlanFeatures(plan: {
     aiArticlesPerMonth?: number;
     aiImagesPerMonth?: number;
   };
-}): PlanFeatureItem[] {
+}, t: (key: string) => string): PlanFeatureItem[] {
   if (plan.features.length > 0) {
     // Legacy marketing copy — plain items, no sub-lines.
     return plan.features.map((f) => ({ label: f }));
@@ -154,18 +154,18 @@ function derivePlanFeatures(plan: {
   const items: PlanFeatureItem[] = [];
   items.push(
     plan.limits.maxSites === -1
-      ? { label: 'Unlimited sites' }
-      : { label: `Up to ${plan.limits.maxSites} sites` },
+      ? { label: t('billing.unlimitedSites') }
+      : { label: `${t('billing.upTo')} ${plan.limits.maxSites} ${t('billing.sites')}` },
   );
   const gb = plan.limits.storageBytes / GB_FACTOR;
   if (gb >= 1) {
-    items.push({ label: `${Math.floor(gb)} GB storage` });
+    items.push({ label: `${Math.floor(gb)} GB ${t('billing.storage')}` });
   } else if (plan.limits.storageBytes > 0) {
-    items.push({ label: `${plan.limits.storageBytes} bytes storage` });
+    items.push({ label: `${plan.limits.storageBytes} ${t('billing.bytesStorage')}` });
   } else {
-    items.push({ label: 'No storage' });
+    items.push({ label: t('billing.noStorage') });
   }
-  items.push({ label: plan.isFree ? 'Community support' : 'Priority support' });
+  items.push({ label: plan.isFree ? t('billing.communitySupport') : t('billing.prioritySupport') });
   // Enabled features — ONLY the enabled ones are displayed (each
   // entitlement key renders its label). Platform AI nests its limits
   // directly next to the feature; Client's Own AI API states that
@@ -184,9 +184,9 @@ function derivePlanFeatures(plan: {
       items.push({
         label,
         subLines: [
-          'AI provided by the platform',
-          `${formatAiCount(articles)} AI articles`,
-          `${formatAiCount(images)} AI images`,
+          t('billing.aiProvidedByPlatform'),
+          `${formatAiCount(articles, t)} ${t('billing.aiArticles')}`,
+          `${formatAiCount(images, t)} ${t('billing.aiImages')}`,
         ],
       });
       continue;
@@ -194,7 +194,7 @@ function derivePlanFeatures(plan: {
     if (e === 'ai_client') {
       items.push({
         label,
-        subLines: ["Your own AI provider — platform AI usage limits don't apply"],
+        subLines: [t('billing.ownAiProvider')],
       });
       continue;
     }
@@ -258,17 +258,17 @@ export function BillingPage() {
     onSuccess: (data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['platform-billing-me'] });
       queryClient.invalidateQueries({ queryKey: ['platform-overview'] });
-      toast.success(vars.isUpgrade ? `Upgraded to ${vars.planName}` : `Changed to ${vars.planName}`);
+      toast.success(vars.isUpgrade ? `${t('billing.upgradedTo')} ${vars.planName}` : `${t('billing.changedTo')} ${vars.planName}`);
     },
     onError: (err: unknown) => {
       const e = err as { error?: { code?: string; message?: string }; message?: string };
       const code = e?.error?.code;
       if (code === 'CHECKOUT_REQUIRED') {
-        toast.error('Paid plans require Stripe checkout. Please use the Upgrade button.');
+        toast.error(t('billing.checkoutRequired'));
       } else if (code === 'PLAN_NOT_AVAILABLE') {
-        toast.error('This plan is no longer available. Please choose another plan.');
+        toast.error(t('billing.planNotAvailable'));
       } else {
-        toast.error(e?.error?.message ?? e?.message ?? 'Unable to change plan. Please try again.');
+        toast.error(e?.error?.message ?? e?.message ?? t('billing.changePlanFailed'));
       }
     },
   });
@@ -290,7 +290,7 @@ export function BillingPage() {
       }).then(async (r) => {
         if (!r.ok) {
           const body = await r.json().catch(() => ({}));
-          const err = new Error(body?.error?.message ?? 'Checkout failed') as Error & {
+          const err = new Error(body?.error?.message ?? t('billing.checkoutFailed')) as Error & {
             code?: string;
             status?: number;
           };
@@ -311,15 +311,11 @@ export function BillingPage() {
     onError: (err: unknown) => {
       const e = err as { code?: string; message?: string; status?: number };
       if (e?.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
-        toast.error(
-          'Stripe is not configured on this platform. An admin must connect Stripe in Platform Admin → Stripe Settings to enable real checkout. Free plans can still be selected directly.',
-        );
+        toast.error(t('billing.stripeNotConfiguredCheckout'));
       } else if (e?.code === 'STRIPE_PRICE_NOT_CONFIGURED') {
-        toast.error(
-          'This plan does not have a Stripe Price ID configured. An admin must wire it via Platform Admin → Edit Plan → Stripe Price ID.',
-        );
+        toast.error(t('billing.stripePriceNotConfigured'));
       } else {
-        toast.error(e?.message ?? 'Unable to start checkout. Please try again.');
+        toast.error(e?.message ?? t('billing.startCheckoutFailed'));
       }
     },
   });
@@ -329,10 +325,10 @@ export function BillingPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['platform-billing-me'] });
       queryClient.invalidateQueries({ queryKey: ['platform-overview'] });
-      toast.success('Subscription cancelled');
+      toast.success(t('billing.subscriptionCancelled'));
     },
     onError: () => {
-      toast.error('Unable to cancel subscription. Please try again.');
+      toast.error(t('billing.cancelFailed'));
     },
   });
 
@@ -357,7 +353,7 @@ export function BillingPage() {
         if (!r.ok) {
           const body = await r.json().catch(() => ({}));
           const err = new Error(
-            body?.error?.message ?? 'Unable to open payment management',
+            body?.error?.message ?? t('billing.openPortalFailed'),
           ) as Error & { code?: string; status?: number };
           err.code = body?.error?.code;
           err.status = r.status;
@@ -376,11 +372,9 @@ export function BillingPage() {
     onError: (err: unknown) => {
       const e = err as { code?: string; message?: string };
       if (e?.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
-        toast.error(
-          'Stripe is not configured on this platform. An admin must connect Stripe in Platform Admin → Stripe Settings to enable payment management.',
-        );
+        toast.error(t('billing.stripeNotConfiguredPortal'));
       } else {
-        toast.error(e?.message ?? 'Unable to open payment management. Please try again.');
+        toast.error(e?.message ?? t('billing.openPortalRetryFailed'));
       }
     },
   });
@@ -461,7 +455,7 @@ export function BillingPage() {
         <Card>
           <CardContent>
             <ErrorState
-              message="Unable to load billing data. Please check your connection and try again."
+              message={t('billing.loadFailed')}
               onRetry={() => billingQuery.refetch()}
             />
           </CardContent>
@@ -491,19 +485,19 @@ export function BillingPage() {
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <CreditCard className="h-5 w-5 text-muted-foreground" />
-                  <span className="font-semibold text-lg">Internal Account</span>
+                  <span className="font-semibold text-lg">{t('billing.internalAccount')}</span>
                   <Badge variant="outline" className="text-[10px] font-semibold bg-primary/10 text-primary border-primary/30">
                     {billingState.billingMode}
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground ml-7">
-                  Full platform access — billing bypass. Not counted as a paying customer.
+                  {t('billing.internalAccountDesc')}
                 </p>
               </div>
-              <Badge variant="default">active</Badge>
+              <Badge variant="default">{t('common.active')}</Badge>
             </div>
             <Separator />
-            <PlanFeatureList items={derivePlanFeatures(billingState.plan)} />
+            <PlanFeatureList items={derivePlanFeatures(billingState.plan, t)} />
           </CardContent>
         </Card>
       </div>
@@ -547,7 +541,7 @@ export function BillingPage() {
   };
 
   const handleCancel = () => {
-    if (window.confirm('Are you sure you want to cancel your subscription?')) {
+    if (window.confirm(t('billing.cancelConfirm'))) {
       cancelMutation.mutate();
     }
   };
@@ -602,10 +596,10 @@ export function BillingPage() {
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
             <div className="text-sm">
               <p className="font-semibold text-amber-700 dark:text-amber-300">
-                Free trial expired
+                {t('billing.freeTrialExpired')}
               </p>
               <p className="text-muted-foreground">
-                Your free access expired on {formatDate(freeTrialExpiresAt)}. Upgrade to a paid plan to continue using gated features.
+                {t('billing.freeTrialExpiredPrefix')} {formatDate(freeTrialExpiresAt)}. {t('billing.freeTrialExpiredSuffix')}
               </p>
             </div>
           </CardContent>
@@ -631,7 +625,7 @@ export function BillingPage() {
             {/* Factual billing period of the current subscription —
                 no price/currency presentation. */}
             <p className="text-sm text-muted-foreground">
-              {currentInterval === 'yearly' ? 'Billed yearly' : 'Billed monthly'}
+              {currentInterval === 'yearly' ? t('billing.billedYearly') : t('billing.billedMonthly')}
             </p>
           </div>
 
@@ -639,7 +633,7 @@ export function BillingPage() {
             <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-md p-3">
               <Clock className="h-4 w-4 shrink-0" />
               <span>
-                {t('billing.trialActive')} — ends {formatDate(trialEnd)}
+                {t('billing.trialActive')} — {t('billing.trialEnds')} {formatDate(trialEnd)}
               </span>
             </div>
           )}
@@ -652,9 +646,9 @@ export function BillingPage() {
               plan cards. */}
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Included in your plan
+              {t('billing.includedInPlan')}
             </p>
-            <PlanFeatureList items={derivePlanFeatures(currentPlan)} />
+            <PlanFeatureList items={derivePlanFeatures(currentPlan, t)} />
           </div>
 
           <Separator />
@@ -662,7 +656,7 @@ export function BillingPage() {
           {isCancelled ? (
             <div className="flex items-center justify-end">
               <p className="text-xs text-muted-foreground italic">
-                Your subscription is cancelled
+                {t('billing.cancelledNotice')}
               </p>
             </div>
           ) : (
@@ -716,7 +710,7 @@ export function BillingPage() {
           {showPeriodSelector && (
             <div
               role="group"
-              aria-label="Billing period"
+              aria-label={t('billing.billingPeriod')}
               className="inline-flex items-center rounded-full border bg-muted/40 p-1"
             >
               <button
@@ -729,7 +723,7 @@ export function BillingPage() {
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Monthly
+                {t('billing.monthly')}
               </button>
               <button
                 type="button"
@@ -741,7 +735,7 @@ export function BillingPage() {
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Yearly
+                {t('billing.yearly')}
               </button>
             </div>
           )}
@@ -807,7 +801,7 @@ export function BillingPage() {
                       </span>
                       {planPrice > 0 && (
                         <span className="text-sm text-muted-foreground whitespace-nowrap">
-                          / {cardInterval === 'yearly' ? 'year' : 'month'}
+                          / {cardInterval === 'yearly' ? t('billing.perYear') : t('billing.perMonth')}
                         </span>
                       )}
                     </div>
@@ -816,14 +810,14 @@ export function BillingPage() {
                         an invalid price for the selected period). */}
                     {!plan.isFree && !followsSelection && planHasMonthly !== planHasYearly && (
                       <p className="text-[11px] text-muted-foreground mt-1.5">
-                        {planHasMonthly ? 'Monthly billing only' : 'Yearly billing only'}
+                        {planHasMonthly ? t('billing.monthlyOnly') : t('billing.yearlyOnly')}
                       </p>
                     )}
                   </div>
                   <Separator className="my-5" />
                   {/* Feature list with check icons */}
                   <div className="flex-1">
-                    <PlanFeatureList items={derivePlanFeatures(plan)} />
+                    <PlanFeatureList items={derivePlanFeatures(plan, t)} />
                   </div>
                   {/* Action button pinned to the card bottom (label +
                       behavior unchanged: Upgrade / Downgrade / Change
@@ -867,7 +861,7 @@ export function BillingPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left">
-                    <th className="pb-2 font-medium text-xs text-muted-foreground">Plan</th>
+                    <th className="pb-2 font-medium text-xs text-muted-foreground">{t('billing.plan')}</th>
                     <th className="pb-2 font-medium text-xs text-muted-foreground">{t('billing.status')}</th>
                     <th className="pb-2 font-medium text-xs text-muted-foreground text-right">{t('billing.date')}</th>
                   </tr>

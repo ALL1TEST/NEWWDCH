@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { useT } from '@/lib/i18n';
 import {
   Users, CreditCard, DollarSign, Globe, TrendingUp,
   HeartPulse, AlertCircle, AlertTriangle, Info, ArrowRight,
@@ -32,6 +33,7 @@ import {
 import type { PlatformOverview } from '@/lib/platform/platform-data';
 
 export function PlatformOverviewModule() {
+  const { t } = useT();
   const { data, isLoading, isError, refetch } = usePlatformApi<PlatformOverview>(
     '/api/platform/admin/overview',
     ['platform-overview'],
@@ -53,12 +55,12 @@ export function PlatformOverviewModule() {
     try {
       const result = await refetch();
       if (result.isError) {
-        toast.error('Could not refresh overview. Please try again.');
+        toast.error(t('platformOverview.refreshError'));
       } else {
-        toast.success('Overview data refreshed.');
+        toast.success(t('platformOverview.refreshed'));
       }
     } catch {
-      toast.error('Could not refresh overview. Please try again.');
+      toast.error(t('platformOverview.refreshError'));
     } finally {
       setIsRefreshing(false);
     }
@@ -67,7 +69,7 @@ export function PlatformOverviewModule() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <PlatformPageHeader title="Platform Overview" subtitle="Monitor customers, subscriptions, revenue, usage, and platform health." />
+        <PlatformPageHeader title={t('title.platformOverview')} subtitle={t('platformOverview.subtitle')} />
         <KpiGridSkeleton count={4} />
       </div>
     );
@@ -75,8 +77,8 @@ export function PlatformOverviewModule() {
   if (isError || !data) {
     return (
       <div className="space-y-6">
-        <PlatformPageHeader title="Platform Overview" subtitle="Monitor customers, subscriptions, revenue, usage, and platform health." />
-        <Card><CardContent className="p-6"><ErrorState message="Could not load platform overview. Please retry." onRetry={() => refetch()} /></CardContent></Card>
+        <PlatformPageHeader title={t('title.platformOverview')} subtitle={t('platformOverview.subtitle')} />
+        <Card><CardContent className="p-6"><ErrorState message={t('platformOverview.loadError')} onRetry={() => refetch()} /></CardContent></Card>
       </div>
     );
   }
@@ -89,14 +91,14 @@ export function PlatformOverviewModule() {
   return (
     <div className="space-y-6">
       <PlatformPageHeader
-        title="Platform Overview"
-        subtitle="Monitor customers, subscriptions, revenue, usage, and platform health."
+        title={t('title.platformOverview')}
+        subtitle={t('platformOverview.subtitle')}
         actions={
           <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
             {isRefreshing
               ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
               : <Activity className="h-4 w-4 mr-1.5" />}
-            {isRefreshing ? 'Refreshing…' : 'Refresh'}
+            {isRefreshing ? t('platformOverview.refreshing') : t('common.refresh')}
           </Button>
         }
       />
@@ -104,32 +106,32 @@ export function PlatformOverviewModule() {
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <PlatformKpi
-          label="Total Customers"
+          label={t('platformOverview.totalCustomers')}
           value={data.totalCustomers}
-          sublabel="Active accounts"
+          sublabel={t('platformOverview.activeAccounts')}
           icon={<Users className="h-4 w-4" />}
           color="violet"
         />
         <PlatformKpi
-          label="Active Subscriptions"
+          label={t('platformOverview.activeSubscriptions')}
           value={data.activeSubscriptions}
-          sublabel={`${activePct}% of customers`}
+          sublabel={`${activePct}% ${t('platformOverview.ofCustomers')}`}
           icon={<CreditCard className="h-4 w-4" />}
           color="emerald"
           trend="up"
         />
         <PlatformKpi
-          label="Monthly Recurring Revenue"
+          label={t('platformOverview.mrr')}
           value={formatCurrency(data.mrr, data.currency)}
-          sublabel="From active paid subscriptions"
+          sublabel={t('platformOverview.fromActivePaidSubscriptions')}
           icon={<DollarSign className="h-4 w-4" />}
           color="amber"
           trend={revenueTrendUp ? 'up' : 'down'}
         />
         <PlatformKpi
-          label="Total Sites"
+          label={t('platformOverview.totalSites')}
           value={data.totalSites}
-          sublabel="Across all customers"
+          sublabel={t('platformOverview.acrossAllCustomers')}
           icon={<Globe className="h-4 w-4" />}
           color="sky"
         />
@@ -142,12 +144,12 @@ export function PlatformOverviewModule() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base">Revenue Overview</CardTitle>
-                <CardDescription className="text-xs mt-0.5">Monthly recurring revenue trend (last 8 months)</CardDescription>
+                <CardTitle className="text-base">{t('platformOverview.revenueOverview')}</CardTitle>
+                <CardDescription className="text-xs mt-0.5">{t('platformOverview.revenueTrend')}</CardDescription>
               </div>
               <Badge variant="outline" className="text-xs">
                 <TrendingUp className="h-3 w-3 mr-1" />
-                {formatCurrency(lastRevenue, data.currency)} this month
+                {formatCurrency(lastRevenue, data.currency)} {t('platformOverview.thisMonth')}
               </Badge>
             </div>
           </CardHeader>
@@ -178,13 +180,13 @@ export function PlatformOverviewModule() {
         {/* Subscription Overview */}
         <Card className="xl:col-span-2">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Subscription Overview</CardTitle>
-            <CardDescription className="text-xs mt-0.5">Plan distribution + status</CardDescription>
+            <CardTitle className="text-base">{t('platformOverview.subscriptionOverview')}</CardTitle>
+            <CardDescription className="text-xs mt-0.5">{t('platformOverview.planDistributionStatus')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             {/* Plan distribution */}
             <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">By Plan</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">{t('platformOverview.byPlan')}</p>
               <div className="space-y-2">
                 {data.planDistribution.map((p) => {
                   const pct = data.totalCustomers > 0 ? Math.round((p.count / data.totalCustomers) * 100) : 0;
@@ -205,7 +207,7 @@ export function PlatformOverviewModule() {
             </div>
             {/* Status counts */}
             <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">By Status</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">{t('platformOverview.byStatus')}</p>
               <div className="flex flex-wrap gap-2">
                 {data.statusCounts.map((s) => (
                   <div key={s.status} className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-muted/60">
@@ -226,11 +228,11 @@ export function PlatformOverviewModule() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base">Recent Customers</CardTitle>
-                <CardDescription className="text-xs mt-0.5">Latest sign-ups</CardDescription>
+                <CardTitle className="text-base">{t('platformOverview.recentCustomers')}</CardTitle>
+                <CardDescription className="text-xs mt-0.5">{t('platformOverview.latestSignups')}</CardDescription>
               </div>
               <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => navigate('platform-customers')}>
-                View all <ArrowRight className="h-3 w-3 ml-1" />
+                {t('platformOverview.viewAll')} <ArrowRight className="h-3 w-3 ml-1" />
               </Button>
             </div>
           </CardHeader>
@@ -239,11 +241,11 @@ export function PlatformOverviewModule() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left">
-                    <th className="pb-2 font-medium text-xs text-muted-foreground">Customer</th>
-                    <th className="pb-2 font-medium text-xs text-muted-foreground">Plan</th>
-                    <th className="pb-2 font-medium text-xs text-muted-foreground">Status</th>
-                    <th className="pb-2 font-medium text-xs text-muted-foreground text-right">Sites</th>
-                    <th className="pb-2 font-medium text-xs text-muted-foreground text-right">Joined</th>
+                    <th className="pb-2 font-medium text-xs text-muted-foreground">{t('platformOverview.customer')}</th>
+                    <th className="pb-2 font-medium text-xs text-muted-foreground">{t('platformOverview.plan')}</th>
+                    <th className="pb-2 font-medium text-xs text-muted-foreground">{t('common.status')}</th>
+                    <th className="pb-2 font-medium text-xs text-muted-foreground text-right">{t('platformOverview.sites')}</th>
+                    <th className="pb-2 font-medium text-xs text-muted-foreground text-right">{t('platformOverview.joined')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -274,11 +276,11 @@ export function PlatformOverviewModule() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base">Recent Payments</CardTitle>
-                <CardDescription className="text-xs mt-0.5">Latest transactions</CardDescription>
+                <CardTitle className="text-base">{t('platformOverview.recentPayments')}</CardTitle>
+                <CardDescription className="text-xs mt-0.5">{t('platformOverview.latestTransactions')}</CardDescription>
               </div>
               <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => navigate('platform-payments')}>
-                View all <ArrowRight className="h-3 w-3 ml-1" />
+                {t('platformOverview.viewAll')} <ArrowRight className="h-3 w-3 ml-1" />
               </Button>
             </div>
           </CardHeader>
@@ -287,11 +289,11 @@ export function PlatformOverviewModule() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left">
-                    <th className="pb-2 font-medium text-xs text-muted-foreground">Customer</th>
-                    <th className="pb-2 font-medium text-xs text-muted-foreground">Plan</th>
-                    <th className="pb-2 font-medium text-xs text-muted-foreground text-right">Amount</th>
-                    <th className="pb-2 font-medium text-xs text-muted-foreground">Status</th>
-                    <th className="pb-2 font-medium text-xs text-muted-foreground text-right">Date</th>
+                    <th className="pb-2 font-medium text-xs text-muted-foreground">{t('platformOverview.customer')}</th>
+                    <th className="pb-2 font-medium text-xs text-muted-foreground">{t('platformOverview.plan')}</th>
+                    <th className="pb-2 font-medium text-xs text-muted-foreground text-right">{t('platformOverview.amount')}</th>
+                    <th className="pb-2 font-medium text-xs text-muted-foreground">{t('common.status')}</th>
+                    <th className="pb-2 font-medium text-xs text-muted-foreground text-right">{t('platformOverview.date')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -318,11 +320,11 @@ export function PlatformOverviewModule() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base">Admin Alerts</CardTitle>
-              <CardDescription className="text-xs mt-0.5">Platform-level items needing attention</CardDescription>
+              <CardTitle className="text-base">{t('platformOverview.adminAlerts')}</CardTitle>
+              <CardDescription className="text-xs mt-0.5">{t('platformOverview.alertsDescription')}</CardDescription>
             </div>
             {data.alerts.length > 0 && (
-              <Badge variant="outline" className="text-xs">{data.alerts.length} active</Badge>
+              <Badge variant="outline" className="text-xs">{data.alerts.length} {t('platformOverview.activeCount')}</Badge>
             )}
           </div>
         </CardHeader>
@@ -334,7 +336,7 @@ export function PlatformOverviewModule() {
           ) : (
             <div className="text-center py-10 text-muted-foreground">
               <HeartPulse className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              <p className="text-sm">All clear — no platform alerts.</p>
+              <p className="text-sm">{t('platformOverview.allClear')}</p>
             </div>
           )}
         </CardContent>
@@ -346,10 +348,11 @@ export function PlatformOverviewModule() {
 // -------------------- Sub-components --------------------
 
 function AlertRow({ alert, onNavigate }: { alert: PlatformOverview['alerts'][number]; onNavigate: (mod: string, id?: string | null) => void }) {
+  const { t } = useT();
   const map = {
-    critical: { icon: <AlertCircle className="h-4 w-4 text-rose-500" />, cls: 'bg-rose-50 dark:bg-rose-950/30', badge: <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Critical</Badge> },
-    warning: { icon: <AlertTriangle className="h-4 w-4 text-amber-500" />, cls: 'bg-amber-50 dark:bg-amber-950/30', badge: <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 text-[10px] px-1.5 py-0 border-0">Warning</Badge> },
-    info: { icon: <Info className="h-4 w-4 text-sky-500" />, cls: '', badge: <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Info</Badge> },
+    critical: { icon: <AlertCircle className="h-4 w-4 text-rose-500" />, cls: 'bg-rose-50 dark:bg-rose-950/30', badge: <Badge variant="destructive" className="text-[10px] px-1.5 py-0">{t('platformOverview.severityCritical')}</Badge> },
+    warning: { icon: <AlertTriangle className="h-4 w-4 text-amber-500" />, cls: 'bg-amber-50 dark:bg-amber-950/30', badge: <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 text-[10px] px-1.5 py-0 border-0">{t('platformOverview.severityWarning')}</Badge> },
+    info: { icon: <Info className="h-4 w-4 text-sky-500" />, cls: '', badge: <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{t('platformOverview.severityInfo')}</Badge> },
   };
   const s = map[alert.severity];
   return (

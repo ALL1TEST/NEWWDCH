@@ -9,13 +9,24 @@ import {
   Languages,
   Sun,
   Moon,
+  Monitor,
+  Check,
 } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useSidebarStore } from '@/lib/stores/sidebar-store';
-import { useLocaleStore } from '@/lib/i18n';
+import {
+  useLocaleStore,
+  useT,
+  SUPPORTED_LOCALES,
+  DEFAULT_LOCALE,
+  getLocaleNativeName,
+  getPlatformLocales,
+  type Locale,
+  type SupportedLocale,
+} from '@/lib/i18n';
 import {
   useSubscriptionStore,
   getPlanBadgeStyle,
@@ -26,6 +37,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -101,6 +115,18 @@ export function UserProfileMenu({
   const closeMobile = useSidebarStore((s) => s.closeMobile);
   const locale = useLocaleStore((s) => s.locale);
   const setLocale = useLocaleStore((s) => s.setLocale);
+  const { t } = useT();
+  // Language list offered in the submenu — CLIENT roles (Admin User)
+  // get the FULL supported-locales registry (the single source of
+  // truth); incomplete dictionaries fall back to English per key.
+  // Platform staff (OWNER / PLATFORM_ADMIN) only get the locales
+  // whose Platform Admin dictionaries are COMPLETE (en + fr) so the
+  // platform dashboard never pretends a partially-translated
+  // language is fully supported.
+  const isPlatformStaff = user?.role === 'OWNER' || user?.role === 'PLATFORM_ADMIN';
+  const availableLocales: readonly SupportedLocale[] = isPlatformStaff
+    ? getPlatformLocales()
+    : SUPPORTED_LOCALES;
   // Active plan — drives the colored ring on the header avatar so the
   // dropdown header's avatar matches the top-right topbar avatar trigger
   // exactly (same ring color/thickness/offset). Platform admins
@@ -112,17 +138,27 @@ export function UserProfileMenu({
   // the first sync is still in flight the ring stays neutral so a
   // default/stale plan color is never displayed.
   const { currentPlan, serverSynced } = useSubscriptionStore();
-  const isPlatformStaff = user?.role === 'OWNER' || user?.role === 'PLATFORM_ADMIN';
+  // (isPlatformStaff is derived above, next to the locale list.)
   // Theme — same next-themes state the old topbar ThemeToggle used. The
   // dropdown is now the single in-header access point for the theme
   // control (the standalone topbar toggle was removed to avoid a
   // duplicate). setTheme persists via next-themes (localStorage +
   // html.dark class), so the whole app re-renders consistently.
-  const { theme, setTheme } = useTheme();
+  // `theme` is the STORED preference (may be 'system');
+  // `resolvedTheme` is what is actually rendered — used for the row icon.
+  const { theme, resolvedTheme, setTheme } = useTheme();
 
   const handleNavigate = (targetMod: string) => {
     useNavigationStore.getState().navigate(targetMod);
     closeMobile();
+  };
+
+  // Selecting a locale from the submenu — stores it via the SAME
+  // i18n store (persisted in localStorage under 'cms_locale'), so
+  // it survives navigation, refresh and reopening the app.
+  const handleSetLocale = (next: Locale) => {
+    setLocale(next);
+    toast.success(`${t('language.set')} ${getLocaleNativeName(next)}`);
   };
 
   return (
@@ -237,88 +273,109 @@ export function UserProfileMenu({
           onClick={() => handleNavigate('profile')}
         >
           <User className="h-4 w-4" />
-          Profile
+          {t('menu.profile')}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
 
-        {/* 3 — Language with EN / FR selector (existing locale state) */}
-        <div className="flex items-center justify-between px-2 py-1.5 text-sm">
-          <div className="flex items-center gap-2">
+        {/* 3 — Language → submenu listing the COMPLETE supported
+            locale registry (source of truth: SUPPORTED_LOCALES in
+            src/lib/i18n). Compact scrollable rows; a checkmark marks
+            the active locale and English (the default language)
+            carries a small "Default" badge. Selecting a locale goes
+            through the existing i18n store (persisted + fallback to
+            English for untranslated keys). Platform staff see only
+            the fully-translated platform locales (en + fr). */}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className="cursor-pointer">
             <Languages className="h-4 w-4 text-muted-foreground" />
-            <span className="text-muted-foreground">Language</span>
-          </div>
-          <div className="flex gap-1">
-            <button
-              type="button"
-              className={cn(
-                'h-6 px-2.5 text-xs font-medium rounded-md transition-colors',
-                locale === 'en'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted',
-              )}
-              onClick={() => { setLocale('en'); toast.success('Language set to EN'); }}
+            <span className="text-muted-foreground">{t('menu.language')}</span>
+            <span className="flex-1 truncate pl-4 text-right text-xs text-muted-foreground">
+              {getLocaleNativeName(locale)}
+            </span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="z-[70] w-48 p-0">
+            <div
+              className="max-h-72 overflow-y-auto p-1"
+              role="listbox"
+              aria-label={t('menu.language')}
             >
-              EN
-            </button>
-            <button
-              type="button"
-              className={cn(
-                'h-6 px-2.5 text-xs font-medium rounded-md transition-colors',
-                locale === 'fr'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted',
-              )}
-              onClick={() => { setLocale('fr'); toast.success('Langue définie sur FR'); }}
-            >
-              FR
-            </button>
-          </div>
-        </div>
+              {availableLocales.map((l) => (
+                <DropdownMenuItem
+                  key={l.code}
+                  className="cursor-pointer gap-2 rounded-md py-1.5 text-sm"
+                  onClick={() => handleSetLocale(l.code)}
+                  aria-selected={locale === l.code}
+                >
+                  <span className="min-w-0 flex-1 truncate">{l.nativeName}</span>
+                  {l.code === DEFAULT_LOCALE && (
+                    <span className="shrink-0 rounded-full border bg-muted px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground">
+                      {t('menu.default')}
+                    </span>
+                  )}
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                    {locale === l.code && <Check className="h-3.5 w-3.5" aria-hidden />}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </div>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
         <DropdownMenuSeparator />
 
-        {/* 4 — Theme with Light / Dark selector. Reuses the SAME
-            next-themes state the rest of the app uses (no second source
-            of truth). The dropdown is now the single in-header place to
-            switch theme — the old standalone topbar ThemeToggle was
-            removed to avoid a duplicate. Layout mirrors the Language
-            selector above (icon + label on the left, two segmented
-            buttons on the right) for visual consistency. */}
-        <div className="flex items-center justify-between px-2 py-1.5 text-sm">
-          <div className="flex items-center gap-2">
-            {theme === 'dark' ? (
+        {/* 4 — Theme → submenu with EXACTLY Light / Dark / System.
+            Reuses the SAME next-themes state the rest of the app uses
+            (no second source of truth) and persists the choice through
+            next-themes' own storage — Light and Dark switch the entire
+            dashboard immediately, System follows the OS preference.
+            The active option shows a checkmark on the right. */}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className="cursor-pointer">
+            {resolvedTheme === 'dark' ? (
               <Moon className="h-4 w-4 text-muted-foreground" />
             ) : (
               <Sun className="h-4 w-4 text-muted-foreground" />
             )}
-            <span className="text-muted-foreground">Theme</span>
-          </div>
-          <div className="flex gap-1">
-            <button
-              type="button"
-              className={cn(
-                'h-6 px-2.5 text-xs font-medium rounded-md transition-colors',
-                theme === 'light'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted',
-              )}
-              onClick={() => { setTheme('light'); toast.success('Theme set to Light'); }}
+            <span className="text-muted-foreground">{t('menu.theme')}</span>
+            <span className="flex-1 truncate pl-4 text-right text-xs text-muted-foreground">
+              {theme === 'system' ? t('menu.system') : theme === 'dark' ? t('menu.dark') : t('menu.light')}
+            </span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="z-[70] w-40 p-1">
+            <DropdownMenuItem
+              className="cursor-pointer gap-2 rounded-md py-1.5 text-sm"
+              onClick={() => { setTheme('light'); toast.success(t('theme.setLight')); }}
+              aria-selected={theme === 'light'}
             >
-              Light
-            </button>
-            <button
-              type="button"
-              className={cn(
-                'h-6 px-2.5 text-xs font-medium rounded-md transition-colors',
-                theme === 'dark'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted',
-              )}
-              onClick={() => { setTheme('dark'); toast.success('Theme set to Dark'); }}
+              <Sun className="h-4 w-4 text-muted-foreground" />
+              <span className="flex-1">{t('menu.light')}</span>
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                {theme === 'light' && <Check className="h-3.5 w-3.5" aria-hidden />}
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="cursor-pointer gap-2 rounded-md py-1.5 text-sm"
+              onClick={() => { setTheme('dark'); toast.success(t('theme.setDark')); }}
+              aria-selected={theme === 'dark'}
             >
-              Dark
-            </button>
-          </div>
-        </div>
+              <Moon className="h-4 w-4 text-muted-foreground" />
+              <span className="flex-1">{t('menu.dark')}</span>
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                {theme === 'dark' && <Check className="h-3.5 w-3.5" aria-hidden />}
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="cursor-pointer gap-2 rounded-md py-1.5 text-sm"
+              onClick={() => { setTheme('system'); toast.success(t('theme.setSystem')); }}
+              aria-selected={theme === 'system'}
+            >
+              <Monitor className="h-4 w-4 text-muted-foreground" />
+              <span className="flex-1">{t('menu.system')}</span>
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                {theme === 'system' && <Check className="h-3.5 w-3.5" aria-hidden />}
+              </span>
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
         <DropdownMenuSeparator />
 
         {/* 5 — Manage Subscription → existing billing module. Hidden for
@@ -333,7 +390,7 @@ export function UserProfileMenu({
               onClick={() => handleNavigate('billing')}
             >
               <CreditCard className="h-4 w-4" />
-              Manage Subscription
+              {t('menu.manageSubscription')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
@@ -345,7 +402,7 @@ export function UserProfileMenu({
           onClick={() => void logout()}
         >
           <LogOut className="h-4 w-4" />
-          Log out
+          {t('menu.logOut')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

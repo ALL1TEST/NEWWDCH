@@ -93,6 +93,7 @@ import { cn } from '@/lib/utils';
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
 import { useSubscriptionStore, getPlanBadgeStyle } from '@/lib/stores/subscription-store';
 import { usePlanEntitlements, isModuleAllowedByPlan, isSmtpSettingsAllowedByPlan } from '@/hooks/use-entitlements';
+import { useT } from '@/lib/i18n';
 import { SMTP_SETTINGS_ROUTE } from '@/lib/platform/feature-config';
 import { NotificationBell } from '@/components/layout/notification-bell';
 import { UserProfileMenu } from '@/components/layout/user-profile-menu';
@@ -214,6 +215,42 @@ const COLLAPSED_TOOLTIP_PROPS: React.ComponentProps<typeof TooltipContent> = {
 };
 
 // -------------------- Navigation Config --------------------
+
+// i18n — every NAV_ITEMS / PLATFORM_NAV_ITEMS href maps to ONE key in
+// the core dictionary ('nav.*' — see src/lib/i18n/core/en.ts). The
+// static label strings above stay as the English fallback for keys
+// that are not translated in a given locale; renderers resolve the
+// label through t() so the sidebar switches language with the app.
+const NAV_LABEL_KEYS: Record<string, string> = {
+  // Client CMS nav
+  '#': 'nav.dashboard',
+  '#content': 'nav.articles',
+  '#calendar': 'nav.calendar',
+  '#media': 'nav.media',
+  '#users': 'nav.users',
+  '#comments': 'nav.comments',
+  '#newsletter': 'nav.newsletter',
+  '#seo': 'nav.seo',
+  '#ai': 'nav.ai',
+  '#automation': 'nav.automation',
+  '#settings': 'nav.settings',
+  '#email-templates': 'nav.emailTemplates',
+  '#settings/smtp': 'nav.smtpSettings',
+  '#notifications': 'nav.notifications',
+  '#backups': 'nav.backups',
+  // Platform Admin nav
+  '#platform-overview': 'nav.overview',
+  '#platform-customers': 'nav.customers',
+  '#platform-payments': 'nav.payments',
+  '#platform-plans': 'nav.plans',
+  '#platform-coupons': 'nav.coupons',
+  '#platform-stripe-settings': 'nav.stripeSettings',
+  '#platform-notifications': 'nav.notifications',
+  '#platform-email-templates': 'nav.emailTemplates',
+  '#platform-smtp': 'nav.smtpSettings',
+  '#platform-ai': 'nav.ai',
+  '#platform-backups': 'nav.backups',
+};
 
 const NAV_ITEMS: NavItem[] = [
   {
@@ -394,6 +431,20 @@ function buildNavGroups(items: NavItem[]): NavGroup[] {
 function hrefToModule(href: string): string {
   const hash = href.replace(/^#/, '');
   return hash.split('/')[0] || 'dashboard';
+}
+
+/**
+ * Resolve a nav item's DISPLAY label through the i18n dictionary.
+ * Every NAV_ITEMS / PLATFORM_NAV_ITEMS href (parents + children) has
+ * an entry in NAV_LABEL_KEYS; the item's static `label` is kept as
+ * the final fallback so nothing can ever render empty. The hook
+ * subscribes to the locale store, so the whole sidebar re-renders
+ * in the new language the moment a locale is selected.
+ */
+function useNavLabel(item: NavItem): string {
+  const { t } = useT();
+  const key = NAV_LABEL_KEYS[item.href];
+  return key ? t(key) : item.label;
 }
 
 function NavIcon({ name }: { name?: string }) {
@@ -618,6 +669,8 @@ function CollapsedParentNavItem({
   const [floatOpen, setFloatOpen] = useState(false);
   const mod = hrefToModule(item.href);
   const isActive = currentModule === mod;
+  const { t } = useT();
+  const itemLabel = useNavLabel(item);
 
   const handleChildNavigate = (
     e: React.MouseEvent<HTMLAnchorElement>,
@@ -653,7 +706,7 @@ function CollapsedParentNavItem({
             tooltip={
               floatOpen
                 ? undefined
-                : { ...COLLAPSED_TOOLTIP_PROPS, children: item.label }
+                : { ...COLLAPSED_TOOLTIP_PROPS, children: itemLabel }
             }
             onClick={(e: React.MouseEvent) => {
               e.preventDefault();
@@ -661,7 +714,7 @@ function CollapsedParentNavItem({
             }}
           >
             <NavIcon name={item.icon} />
-            <span>{item.label}</span>
+            <span>{itemLabel}</span>
           </SidebarMenuButton>
         </PopoverTrigger>
         {/* Portal → document.body: immune to sidebar overflow clipping.
@@ -677,7 +730,7 @@ function CollapsedParentNavItem({
         >
           <ul
             role="menu"
-            aria-label={`${item.label} submenu`}
+            aria-label={`${itemLabel} submenu`}
             className="flex min-w-0 list-none flex-col gap-0.5 p-0 m-0"
           >
             {item.children!.map((child) => {
@@ -687,6 +740,9 @@ function CollapsedParentNavItem({
               const isChildActive =
                 currentModule === parts[0] &&
                 (!childSubPage || currentSubPage === childSubPage);
+              const childLabel = NAV_LABEL_KEYS[child.href]
+                ? t(NAV_LABEL_KEYS[child.href])
+                : child.label;
               return (
                 <SidebarMenuSubItem key={child.label} className="list-none p-0">
                   <SidebarMenuSubButton asChild isActive={isChildActive}>
@@ -696,7 +752,7 @@ function CollapsedParentNavItem({
                       onClick={(e) => handleChildNavigate(e, child)}
                     >
                       <NavIcon name={child.icon} />
-                      <span>{child.label}</span>
+                      <span>{childLabel}</span>
                     </a>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
@@ -724,6 +780,8 @@ function ExpandableNavItem({
 }) {
   const mod = hrefToModule(item.href);
   const isActive = currentModule === mod;
+  const { t } = useT();
+  const itemLabel = useNavLabel(item);
   const sectionId = `submenu-${item.label.toLowerCase().replace(/\s+/g, '-')}`;
 
   return (
@@ -737,7 +795,7 @@ function ExpandableNavItem({
         // toggles between expanded and collapsed while this row stays
         // mounted, the tooltip that appears is identical in positioning to
         // SimpleNavItem / CollapsedParentNavItem / CollapsedLogoButton.
-        tooltip={{ ...COLLAPSED_TOOLTIP_PROPS, children: item.label }}
+        tooltip={{ ...COLLAPSED_TOOLTIP_PROPS, children: itemLabel }}
         isActive={isActive}
         onClick={(e: React.MouseEvent) => {
           e.preventDefault();
@@ -747,7 +805,7 @@ function ExpandableNavItem({
         aria-controls={sectionId}
       >
         <NavIcon name={item.icon} />
-        <span>{item.label}</span>
+        <span>{itemLabel}</span>
         <ChevronRight
           className={cn(
             'ml-auto h-4 w-4 shrink-0 transition-transform duration-200',
@@ -762,7 +820,7 @@ function ExpandableNavItem({
         </SidebarMenuBadge>
       )}
 
-      <AccordionSubmenu isOpen={isExpanded} sectionLabel={item.label}>
+      <AccordionSubmenu isOpen={isExpanded} sectionLabel={itemLabel}>
         {item.children!.map((child) => {
           const hash = child.href.replace(/^#/, '');
           const parts = hash.split('/');
@@ -771,6 +829,9 @@ function ExpandableNavItem({
           const isChildActive =
             currentModule === childMod &&
             (!childSubPage || currentSubPage === childSubPage);
+          const childLabel = NAV_LABEL_KEYS[child.href]
+            ? t(NAV_LABEL_KEYS[child.href])
+            : child.label;
 
           return (
             <SidebarMenuSubItem key={child.label}>
@@ -789,7 +850,7 @@ function ExpandableNavItem({
                   }}
                 >
                   <NavIcon name={child.icon} />
-                  <span>{child.label}</span>
+                  <span>{childLabel}</span>
                 </a>
               </SidebarMenuSubButton>
             </SidebarMenuSubItem>
@@ -809,6 +870,7 @@ function SimpleNavItem({
 }) {
   const mod = hrefToModule(item.href);
   const isActive = currentModule === mod;
+  const itemLabel = useNavLabel(item);
 
   return (
     <SidebarMenuItem>
@@ -824,7 +886,7 @@ function SimpleNavItem({
         // ExpandableNavItem, CollapsedParentNavItem). Portal-based rendering
         // means the bubble floats outside the sidebar DOM at z-50 — never
         // clipped by the rail's overflow-hidden.
-        tooltip={{ ...COLLAPSED_TOOLTIP_PROPS, children: item.label }}
+        tooltip={{ ...COLLAPSED_TOOLTIP_PROPS, children: itemLabel }}
       >
         <a
           href={item.href}
@@ -834,7 +896,7 @@ function SimpleNavItem({
           }}
         >
           <NavIcon name={item.icon} />
-          <span>{item.label}</span>
+          <span>{itemLabel}</span>
         </a>
       </SidebarMenuButton>
 

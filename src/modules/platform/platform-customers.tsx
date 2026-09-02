@@ -14,6 +14,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { useT } from '@/lib/i18n';
 import {
   PlatformPageHeader,
   SearchInput,
@@ -33,6 +34,7 @@ import { Eye } from 'lucide-react';
 type CustomerRow = Customer & { siteCount: number };
 
 export function PlatformCustomersModule() {
+  const { t } = useT();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [planId, setPlanId] = useState<PlanId | 'all'>('all');
@@ -58,19 +60,20 @@ export function PlatformCustomersModule() {
   return (
     <div className="space-y-6">
       <PlatformPageHeader
-        title="Customers"
-        subtitle="All SaaS customers on the platform."
+        title={t('title.platformCustomers')}
+        subtitle={t('platformCustomers.subtitle')}
       />
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <SearchInput
           value={search}
           onChange={setSearch}
-          placeholder="Search name, email, company…"
+          placeholder={t('platformCustomers.searchPlaceholder')}
         />
         <FilterSelect
           value={planId}
           onChange={setPlanId}
+          allLabel={t('platformCustomers.allPlans')}
           options={[
             { value: 'free', label: 'Free' },
             { value: 'plus', label: 'Plus' },
@@ -81,12 +84,13 @@ export function PlatformCustomersModule() {
         <FilterSelect
           value={status}
           onChange={setStatus}
+          allLabel={t('platformCustomers.allStatuses')}
           options={[
-            { value: 'active', label: 'Active' },
-            { value: 'trial', label: 'Trial' },
-            { value: 'past_due', label: 'Past Due' },
-            { value: 'cancelled', label: 'Cancelled' },
-            { value: 'expired', label: 'Expired' },
+            { value: 'active', label: t('common.active') },
+            { value: 'trial', label: t('platformCustomers.statusTrial') },
+            { value: 'past_due', label: t('platformCustomers.statusPastDue') },
+            { value: 'cancelled', label: t('platformCustomers.statusCancelled') },
+            { value: 'expired', label: t('platformCustomers.statusExpired') },
           ]}
         />
       </div>
@@ -97,29 +101,29 @@ export function PlatformCustomersModule() {
             <TableSkeleton rows={10} cols={7} />
           ) : isError ? (
             <ErrorState
-              message="Could not load customers. Please retry."
+              message={t('platformCustomers.loadError')}
               onRetry={() => refetch()}
             />
           ) : !data || data.length === 0 ? (
-            <EmptyState message="No customers found." />
+            <EmptyState message={t('platformCustomers.empty')} />
           ) : (
             <>
               <p className="text-xs text-muted-foreground mb-3">
-                {data.length} customer{data.length === 1 ? '' : 's'}
+                {data.length} {data.length === 1 ? t('platformCustomers.customerOne') : t('platformCustomers.customerMany')}
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left">
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Customer</th>
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Company</th>
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Plan</th>
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Sub. Status</th>
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Account</th>
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground text-center">Sites</th>
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Country</th>
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Created</th>
-                      <th className="pb-2 font-medium text-xs text-muted-foreground text-right">Actions</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformCustomers.customer')}</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformCustomers.company')}</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformCustomers.plan')}</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformCustomers.subStatus')}</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformCustomers.account')}</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground text-center">{t('platformCustomers.sites')}</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformCustomers.country')}</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformCustomers.created')}</th>
+                      <th className="pb-2 font-medium text-xs text-muted-foreground text-right">{t('common.actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -151,7 +155,7 @@ export function PlatformCustomersModule() {
                             onClick={() => navigate('platform-customer-detail', c.id)}
                           >
                             <Eye className="h-3.5 w-3.5 mr-1" />
-                            View
+                            {t('common.view')}
                           </Button>
                         </td>
                       </tr>

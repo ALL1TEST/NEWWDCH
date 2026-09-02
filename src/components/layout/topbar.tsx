@@ -3,6 +3,7 @@
 import { Search } from 'lucide-react';
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { useT } from '@/lib/i18n';
 import { Button } from '@/components/ui/button';
 import { Breadcrumbs, hasBreadcrumb } from '@/components/layout/breadcrumbs';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -35,6 +36,7 @@ export function Topbar() {
   const openCommandPalette = useCommandPaletteStore((s) => s.open);
   const currentModule = useNavigationStore((s) => s.currentModule);
   const showBreadcrumb = hasBreadcrumb(currentModule);
+  const { t } = useT();
 
   return (
     <header
@@ -75,10 +77,10 @@ export function Topbar() {
           size="icon"
           className="h-8 w-8 sm:hidden"
           onClick={openCommandPalette}
-          aria-label="Search"
+          aria-label={t('app.search')}
         >
           <Search className="h-4 w-4" />
-          <span className="sr-only">Search</span>
+          <span className="sr-only">{t('app.search')}</span>
         </Button>
       </div>
     </header>

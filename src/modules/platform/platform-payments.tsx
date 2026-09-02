@@ -22,6 +22,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
+import { useT } from '@/lib/i18n';
 import {
   PlatformPageHeader,
   SearchInput,
@@ -40,6 +41,7 @@ import type { Payment, PaymentStatus } from '@/lib/platform/platform-data';
 type PaymentRow = Payment & { customerName: string; customerEmail: string };
 
 export function PlatformPaymentsModule() {
+  const { t } = useT();
   const [status, setStatus] = useState<PaymentStatus | 'all'>('all');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -69,24 +71,25 @@ export function PlatformPaymentsModule() {
   return (
     <div className="space-y-6">
       <PlatformPageHeader
-        title="Payments"
-        subtitle="All payment transactions across the platform."
+        title={t('title.platformPayments')}
+        subtitle={t('platformPayments.subtitle')}
       />
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <SearchInput
           value={search}
           onChange={setSearch}
-          placeholder="Search by customer, invoice, transaction…"
+          placeholder={t('platformPayments.searchPlaceholder')}
         />
         <FilterSelect
           value={status}
           onChange={setStatus}
+          allLabel={t('platformPayments.allStatuses')}
           options={[
-            { value: 'paid', label: 'Paid' },
-            { value: 'pending', label: 'Pending' },
-            { value: 'failed', label: 'Failed' },
-            { value: 'refunded', label: 'Refunded' },
+            { value: 'paid', label: t('platformPayments.statusPaid') },
+            { value: 'pending', label: t('platformPayments.statusPending') },
+            { value: 'failed', label: t('platformPayments.statusFailed') },
+            { value: 'refunded', label: t('platformPayments.statusRefunded') },
           ]}
         />
       </div>
@@ -97,23 +100,23 @@ export function PlatformPaymentsModule() {
             <TableSkeleton rows={8} cols={7} />
           ) : isError ? (
             <ErrorState
-              message="Could not load payments. Please retry."
+              message={t('platformPayments.loadError')}
               onRetry={() => refetch()}
             />
           ) : !data || data.length === 0 ? (
-            <EmptyState message="No payments found." />
+            <EmptyState message={t('platformPayments.empty')} />
           ) : (
             <>
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <p className="text-xs text-muted-foreground">
-                  {data.length} payment{data.length === 1 ? '' : 's'}
+                  {data.length} {data.length === 1 ? t('platformPayments.paymentOne') : t('platformPayments.paymentMany')}
                 </p>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                   <span>
-                    <span className="font-semibold text-foreground">{paidSummary.count}</span> paid
+                    <span className="font-semibold text-foreground">{paidSummary.count}</span> {t('platformPayments.paidCount')}
                   </span>
                   <span>
-                    Paid total:{' '}
+                    {t('platformPayments.paidTotal')}{' '}
                     <span className="font-semibold text-foreground">
                       {formatCurrency(paidSummary.total)}
                     </span>
@@ -124,14 +127,14 @@ export function PlatformPaymentsModule() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left">
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Transaction</th>
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Invoice</th>
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Customer</th>
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Plan</th>
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground text-right">Amount</th>
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Status</th>
-                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">Method</th>
-                      <th className="pb-2 font-medium text-xs text-muted-foreground text-right">Date</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformPayments.transaction')}</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformPayments.invoice')}</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformPayments.customer')}</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformPayments.plan')}</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground text-right">{t('platformPayments.amount')}</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('common.status')}</th>
+                      <th className="pb-2 pr-4 font-medium text-xs text-muted-foreground">{t('platformPayments.method')}</th>
+                      <th className="pb-2 font-medium text-xs text-muted-foreground text-right">{t('platformPayments.date')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">

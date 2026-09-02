@@ -113,7 +113,7 @@ export function ProfilePage() {
       useAuthStore.setState({ user: updatedUser });
       toast.success(t('profile.nameSaved'));
     } catch {
-      toast.error('Failed to update profile');
+      toast.error(t('profile.updateFailed'));
     } finally {
       setIsSavingName(false);
     }
@@ -121,21 +121,21 @@ export function ProfilePage() {
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword) {
-      toast.error('Please fill in both password fields');
+      toast.error(t('profile.fillBothPasswordFields'));
       return;
     }
     if (newPassword.length < 8) {
-      toast.error('New password must be at least 8 characters');
+      toast.error(t('profile.passwordMinLength'));
       return;
     }
     setIsChangingPw(true);
     try {
       await postApi('/api/auth/change-password', { currentPassword, newPassword });
-      toast.success('Password changed successfully');
+      toast.success(t('profile.passwordChanged'));
       setCurrentPassword('');
       setNewPassword('');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to change password';
+      const msg = err instanceof Error ? err.message : t('profile.changePasswordFailed');
       toast.error(msg);
     } finally {
       setIsChangingPw(false);
@@ -207,7 +207,7 @@ export function ProfilePage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setChangeEmailOpen(true)}>
               <Mail className="h-4 w-4 mr-2" />
-              Change Email
+              {t('profile.changeEmail')}
             </Button>
             <Button onClick={handleSaveName} disabled={isSavingName || name.trim() === user.name}>
               {isSavingName && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -222,22 +222,22 @@ export function ProfilePage() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Lock className="h-4 w-4" />
-            Change Password
+            {t('profile.changePassword')}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            To set a new password, you need to enter your current password first.
+            {t('profile.changePasswordDesc')}
           </p>
           <div className="grid gap-2">
-            <Label htmlFor="current-pw">Current Password</Label>
+            <Label htmlFor="current-pw">{t('profile.currentPassword')}</Label>
             <div className="relative">
               <Input
                 id="current-pw"
                 type={showCurrentPw ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Enter current password"
+                placeholder={t('profile.enterCurrentPassword')}
                 autoComplete="current-password"
               />
               <button
@@ -250,14 +250,14 @@ export function ProfilePage() {
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="new-pw">New Password</Label>
+            <Label htmlFor="new-pw">{t('profile.newPassword')}</Label>
             <div className="relative">
               <Input
                 id="new-pw"
                 type={showNewPw ? 'text' : 'password'}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Enter new password (min. 8 characters)"
+                placeholder={t('profile.enterNewPassword')}
                 autoComplete="new-password"
               />
               <button
@@ -275,7 +275,7 @@ export function ProfilePage() {
               disabled={isChangingPw || !currentPassword || !newPassword}
             >
               {isChangingPw && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Change Password
+              {t('profile.changePassword')}
             </Button>
           </div>
         </CardContent>
@@ -286,10 +286,10 @@ export function ProfilePage() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <ShieldCheck className="h-4 w-4" />
-            Security
+            {t('profile.security')}
           </CardTitle>
           <CardDescription className="text-xs mt-1">
-            Authenticator App
+            {t('profile.authenticatorApp')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -306,13 +306,13 @@ export function ProfilePage() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium">Enabled</p>
+                      <p className="text-sm font-medium">{t('profile.enabled')}</p>
                       <Badge className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 border-0">
-                        Authenticator App
+                        {t('profile.authenticatorApp')}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
-                      Your authenticator app is configured and required for login verification.
+                      {t('profile.authenticatorConfigured')}
                     </p>
                   </div>
                 </div>
@@ -326,11 +326,11 @@ export function ProfilePage() {
                   onClick={() => setDisableOpen(true)}
                 >
                   <AlertTriangle className="h-4 w-4 mr-2" />
-                  Disable Authenticator App
+                  {t('profile.disableAuthenticator')}
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => setRegenerateOpen(true)}>
                   <RefreshCw className="h-4 w-4 mr-2" />
-                  Regenerate Secret
+                  {t('profile.regenerateSecret')}
                 </Button>
               </div>
             </div>
@@ -341,17 +341,16 @@ export function ProfilePage() {
                   <Smartphone className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Authenticator App</p>
+                  <p className="text-sm font-medium">{t('profile.authenticatorApp')}</p>
                   <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
-                    Use an authenticator app to generate a one-time verification code when logging in.
-                    This adds an extra layer of security to your account.
+                    {t('profile.authenticatorDesc')}
                   </p>
                 </div>
               </div>
               <div className="flex justify-end">
                 <Button onClick={() => setSetupOpen(true)}>
                   <Smartphone className="h-4 w-4 mr-2" />
-                  Enable Authenticator App
+                  {t('profile.enableAuthenticator')}
                 </Button>
               </div>
             </div>
@@ -385,7 +384,7 @@ export function ProfilePage() {
         onActivated={() => {
           invalidate2faStatus();
           setRegeneratedSetupData(null);
-          toast.success('Authenticator app enabled.');
+          toast.success(t('profile.authenticatorEnabledToast'));
         }}
       />
 
@@ -395,7 +394,7 @@ export function ProfilePage() {
         mfaEnabled={mfaEnabled}
         onDisabled={() => {
           invalidate2faStatus();
-          toast.success('Authenticator app disabled.');
+          toast.success(t('profile.authenticatorDisabledToast'));
         }}
       />
 
@@ -452,6 +451,7 @@ function ChangeEmailDialog({
   currentEmail: string;
   onEmailChanged: (newEmail: string) => void;
 }) {
+  const { t } = useT();
   const [newEmail, setNewEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -473,19 +473,19 @@ function ChangeEmailDialog({
   const handleSubmit = async () => {
     setLocalError(null);
     if (!newEmail.trim()) {
-      setLocalError('Please enter a new email address.');
+      setLocalError(t('profile.enterNewEmail'));
       return;
     }
     if (!emailValid) {
-      setLocalError('Please enter a valid email address.');
+      setLocalError(t('profile.enterValidEmail'));
       return;
     }
     if (!isDifferent) {
-      setLocalError('New email must be different from your current email.');
+      setLocalError(t('profile.emailMustDiffer'));
       return;
     }
     if (!currentPassword) {
-      setLocalError('Please enter your current password to confirm.');
+      setLocalError(t('profile.enterCurrentPasswordToConfirm'));
       return;
     }
 
@@ -496,10 +496,10 @@ function ChangeEmailDialog({
         newEmail: newEmail.trim(),
       });
       onEmailChanged(res.email);
-      toast.success('Email address updated successfully.');
+      toast.success(t('profile.emailUpdated'));
       onOpenChange(false);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to change email.';
+      const msg = err instanceof Error ? err.message : t('profile.changeEmailFailed');
       setLocalError(msg);
     } finally {
       setIsSaving(false);
@@ -512,21 +512,21 @@ function ChangeEmailDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail className="h-5 w-5" />
-            Change Email Address
+            {t('profile.changeEmailAddress')}
           </DialogTitle>
           <DialogDescription>
-            Enter your new email and current password to confirm the change.
+            {t('profile.changeEmailDesc')}
           </DialogDescription>
         </DialogHeader>
         <div className="py-2 space-y-4">
           <div className="grid gap-2">
-            <Label className="text-xs text-muted-foreground">Current Email</Label>
+            <Label className="text-xs text-muted-foreground">{t('profile.currentEmail')}</Label>
             <div className="rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
               {currentEmail}
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="new-email" className="text-xs">New Email Address</Label>
+            <Label htmlFor="new-email" className="text-xs">{t('profile.newEmailAddress')}</Label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -541,7 +541,7 @@ function ChangeEmailDialog({
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ce-current-pw" className="text-xs">Current Password</Label>
+            <Label htmlFor="ce-current-pw" className="text-xs">{t('profile.currentPassword')}</Label>
             <div className="relative">
               <Input
                 id="ce-current-pw"
@@ -549,7 +549,7 @@ function ChangeEmailDialog({
                 autoComplete="current-password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Enter current password"
+                placeholder={t('profile.enterCurrentPassword')}
               />
               <button
                 type="button"
@@ -569,11 +569,11 @@ function ChangeEmailDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleSubmit} disabled={isSaving || !emailValid || !isDifferent || !currentPassword}>
             {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Save Email
+            {t('profile.saveEmail')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -610,6 +610,7 @@ function AuthenticatorSetupDialog({
   onActivated: () => void;
   initialSetupData?: TwoFactorSetupResponse | null;
 }) {
+  const { t } = useT();
   const [step, setStep] = useState<SetupStep>(1);
   const [currentPassword, setCurrentPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -636,7 +637,7 @@ function AuthenticatorSetupDialog({
   const handleStartSetup = async () => {
     setLocalError(null);
     if (!currentPassword) {
-      setLocalError('Please enter your current password to start.');
+      setLocalError(t('profile.enterCurrentPasswordToStart'));
       return;
     }
     setIsWorking(true);
@@ -645,7 +646,7 @@ function AuthenticatorSetupDialog({
       setSetupData(res);
       setStep(2);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to start setup.';
+      const msg = err instanceof Error ? err.message : t('profile.setupStartFailed');
       setLocalError(msg);
     } finally {
       setIsWorking(false);
@@ -656,7 +657,7 @@ function AuthenticatorSetupDialog({
     setLocalError(null);
     const clean = code.replace(/\s+/g, '');
     if (!/^\d{6}$/.test(clean)) {
-      setLocalError('Please enter the 6-digit code from your authenticator app.');
+      setLocalError(t('profile.enter6DigitCode'));
       return;
     }
     setIsWorking(true);
@@ -665,7 +666,7 @@ function AuthenticatorSetupDialog({
       onActivated();
       onOpenChange(false);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Invalid verification code.';
+      const msg = err instanceof Error ? err.message : t('profile.invalidCode');
       setLocalError(msg);
     } finally {
       setIsWorking(false);
@@ -677,10 +678,10 @@ function AuthenticatorSetupDialog({
     try {
       await navigator.clipboard.writeText(setupData.secret);
       setCopied(true);
-      toast.success('Secret copied to clipboard.');
+      toast.success(t('profile.secretCopied'));
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error('Failed to copy secret.');
+      toast.error(t('profile.copyFailed'));
     }
   };
 
@@ -690,10 +691,10 @@ function AuthenticatorSetupDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Smartphone className="h-5 w-5" />
-            Enable Authenticator App
+            {t('profile.enableAuthenticator')}
           </DialogTitle>
           <DialogDescription>
-            Step {step} of 3 — {step === 1 ? 'Download an authenticator app' : step === 2 ? 'Scan the QR code' : 'Verify the code'}
+            {t('profile.step')} {step} {t('profile.ofSteps')} — {step === 1 ? t('profile.setupStep1') : step === 2 ? t('profile.setupStep2') : t('profile.setupStep3')}
           </DialogDescription>
         </DialogHeader>
 
@@ -701,17 +702,17 @@ function AuthenticatorSetupDialog({
         {step === 1 && (
           <div className="py-2 space-y-4">
             <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2">
-              <p className="font-medium">Step 1: Download an authenticator app</p>
+              <p className="font-medium">{t('profile.step1Title')}</p>
               <p className="text-muted-foreground">
-                Install an authenticator app such as
+                {t('profile.setupInstallPrefix')}
                 <span className="font-medium text-foreground"> Google Authenticator</span>,
                 <span className="font-medium text-foreground"> Authy</span>,
-                <span className="font-medium text-foreground"> 1Password</span>, or
-                <span className="font-medium text-foreground"> Microsoft Authenticator</span> on your phone.
+                <span className="font-medium text-foreground"> 1Password</span>, {t('profile.or')}
+                <span className="font-medium text-foreground"> Microsoft Authenticator</span>{t('profile.setupInstallSuffix')}
               </p>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="setup-current-pw" className="text-xs">Current Password</Label>
+              <Label htmlFor="setup-current-pw" className="text-xs">{t('profile.currentPassword')}</Label>
               <div className="relative">
                 <Input
                   id="setup-current-pw"
@@ -719,7 +720,7 @@ function AuthenticatorSetupDialog({
                   autoComplete="current-password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder="Enter current password"
+                  placeholder={t('profile.enterCurrentPassword')}
                 />
                 <button
                   type="button"
@@ -743,21 +744,21 @@ function AuthenticatorSetupDialog({
         {step === 2 && setupData && (
           <div className="py-2 space-y-4">
             <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2">
-              <p className="font-medium">Step 2: Scan the QR code</p>
+              <p className="font-medium">{t('profile.step2Title')}</p>
               <p className="text-muted-foreground">
-                Scan the QR code below with your authenticator app, or enter the 2FA key manually.
+                {t('profile.step2Desc')}
               </p>
             </div>
             <div className="flex justify-center">
               <img
                 src={setupData.qrDataUrl}
-                alt="Authenticator QR code"
+                alt={t('profile.qrAlt')}
                 className="h-48 w-48 rounded-lg border bg-white p-2"
               />
             </div>
             <div className="grid gap-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-xs text-muted-foreground">2FA Key (Manual entry)</Label>
+                <Label className="text-xs text-muted-foreground">{t('profile.twoFactorKey')}</Label>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -765,7 +766,7 @@ function AuthenticatorSetupDialog({
                   onClick={handleCopySecret}
                 >
                   {copied ? <Check className="h-3.5 w-3.5 mr-1" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
-                  {copied ? 'Copied' : 'Copy'}
+                  {copied ? t('common.copied') : t('common.copy')}
                 </Button>
               </div>
               <div className="rounded-md border bg-muted/50 px-3 py-2 font-mono text-xs break-all select-all">
@@ -785,13 +786,13 @@ function AuthenticatorSetupDialog({
         {step === 3 && (
           <div className="py-2 space-y-4">
             <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2">
-              <p className="font-medium">Step 3: Enter the verification code</p>
+              <p className="font-medium">{t('profile.step3Title')}</p>
               <p className="text-muted-foreground">
-                Open your authenticator app and enter the 6-digit code shown for this account.
+                {t('profile.step3Desc')}
               </p>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="totp-code" className="text-xs">6-digit verification code</Label>
+              <Label htmlFor="totp-code" className="text-xs">{t('profile.sixDigitCode')}</Label>
               <Input
                 id="totp-code"
                 inputMode="numeric"
@@ -821,29 +822,29 @@ function AuthenticatorSetupDialog({
                 onClick={() => setStep((step - 1) as SetupStep)}
                 disabled={isWorking}
               >
-                Back
+                {t('common.back')}
               </Button>
             )}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isWorking}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             {step === 1 && (
               <Button onClick={handleStartSetup} disabled={isWorking || !currentPassword}>
                 {isWorking && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Continue
+                {t('profile.continue')}
               </Button>
             )}
             {step === 2 && (
               <Button onClick={() => setStep(3)} disabled={isWorking}>
-                Continue
+                {t('profile.continue')}
               </Button>
             )}
             {step === 3 && (
               <Button onClick={handleActivate} disabled={isWorking || code.length !== 6}>
                 {isWorking && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Activate
+                {t('profile.activate')}
               </Button>
             )}
           </div>
@@ -871,6 +872,7 @@ function DisableAuthenticatorDialog({
   mfaEnabled: boolean;
   onDisabled: () => void;
 }) {
+  const { t } = useT();
   const [currentPassword, setCurrentPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [code, setCode] = useState('');
@@ -889,11 +891,11 @@ function DisableAuthenticatorDialog({
   const handleSubmit = async () => {
     setLocalError(null);
     if (!currentPassword) {
-      setLocalError('Please enter your current password.');
+      setLocalError(t('profile.enterCurrentPasswordRequired'));
       return;
     }
     if (mfaEnabled && code.length !== 6) {
-      setLocalError('Please enter the 6-digit code from your authenticator app.');
+      setLocalError(t('profile.enter6DigitCode'));
       return;
     }
     setIsWorking(true);
@@ -905,7 +907,7 @@ function DisableAuthenticatorDialog({
       onDisabled();
       onOpenChange(false);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to disable authenticator.';
+      const msg = err instanceof Error ? err.message : t('profile.disableFailed');
       setLocalError(msg);
     } finally {
       setIsWorking(false);
@@ -918,15 +920,15 @@ function DisableAuthenticatorDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="h-5 w-5" />
-            Disable Authenticator App
+            {t('profile.disableAuthenticator')}
           </DialogTitle>
           <DialogDescription>
-            This will remove the authenticator from your account. You will no longer need a verification code at login.
+            {t('profile.disableDesc')}
           </DialogDescription>
         </DialogHeader>
         <div className="py-2 space-y-4">
           <div className="grid gap-2">
-            <Label htmlFor="disable-pw" className="text-xs">Current Password</Label>
+            <Label htmlFor="disable-pw" className="text-xs">{t('profile.currentPassword')}</Label>
             <div className="relative">
               <Input
                 id="disable-pw"
@@ -934,7 +936,7 @@ function DisableAuthenticatorDialog({
                 autoComplete="current-password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Enter current password"
+                placeholder={t('profile.enterCurrentPassword')}
               />
               <button
                 type="button"
@@ -947,7 +949,7 @@ function DisableAuthenticatorDialog({
           </div>
           {mfaEnabled && (
             <div className="grid gap-2">
-              <Label htmlFor="disable-code" className="text-xs">6-digit verification code</Label>
+              <Label htmlFor="disable-code" className="text-xs">{t('profile.sixDigitCode')}</Label>
               <Input
                 id="disable-code"
                 inputMode="numeric"
@@ -977,7 +979,7 @@ function DisableAuthenticatorDialog({
             disabled={isWorking || !currentPassword || (mfaEnabled && code.length !== 6)}
           >
             {isWorking && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Disable
+            {t('profile.disable')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1005,6 +1007,7 @@ function RegenerateSecretDialog({
   email: string;
   onRegenerated: (setupData: TwoFactorSetupResponse) => void;
 }) {
+  const { t } = useT();
   const [currentPassword, setCurrentPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [code, setCode] = useState('');
@@ -1023,11 +1026,11 @@ function RegenerateSecretDialog({
   const handleSubmit = async () => {
     setLocalError(null);
     if (!currentPassword) {
-      setLocalError('Please enter your current password.');
+      setLocalError(t('profile.enterCurrentPasswordRequired'));
       return;
     }
     if (code.length !== 6) {
-      setLocalError('Please enter the 6-digit code from your authenticator app.');
+      setLocalError(t('profile.enter6DigitCode'));
       return;
     }
     setIsWorking(true);
@@ -1039,7 +1042,7 @@ function RegenerateSecretDialog({
       onRegenerated(res);
       onOpenChange(false);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to regenerate secret.';
+      const msg = err instanceof Error ? err.message : t('profile.regenerateFailed');
       setLocalError(msg);
     } finally {
       setIsWorking(false);
@@ -1052,15 +1055,15 @@ function RegenerateSecretDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RefreshCw className="h-5 w-5" />
-            Regenerate Authenticator Secret
+            {t('profile.regenerateAuthenticatorSecret')}
           </DialogTitle>
           <DialogDescription>
-            This will roll a new secret and disable 2FA until you re-activate. You will need to scan the new QR code with your authenticator app.
+            {t('profile.regenerateDesc')}
           </DialogDescription>
         </DialogHeader>
         <div className="py-2 space-y-4">
           <div className="grid gap-2">
-            <Label htmlFor="regen-pw" className="text-xs">Current Password</Label>
+            <Label htmlFor="regen-pw" className="text-xs">{t('profile.currentPassword')}</Label>
             <div className="relative">
               <Input
                 id="regen-pw"
@@ -1068,7 +1071,7 @@ function RegenerateSecretDialog({
                 autoComplete="current-password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Enter current password"
+                placeholder={t('profile.enterCurrentPassword')}
               />
               <button
                 type="button"
@@ -1080,7 +1083,7 @@ function RegenerateSecretDialog({
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="regen-code" className="text-xs">Current 6-digit code</Label>
+            <Label htmlFor="regen-code" className="text-xs">{t('profile.currentSixDigitCode')}</Label>
             <Input
               id="regen-code"
               inputMode="numeric"
@@ -1108,7 +1111,7 @@ function RegenerateSecretDialog({
             disabled={isWorking || !currentPassword || code.length !== 6}
           >
             {isWorking && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Regenerate Secret
+            {t('profile.regenerateSecret')}
           </Button>
         </DialogFooter>
       </DialogContent>

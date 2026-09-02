@@ -49,6 +49,7 @@ import {
 import { ConfirmDialog } from '@/components/patterns';
 import { getApi, deleteApi, patchApi, postApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
+import { useT } from '@/lib/i18n';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import type {
@@ -125,6 +126,17 @@ const STATUS_TABS: { label: string; value: string }[] = [
   { label: 'Trash', value: 'TRASH' },
 ];
 
+// i18n key per status tab / badge value (tab strip + small status badge).
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  all: 'comments.all',
+  PENDING: 'comments.pending',
+  APPROVED: 'comments.approved',
+  REJECTED: 'comments.rejected',
+  FLAGGED: 'comments.flagged',
+  SPAM: 'comments.spam',
+  TRASH: 'comments.trash',
+};
+
 const STATUS_BADGE_COLORS: Record<string, string> = {
   PENDING:
     'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
@@ -148,10 +160,13 @@ const SORT_OPTIONS = [
 // -------------------- Sub-components --------------------
 
 function StatusBadgeSmall({ status }: { status: string }) {
+  const { t } = useT();
   const colorClass =
     STATUS_BADGE_COLORS[status] ??
     'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300';
-  const label = status.charAt(0) + status.slice(1).toLowerCase();
+  const label = STATUS_LABEL_KEYS[status]
+    ? t(STATUS_LABEL_KEYS[status])
+    : status.charAt(0) + status.slice(1).toLowerCase();
   return (
     <span
       className={cn(
@@ -181,6 +196,7 @@ function CommentText({
   isExpanded: boolean;
   onToggle: (id: string) => void;
 }) {
+  const { t } = useT();
   const paraRef = useRef<HTMLParagraphElement>(null);
   const [isTruncated, setIsTruncated] = useState(false);
 
@@ -231,7 +247,7 @@ function CommentText({
           className="text-xs text-primary hover:underline mt-0.5"
           onClick={() => onToggle(commentId)}
         >
-          {isExpanded ? 'Read Less' : 'Read More'}
+          {isExpanded ? t('comments.readLess') : t('comments.readMore')}
         </button>
       )}
     </>
@@ -287,6 +303,7 @@ interface ProviderDraft {
 
 function CommentSettingsCard() {
   const queryClient = useQueryClient();
+  const { t } = useT();
 
   const { data: settingsData, isLoading } = useQuery({
     queryKey: ['settings', 'discussion', 'comments-page'],
@@ -365,9 +382,9 @@ function CommentSettingsCard() {
     onSuccess: () => {
       setDraft({});
       queryClient.invalidateQueries({ queryKey: ['settings'] });
-      toast.success('Comment settings saved');
+      toast.success(t('comments.settingsSaved'));
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to save settings'),
+    onError: (err: Error) => toast.error(err.message || t('comments.settingsSaveFailed')),
   });
 
   if (isLoading) {
@@ -394,7 +411,7 @@ function CommentSettingsCard() {
             onCheckedChange={(v) => setDraft((prev) => ({ ...prev, commentsEnabled: v }))}
           />
           <Label htmlFor="enable-comments" className="text-sm font-medium cursor-pointer">
-            Enable Comments
+            {t('comments.enableComments')}
           </Label>
         </div>
 
@@ -409,14 +426,14 @@ function CommentSettingsCard() {
             onCheckedChange={(v) => setDraft((prev) => ({ ...prev, spamDetection: v }))}
           />
           <Label htmlFor="spam-detection" className="text-sm font-medium cursor-pointer">
-            Auto Spam Detection
+            {t('comments.autoSpamDetection')}
           </Label>
         </div>
 
         {/* Spam Provider (conditional on spam detection being on) */}
         {spamDetection && (
           <div className="flex items-center gap-2">
-            <Label className="text-sm text-muted-foreground">Provider:</Label>
+            <Label className="text-sm text-muted-foreground">{t('comments.provider')}</Label>
             <Select
               value={spamProvider}
               onValueChange={(v) => setDraft((prev) => ({ ...prev, spamProvider: v }))}
@@ -427,7 +444,11 @@ function CommentSettingsCard() {
               <SelectContent>
                 {SPAM_PROVIDERS.map((p) => (
                   <SelectItem key={p.value} value={p.value}>
-                    {p.label}
+                    {p.value === 'none'
+                      ? t('comments.providerNone')
+                      : p.value === 'custom'
+                        ? t('comments.providerCustom')
+                        : t('comments.providerAkismet')}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -445,7 +466,7 @@ function CommentSettingsCard() {
           {saveMutation.isPending ? (
             <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
           ) : null}
-          Save
+          {t('common.save')}
         </Button>
       </div>
 
@@ -456,7 +477,7 @@ function CommentSettingsCard() {
         <div className="mt-4 pt-4 border-t border-dashed">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold">Custom Spam Provider</h3>
+              <h3 className="text-sm font-semibold">{t('comments.customSpamProvider')}</h3>
               {/* Helper text as a small info tooltip to keep the UI clean */}
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -465,13 +486,13 @@ function CommentSettingsCard() {
                   </button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs text-xs leading-relaxed">
-                  The custom endpoint receives POST requests with the comment payload and must respond with JSON: {`{ "spam": true|false, "score": 0-100 }`}
+                  {t('comments.customEndpointHint')} {`{ "spam": true|false, "score": 0-100 }`}
                 </TooltipContent>
               </Tooltip>
             </div>
             <div className="flex items-center gap-2">
               <Label htmlFor="custom-enabled" className="text-xs text-muted-foreground cursor-pointer">
-                {customEnabled ? 'Enabled' : 'Disabled'}
+                {customEnabled ? t('comments.enabled') : t('comments.disabled')}
               </Label>
               <Switch
                 id="custom-enabled"
@@ -483,19 +504,19 @@ function CommentSettingsCard() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1">
               <Label htmlFor="custom-provider-name" className="text-xs font-medium">
-                Provider Name
+                {t('comments.providerName')}
               </Label>
               <Input
                 id="custom-provider-name"
                 value={customProviderName}
                 onChange={(e) => setDraft((prev) => ({ ...prev, customProviderName: e.target.value }))}
-                placeholder="e.g. ProjectShield"
+                placeholder={t('comments.providerNamePlaceholder')}
                 className="h-8 text-sm"
               />
             </div>
             <div className="space-y-1">
               <Label htmlFor="custom-api-endpoint" className="text-xs font-medium">
-                API Endpoint / URL
+                {t('comments.apiEndpoint')}
               </Label>
               <Input
                 id="custom-api-endpoint"
@@ -507,18 +528,18 @@ function CommentSettingsCard() {
             </div>
             <div className="space-y-1">
               <Label htmlFor="custom-api-key" className="text-xs font-medium">
-                API Key
+                {t('comments.apiKey')}
               </Label>
               <Input
                 id="custom-api-key"
                 type="password"
                 value={customApiKey}
                 onChange={(e) => setDraft((prev) => ({ ...prev, customApiKey: e.target.value }))}
-                placeholder={hasSavedCustomApiKey ? API_KEY_MASK : 'Enter API key'}
+                placeholder={hasSavedCustomApiKey ? API_KEY_MASK : t('comments.enterApiKey')}
                 className="h-8 text-sm"
               />
               {hasSavedCustomApiKey && !draft.customApiKey && (
-                <p className="text-[10px] text-muted-foreground">Leave as {API_KEY_MASK} to keep the saved key.</p>
+                <p className="text-[10px] text-muted-foreground">{t('comments.keepKeyPrefix')}{API_KEY_MASK}{t('comments.keepKeySuffix')}</p>
               )}
             </div>
           </div>
@@ -530,9 +551,9 @@ function CommentSettingsCard() {
         <div className="mt-4 pt-4 border-t border-dashed">
           <div className="flex items-center gap-2 mb-3">
             <Shield className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-semibold">Akismet Configuration</h3>
+            <h3 className="text-sm font-semibold">{t('comments.akismetConfiguration')}</h3>
             <span className="text-[10px] text-muted-foreground">
-              Get your key at{' '}
+              {t('comments.getKeyAt')}{' '}
               <a href="https://akismet.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                 akismet.com
               </a>
@@ -541,23 +562,23 @@ function CommentSettingsCard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label htmlFor="akismet-api-key" className="text-xs font-medium">
-                Akismet API Key
+                {t('comments.akismetApiKey')}
               </Label>
               <Input
                 id="akismet-api-key"
                 type="password"
                 value={akismetApiKey}
                 onChange={(e) => setDraft((prev) => ({ ...prev, akismetApiKey: e.target.value }))}
-                placeholder={hasSavedAkismetApiKey ? API_KEY_MASK : 'Enter Akismet key'}
+                placeholder={hasSavedAkismetApiKey ? API_KEY_MASK : t('comments.enterAkismetKey')}
                 className="h-8 text-sm"
               />
               {hasSavedAkismetApiKey && !draft.akismetApiKey && (
-                <p className="text-[10px] text-muted-foreground">Leave as {API_KEY_MASK} to keep the saved key.</p>
+                <p className="text-[10px] text-muted-foreground">{t('comments.keepKeyPrefix')}{API_KEY_MASK}{t('comments.keepKeySuffix')}</p>
               )}
             </div>
             <div className="space-y-1">
               <Label htmlFor="akismet-blog-url" className="text-xs font-medium">
-                Blog / Site URL
+                {t('comments.blogUrl')}
               </Label>
               <Input
                 id="akismet-blog-url"
@@ -580,6 +601,7 @@ function CommentSettingsCard() {
 
 export function CommentsPage() {
   const queryClient = useQueryClient();
+  const { t } = useT();
 
   // ---------- Plan entitlement gate (client-side) ----------
   // Comments is a real plan feature entitlement. The AUTHORITATIVE
@@ -825,60 +847,60 @@ export function CommentsPage() {
     (id: string) => {
       if (USE_DEMO_DATA) {
         updateDemoStatus(id, 'APPROVED');
-        toast.success('Comment approved');
+        toast.success(t('comments.toastApproved'));
       } else {
         approveMutation.mutate(id);
       }
     },
-    [approveMutation, updateDemoStatus],
+    [approveMutation, updateDemoStatus, t],
   );
 
   const handleReject = useCallback(
     (id: string) => {
       if (USE_DEMO_DATA) {
         updateDemoStatus(id, 'REJECTED');
-        toast.success('Comment rejected');
+        toast.success(t('comments.toastRejected'));
       } else {
         rejectMutation.mutate(id);
       }
     },
-    [rejectMutation, updateDemoStatus],
+    [rejectMutation, updateDemoStatus, t],
   );
 
   const handleMarkSpam = useCallback(
     (id: string) => {
       if (USE_DEMO_DATA) {
         updateDemoStatus(id, 'SPAM');
-        toast.success('Comment marked as spam');
+        toast.success(t('comments.toastMarkedSpam'));
       } else {
         markSpamMutation.mutate(id);
       }
     },
-    [markSpamMutation, updateDemoStatus],
+    [markSpamMutation, updateDemoStatus, t],
   );
 
   const handleFlag = useCallback(
     (id: string) => {
       if (USE_DEMO_DATA) {
         updateDemoStatus(id, 'FLAGGED');
-        toast.success('Comment flagged for review');
+        toast.success(t('comments.toastFlagged'));
       } else {
         flagMutation.mutate(id);
       }
     },
-    [flagMutation, updateDemoStatus],
+    [flagMutation, updateDemoStatus, t],
   );
 
   const handleMoveToTrash = useCallback(
     (id: string) => {
       if (USE_DEMO_DATA) {
         updateDemoStatus(id, 'TRASH');
-        toast.success('Comment moved to trash');
+        toast.success(t('comments.toastTrashed'));
       } else {
         trashMutation.mutate(id);
       }
     },
-    [trashMutation, updateDemoStatus],
+    [trashMutation, updateDemoStatus, t],
   );
 
   const handleDelete = useCallback(
@@ -886,12 +908,12 @@ export function CommentsPage() {
       if (USE_DEMO_DATA) {
         removeDemoComment(id);
         setDeleteTarget(null);
-        toast.success('Comment permanently deleted');
+        toast.success(t('comments.toastDeleted'));
       } else {
         deleteMutation.mutate(id);
       }
     },
-    [deleteMutation, removeDemoComment],
+    [deleteMutation, removeDemoComment, t],
   );
 
   // Restore a trashed comment back to Pending (the previous status is not
@@ -900,12 +922,12 @@ export function CommentsPage() {
     (id: string) => {
       if (USE_DEMO_DATA) {
         updateDemoStatus(id, 'PENDING');
-        toast.success('Comment restored');
+        toast.success(t('comments.toastRestored'));
       } else {
         restoreMutation.mutate(id);
       }
     },
-    [restoreMutation, updateDemoStatus],
+    [restoreMutation, updateDemoStatus, t],
   );
 
   // Bulk action wrappers.
@@ -914,12 +936,12 @@ export function CommentsPage() {
       if (USE_DEMO_DATA) {
         ids.forEach((id) => updateDemoStatus(id, 'APPROVED'));
         setSelectedIds(new Set());
-        toast.success(`${ids.length} comment${ids.length > 1 ? 's' : ''} approved`);
+        toast.success(`${ids.length} ${ids.length > 1 ? t('comments.bulkApprovedPlural') : t('comments.bulkApprovedSingular')}`);
       } else {
         bulkApproveMutation.mutate(ids);
       }
     },
-    [bulkApproveMutation, updateDemoStatus],
+    [bulkApproveMutation, updateDemoStatus, t],
   );
 
   const handleBulkReject = useCallback(
@@ -927,12 +949,12 @@ export function CommentsPage() {
       if (USE_DEMO_DATA) {
         ids.forEach((id) => updateDemoStatus(id, 'REJECTED'));
         setSelectedIds(new Set());
-        toast.success(`${ids.length} comment${ids.length > 1 ? 's' : ''} rejected`);
+        toast.success(`${ids.length} ${ids.length > 1 ? t('comments.bulkRejectedPlural') : t('comments.bulkRejectedSingular')}`);
       } else {
         bulkRejectMutation.mutate(ids);
       }
     },
-    [bulkRejectMutation, updateDemoStatus],
+    [bulkRejectMutation, updateDemoStatus, t],
   );
 
   const handleBulkSpam = useCallback(
@@ -940,12 +962,12 @@ export function CommentsPage() {
       if (USE_DEMO_DATA) {
         ids.forEach((id) => updateDemoStatus(id, 'SPAM'));
         setSelectedIds(new Set());
-        toast.success(`${ids.length} comment${ids.length > 1 ? 's' : ''} marked as spam`);
+        toast.success(`${ids.length} ${ids.length > 1 ? t('comments.bulkSpamPlural') : t('comments.bulkSpamSingular')}`);
       } else {
         bulkSpamMutation.mutate(ids);
       }
     },
-    [bulkSpamMutation, updateDemoStatus],
+    [bulkSpamMutation, updateDemoStatus, t],
   );
 
   const handleBulkTrash = useCallback(
@@ -953,12 +975,12 @@ export function CommentsPage() {
       if (USE_DEMO_DATA) {
         ids.forEach((id) => updateDemoStatus(id, 'TRASH'));
         setSelectedIds(new Set());
-        toast.success(`${ids.length} comment${ids.length > 1 ? 's' : ''} moved to trash`);
+        toast.success(`${ids.length} ${ids.length > 1 ? t('comments.bulkTrashPlural') : t('comments.bulkTrashSingular')}`);
       } else {
         bulkTrashMutation.mutate(ids);
       }
     },
-    [bulkTrashMutation, updateDemoStatus],
+    [bulkTrashMutation, updateDemoStatus, t],
   );
 
   const handleBulkDelete = useCallback(
@@ -966,12 +988,12 @@ export function CommentsPage() {
       if (USE_DEMO_DATA) {
         ids.forEach((id) => removeDemoComment(id));
         setSelectedIds(new Set());
-        toast.success(`${ids.length} comment${ids.length > 1 ? 's' : ''} permanently deleted`);
+        toast.success(`${ids.length} ${ids.length > 1 ? t('comments.bulkDeletePlural') : t('comments.bulkDeleteSingular')}`);
       } else {
         bulkDeleteMutation.mutate(ids);
       }
     },
-    [bulkDeleteMutation, removeDemoComment],
+    [bulkDeleteMutation, removeDemoComment, t],
   );
 
   // Handlers
@@ -1043,24 +1065,24 @@ export function CommentsPage() {
 
   // Empty state messages
   const emptyMessage = useMemo(() => {
-    if (searchValue) return 'No comments match your search.';
+    if (searchValue) return t('comments.emptySearch');
     switch (statusTab) {
       case 'PENDING':
-        return 'No pending comments to review.';
+        return t('comments.emptyPending');
       case 'APPROVED':
-        return 'No approved comments yet.';
+        return t('comments.emptyApproved');
       case 'REJECTED':
-        return 'No rejected comments.';
+        return t('comments.emptyRejected');
       case 'FLAGGED':
-        return 'No flagged comments.';
+        return t('comments.emptyFlagged');
       case 'SPAM':
-        return 'No spam comments detected.';
+        return t('comments.emptySpam');
       case 'TRASH':
-        return 'Trash is empty.';
+        return t('comments.emptyTrash');
       default:
-        return 'No comments yet. They will appear here when users leave comments on your content.';
+        return t('comments.emptyDefault');
     }
-  }, [searchValue, statusTab]);
+  }, [searchValue, statusTab, t]);
 
   // ---------- Plan entitlement gate ----------
   // The current plan does not include the Comments feature → render a
@@ -1078,11 +1100,10 @@ export function CommentsPage() {
             </div>
             <div className="space-y-1.5">
               <h2 className="text-lg font-semibold text-foreground">
-                Comments is not included in your plan
+                {t('comments.notIncludedTitle')}
               </h2>
               <p className="text-sm text-muted-foreground">
-                Upgrade your plan to moderate and manage comments across your
-                content. Direct API calls are also blocked server-side.
+                {t('comments.notIncludedDescription')}
               </p>
             </div>
             <Button
@@ -1091,7 +1112,7 @@ export function CommentsPage() {
               }}
               className="mt-2"
             >
-              View Plans &amp; Upgrade
+              {t('comments.viewPlans')}
             </Button>
           </CardContent>
         </Card>
@@ -1105,9 +1126,9 @@ export function CommentsPage() {
         {/* Page Header */}
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Comments</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{t('title.comments')}</h1>
             <p className="text-muted-foreground mt-1">
-              Moderate and manage user comments across your content
+              {t('comments.pageDescription')}
             </p>
           </div>
         </header>
@@ -1120,7 +1141,7 @@ export function CommentsPage() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by author, content, article or email..."
+              placeholder={t('comments.searchPlaceholder')}
               value={searchValue}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-9 h-9"
@@ -1134,7 +1155,7 @@ export function CommentsPage() {
               {SORT_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
                   <span className="flex items-center gap-2">
-                    {opt.label}
+                    {opt.value === 'createdAt' ? t('comments.sortDate') : t('comments.sortContent')}
                     {sortField === opt.value && (
                       <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
                     )}
@@ -1151,14 +1172,14 @@ export function CommentsPage() {
               setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
             }}
           >
-            {sortOrder === 'desc' ? 'Newest' : 'Oldest'}
+            {sortOrder === 'desc' ? t('comments.newest') : t('comments.oldest')}
           </Button>
         </div>
 
         {/* Custom Status Filter Tabs — each tab shows its live count */}
         <nav
           className="flex gap-1 overflow-x-auto border-b scrollbar-none -mx-1 px-1"
-          aria-label="Comment status filter"
+          aria-label={t('comments.statusFilterAria')}
         >
           {STATUS_TABS.map((tab) => {
             const isActive = statusTab === tab.value;
@@ -1179,7 +1200,9 @@ export function CommentsPage() {
                     : 'text-muted-foreground hover:text-foreground/80',
                 )}
               >
-                {tab.label}
+                {STATUS_LABEL_KEYS[tab.value]
+                  ? t(STATUS_LABEL_KEYS[tab.value])
+                  : tab.label}
                 {USE_DEMO_DATA && (
                   <span
                     className={cn(
@@ -1213,7 +1236,7 @@ export function CommentsPage() {
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
                 <MessageSquare className="h-7 w-7 text-muted-foreground" />
               </div>
-              <h3 className="mt-4 text-sm font-semibold">No comments</h3>
+              <h3 className="mt-4 text-sm font-semibold">{t('comments.noComments')}</h3>
               <p className="mt-1 text-sm text-muted-foreground text-center max-w-sm">
                 {emptyMessage}
               </p>
@@ -1228,12 +1251,12 @@ export function CommentsPage() {
                     selectedIds.size === comments.length
                   }
                   onCheckedChange={toggleSelectAll}
-                  aria-label="Select all comments"
+                  aria-label={t('comments.selectAllAria')}
                 />
                 <span className="text-xs text-muted-foreground">
                   {selectedIds.size > 0
-                    ? `${selectedIds.size} selected`
-                    : `${totalItems} comment${totalItems !== 1 ? 's' : ''}`}
+                    ? `${selectedIds.size} ${t('comments.selectedCount')}`
+                    : `${totalItems} ${totalItems !== 1 ? t('comments.commentsPlural') : t('comments.commentSingular')}`}
                 </span>
               </div>
 
@@ -1283,7 +1306,7 @@ export function CommentsPage() {
                         <Checkbox
                           checked={isSelected}
                           onCheckedChange={() => toggleSelect(comment.id)}
-                          aria-label={`Select comment by ${comment.author?.name ?? 'Anonymous'}`}
+                          aria-label={`${t('comments.selectByPrefix')}${comment.author?.name ?? t('comments.anonymous')}`}
                         />
                       </div>
 
@@ -1292,7 +1315,7 @@ export function CommentsPage() {
                         {/* Name + Email (inline) */}
                         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                           <span className="text-sm font-semibold text-foreground truncate">
-                            {comment.author?.name ?? 'Anonymous'}
+                            {comment.author?.name ?? t('comments.anonymous')}
                           </span>
                           {comment.author?.email && (
                             <span className="text-[11px] text-muted-foreground truncate max-w-[16rem]">
@@ -1313,7 +1336,7 @@ export function CommentsPage() {
                         <div className="flex flex-wrap items-center gap-2 mt-1.5">
                           {comment.contentItem && (
                             <span className="text-xs text-muted-foreground">
-                              on{' '}
+                              {t('comments.onArticle')}{' '}
                               <a
                                 href={`#content/${comment.contentItem.id}`}
                                 className="text-foreground/70 hover:text-primary transition-colors"
@@ -1353,7 +1376,7 @@ export function CommentsPage() {
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                              {isSpam ? 'Not Spam (Approve)' : 'Approve'}
+                              {isSpam ? t('comments.notSpamApprove') : t('comments.approve')}
                             </TooltipContent>
                           </Tooltip>
                         )}
@@ -1374,7 +1397,7 @@ export function CommentsPage() {
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                              {comment.status === 'APPROVED' ? 'Unapprove' : 'Reject'}
+                              {comment.status === 'APPROVED' ? t('comments.unapprove') : t('comments.reject')}
                             </TooltipContent>
                           </Tooltip>
                         )}
@@ -1392,7 +1415,7 @@ export function CommentsPage() {
                                 <RotateCcw className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Restore</TooltipContent>
+                            <TooltipContent>{t('comments.restore')}</TooltipContent>
                           </Tooltip>
                         )}
 
@@ -1411,7 +1434,7 @@ export function CommentsPage() {
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Delete Permanently</TooltipContent>
+                            <TooltipContent>{t('comments.deletePermanently')}</TooltipContent>
                           </Tooltip>
                         )}
 
@@ -1424,7 +1447,7 @@ export function CommentsPage() {
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8">
                               <MoreHorizontal className="h-4 w-4" />
-                              <span className="sr-only">More actions</span>
+                              <span className="sr-only">{t('comments.moreActions')}</span>
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-48">
@@ -1432,21 +1455,21 @@ export function CommentsPage() {
                             {showFlagInMore && (
                               <DropdownMenuItem onClick={() => handleFlag(comment.id)}>
                                 <FlagIcon className="h-4 w-4 mr-2" />
-                                Flag for Review
+                                {t('comments.flagForReview')}
                               </DropdownMenuItem>
                             )}
                             {/* Mark as Spam */}
                             {showMarkSpamInMore && (
                               <DropdownMenuItem onClick={() => handleMarkSpam(comment.id)}>
                                 <Flag className="h-4 w-4 mr-2" />
-                                Mark as Spam
+                                {t('comments.markAsSpam')}
                               </DropdownMenuItem>
                             )}
                             {/* Move to Trash */}
                             {showMoveToTrashInMore && (
                               <DropdownMenuItem onClick={() => handleMoveToTrash(comment.id)}>
                                 <Archive className="h-4 w-4 mr-2" />
-                                Move to Trash
+                                {t('comments.moveToTrash')}
                               </DropdownMenuItem>
                             )}
                             {/* Delete Permanently */}
@@ -1458,7 +1481,7 @@ export function CommentsPage() {
                                   onClick={() => setDeleteTarget(comment)}
                                 >
                                   <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete Permanently
+                                  {t('comments.deletePermanently')}
                                 </DropdownMenuItem>
                               </>
                             )}
@@ -1477,7 +1500,7 @@ export function CommentsPage() {
           {!isLoading && comments.length > 0 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t">
               <p className="text-sm text-muted-foreground">
-                Showing {pageStart} to {pageEnd} of {totalItems}
+                {t('common.showing')} {pageStart} {t('comments.toText')} {pageEnd} {t('common.of')} {totalItems}
               </p>
               <div className="flex items-center gap-1">
                 <Button
@@ -1559,7 +1582,7 @@ export function CommentsPage() {
         {selectedIds.size > 0 && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-wrap items-center gap-2 rounded-xl border bg-card px-4 py-2.5 shadow-lg animate-in fade-in-0 slide-in-from-bottom-4 max-w-[calc(100vw-2rem)]">
             <span className="text-sm font-medium whitespace-nowrap">
-              {selectedIds.size} selected
+              {selectedIds.size} {t('comments.selectedCount')}
             </span>
             <div className="w-px h-5 bg-border" />
             <Button
@@ -1568,7 +1591,7 @@ export function CommentsPage() {
               onClick={() => handleBulkApprove(Array.from(selectedIds))}
             >
               <Check className="h-3.5 w-3.5 text-emerald-100" />
-              Approve
+              {t('comments.approve')}
             </Button>
             <Button
               size="sm"
@@ -1577,7 +1600,7 @@ export function CommentsPage() {
               onClick={() => handleBulkReject(Array.from(selectedIds))}
             >
               <X className="h-3.5 w-3.5 text-red-600" />
-              Reject
+              {t('comments.reject')}
             </Button>
             <Button
               size="sm"
@@ -1586,8 +1609,8 @@ export function CommentsPage() {
               onClick={() => handleBulkSpam(Array.from(selectedIds))}
             >
               <Flag className="h-3.5 w-3.5 text-purple-600" />
-              <span className="hidden sm:inline">Mark as Spam</span>
-              <span className="sm:hidden">Spam</span>
+              <span className="hidden sm:inline">{t('comments.markAsSpam')}</span>
+              <span className="sm:hidden">{t('comments.spam')}</span>
             </Button>
             <Button
               size="sm"
@@ -1596,8 +1619,8 @@ export function CommentsPage() {
               onClick={() => handleBulkTrash(Array.from(selectedIds))}
             >
               <Archive className="h-3.5 w-3.5 text-orange-600" />
-              <span className="hidden sm:inline">Move to Trash</span>
-              <span className="sm:hidden">Trash</span>
+              <span className="hidden sm:inline">{t('comments.moveToTrash')}</span>
+              <span className="sm:hidden">{t('comments.trash')}</span>
             </Button>
             <Button
               size="sm"
@@ -1606,7 +1629,7 @@ export function CommentsPage() {
               onClick={() => handleBulkDelete(Array.from(selectedIds))}
             >
               <Trash2 className="h-3.5 w-3.5" />
-              Delete
+              {t('common.delete')}
             </Button>
             <div className="w-px h-5 bg-border hidden sm:block" />
             <Button
@@ -1615,7 +1638,7 @@ export function CommentsPage() {
               className="h-8"
               onClick={clearSelection}
             >
-              Clear
+              {t('comments.clear')}
             </Button>
           </div>
         )}
@@ -1624,13 +1647,13 @@ export function CommentsPage() {
         <ConfirmDialog
           open={!!deleteTarget}
           onOpenChange={(open) => !open && setDeleteTarget(null)}
-          title="Delete Comment"
+          title={t('comments.deleteComment')}
           description={
             deleteTarget
-              ? `Are you sure you want to permanently delete this comment by "${deleteTarget.author?.name ?? 'Anonymous'}"? This action cannot be undone.`
+              ? `${t('comments.deleteConfirmPrefix')}${deleteTarget.author?.name ?? t('comments.anonymous')}${t('comments.deleteConfirmSuffix')}`
               : undefined
           }
-          confirmLabel="Delete Permanently"
+          confirmLabel={t('comments.deletePermanently')}
           variant="destructive"
           onConfirm={() => {
             if (deleteTarget) handleDelete(deleteTarget.id);

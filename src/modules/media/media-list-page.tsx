@@ -27,6 +27,7 @@ import {
 import { ConfirmDialog } from '@/components/patterns';
 import { getApi, deleteApi, postApi, patchApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
+import { useT } from '@/lib/i18n';
 import { cn, formatFileSize, truncate } from '@/lib/utils';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import type { MediaProcessingStatus } from '@/shared/types';
@@ -71,12 +72,12 @@ interface UploadSummary {
 const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4'] as const;
 const IMAGE_COUNTS = [1, 2, 3, 4] as const;
 
-const FILTER_OPTIONS: { value: FilterType; label: string }[] = [
-  { value: 'all', label: 'All Media' },
-  { value: 'image', label: 'Images' },
-  { value: 'video', label: 'Videos' },
-  { value: 'audio', label: 'Audio' },
-  { value: 'document', label: 'Documents' },
+const FILTER_OPTIONS: { value: FilterType; labelKey: string }[] = [
+  { value: 'all', labelKey: 'media.filterAll' },
+  { value: 'image', labelKey: 'media.filterImages' },
+  { value: 'video', labelKey: 'media.filterVideos' },
+  { value: 'audio', labelKey: 'media.filterAudio' },
+  { value: 'document', labelKey: 'media.filterDocuments' },
 ];
 
 // ==================== Helpers ====================
@@ -129,6 +130,8 @@ function FolderCard({
   onClick: () => void;
   onContext: (e: React.MouseEvent) => void;
 }) {
+  const { t } = useT();
+
   return (
     <div
       onClick={onClick}
@@ -145,8 +148,8 @@ function FolderCard({
       </div>
       <p className="text-sm font-medium text-foreground text-center line-clamp-1 w-full px-1">{folder.name}</p>
       <p className="text-[11px] text-muted-foreground">
-        {folder._count.media} file{folder._count.media !== 1 ? 's' : ''}
-        {folder._count.children > 0 && ` · ${folder._count.children} subfolder${folder._count.children !== 1 ? 's' : ''}`}
+        {folder._count.media} {folder._count.media !== 1 ? t('media.filesPlural') : t('media.fileSingular')}
+        {folder._count.children > 0 && ` · ${folder._count.children} ${folder._count.children !== 1 ? t('media.subfoldersPlural') : t('media.subfolderSingular')}`}
       </p>
     </div>
   );
@@ -164,6 +167,8 @@ function MediaGridCard({
   onCopyUrl: (url: string) => void;
   onDelete: (item: MediaItemRow) => void;
 }) {
+  const { t } = useT();
+
   const imgSrc = isImageType(item.mimeType) ? (item.thumbnailUrl || item.url) : null;
   return (
     <div
@@ -207,23 +212,23 @@ function MediaGridCard({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" sideOffset={4} className="w-48">
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDetail(item.id); }}>
-                <ExternalLink className="mr-2 h-4 w-4" /> View Details
+                <ExternalLink className="mr-2 h-4 w-4" /> {t('media.viewDetails')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(item); }}>
-                <Pencil className="mr-2 h-4 w-4" /> Edit Details
+                <Pencil className="mr-2 h-4 w-4" /> {t('media.editDetails')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onMove(item); }}>
-                <Move className="mr-2 h-4 w-4" /> Move to Folder
+                <Move className="mr-2 h-4 w-4" /> {t('media.moveToFolder')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onCopyUrl(item.url); }}>
-                <Copy className="mr-2 h-4 w-4" /> Copy URL
+                <Copy className="mr-2 h-4 w-4" /> {t('media.copyUrl')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(item.url, '_blank'); }}>
-                <Download className="mr-2 h-4 w-4" /> Download
+                <Download className="mr-2 h-4 w-4" /> {t('media.download')}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(item); }} className="text-destructive focus:text-destructive">
-                <Trash2 className="mr-2 h-4 w-4" /> Delete
+                <Trash2 className="mr-2 h-4 w-4" /> {t('common.delete')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -259,6 +264,8 @@ function MediaListItem({
   onCopyUrl: (url: string) => void;
   onDelete: (item: MediaItemRow) => void;
 }) {
+  const { t } = useT();
+
   const imgSrc = isImageType(item.mimeType) ? (item.thumbnailUrl || item.url) : null;
   return (
     <div
@@ -301,23 +308,23 @@ function MediaListItem({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDetail(item.id); }}>
-              <ExternalLink className="mr-2 h-4 w-4" /> View Details
+              <ExternalLink className="mr-2 h-4 w-4" /> {t('media.viewDetails')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(item); }}>
-              <Pencil className="mr-2 h-4 w-4" /> Edit Details
+              <Pencil className="mr-2 h-4 w-4" /> {t('media.editDetails')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onMove(item); }}>
-              <Move className="mr-2 h-4 w-4" /> Move to Folder
+              <Move className="mr-2 h-4 w-4" /> {t('media.moveToFolder')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onCopyUrl(item.url); }}>
-              <Copy className="mr-2 h-4 w-4" /> Copy URL
+              <Copy className="mr-2 h-4 w-4" /> {t('media.copyUrl')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(item.url, '_blank'); }}>
-              <Download className="mr-2 h-4 w-4" /> Download
+              <Download className="mr-2 h-4 w-4" /> {t('media.download')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(item); }} className="text-destructive focus:text-destructive">
-              <Trash2 className="mr-2 h-4 w-4" /> Delete
+              <Trash2 className="mr-2 h-4 w-4" /> {t('common.delete')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -329,6 +336,8 @@ function MediaListItem({
 // ==================== Main Component ====================
 
 export function MediaListPage() {
+  const { t } = useT();
+
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
 
@@ -437,9 +446,9 @@ export function MediaListPage() {
       setDeleteTarget(null);
       setContextItem(null);
       setContextMenuPos(null);
-      toast.success('Media deleted');
+      toast.success(t('media.mediaDeleted'));
     },
-    onError: () => toast.error('Failed to delete media'),
+    onError: () => toast.error(t('media.deleteFailed')),
   });
 
   const bulkDeleteMutation = useMutation({
@@ -447,9 +456,9 @@ export function MediaListPage() {
     onSuccess: () => {
       invalidateMediaAndFolders();
       setSelectedIds([]);
-      toast.success(`${selectedIds.length} items deleted`);
+      toast.success(`${selectedIds.length} ${t('media.itemsDeletedSuffix')}`);
     },
-    onError: () => toast.error('Failed to delete items'),
+    onError: () => toast.error(t('media.deleteItemsFailed')),
   });
 
   const bulkMoveMutation = useMutation({
@@ -459,9 +468,9 @@ export function MediaListPage() {
     onSuccess: () => {
       invalidateMediaAndFolders();
       setSelectedIds([]);
-      toast.success('Items moved');
+      toast.success(t('media.itemsMoved'));
     },
-    onError: () => toast.error('Failed to move items'),
+    onError: () => toast.error(t('media.moveFailed')),
   });
 
   const createFolderMutation = useMutation({
@@ -473,10 +482,10 @@ export function MediaListPage() {
       setNewFolderParentId(null);
       setContextFolder(null);
       setFolderMenuPos(null);
-      toast.success('Folder created');
+      toast.success(t('media.folderCreated'));
       // FIX #2: Do NOT navigate away - user stays in current folder
     },
-    onError: () => toast.error('Failed to create folder'),
+    onError: () => toast.error(t('media.folderCreateFailed')),
   });
 
   const renameFolderMutation = useMutation({
@@ -492,9 +501,9 @@ export function MediaListPage() {
       setFolderPath((prev) =>
         prev.map((crumb) => (crumb.id === vars.id ? { ...crumb, name: vars.name } : crumb)),
       );
-      toast.success('Folder renamed');
+      toast.success(t('media.folderRenamed'));
     },
-    onError: () => toast.error('Failed to rename folder'),
+    onError: () => toast.error(t('media.renameFailed')),
   });
 
   const deleteFolderMutation = useMutation({
@@ -504,9 +513,9 @@ export function MediaListPage() {
       setDeleteFolderTarget(null);
       setContextFolder(null);
       setFolderMenuPos(null);
-      toast.success('Folder deleted');
+      toast.success(t('media.folderDeleted'));
     },
-    onError: () => toast.error('Failed to delete folder'),
+    onError: () => toast.error(t('media.deleteFolderFailed')),
   });
 
   // Upload mutation — per-file POSTs to /api/media/upload (multipart/form-data).
@@ -536,15 +545,15 @@ export function MediaListPage() {
           if (!res.ok || !json?.data) {
             const reason =
               json?.error?.message ||
-              (res.status === 413 ? 'File is too large' :
-               res.status === 415 ? 'File type not supported' :
-               res.status === 401 ? 'Authentication required' :
-               res.status === 403 ? 'Not allowed' :
-               res.status === 404 ? 'Upload endpoint not found' :
-               res.status >= 500 ? 'Server error' :
+              (res.status === 413 ? t('media.errFileTooLarge') :
+               res.status === 415 ? t('media.errFileType') :
+               res.status === 401 ? t('media.errAuthRequired') :
+               res.status === 403 ? t('media.errNotAllowed') :
+               res.status === 404 ? t('media.errUploadEndpoint') :
+               res.status >= 500 ? t('media.errServer') :
                `HTTP ${res.status}`) ||
               res.statusText ||
-              'Upload failed';
+              t('media.uploadFailed');
             failures.push({ name: file.name, reason });
             console.error(
               `[MEDIA:UPLOAD] ${file.name} failed —`,
@@ -560,7 +569,7 @@ export function MediaListPage() {
           else results.push(data);
         } catch (err) {
           // Network error / aborted request — surface the actual reason
-          const reason = err instanceof Error ? err.message : 'Network request failed';
+          const reason = err instanceof Error ? err.message : t('media.errNetwork');
           failures.push({ name: file.name, reason });
           console.error(`[MEDIA:UPLOAD] ${file.name} network error —`, err);
         }
@@ -577,8 +586,8 @@ export function MediaListPage() {
       if (results.length === 0 && files.length > 0) {
         const err = new Error(
           failures.length === 1
-            ? `Upload failed: ${failures[0].reason}`
-            : `All ${failures.length} files failed`,
+            ? `${t('media.uploadFailedPrefix')} ${failures[0].reason}`
+            : `${t('media.allFilesFailedPrefix')} ${failures.length} ${t('media.filesFailedSuffix')}`,
         ) as Error & { uploadSummary?: UploadSummary };
         err.uploadSummary = summary;
         throw err;
@@ -592,11 +601,11 @@ export function MediaListPage() {
 
       if (summary.failed.length === 0) {
         const n = summary.succeeded;
-        toast.success(n === 1 ? '1 file uploaded successfully' : `${n} files uploaded successfully`);
+        toast.success(n === 1 ? t('media.oneFileUploaded') : `${n} ${t('media.filesUploadedSuffix')}`);
       } else {
         const failedNames = summary.failed.map((f) => f.name).join(', ');
         toast.warning(
-          `${summary.succeeded} file${summary.succeeded === 1 ? '' : 's'} uploaded, ${summary.failed.length} failed: ${failedNames}`,
+          `${summary.succeeded} ${summary.succeeded === 1 ? t('media.fileSingular') : t('media.filesPlural')} ${t('media.partialUploadInfix')} ${summary.failed.length} ${t('media.failedCountSuffix')} ${failedNames}`,
           { duration: 6000 },
         );
       }
@@ -607,12 +616,12 @@ export function MediaListPage() {
         const first = summary.failed[0];
         toast.error(
           summary.failed.length === 1
-            ? `Upload failed: ${first.reason}`
-            : `All ${summary.failed.length} files failed. First reason: ${first.reason}`,
+            ? `${t('media.uploadFailedPrefix')} ${first.reason}`
+            : `${t('media.allFilesFailedPrefix')} ${summary.failed.length} ${t('media.allFilesFailedSuffix')} ${first.reason}`,
           { duration: 8000 },
         );
       } else {
-        toast.error(err.message || 'Upload failed');
+        toast.error(err.message || t('media.uploadFailed'));
       }
     },
   });
@@ -630,9 +639,9 @@ export function MediaListPage() {
       invalidateMediaAndFolders();
       setAiDialogOpen(false);
       setAiPrompt('');
-      toast.success('Images generated successfully');
+      toast.success(t('media.imagesGenerated'));
     },
-    onError: () => toast.error('Failed to generate images'),
+    onError: () => toast.error(t('media.generateFailed')),
   });
 
   const updateMediaMutation = useMutation({
@@ -644,9 +653,9 @@ export function MediaListPage() {
       setMoveTarget(null);
       setContextItem(null);
       setContextMenuPos(null);
-      toast.success('Updated');
+      toast.success(t('media.updated'));
     },
-    onError: () => toast.error('Failed to update'),
+    onError: () => toast.error(t('media.updateFailed')),
   });
 
   // ==================== Callbacks ====================
@@ -780,7 +789,7 @@ export function MediaListPage() {
 
   // ==================== Render ====================
 
-  const activeFilterLabel = FILTER_OPTIONS.find((f) => f.value === activeFilter)?.label;
+  const activeFilterLabel = FILTER_OPTIONS.find((f) => f.value === activeFilter)?.labelKey;
 
   return (
     <div className="flex flex-col h-full" onClick={closeMenus}>
@@ -792,7 +801,7 @@ export function MediaListPage() {
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors">
                 <FolderOpen className="h-3.5 w-3.5" />
-                Filter
+                {t('media.filter')}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-44">
@@ -803,38 +812,38 @@ export function MediaListPage() {
                   className={cn(activeFilter === opt.value && 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 font-medium')}
                 >
                   {activeFilter === opt.value && <Check className="mr-2 h-4 w-4" />}
-                  {opt.label}
+                  {opt.labelKey && t(opt.labelKey)}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
           {activeFilter !== 'all' && (
-            <span className="px-3 py-1 bg-amber-400 text-black text-xs font-semibold rounded-full">{activeFilterLabel}</span>
+            <span className="px-3 py-1 bg-amber-400 text-black text-xs font-semibold rounded-full">{activeFilterLabel && t(activeFilterLabel)}</span>
           )}
           <button
             onClick={() => { setNewFolderParentId(currentFolderId); setNewFolderName(''); setNewFolderDialogOpen(true); }}
             className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground border border-border rounded-lg transition-colors"
           >
             <FolderPlus className="h-3.5 w-3.5" />
-            New Folder
+            {t('media.newFolder')}
           </button>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">{items.length} file{items.length !== 1 ? 's' : ''}</span>
+          <span className="text-sm text-muted-foreground">{items.length} {items.length !== 1 ? t('media.filesPlural') : t('media.fileSingular')}</span>
           {/* FIX #8: AI Generate button - amber/gold color */}
           <button
             onClick={openAiDialog}
             className="flex items-center gap-2 px-4 py-2 bg-amber-400 text-black text-sm font-semibold rounded-lg hover:bg-amber-500 transition-colors shadow-sm"
           >
             <Sparkles className="h-4 w-4" />
-            AI Generate
+            {t('media.aiGenerate')}
           </button>
           <button
             onClick={() => setUploadDialogOpen(true)}
             className="flex items-center gap-2 px-5 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-neutral-800 transition-colors shadow-sm"
           >
             <Upload className="h-4 w-4" />
-            Upload
+            {t('media.upload')}
           </button>
         </div>
       </div>
@@ -843,7 +852,7 @@ export function MediaListPage() {
       {folderPath.length > 0 && (
         <div className="flex items-center gap-1.5 px-6 py-2.5 bg-muted/30 border-b text-sm overflow-x-auto">
           <button onClick={goToRoot} className="text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap">
-            All Media
+            {t('media.allMedia')}
           </button>
           {folderPath.map((crumb, idx) => (
             <React.Fragment key={crumb.id}>
@@ -875,7 +884,7 @@ export function MediaListPage() {
                 className="data-[state=checked]:bg-amber-400 data-[state=checked]:border-amber-400 data-[state=indeterminate]:bg-amber-400 data-[state=indeterminate]:border-amber-400"
               />
               <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {allSelected ? 'Deselect All' : 'Select All'}
+                {allSelected ? t('media.deselectAll') : t('media.selectAll')}
               </span>
             </label>
           )}
@@ -883,7 +892,7 @@ export function MediaListPage() {
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={search} onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search by name..."
+              placeholder={t('media.searchPlaceholder')}
               className="h-9 w-full pl-10 pr-4 bg-muted/50 border-border rounded-lg text-sm"
             />
           </div>
@@ -908,15 +917,15 @@ export function MediaListPage() {
         ) : items.length === 0 && folderList.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <Upload className="h-12 w-12 text-muted-foreground/40 mb-3" />
-            <p className="text-base font-medium text-muted-foreground">No files found</p>
-            <p className="text-sm text-muted-foreground/70 mt-1">Upload files or generate with AI to get started</p>
+            <p className="text-base font-medium text-muted-foreground">{t('media.noFiles')}</p>
+            <p className="text-sm text-muted-foreground/70 mt-1">{t('media.noFilesHint')}</p>
           </div>
         ) : (
           <>
             {/* Folders */}
             {viewMode === 'grid' && folderList.length > 0 && (
               <div className="p-6 pb-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Folders</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t('media.folders')}</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                   {folderList.map((folder) => (
                     <FolderCard
@@ -942,7 +951,7 @@ export function MediaListPage() {
                     onDetail={goToDetail}
                     onEdit={openEditDetails}
                     onMove={openMoveToFolder}
-                    onCopyUrl={(url) => { navigator.clipboard.writeText(url); toast.success('URL copied to clipboard'); }}
+                    onCopyUrl={(url) => { navigator.clipboard.writeText(url); toast.success(t('media.urlCopied')); }}
                     onDelete={(i) => setDeleteTarget(i)}
                   />
                 ))}
@@ -958,7 +967,7 @@ export function MediaListPage() {
                     onDetail={goToDetail}
                     onEdit={openEditDetails}
                     onMove={openMoveToFolder}
-                    onCopyUrl={(url) => { navigator.clipboard.writeText(url); toast.success('URL copied to clipboard'); }}
+                    onCopyUrl={(url) => { navigator.clipboard.writeText(url); toast.success(t('media.urlCopied')); }}
                     onDelete={(i) => setDeleteTarget(i)}
                   />
                 ))}
@@ -970,7 +979,7 @@ export function MediaListPage() {
         {/* Footer stats */}
         {items.length > 0 && (
           <div className="text-center text-sm text-muted-foreground py-8">
-            Showing {items.length} file{items.length !== 1 ? 's' : ''} · {formatFileSize(items.reduce((a, i) => a + i.size, 0))} used
+            {`${t('common.showing')} ${items.length} ${items.length !== 1 ? t('media.filesPlural') : t('media.fileSingular')} · ${formatFileSize(items.reduce((a, i) => a + i.size, 0))} ${t('media.usedSuffix')}`}
           </div>
         )}
       </div>
@@ -978,17 +987,17 @@ export function MediaListPage() {
       {/* Selection Bar */}
       {selectedIds.length > 0 && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 rounded-full border bg-card shadow-2xl px-5 py-2.5">
-          <span className="text-sm font-medium">{selectedIds.length} selected</span>
+          <span className="text-sm font-medium">{`${selectedIds.length} ${t('media.selectedSuffix')}`}</span>
           <div className="w-px h-5 bg-border" />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                <Move className="h-3.5 w-3.5" /> Move
+                <Move className="h-3.5 w-3.5" /> {t('media.move')}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center">
               <DropdownMenuItem onClick={() => { bulkMoveMutation.mutate(''); }}>
-                Root (no folder)
+                {t('media.rootNoFolder')}
               </DropdownMenuItem>
               {flatFolders.map((f) => (
                 <DropdownMenuItem key={f.id} onClick={() => { bulkMoveMutation.mutate(f.id); }}>
@@ -1001,7 +1010,7 @@ export function MediaListPage() {
             onClick={() => bulkDeleteMutation.mutate()}
             className="flex items-center gap-1.5 text-sm font-medium text-destructive hover:text-destructive/80 transition-colors"
           >
-            <Trash2 className="h-3.5 w-3.5" /> Delete
+            <Trash2 className="h-3.5 w-3.5" /> {t('common.delete')}
           </button>
           <div className="w-px h-5 bg-border" />
           <button onClick={() => setSelectedIds([])} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -1021,32 +1030,32 @@ export function MediaListPage() {
             onClick={() => { openEditDetails(contextItem); closeMenus(); }}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
           >
-            <Pencil className="h-4 w-4" /> Edit Details
+            <Pencil className="h-4 w-4" /> {t('media.editDetails')}
           </button>
           <button
             onClick={() => { openMoveToFolder(contextItem); closeMenus(); }}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
           >
-            <Move className="h-4 w-4" /> Move to Folder
+            <Move className="h-4 w-4" /> {t('media.moveToFolder')}
           </button>
           <button
-            onClick={() => { navigator.clipboard.writeText(contextItem.url); toast.success('URL copied to clipboard'); closeMenus(); }}
+            onClick={() => { navigator.clipboard.writeText(contextItem.url); toast.success(t('media.urlCopied')); closeMenus(); }}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
           >
-            <Copy className="h-4 w-4" /> Copy URL
+            <Copy className="h-4 w-4" /> {t('media.copyUrl')}
           </button>
           <button
             onClick={() => { window.open(contextItem.url, '_blank'); closeMenus(); }}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
           >
-            <Download className="h-4 w-4" /> Download
+            <Download className="h-4 w-4" /> {t('media.download')}
           </button>
           <div className="border-t my-1" />
           <button
             onClick={() => { setDeleteTarget(contextItem); closeMenus(); }}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors text-left"
           >
-            <Trash2 className="h-4 w-4" /> Delete
+            <Trash2 className="h-4 w-4" /> {t('common.delete')}
           </button>
         </div>
       )}
@@ -1062,13 +1071,13 @@ export function MediaListPage() {
             onClick={() => { openNewSubfolder(contextFolder.id); closeMenus(); }}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
           >
-            <FolderPlus className="h-4 w-4" /> New Subfolder
+            <FolderPlus className="h-4 w-4" /> {t('media.newSubfolder')}
           </button>
           <button
             onClick={() => { openRenameFolder(contextFolder); closeMenus(); }}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
           >
-            <Pencil className="h-4 w-4" /> Rename
+            <Pencil className="h-4 w-4" /> {t('media.rename')}
           </button>
           <div className="border-t my-1" />
           {/* FIX #3: Pre-check emptiness before opening delete dialog */}
@@ -1076,7 +1085,7 @@ export function MediaListPage() {
             onClick={() => { handleDeleteFolder(contextFolder); closeMenus(); }}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors text-left"
           >
-            <Trash2 className="h-4 w-4" /> Delete
+            <Trash2 className="h-4 w-4" /> {t('common.delete')}
           </button>
         </div>
       )}
@@ -1085,11 +1094,11 @@ export function MediaListPage() {
       <Dialog open={uploadDialogOpen} onOpenChange={(open) => { if (!open) { setUploadDialogOpen(false); setUploadFiles([]); } }}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Upload Files</DialogTitle>
+            <DialogTitle>{t('media.uploadFiles')}</DialogTitle>
             <DialogDescription>
               {currentFolderId
-                ? `Uploading to: ${folderPath[folderPath.length - 1]?.name}`
-                : 'Uploading to: Root'}
+                ? `${t('media.uploadingTo')} ${folderPath[folderPath.length - 1]?.name}`
+                : `${t('media.uploadingTo')} ${t('media.rootLabel')}`}
             </DialogDescription>
           </DialogHeader>
           <div
@@ -1101,8 +1110,8 @@ export function MediaListPage() {
             )}
           >
             <CloudUpload className={cn('h-12 w-12 mx-auto mb-4', dragActive ? 'text-amber-500' : 'text-muted-foreground/40')} />
-            <p className="text-base font-semibold text-foreground">Drag and drop files here</p>
-            <p className="text-sm text-muted-foreground mt-1">or click to browse from your computer</p>
+            <p className="text-base font-semibold text-foreground">{t('media.dragDrop')}</p>
+            <p className="text-sm text-muted-foreground mt-1">{t('media.orBrowse')}</p>
             {uploadFiles.length > 0 && (
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 {uploadFiles.map((f, i) => (
@@ -1118,14 +1127,14 @@ export function MediaListPage() {
           </div>
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileInput} />
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setUploadDialogOpen(false); setUploadFiles([]); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setUploadDialogOpen(false); setUploadFiles([]); }}>{t('common.cancel')}</Button>
             <Button
               className="bg-amber-400 text-black hover:bg-amber-500 font-semibold"
               onClick={() => uploadMutation.mutate(uploadFiles)}
               disabled={uploadFiles.length === 0 || uploadMutation.isPending}
             >
               {uploadMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              Upload{uploadFiles.length > 1 ? ` ${uploadFiles.length} Files` : ''}
+              {t('media.upload')}{uploadFiles.length > 1 ? ` ${uploadFiles.length} ${t('media.filesCap')}` : ''}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1135,16 +1144,16 @@ export function MediaListPage() {
       <Dialog open={newFolderDialogOpen} onOpenChange={setNewFolderDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>{newFolderParentId ? 'Create Subfolder' : 'Create New Folder'}</DialogTitle>
+            <DialogTitle>{newFolderParentId ? t('media.createSubfolder') : t('media.createNewFolder')}</DialogTitle>
             <DialogDescription>
               {newFolderParentId
-                ? `Creating inside: ${folderPath.length > 0 ? folderPath[folderPath.length - 1].name : 'current folder'}`
-                : 'Enter a name for the new folder.'}
+                ? `${t('media.creatingInside')} ${folderPath.length > 0 ? folderPath[folderPath.length - 1].name : t('media.currentFolder')}`
+                : t('media.newFolderDescription')}
             </DialogDescription>
           </DialogHeader>
           <Input
             value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
-            placeholder="Folder name..." className="h-10"
+            placeholder={t('media.folderNamePlaceholder')} className="h-10"
             onKeyDown={(e) => { if (e.key === 'Enter' && newFolderName.trim()) createFolderMutation.mutate({ name: newFolderName.trim(), parentId: newFolderParentId || undefined }); }}
             autoFocus
           />
@@ -1156,7 +1165,7 @@ export function MediaListPage() {
               disabled={!newFolderName.trim() || createFolderMutation.isPending}
             >
               {createFolderMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Create
+              {t('common.create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1166,12 +1175,12 @@ export function MediaListPage() {
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Rename Folder</DialogTitle>
-            <DialogDescription>Enter a new name for the folder.</DialogDescription>
+            <DialogTitle>{t('media.renameFolder')}</DialogTitle>
+            <DialogDescription>{t('media.renameFolderDescription')}</DialogDescription>
           </DialogHeader>
           <Input
             value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
-            placeholder="Folder name..." className="h-10"
+            placeholder={t('media.folderNamePlaceholder')} className="h-10"
             onKeyDown={(e) => { if (e.key === 'Enter' && renameValue.trim() && renameFolderId) renameFolderMutation.mutate({ id: renameFolderId, name: renameValue.trim() }); }}
             autoFocus
           />
@@ -1183,7 +1192,7 @@ export function MediaListPage() {
               disabled={!renameValue.trim() || renameFolderMutation.isPending}
             >
               {renameFolderMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Rename
+              {t('media.rename')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1193,14 +1202,14 @@ export function MediaListPage() {
       <Dialog open={!!editDetailsTarget} onOpenChange={(open) => { if (!open) setEditDetailsTarget(null); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Details</DialogTitle>
-            <DialogDescription>Update alt text and caption for this media.</DialogDescription>
+            <DialogTitle>{t('media.editDetails')}</DialogTitle>
+            <DialogDescription>{t('media.editDetailsDescription')}</DialogDescription>
           </DialogHeader>
           {editDetailsTarget && (
             <div className="space-y-4">
               <div className="rounded-lg overflow-hidden bg-muted max-h-48 flex items-center justify-center">
                 {isImageType(editDetailsTarget.mimeType) ? (
-                  <img src={editDetailsTarget.url} alt="Preview" className="max-h-48 object-contain" />
+                  <img src={editDetailsTarget.url} alt={t('media.preview')} className="max-h-48 object-contain" />
                 ) : (
                   <div className="p-6 text-center">
                     {React.createElement(getFileIcon(editDetailsTarget.mimeType), { className: 'h-10 w-10 text-muted-foreground/40 mx-auto' })}
@@ -1209,12 +1218,12 @@ export function MediaListPage() {
                 )}
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Alt Text</label>
-                <Input value={editAlt} onChange={(e) => setEditAlt(e.target.value)} placeholder="Describe this image..." className="h-10" />
+                <label className="text-sm font-medium">{t('media.altText')}</label>
+                <Input value={editAlt} onChange={(e) => setEditAlt(e.target.value)} placeholder={t('media.altPlaceholder')} className="h-10" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Caption</label>
-                <Input value={editCaption} onChange={(e) => setEditCaption(e.target.value)} placeholder="Add a caption..." className="h-10" />
+                <label className="text-sm font-medium">{t('media.caption')}</label>
+                <Input value={editCaption} onChange={(e) => setEditCaption(e.target.value)} placeholder={t('media.captionPlaceholder')} className="h-10" />
               </div>
             </div>
           )}
@@ -1230,7 +1239,7 @@ export function MediaListPage() {
               disabled={updateMediaMutation.isPending}
             >
               {updateMediaMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Save
+              {t('common.save')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1240,15 +1249,15 @@ export function MediaListPage() {
       <Dialog open={!!moveTarget} onOpenChange={(open) => { if (!open) setMoveTarget(null); }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Move to Folder</DialogTitle>
-            <DialogDescription>Choose a folder to move this item to.</DialogDescription>
+            <DialogTitle>{t('media.moveToFolder')}</DialogTitle>
+            <DialogDescription>{t('media.moveToFolderDescription')}</DialogDescription>
           </DialogHeader>
           <div className="max-h-60 overflow-y-auto space-y-1">
             <button
               onClick={() => { if (moveTarget) updateMediaMutation.mutate({ id: moveTarget.id, data: { folderId: '' } }); }}
               className="w-full flex items-center gap-2 px-3 py-2.5 text-sm rounded-lg hover:bg-muted transition-colors text-left"
             >
-              <FolderOpen className="h-4 w-4 text-muted-foreground" /> Root (no folder)
+              <FolderOpen className="h-4 w-4 text-muted-foreground" /> {t('media.rootNoFolder')}
             </button>
             {flatFolders.map((f) => (
               <button
@@ -1273,23 +1282,23 @@ export function MediaListPage() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-amber-500" /> Generate with AI
+              <Sparkles className="h-5 w-5 text-amber-500" /> {t('media.generateWithAi')}
             </DialogTitle>
-            <DialogDescription>Describe the image you want to create.</DialogDescription>
+            <DialogDescription>{t('media.generateDescription')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Prompt</label>
+              <label className="text-sm font-medium">{t('media.prompt')}</label>
               <textarea
                 value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)}
-                placeholder="A serene mountain landscape at sunset with golden light reflecting on a crystal-clear lake..."
+                placeholder={t('media.promptPlaceholder')}
                 className="w-full min-h-[100px] resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
 
             {/* Aspect Ratio */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Aspect Ratio</label>
+              <label className="text-sm font-medium">{t('media.aspectRatio')}</label>
               <div className="flex flex-wrap gap-2">
                 {ASPECT_RATIOS.map((ratio) => (
                   <button
@@ -1310,7 +1319,7 @@ export function MediaListPage() {
 
             {/* Image Count */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Number of Images</label>
+              <label className="text-sm font-medium">{t('media.numberOfImages')}</label>
               <div className="flex gap-2">
                 {IMAGE_COUNTS.map((n) => (
                   <button
@@ -1331,16 +1340,16 @@ export function MediaListPage() {
 
             {/* FIX #9 & #10: Folder Selection - styled shadcn Select with full hierarchy */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Save to Folder (optional)</label>
+              <label className="text-sm font-medium">{t('media.saveToFolder')}</label>
               <Select value={aiFolderId} onValueChange={setAiFolderId}>
                 <SelectTrigger className="w-full h-10">
-                  <SelectValue placeholder="Root (no folder)" />
+                  <SelectValue placeholder={t('media.rootNoFolder')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="root">
                     <span className="flex items-center gap-2">
                       <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                      Root (no folder)
+                      {t('media.rootNoFolder')}
                     </span>
                   </SelectItem>
                   {flatFolders.map((f) => (
@@ -1364,7 +1373,7 @@ export function MediaListPage() {
               disabled={!aiPrompt.trim() || aiGenerateMutation.isPending}
             >
               {aiGenerateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
-              Generate {aiCount > 1 ? `${aiCount} Images` : 'Image'}
+              {t('media.generate')} {aiCount > 1 ? `${aiCount} ${t('media.images')}` : t('media.image')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1374,9 +1383,9 @@ export function MediaListPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Media"
-        description={deleteTarget ? `Are you sure you want to delete "${truncate(deleteTarget.originalName || deleteTarget.filename, 50)}"?` : undefined}
-        confirmLabel="Delete"
+        title={t('media.deleteMedia')}
+        description={deleteTarget ? `${t('media.deleteConfirmPrefix')}${truncate(deleteTarget.originalName || deleteTarget.filename, 50)}${t('media.deleteConfirmSuffix')}` : undefined}
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget.id); }}
         isLoading={deleteMutation.isPending}
@@ -1386,9 +1395,9 @@ export function MediaListPage() {
       <ConfirmDialog
         open={!!deleteFolderTarget}
         onOpenChange={(open) => !open && setDeleteFolderTarget(null)}
-        title="Delete Folder"
-        description={deleteFolderTarget ? `Delete "${deleteFolderTarget.name}" and all its contents? This includes all files and subfolders inside it, and cannot be undone.` : undefined}
-        confirmLabel="Delete"
+        title={t('media.deleteFolder')}
+        description={deleteFolderTarget ? `${t('media.deleteFolderPrefix')}${deleteFolderTarget.name}${t('media.deleteFolderSuffix')}` : undefined}
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => { if (deleteFolderTarget) deleteFolderMutation.mutate(deleteFolderTarget.id); }}
         isLoading={deleteFolderMutation.isPending}
