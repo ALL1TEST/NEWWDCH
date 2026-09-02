@@ -30,9 +30,26 @@ export default function AdminApp() {
     if (isPlatformStaff && !isPlatformPage(currentModule) && currentModule !== 'profile') {
       navigate('platform-overview');
     }
+    // INTERNAL — the dedicated Internal Account. It lands on its OWN
+    // Internal Account dashboard (never the Platform Admin dashboard,
+    // never the Admin User client dashboard). 'profile' / 'billing' /
+    // 'notifications' are its shared self-service account pages and are
+    // excluded from the redirect; anything else (including platform-
+    // * pages and client CMS pages the account cannot access) routes
+    // back to the internal dashboard.
+    const isInternalAccount = user?.role === 'INTERNAL';
+    if (isInternalAccount && !(currentModule === 'internal-dashboard' || currentModule === 'profile' || currentModule === 'billing' || currentModule === 'notifications')) {
+      navigate('internal-dashboard');
+    }
+    // No other account type may land on the Internal Account dashboard —
+    // it belongs exclusively to the INTERNAL-role account.
+    if (user && !isInternalAccount && currentModule === 'internal-dashboard') {
+      navigate(isPlatformStaff ? 'platform-overview' : 'dashboard');
+    }
     // CLIENT roles that somehow land on a platform page fall back to
-    // their client dashboard.
-    if (user && !isPlatformStaff && isPlatformPage(currentModule)) {
+    // their client dashboard. (INTERNAL is handled above — platform
+    // pages route it back to its own internal dashboard.)
+    if (user && !isPlatformStaff && !isInternalAccount && isPlatformPage(currentModule)) {
       navigate('dashboard');
     }
     // ANALYTICS REMOVAL (Admin User dashboard only) — the Analytics
@@ -42,7 +59,7 @@ export default function AdminApp() {
     // redirected to their dashboard and can never reach the module.
     // Platform staff were already redirected to platform pages by the
     // rule above — the Platform Admin dashboard is unaffected.
-    if (user && !isPlatformStaff && currentModule === 'analytics') {
+    if (user && !isPlatformStaff && !isInternalAccount && currentModule === 'analytics') {
       navigate('dashboard');
     }
   }, [user, currentModule, navigate]);

@@ -91,6 +91,51 @@ async function ensurePlatformOwnerAlias() {
   console.log(`  ✓ created ${email} (OWNER / INTERNAL, password: ${password})`);
 }
 
+// Dedicated INTERNAL-role account — the internal SaaS account used by
+// the platform team. This is a SEPARATE identity from Platform Admin
+// (platform@example.com): it has its own session, its own profile and
+// its own Internal Account dashboard (module 'internal-dashboard').
+// billingMode INTERNAL marks it as "not a paying customer" (billing
+// bypass for product features), while the INTERNAL role itself keeps it
+// OUT of platform-owner/staff authorization (see isOwner in
+// platform-auth.ts). Managed by the Platform Admin profile's
+// "Internal Account" section via /api/platform/admin/admin-users.
+async function ensureInternalAccount() {
+  const email = 'internal@example.com';
+  const password = 'internal123';
+  const existing = await db.user.findUnique({ where: { email } });
+  if (existing) {
+    if (
+      existing.role !== 'INTERNAL' ||
+      existing.billingMode !== 'INTERNAL' ||
+      existing.password !== password ||
+      existing.status !== 'ACTIVE'
+    ) {
+      await db.user.update({
+        where: { email },
+        data: { role: 'INTERNAL', billingMode: 'INTERNAL', status: 'ACTIVE', password },
+      });
+      console.log(`  ✓ upgraded existing ${email} → INTERNAL account (password reset to ${password})`);
+    } else {
+      console.log(`  ✓ ${email} already INTERNAL account`);
+    }
+    return;
+  }
+  await db.user.create({
+    data: {
+      email,
+      name: 'Internal Account',
+      role: 'INTERNAL',
+      status: 'ACTIVE',
+      billingMode: 'INTERNAL',
+      // Demo-only plain-text password (matches existing login convention).
+      password,
+      emailVerified: true,
+    },
+  });
+  console.log(`  ✓ created ${email} (INTERNAL account, password: ${password})`);
+}
+
 // Seed realistic demo coupons so the Platform Admin Coupons page is
 // populated on first run. Idempotent — only inserts when the table is
 // empty, so re-running the bootstrap never duplicates coupons.
@@ -245,6 +290,7 @@ async function main() {
   console.log('\n🚀 Bootstrapping platform config...\n');
   await ensureOwner();
   await ensurePlatformOwnerAlias();
+  await ensureInternalAccount();
   await ensurePlans();
   console.log(`  ✓ plan configs seeded (${(await db.planConfig.count())} rows)`);
   await listFeatureFlags();
@@ -261,6 +307,7 @@ async function main() {
   console.log('\n✅ Platform bootstrap complete.\n');
   console.log('   Owner login:        owner@example.com / owner123');
   console.log('   Platform Admin:     platform@example.com / platform123');
+  console.log('   Internal Account:   internal@example.com / internal123');
   console.log('   CMS Admin (client): admin@example.com / admin123');
 }
 

@@ -5,11 +5,14 @@ import { logAdminAction } from '@/lib/platform/audit';
 
 // Only the OWNER can list/create platform admins. Normal clients can
 // never access or create platform admins.
+// The list also includes the dedicated INTERNAL-role account (the
+// platform-side Internal Account) so the Platform Admin profile's
+// "Internal Account" management section can resolve its identity.
 export async function GET(request: NextRequest) {
   const auth = await requireOwner(request);
   if ('response' in auth) return auth.response;
   const users = await db.user.findMany({
-    where: { role: { in: ['OWNER', 'PLATFORM_ADMIN'] } },
+    where: { role: { in: ['OWNER', 'PLATFORM_ADMIN', 'INTERNAL'] } },
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,

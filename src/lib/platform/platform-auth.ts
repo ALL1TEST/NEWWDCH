@@ -52,10 +52,18 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
   };
 }
 
-/** True for the platform owner (full bypass). */
+/** True for the platform owner (full bypass).
+ *
+ *  The dedicated Internal Account (role INTERNAL) is an internal SaaS
+ *  account with its OWN dashboard — it is deliberately NOT a platform
+ *  owner/staff, even though it carries the INTERNAL billing mode (the
+ *  "not a paying customer" marker). Platform control stays exclusive
+ *  to OWNER-role accounts (and legacy INTERNAL-billing-mode owners). */
 export function isOwner(user: { role?: string; billingMode?: string } | null | undefined): boolean {
   if (!user) return false;
-  return user.role === 'OWNER' || user.billingMode === 'INTERNAL';
+  if (user.role === 'OWNER') return true;
+  if (user.role === 'INTERNAL') return false;
+  return user.billingMode === 'INTERNAL';
 }
 
 /** True for any platform-level admin (OWNER or PLATFORM_ADMIN). */

@@ -117,6 +117,25 @@ export function isPlatformPage(pageKey: string): boolean {
   return pageKey.startsWith('platform-');
 }
 
+// -------------------- Internal Account Pages --------------------
+// The dedicated INTERNAL-role account (the platform team's internal SaaS
+// account) sees its OWN dashboard experience — not the client CMS and
+// not the Platform Admin pages. 'profile' is the shared account-settings
+// page (email/password/2FA self-service), 'billing' shows the account's
+// Internal billing status, and 'notifications' backs the shell's
+// notification bell "view all" action.
+
+export const INTERNAL_PAGES = [
+  'internal-dashboard',
+  'profile',
+  'billing',
+  'notifications',
+] as const;
+
+export function isInternalAccountRole(role: string | null | undefined): boolean {
+  return role === 'INTERNAL';
+}
+
 // -------------------- Settings Sub-pages --------------------
 
 export const SETTINGS_SUBPAGES = [
@@ -164,6 +183,14 @@ export function canAccessPage(
     return isPlatformPage(pageKey) || pageKey === 'profile';
   }
 
+  // INTERNAL — the dedicated Internal Account. Own dashboard + the
+  // shared self-service account pages only. NEVER the Platform Admin
+  // pages, never the client CMS pages (that is a separate account type
+  // from both Platform Admin and Admin User).
+  if (role === 'INTERNAL') {
+    return (INTERNAL_PAGES as readonly string[]).includes(pageKey);
+  }
+
   // Client roles must never reach platform pages.
   if (isPlatformPage(pageKey)) return false;
 
@@ -200,6 +227,9 @@ export function getAccessiblePages(
   }
   if (role === 'PLATFORM_ADMIN') {
     return PLATFORM_PAGES.map((p) => p.key);
+  }
+  if (role === 'INTERNAL') {
+    return [...INTERNAL_PAGES];
   }
   if (role === 'CLIENT' || role === 'ADMIN') {
     return [
@@ -275,6 +305,15 @@ export function getVisibleNavItems(
   // OWNER and PLATFORM_ADMIN see everything passed in (the sidebar passes
   // the platform nav array for these roles).
   if (userRole === 'OWNER' || userRole === 'PLATFORM_ADMIN') {
+    return allItems.map((item) => ({
+      ...item,
+      children: item.children ? [...item.children] : undefined,
+    }));
+  }
+
+  // INTERNAL (the dedicated Internal Account) sees the internal nav the
+  // sidebar passes in — its own dashboard, not the client CMS.
+  if (userRole === 'INTERNAL') {
     return allItems.map((item) => ({
       ...item,
       children: item.children ? [...item.children] : undefined,

@@ -28,6 +28,7 @@ import {
   Ticket,
   Zap,
   Loader2,
+  User,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -173,6 +174,20 @@ const PLATFORM_NAV_ITEMS: CommandItemDef[] = [
   { id: 'plat-backups', label: 'Backups', icon: Database, module: 'platform-backups' },
 ];
 
+// -------------------- Internal Account Navigation Items --------------------
+// Shown ONLY when the signed-in user is the INTERNAL-role account (the
+// platform team's internal SaaS account). Mirrors the internal sidebar
+// (INTERNAL_NAV_ITEMS in sidebar.tsx) — the Internal Account's own
+// dashboard + shared self-service account pages, never the client CMS
+// nav (those modules are access-denied for this account type).
+
+const INTERNAL_NAV_ITEMS: CommandItemDef[] = [
+  { id: 'internal-dashboard', label: 'Dashboard', icon: LayoutDashboard, module: 'internal-dashboard' },
+  { id: 'internal-profile', label: 'Profile', icon: User, module: 'profile' },
+  { id: 'internal-notifications', label: 'Notifications', icon: Bell, module: 'notifications' },
+  { id: 'internal-billing', label: 'Billing', icon: CreditCard, module: 'billing' },
+];
+
 // -------------------- Recent Items (in-memory) --------------------
 
 let recentItems: CommandItemDef[] = [];
@@ -270,6 +285,9 @@ export function CommandPalette() {
   const [query, setQuery] = useState('');
 
   const isPlatformStaff = user?.role === 'PLATFORM_ADMIN' || user?.role === 'OWNER';
+  // Dedicated Internal Account (role INTERNAL) — its own command list
+  // (own dashboard + shared account pages), never the client CMS nav.
+  const isInternalAccount = user?.role === 'INTERNAL';
 
   // PLAN FEATURE SYNC — same entitlement rule as the sidebar: the
   // plan's Feature Access configuration (resolved via
@@ -497,13 +515,15 @@ export function CommandPalette() {
 
     if (isPlatformStaff) {
       result.push({ heading: 'Platform Admin', items: PLATFORM_NAV_ITEMS });
+    } else if (isInternalAccount) {
+      result.push({ heading: 'Internal Account', items: INTERNAL_NAV_ITEMS });
     } else {
       result.push({ heading: 'Navigation', items: withoutFeatureLocked(NAV_ITEMS) });
       result.push({ heading: 'Actions', items: ACTION_ITEMS });
     }
 
     return result;
-  }, [shouldSearch, searchResults, isPlatformStaff, planEntitlements]);
+  }, [shouldSearch, searchResults, isPlatformStaff, isInternalAccount, planEntitlements]);
 
   // When the user is searching, override Command's default filter
   // (we already have backend results — don't client-side filter them

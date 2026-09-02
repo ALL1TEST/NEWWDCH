@@ -26,6 +26,10 @@ enum UserRole {
   PLATFORM_ADMIN
   OWNER
   CLIENT
+  // Dedicated Internal Account — the internal SaaS account used by the
+  // platform team. OWN identity/session/dashboard; NOT a platform owner,
+  // NOT a platform admin, NOT a client CMS customer.
+  INTERNAL
 }
 
 // Billing mode controls whether a user is a paying customer or has a

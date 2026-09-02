@@ -9845,3 +9845,38 @@ Stage Summary:
 - Internal Account = existing owner@example.com OWNER/INTERNAL identity; recognized consistently (login, profile, permissions, billing bypass, platform UI)
 - Platform Admin → Profile Change Email/Change Password verified fully functional end-to-end for the Internal Account; both credentials restored to originals
 - Minimal change: single file modified; no unrelated functionality touched
+
+---
+Task ID: 3
+Agent: main (orchestrator)
+Task: Implement 3 correctly separated authenticated account types (Admin / Platform Admin / Internal Account) with dedicated Internal Account identity, session, dashboard, profile, permissions + Platform Admin profile section to manage the Internal Account credentials
+
+Work Log:
+- Traced the auth/account architecture: UserRole enum (ADMIN/EDITOR/PLATFORM_ADMIN/OWNER/CLIENT), session-cookie auth, canAccessPage/getVisibleNavItems role branches, sidebar (PLATFORM badge + plan badge), command palette, breadcrumbs, isOwner (role OWNER || billingMode INTERNAL → platform staff), admin-users API (requireOwner + audit log)
+- Schema: added INTERNAL to the UserRole enum (prisma db push WITHOUT --accept-data-loss — SQLite enums are non-destructive; 15 users intact) + regenerated Prisma client + added INTERNAL to the shared UserRole type
+- Created the dedicated Internal Account identity: internal@example.com / internal123, role INTERNAL, billingMode INTERNAL, name "Internal Account" via a new idempotent ensureInternalAccount() in platform/bootstrap.ts (ran it; account verified in DB)
+- Backend account separation: isOwner() in platform-auth.ts now explicitly excludes role INTERNAL (the Internal Account keeps the "not a paying customer" INTERNAL billing mode but is NOT a platform owner/staff — platform admin APIs return 403 for its session)
+- Backend management API: extended the EXISTING owner-guarded + audit-logged /api/platform/admin/admin-users routes — GET now includes INTERNAL-role accounts; PATCH accepts INTERNAL targets and a new validated + uniqueness-checked `email` field (email/password only for INTERNAL; role/status/billingMode changes refused for INTERNAL so the separation can never be collapsed). Fixed a pre-existing dormant bug in [id]/route.ts (pathname `.at(-2)` returned 'admin-users' instead of the id → 404; now uses context.params like the neighboring routes)
+- Frontend routing: new module src/modules/internal/internal-dashboard.tsx (dedicated Internal Account dashboard: identity KPIs, account identity card with INTERNAL badge, security/credentials card; data from session-based /api/auth/me + /api/auth/2fa/status — no platform APIs); registered 'internal-dashboard' in module-registry; admin-app.tsx routes INTERNAL → internal-dashboard (profile/billing/notifications allowed) and makes the internal dashboard exclusive to INTERNAL (platform staff → platform-overview, clients → dashboard); permissions.ts adds INTERNAL_PAGES + canAccessPage/getAccessiblePages/getVisibleNavItems INTERNAL branches
+- Sidebar: INTERNAL_NAV_ITEMS (own Dashboard nav), '#internal-dashboard' → nav.internalDashboard label key, INTERNAL ACCOUNT badge (emerald) in the footer account indicator, site selector hidden for INTERNAL; breadcrumbs: internal-dashboard → title.internalDashboard, no-breadcrumb module (title header flush like platform pages); command palette: internal command list (Dashboard/Profile/Notifications/Billing) shown only for INTERNAL
+- user-profile-menu: INTERNAL gets neutral ring, no Manage Subscription, "Internal Account" badge next to the name (full client locale list, not the platform-restricted one)
+- profile-page: INTERNAL hides plan badge/ring (no personal subscription, like staff) but does NOT get the management section; Platform Admin (OWNER/PLATFORM_ADMIN) gets a new "Internal Account" management card — Internal Account email (read-only), Change Email + Change Password dialogs that PATCH the real internal@example.com account through the existing admin-users API (requirement 4; not the Platform Admin's own credentials)
+- login-screen: Internal Account quick sign-in now authenticates as internal@example.com/internal123 (the real dedicated account; owner@example.com remains the platform owner via the normal form)
+- i18n: nav.internalDashboard + title.internalDashboard in core en/fr (40-locale fallback intact); full 'internal.*' key set (dashboard + management strings) in client-account fragments en + fr
+- E2E verification (agent-browser + VLM):
+  - A) Admin button → admin@example.com/ADMIN/EXTERNAL → Executive Dashboard; plan badge "Plus"; Manage Subscription in profile menu ✓
+  - B) Platform Admin (Staff) → platform@example.com/OWNER → Platform Overview (PLATFORM badge); profile: own Change Email + own Change Password (password change verified E2E with real login, restored) + Internal Account management section ✓
+  - C) Internal Account button → internal@example.com/INTERNAL/INTERNAL → #internal-dashboard (NOT platform, NOT client); title/badge/KPIs identify Internal Account; sidebar shows INTERNAL ACCOUNT badge + own Dashboard nav; profile dropdown: no Manage Subscription + Internal Account badge; billing page shows the Internal Account card; command palette shows the internal list ✓
+  - Internal Account exclusivity: #platform-overview and #content both redirect back to #internal-dashboard; platform admin APIs 403 for the INTERNAL session; platform staff + clients are redirected away from #internal-dashboard ✓
+  - D) Platform Admin → Profile → Internal Account management: Change Email (internal→internal-test@example.com via real dialog; DB + real login with new email verified; old email rejected; restored via the same UI) and Change Password (→ internal-temp-456; new password authenticates, old rejected via real login from an isolated session; restored via the same UI) — both affect the actual quick-sign-in account ✓
+  - E) Quick-sign-in credentials = the actual internal@example.com account ✓
+  - F) Refresh keeps INTERNAL + #internal-dashboard; logout → quick sign-in again stays INTERNAL/#internal-dashboard; login from the default #dashboard hash routes to #internal-dashboard ✓
+  - G) tsc exactly at the 115-error pre-existing baseline; eslint exactly at the 7-problem pre-existing baseline (none in modified files); zero console/page errors; dev.log clean; 390px mobile verified (VLM) ✓
+- Mobile 390px internal dashboard: clean layout, no overflow (VLM-verified)
+
+Stage Summary:
+- THREE correctly separated authenticated account types: Admin (client CMS), Platform Admin (platform management), Internal Account (dedicated INTERNAL-role internal SaaS account with its own identity/session/dashboard/profile/permissions)
+- Single auth system (no duplicates): one /api/auth/login, one session model, one shared profile page; the Internal Account is a real user row (role INTERNAL) seeded idempotently by bootstrap
+- Platform Admin profile now manages the Internal Account's email + password through the existing owner-guarded, audit-logged admin-users API (a dormant 404 ID-parsing bug in that route was found and fixed)
+- Existing functionality intact: admin/platform logins, subscriptions, billing, Stripe, permissions, profile, language, theme, navigation
+- 19 files modified + 2 new (src/modules/internal/); lint/tsc at exact pre-existing baselines

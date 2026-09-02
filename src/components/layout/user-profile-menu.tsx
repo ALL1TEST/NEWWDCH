@@ -116,13 +116,20 @@ export function UserProfileMenu({
   const locale = useLocaleStore((s) => s.locale);
   const setLocale = useLocaleStore((s) => s.setLocale);
   const { t } = useT();
+  // Dedicated Internal Account (role INTERNAL) — the internal SaaS
+  // account. NOT platform staff (no platform locale restriction, no
+  // platform treatment) but ALSO without a personal subscription, so
+  // the plan ring/badge and "Manage Subscription" are hidden for it
+  // exactly like platform staff — its account-type badge says
+  // "Internal Account" instead.
+  const isInternalAccount = user?.role === 'INTERNAL';
   // Language list offered in the submenu — CLIENT roles (Admin User)
-  // get the FULL supported-locales registry (the single source of
-  // truth); incomplete dictionaries fall back to English per key.
-  // Platform staff (OWNER / PLATFORM_ADMIN) only get the locales
-  // whose Platform Admin dictionaries are COMPLETE (en + fr) so the
-  // platform dashboard never pretends a partially-translated
-  // language is fully supported.
+  // and the Internal Account get the FULL supported-locales registry
+  // (the single source of truth); incomplete dictionaries fall back to
+  // English per key. Platform staff (OWNER / PLATFORM_ADMIN) only get
+  // the locales whose Platform Admin dictionaries are COMPLETE
+  // (en + fr) so the platform dashboard never pretends a
+  // partially-translated language is fully supported.
   const isPlatformStaff = user?.role === 'OWNER' || user?.role === 'PLATFORM_ADMIN';
   const availableLocales: readonly SupportedLocale[] = isPlatformStaff
     ? getPlatformLocales()
@@ -232,8 +239,9 @@ export function UserProfileMenu({
                 header of the open menu, matching the reference layout. */}
             <Avatar className={cn(
               'h-11 w-11 shrink-0 rounded-full ring-2 ring-offset-2 ring-offset-background',
-              // Platform staff: neutral ring (no plan-colored ring).
-              isPlatformStaff ? 'ring-border' : serverSynced ? getPlanBadgeStyle(currentPlan).ring : 'ring-border',
+              // Platform staff + Internal Account: neutral ring (no
+              // plan-colored ring — neither has a personal subscription).
+              isPlatformStaff || isInternalAccount ? 'ring-border' : serverSynced ? getPlanBadgeStyle(currentPlan).ring : 'ring-border',
             )}>
               <AvatarImage
                 src={user?.avatarUrl ?? undefined}
@@ -256,8 +264,17 @@ export function UserProfileMenu({
                   {user?.name ?? 'User'}
                 </p>
                 {/* Plan badge is hidden for platform staff (they have no
-                    personal subscription — INTERNAL billing bypass). */}
-                {!isPlatformStaff && <PlanBadge className="shrink-0" />}
+                    personal subscription — INTERNAL billing bypass). The
+                    Internal Account shows its own account-type badge
+                    instead — identifying the signed-in account as the
+                    internal SaaS account (never "Admin User", never
+                    "Platform Admin"). */}
+                {!isPlatformStaff && !isInternalAccount && <PlanBadge className="shrink-0" />}
+                {isInternalAccount && (
+                  <span className="shrink-0 rounded-md bg-emerald-600 dark:bg-emerald-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+                    {t('internal.badge')}
+                  </span>
+                )}
               </div>
               <p className="truncate text-xs leading-4 text-muted-foreground">
                 {user?.email ?? ''}
@@ -379,11 +396,12 @@ export function UserProfileMenu({
         <DropdownMenuSeparator />
 
         {/* 5 — Manage Subscription → existing billing module. Hidden for
-            platform staff (OWNER / PLATFORM_ADMIN) because they have
-            INTERNAL billing — they are the SaaS owner/operator, not a
-            paying client, so a "Manage Subscription" action does not
-            apply to them. */}
-        {!isPlatformStaff && (
+            platform staff (OWNER / PLATFORM_ADMIN) and the Internal
+            Account (INTERNAL role): none of them has a personal
+            subscription — the Internal Account is the platform team's
+            internal SaaS account (billing bypass), not a paying client,
+            so a "Manage Subscription" action does not apply. */}
+        {!isPlatformStaff && !isInternalAccount && (
           <>
             <DropdownMenuItem
               className="cursor-pointer"

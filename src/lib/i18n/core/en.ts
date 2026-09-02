@@ -93,6 +93,8 @@ export const coreEn: Record<string, string> = {
   'nav.plans': 'Plans & Pricing',
   'nav.coupons': 'Coupons',
   'nav.stripeSettings': 'Stripe Settings',
+  // Internal Account (dedicated internal-account sidebar item)
+  'nav.internalDashboard': 'Dashboard',
 
   // ---- Profile dropdown menu ----
   'menu.profile': 'Profile',
@@ -159,6 +161,7 @@ export const coreEn: Record<string, string> = {
   'title.backups': 'Backups',
   'title.profile': 'Profile',
   'title.billing': 'Billing & Subscription',
+  'title.internalDashboard': 'Internal Account',
   'title.platformOverview': 'Overview',
   'title.platformCustomers': 'Customers',
   'title.platformPayments': 'Payments',

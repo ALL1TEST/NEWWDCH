@@ -95,6 +95,8 @@ const MODULE_TITLE_KEYS: Record<string, string> = {
   'email-templates': 'title.emailTemplates',
   profile: 'title.profile',
   billing: 'title.billing',
+  // Internal Account dashboard (INTERNAL-role account's own page)
+  'internal-dashboard': 'title.internalDashboard',
 };
 
 // English fallback labels (used only for ids missing from
@@ -122,6 +124,7 @@ const MODULE_LABELS: Record<string, string> = {
   'email-templates': 'Email Templates',
   profile: 'Profile',
   billing: 'Billing & Subscription',
+  'internal-dashboard': 'Internal Account',
 };
 
 const SUBPAGE_LABELS: Record<string, Record<string, string>> = {
@@ -191,6 +194,9 @@ const NO_BREADCRUMB_MODULES = new Set([
   // Client account pages — no breadcrumb, topbar hidden on desktop so the
   // page content sits flush against the top (same as the modules above).
   'profile', 'billing',
+  // Internal Account dashboard — same treatment as the platform pages:
+  // the page renders its own title header flush against the top.
+  'internal-dashboard',
 ]);
 
 // Returns `true` if the given module should render a topbar breadcrumb,

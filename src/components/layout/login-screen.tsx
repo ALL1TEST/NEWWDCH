@@ -18,22 +18,28 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Quick Sign-in demo accounts — each button performs a REAL one-click
 // sign-in through the existing auth-store login() (POST /api/auth/login,
-// session cookie, then the account's own dashboard). The credentials are
+// session cookie, then the account's OWN dashboard). The credentials are
 // the SAME seeded demo users the normal email/password form accepts
-// (src/lib/platform/bootstrap.ts + src/lib/seed.ts):
-//   • Admin                 → admin@example.com (Admin User client CMS)
-//   • Platform Admin (Staff)→ platform@example.com (OWNER / INTERNAL
-//                             alias for the platform dashboard)
-//   • Internal Account      → owner@example.com — the EXISTING Internal
-//                             Account identity (OWNER role + INTERNAL
-//                             billing mode, billing bypass). No duplicate
-//                             user or auth logic is created.
+// (src/lib/platform/bootstrap.ts + src/lib/seed.ts) — three SEPARATE
+// account types, each with its own identity, session, dashboard and
+// profile:
+//   • Admin                 → admin@example.com (ADMIN role → Admin
+//                             User client CMS dashboard)
+//   • Platform Admin (Staff)→ platform@example.com (OWNER role →
+//                             Platform Admin dashboard)
+//   • Internal Account      → internal@example.com — the DEDICATED
+//                             INTERNAL-role account (internal SaaS
+//                             account of the platform team) → its OWN
+//                             Internal Account dashboard. NOT the same
+//                             account as Platform Admin.
+// No duplicate users or auth logic — all three authenticate through the
+// single existing /api/auth/login flow.
 // The Editor / Author demo users still exist and remain reachable via
 // the normal email/password form — only their quick buttons are removed.
 const QUICK_ACCOUNTS = [
   { label: 'Admin', email: 'admin@example.com', password: 'admin123', accent: false },
   { label: 'Platform Admin (Staff)', email: 'platform@example.com', password: 'platform123', accent: true },
-  { label: 'Internal Account', email: 'owner@example.com', password: 'owner123', accent: true },
+  { label: 'Internal Account', email: 'internal@example.com', password: 'internal123', accent: true },
 ] as const;
 
 export function LoginScreen() {

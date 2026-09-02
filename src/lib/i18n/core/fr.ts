@@ -87,6 +87,8 @@ export const coreFr: Record<string, string> = {
   'nav.plans': 'Plans et tarifs',
   'nav.coupons': 'Coupons',
   'nav.stripeSettings': 'Paramètres Stripe',
+  // Compte interne (menu latéral du compte interne dédié)
+  'nav.internalDashboard': 'Tableau de bord',
 
   // ---- Menu déroulant du profil ----
   'menu.profile': 'Profil',
@@ -153,6 +155,7 @@ export const coreFr: Record<string, string> = {
   'title.backups': 'Sauvegardes',
   'title.profile': 'Profil',
   'title.billing': 'Facturation et abonnement',
+  'title.internalDashboard': 'Compte interne',
   'title.platformOverview': 'Aperçu',
   'title.platformCustomers': 'Clients',
   'title.platformPayments': 'Paiements',

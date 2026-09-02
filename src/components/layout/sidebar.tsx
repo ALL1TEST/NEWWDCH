@@ -250,6 +250,8 @@ const NAV_LABEL_KEYS: Record<string, string> = {
   '#platform-smtp': 'nav.smtpSettings',
   '#platform-ai': 'nav.ai',
   '#platform-backups': 'nav.backups',
+  // Internal Account nav
+  '#internal-dashboard': 'nav.internalDashboard',
 };
 
 const NAV_ITEMS: NavItem[] = [
@@ -384,6 +386,21 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     label: 'Backups',
     href: '#platform-backups',
     icon: 'Database',
+  },
+];
+
+// -------------------- Internal Account Navigation --------------------
+// Shown ONLY to the INTERNAL-role account (the platform team's internal
+// SaaS account). Completely separate from both the client CMS nav and
+// the Platform Admin nav — the Internal Account gets its own dashboard
+// experience. Profile / language / theme are reached through the shared
+// avatar dropdown (same as every account type).
+
+const INTERNAL_NAV_ITEMS: NavItem[] = [
+  {
+    label: 'Dashboard',
+    href: '#internal-dashboard',
+    icon: 'LayoutDashboard',
   },
 ];
 
@@ -978,6 +995,7 @@ function NavGroupSection({
 
 export function AppSidebar() {
   const user = useAuthStore((s) => s.user);
+  const { t } = useT();
   // Active plan — the footer badge shows the plan NAME, colored with
   // the plan's OWN badge styling (Free → emerald, Plus → amber, Pro →
   // violet, Max → pink — the same id → styling mapping Billing &
@@ -997,6 +1015,10 @@ export function AppSidebar() {
   const userRole = user?.role;
   const pagePermissions = user?.pagePermissions ?? null;
   const isPlatformAdmin = userRole === 'PLATFORM_ADMIN' || userRole === 'OWNER';
+  // Dedicated Internal Account (role INTERNAL) — its own nav + its own
+  // account-type badge. It is NOT platform admin and NOT a client CMS
+  // user, so neither the platform nav nor the plan badge applies.
+  const isInternalAccount = userRole === 'INTERNAL';
   // PLAN FEATURE SYNC — Platform Admin → Plans & Pricing → Feature
   // Access for the customer's ACTIVE plan is the single source of
   // truth for the Admin User dashboard (never the plan NAME): nav
@@ -1017,10 +1039,16 @@ export function AppSidebar() {
   const pageKeyOf = (href: string) => href.replace(/^#/, '').split('/')[0];
   const visibleItems = useMemo(() => {
     if (!userRole) return [];
-    // Platform admins see the dedicated platform nav, not the client CMS nav.
-    const sourceItems = isPlatformAdmin ? PLATFORM_NAV_ITEMS : NAV_ITEMS;
+    // Platform admins see the dedicated platform nav; the Internal
+    // Account sees its dedicated internal nav; everyone else gets the
+    // client CMS nav.
+    const sourceItems = isPlatformAdmin
+      ? PLATFORM_NAV_ITEMS
+      : isInternalAccount
+        ? INTERNAL_NAV_ITEMS
+        : NAV_ITEMS;
     const items = getVisibleNavItems(userRole, sourceItems, pagePermissions);
-    if (isPlatformAdmin) return items;
+    if (isPlatformAdmin || isInternalAccount) return items;
     const smtpHref = `#${SMTP_SETTINGS_ROUTE}`;
     return items
       .map((item) => ({
@@ -1033,7 +1061,7 @@ export function AppSidebar() {
           : undefined,
       }))
       .filter((item) => isModuleAllowedByPlan(pageKeyOf(item.href), planEntitlements));
-  }, [userRole, pagePermissions, isPlatformAdmin, planEntitlements]);
+  }, [userRole, pagePermissions, isPlatformAdmin, isInternalAccount, planEntitlements]);
 
   /*
    * SINGLE SOURCE OF TRUTH for the expanded top-level section.
@@ -1150,8 +1178,11 @@ export function AppSidebar() {
 
         {/* All Sites site selector — lives directly BELOW the CMS Admin logo
             in BOTH sidebar states. Platform admins do not have "their" site
-            (they manage all customers), so the selector is hidden for them. */}
-        {!isPlatformAdmin && <SiteSelector />}
+            (they manage all customers), so the selector is hidden for them.
+            The Internal Account (internal SaaS account) is not a client CMS
+            user either — no personal site context — so it is hidden for it
+            too. */}
+        {!isPlatformAdmin && !isInternalAccount && <SiteSelector />}
       </SidebarHeader>
 
       <SidebarSeparator className="mx-0" />
@@ -1217,6 +1248,13 @@ export function AppSidebar() {
             {isPlatformAdmin ? (
               <Badge className="mt-0.5 h-4 w-fit text-[10px] px-1.5 bg-primary text-primary-foreground border-transparent">
                 PLATFORM
+              </Badge>
+            ) : isInternalAccount ? (
+              // Internal Account — its own account-type badge (distinct
+              // from PLATFORM and from any plan badge): identifies the
+              // signed-in account as the internal SaaS account.
+              <Badge className="mt-0.5 h-4 w-fit text-[10px] px-1.5 bg-emerald-600 dark:bg-emerald-500 text-white border-transparent">
+                {t('internal.badgeSidebar')}
               </Badge>
             ) : (
               <Badge

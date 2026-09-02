@@ -10,7 +10,11 @@ export type UserRole =
   | 'EDITOR'
   | 'PLATFORM_ADMIN'
   | 'OWNER'
-  | 'CLIENT';
+  | 'CLIENT'
+  // Dedicated Internal Account — internal SaaS account of the platform
+  // team. Own identity/session/dashboard; never a platform owner/admin,
+  // never a client CMS customer.
+  | 'INTERNAL';
 
 export type PostStatus =
   | 'DRAFT'
