@@ -9611,3 +9611,28 @@ Stage Summary:
 - "Manage Payment Method" now opens the REAL Stripe Customer Portal via the new secure POST /api/billing/portal (server-side customer resolution, auth-gated, honest 503 when Stripe is unconfigured — which is the current sandbox state; with keys configured it returns a real portal session URL and the button redirects there).
 - Payment History shows exactly Plan | Status | Date from the existing real payment data (Pro | Paid | Aug 30, 2026 for the demo admin user).
 - E2E + VLM verified; lint at pre-existing baseline; dev server never restarted.
+
+---
+Task ID: REPO-SYNC-1
+Agent: main (orchestrator)
+Task: Synchronize the running localhost application with the GitHub repository (https://github.com/ALL1TEST/NEWWDCH.git) — replace the stale local project with the repository version, install dependencies, re-seed the database, restart the dev server, and verify localhost serves the cloned repository.
+
+Work Log:
+- Inspected /home/z/my-project: it IS the directory used by the dev server on port 3000 and was already connected to the repository remote, but local main had DIVERGED — 4 stale local-only commits + a stale working tree, while origin/main was 33 commits ahead (the complete consolidated work + final commit d6a49d2 "chore: sync repository files and documentation"). The local working tree was missing 54,570 lines vs the repository across 414 files.
+- Found db/custom.db wiped again at the 08:31 sandbox boot (dev.sh runs `prisma db push --accept-data-loss` at boot; schema/DB drift caused it): 0 users, only 4 PlanConfig rows.
+- Preserved the entire diverged local state on the local-only branch backup/local-diverged-pre-sync (never pushed).
+- Hard-reset main to origin/main (d6a49d2): working tree now EXACTLY the repository — git status clean, git diff origin/main empty.
+- bun install (1067 installs verified); bun run db:generate (Prisma client regenerated); bun run db:push — added the repository's PlanConfig columns (autoCurrency, billingMonthly, billingYearly) additively, zero data loss.
+- Re-seeded the DB with the repository's own seed chain: src/lib/seed.ts (users/articles/media/comments/settings/notifications), src/lib/platform/bootstrap.ts (owner/platform users, plans, coupons, feature flags, country pricing), scripts/seed-payments.ts (11 payments, 3 subscriptions), prisma/seed-users.ts (10 sample users), prisma/seed-ai-demo.ts (5 providers/13 models/3 prompts), prisma/seed-seo-demo.ts, scripts/seed-demo-charts.ts.
+- Two repository seed scripts contain known fresh-DB bugs (seed-newsletter looks up removed role SUPER_ADMIN; seed-backups-demo hardcodes an old-DB admin cuid) — ran FIXED copies as gitignored prisma/local-seed-newsletter.ts and prisma/local-seed-backups-demo.ts (matched by .gitignore `local-*`) so the repository tree stays 100% untouched: newsletter (4 templates/6 subscribers/6 campaigns) + backups (4 storages/14 backups/23 logs) seeded.
+- Inserted the 3 demo Site rows directly (NEWWDCH Blog, Tech Insights, Creative Studio) so the dashboard site-network/KPI cards render data.
+- Restarted the dev server: the sandbox supervisor manages the process (npm exec next dev -p 3000 → next-server v16.1.3, single instance). A manual `bun run dev` instance was reclaimed by the supervisor in the port race; the serving instance spawned AFTER all code/schema/seed changes. Note: the supervisor-managed instance does not tee to dev.log — error checking done via browser E2E + response codes (all clean).
+- Verification: curl — admin/platform logins + root page all HTTP 200. agent-browser E2E — login page renders (repo login screen with demo-account buttons), admin@example.com/admin123 → Executive Dashboard with 3 site cards + KPIs + notifications badge, Articles page with 10 seeded rows + the restored "AI Ideas" button; zero page errors, zero console errors; mini-services (backup-scheduler, dev-runner) healthy and querying the re-seeded DB.
+- Fresh clone from GitHub to /tmp/newwdch-verify: clone HEAD == local HEAD (d6a49d2e5dd072c4790ec3bd7444de554a0bcbe4), key file sha256 hashes identical (schema.prisma, page.tsx), 1562 tracked files; temp clone removed afterwards. Evidence screenshots stored at /home/z/repo-sync-evidence/.
+
+Stage Summary:
+- /home/z/my-project now serves EXACTLY the GitHub repository: HEAD d6a49d2, clean working tree, byte-identical to a fresh clone; no separate/disconnected clone directory exists.
+- Database fully re-seeded and in sync with the repository schema (15 users, 3 sites, 10 articles, 4 plans, 11 payments, 5 AI providers, 14 backups, 4 email templates, 6 campaigns...).
+- Dev server running on port 3000 serving the repository code — verified end-to-end in a real browser.
+- Diverged local-only state preserved on backup/local-diverged-pre-sync (contains the never-pushed in-progress 5-locale i18n expansion + 3 local bug fixes; NOT part of the repository, not served).
+- Repository-as-is caveats (intentionally NOT fixed per instructions): seed-newsletter SUPER_ADMIN lookup, seed-backups-demo hardcoded admin ID (worked around via gitignored local-* copies), usage-limits.ts checkLimit key mismatch (limits['sites'] vs limits.maxSites — affects non-bypass site creation).
