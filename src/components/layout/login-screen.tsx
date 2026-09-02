@@ -16,6 +16,26 @@ import {
 } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
+// Quick Sign-in demo accounts — each button performs a REAL one-click
+// sign-in through the existing auth-store login() (POST /api/auth/login,
+// session cookie, then the account's own dashboard). The credentials are
+// the SAME seeded demo users the normal email/password form accepts
+// (src/lib/platform/bootstrap.ts + src/lib/seed.ts):
+//   • Admin                 → admin@example.com (Admin User client CMS)
+//   • Platform Admin (Staff)→ platform@example.com (OWNER / INTERNAL
+//                             alias for the platform dashboard)
+//   • Internal Account      → owner@example.com — the EXISTING Internal
+//                             Account identity (OWNER role + INTERNAL
+//                             billing mode, billing bypass). No duplicate
+//                             user or auth logic is created.
+// The Editor / Author demo users still exist and remain reachable via
+// the normal email/password form — only their quick buttons are removed.
+const QUICK_ACCOUNTS = [
+  { label: 'Admin', email: 'admin@example.com', password: 'admin123', accent: false },
+  { label: 'Platform Admin (Staff)', email: 'platform@example.com', password: 'platform123', accent: true },
+  { label: 'Internal Account', email: 'owner@example.com', password: 'owner123', accent: true },
+] as const;
+
 export function LoginScreen() {
   const login = useAuthStore((s) => s.login);
   const isLoading = useAuthStore((s) => s.isLoading);
@@ -25,6 +45,9 @@ export function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // Which quick sign-in button is currently authenticating (drives its
+  // inline spinner); null while idle or when the normal form is used.
+  const [pendingQuick, setPendingQuick] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -33,6 +56,29 @@ export function LoginScreen() {
       await login(email, password);
     } catch {
       // Error is already set in the store
+    }
+  };
+
+  // One-click demo sign-in — reuses the SAME login() the form uses
+  // (existing authentication + demo-account logic, no separate path).
+  // The credentials are also mirrored into the form fields so a failed
+  // sign-in visibly shows which account was used and can be retried or
+  // corrected through the normal form.
+  const handleQuickSignIn = async (account: {
+    label: string;
+    email: string;
+    password: string;
+  }) => {
+    clearError();
+    setEmail(account.email);
+    setPassword(account.password);
+    setPendingQuick(account.label);
+    try {
+      await login(account.email, account.password);
+    } catch {
+      // Error is already set in the store and shown in the form's Alert
+    } finally {
+      setPendingQuick(null);
     }
   };
 
@@ -121,69 +167,38 @@ export function LoginScreen() {
               </Button>
             </form>
 
+            {/* Quick Sign-in — three demo accounts, each performing a
+                REAL authentication via the existing login flow. Editor
+                and Author quick buttons are removed per spec (the demo
+                users themselves are untouched and still sign in through
+                the normal form). */}
             <div className="mt-4 pt-4 border-t">
               <p className="text-xs text-muted-foreground font-medium mb-2 text-center">
                 Quick Sign-in (Demo Accounts)
               </p>
-              <div className="grid grid-cols-3 gap-1.5 text-xs">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-[11px] px-1 truncate"
-                  onClick={() => {
-                    setEmail('admin@example.com');
-                    setPassword('admin123');
-                    clearError();
-                  }}
-                >
-                  Admin
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-[11px] px-1 truncate"
-                  onClick={() => {
-                    setEmail('editor@example.com');
-                    setPassword('editor123');
-                    clearError();
-                  }}
-                >
-                  Editor
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-[11px] px-1 truncate"
-                  onClick={() => {
-                    setEmail('author@example.com');
-                    setPassword('author123');
-                    clearError();
-                  }}
-                >
-                  Author
-                </Button>
+              <div className="space-y-1.5 text-xs">
+                {QUICK_ACCOUNTS.map((account) => (
+                  <Button
+                    key={account.label}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={
+                      'h-8 w-full text-[11px]' +
+                      (account.accent
+                        ? ' border-primary/40 text-primary hover:bg-primary/5'
+                        : '')
+                    }
+                    disabled={isLoading}
+                    onClick={() => void handleQuickSignIn(account)}
+                  >
+                    {pendingQuick === account.label && (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    )}
+                    {account.label}
+                  </Button>
+                ))}
               </div>
-              {/* Platform Admin — staff access to the Platform Admin
-                  dashboard. OWNER role with INTERNAL billing bypass. The
-                  owner@example.com / owner123 credentials still work via
-                  the email/password fields — only the demo quick-fill
-                  button is removed. */}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 w-full text-[11px] mt-1.5 border-primary/40 text-primary hover:bg-primary/5"
-                onClick={() => {
-                  setEmail('platform@example.com');
-                  setPassword('platform123');
-                  clearError();
-                }}
-              >
-                Platform Admin (Staff)
-              </Button>
             </div>
           </CardContent>
 

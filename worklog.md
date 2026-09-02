@@ -9812,3 +9812,36 @@ Stage Summary:
 - 23 module pages wired to the i18n system; ~1,170 deep keys ×2 (en+fr) + 40 core locale dictionaries (~130 keys each)
 - Single i18n architecture: SUPPORTED_LOCALES registry (source of truth), zustand store (cms_locale), t() with honest English fallback, next-themes for Light/Dark/System
 - All 10 requirement sections implemented and browser-verified; lint at exact pre-existing baseline; tsc improved (118→115)
+
+---
+Task ID: 2
+Agent: main (orchestrator)
+Task: Platform Admin Internal Account profile verification + Login Quick Sign-in rework (remove Editor/Author, add Internal Account one-click sign-in)
+
+Work Log:
+- Traced the auth/account model: owner@example.com is the EXISTING Internal Account identity (OWNER role / INTERNAL billingMode, seeded by platform/bootstrap.ts, password owner123 verified in DB); platform@example.com is the OWNER alias behind "Platform Admin (Staff)"; no duplicate users or auth logic exist
+- Verified the shared Profile page (src/modules/profile/profile-page.tsx) already provides Change Email + Change Password to platform staff (Internal Account) through the SAME components/APIs as the Admin User (/api/auth/change-email, /api/auth/change/change-password — session-based, role-agnostic)
+- Modified ONLY src/components/layout/login-screen.tsx (git diff: 1 file, +73/-58):
+  - Removed Editor and Author quick-sign-in buttons (demo users untouched, still reachable via the normal form)
+  - Kept Admin and Platform Admin (Staff)
+  - Added "Internal Account" quick-sign-in button → real one-click login as owner@example.com via the EXISTING auth-store login() (POST /api/auth/login + session cookie)
+  - All three quick buttons now perform REAL authentication (credentials mirrored into the form so failures are retryable; inline spinner via pendingQuick state; disabled while isLoading)
+  - Normal email/password form untouched
+- E2E verified with agent-browser + VLM:
+  - Login page shows exactly Admin / Platform Admin (Staff) / Internal Account (desktop + 390px mobile, VLM-confirmed, no overflow)
+  - Internal Account one-click → signed in as owner@example.com OWNER/INTERNAL (verified via /api/auth/me), landed on Platform Admin Overview
+  - Profile menu: no "Manage Subscription" (INTERNAL bypass) ✓; Admin User menu still shows it ✓
+  - Platform Admin → Profile (owner@example.com): Change Email + Change Password present
+  - Change Email E2E: owner@example.com → owner-test@example.com via real dialog → UI updated + /api/auth/me confirms DB change + login with NEW email works → restored back
+  - Change Password E2E: changed to owner-temp-456 via real form → login with NEW password works, OLD password rejected (INVALID_CREDENTIALS) → restored to owner123 and re-verified
+  - Admin quick button → admin@example.com ADMIN/EXTERNAL → Executive Dashboard ✓
+  - Platform Admin (Staff) quick button → platform@example.com OWNER/INTERNAL → Platform Overview ✓; its Profile page also shows Change Email/Password
+  - Normal form login works (admin@example.com manual login + editor@example.com manual login both authenticate)
+  - No console errors, no page errors, dev.log clean; eslint at exact pre-existing baseline (7 problems, none in login-screen.tsx); tsc unchanged at 115 baseline errors (all in prisma seeds/examples)
+- Editor demo user has pagePermissions=null in seed → shows Access Denied pages (pre-existing behavior, unrelated; the quick button for it was intentionally removed per spec)
+
+Stage Summary:
+- Quick Sign-in section: Admin / Platform Admin (Staff) / Internal Account — all perform REAL one-click authentication via the existing login flow
+- Internal Account = existing owner@example.com OWNER/INTERNAL identity; recognized consistently (login, profile, permissions, billing bypass, platform UI)
+- Platform Admin → Profile Change Email/Change Password verified fully functional end-to-end for the Internal Account; both credentials restored to originals
+- Minimal change: single file modified; no unrelated functionality touched
