@@ -24,6 +24,7 @@ import { queryKeys } from '@/lib/query-keys';
 import { truncate } from '@/lib/utils';
 import type { PaginatedResponse, BrokenLinkType, BrokenLinkStatus } from '@/shared/types';
 import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
+import { useT } from '@/lib/i18n';
 import { toast } from 'sonner';
 
 // ==================== Types ====================
@@ -42,35 +43,39 @@ interface BrokenLinkRow {
 
 // ==================== Status Colors ====================
 
-const LINK_STATUS_MAP: Record<BrokenLinkStatus, { label: string; colorClass: string }> = {
-  BROKEN: { label: 'Broken', colorClass: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
-  IGNORED: { label: 'Ignored', colorClass: 'bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400' },
-  FIXED: { label: 'Fixed', colorClass: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+// labelKey values are resolved via t() at render time (display-only fields;
+// the raw status/type values still flow from the API untouched).
+const LINK_STATUS_MAP: Record<BrokenLinkStatus, { labelKey: string; colorClass: string }> = {
+  BROKEN: { labelKey: 'seo.broken', colorClass: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+  IGNORED: { labelKey: 'seo.ignored', colorClass: 'bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400' },
+  FIXED: { labelKey: 'seo.fixed', colorClass: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
 };
 
-const LINK_TYPE_MAP: Record<BrokenLinkType, { label: string; colorClass: string }> = {
-  INTERNAL: { label: 'Internal', colorClass: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
-  EXTERNAL: { label: 'External', colorClass: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
-  IMAGE: { label: 'Image', colorClass: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
-  PDF: { label: 'PDF', colorClass: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
-  ANCHOR: { label: 'Anchor', colorClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+const LINK_TYPE_MAP: Record<BrokenLinkType, { labelKey: string; colorClass: string }> = {
+  INTERNAL: { labelKey: 'seo.internal', colorClass: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
+  EXTERNAL: { labelKey: 'seo.external', colorClass: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
+  IMAGE: { labelKey: 'seo.image', colorClass: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  PDF: { labelKey: 'seo.pdf', colorClass: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+  ANCHOR: { labelKey: 'seo.anchor', colorClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
 };
 
 // ==================== Filter Options ====================
 
 type FilterCategory = 'status' | 'type';
 
-const STATUS_FILTERS: { label: string; value: string; category: FilterCategory }[] = [
-  { label: 'All', value: 'all', category: 'status' },
-  { label: '404', value: '404', category: 'type' },
-  { label: '500', value: '500', category: 'type' },
-  { label: 'Timeout', value: 'timeout', category: 'type' },
-  { label: 'SSL', value: 'ssl', category: 'type' },
-  { label: 'Internal', value: 'INTERNAL', category: 'type' },
-  { label: 'External', value: 'EXTERNAL', category: 'type' },
-  { label: 'Image', value: 'IMAGE', category: 'type' },
-  { label: 'PDF', value: 'PDF', category: 'type' },
-  { label: 'Anchor', value: 'ANCHOR', category: 'type' },
+// labelKey values are resolved via t() at render time (display-only fields;
+// filtering still compares the raw value).
+const STATUS_FILTERS: { labelKey: string; value: string; category: FilterCategory }[] = [
+  { labelKey: 'seo.all', value: 'all', category: 'status' },
+  { labelKey: 'seo.filter404', value: '404', category: 'type' },
+  { labelKey: 'seo.filter500', value: '500', category: 'type' },
+  { labelKey: 'seo.timeout', value: 'timeout', category: 'type' },
+  { labelKey: 'seo.ssl', value: 'ssl', category: 'type' },
+  { labelKey: 'seo.internal', value: 'INTERNAL', category: 'type' },
+  { labelKey: 'seo.external', value: 'EXTERNAL', category: 'type' },
+  { labelKey: 'seo.image', value: 'IMAGE', category: 'type' },
+  { labelKey: 'seo.pdf', value: 'PDF', category: 'type' },
+  { labelKey: 'seo.anchor', value: 'ANCHOR', category: 'type' },
 ];
 
 // ==================== Helper ====================
@@ -116,6 +121,7 @@ function ErrorCodeBadge({ code }: { code: number | null }) {
 // ==================== Main Page ====================
 
 export function SeoBrokenLinksPage() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [activeFilter, setActiveFilter] = useState('all');
 
@@ -168,10 +174,10 @@ export function SeoBrokenLinksPage() {
     mutationFn: (id: string) => patchApi(`/api/seo/broken-links/${id}`, { status: 'FIXED' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoBrokenLinks.all });
-      toast.success('Link marked as fixed');
+      toast.success(t('seo.linkMarkedFixed'));
     },
     onError: () => {
-      toast.error('Failed to mark link as fixed');
+      toast.error(t('seo.linkMarkFixedFailed'));
     },
   });
 
@@ -179,10 +185,10 @@ export function SeoBrokenLinksPage() {
     mutationFn: (id: string) => patchApi(`/api/seo/broken-links/${id}`, { status: 'IGNORED' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoBrokenLinks.all });
-      toast.success('Link ignored');
+      toast.success(t('seo.linkIgnored'));
     },
     onError: () => {
-      toast.error('Failed to ignore link');
+      toast.error(t('seo.linkIgnoreFailed'));
     },
   });
 
@@ -190,10 +196,10 @@ export function SeoBrokenLinksPage() {
     mutationFn: (id: string) => patchApi(`/api/seo/broken-links/${id}`, { status: 'BROKEN' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoBrokenLinks.all });
-      toast.success('Recheck scheduled');
+      toast.success(t('seo.recheckScheduled'));
     },
     onError: () => {
-      toast.error('Failed to schedule recheck');
+      toast.error(t('seo.recheckFailed'));
     },
   });
 
@@ -201,10 +207,10 @@ export function SeoBrokenLinksPage() {
     mutationFn: () => postApi('/api/seo/broken-links', null, { params: { action: 'scan' } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoBrokenLinks.all });
-      toast.success('Website scan initiated');
+      toast.success(t('seo.websiteScanInitiated'));
     },
     onError: () => {
-      toast.error('Failed to start website scan');
+      toast.error(t('seo.websiteScanFailed'));
     },
   });
 
@@ -216,9 +222,9 @@ export function SeoBrokenLinksPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoBrokenLinks.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all });
-      toast.success('Redirect created — edit the destination in the Redirects page');
+      toast.success(t('seo.redirectCreatedHint'));
     },
-    onError: () => toast.error('Failed to create redirect'),
+    onError: () => toast.error(t('seo.redirectCreateFailed')),
   });
 
   const createRedirectFromBroken = (brokenUrl: string) => redirectFromBroken.mutate(brokenUrl);
@@ -228,7 +234,7 @@ export function SeoBrokenLinksPage() {
     () => [
       {
         id: 'brokenUrl',
-        header: 'Broken URL',
+        header: t('seo.brokenUrl'),
         accessorKey: 'brokenUrl',
         enableSorting: false,
         cell: ({ row }) => (
@@ -242,7 +248,7 @@ export function SeoBrokenLinksPage() {
       },
       {
         id: 'sourcePage',
-        header: 'Source Page',
+        header: t('seo.sourcePage'),
         accessorKey: 'sourcePage',
         enableSorting: false,
         cell: ({ row }) => (
@@ -256,22 +262,22 @@ export function SeoBrokenLinksPage() {
       },
       {
         id: 'errorCode',
-        header: 'Error Code',
+        header: t('seo.errorCode'),
         accessorKey: 'errorCode',
         enableSorting: true,
         cell: ({ row }) => <ErrorCodeBadge code={row.original.errorCode} />,
       },
       {
         id: 'type',
-        header: 'Type',
+        header: t('seo.type'),
         accessorKey: 'type',
         enableSorting: true,
         cell: ({ row }) => {
-          const t = LINK_TYPE_MAP[row.original.type];
+          const typeInfo = LINK_TYPE_MAP[row.original.type];
           return (
             <ColoredBadge
-              label={t?.label ?? row.original.type}
-              colorClass={t?.colorClass ?? ''}
+              label={typeInfo ? t(typeInfo.labelKey) : row.original.type}
+              colorClass={typeInfo?.colorClass ?? ''}
             />
           );
         },
@@ -283,7 +289,7 @@ export function SeoBrokenLinksPage() {
             className="flex items-center gap-1 hover:text-foreground transition-colors"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
           >
-            <span className="font-medium">Detected</span>
+            <span className="font-medium">{t('seo.detected')}</span>
           </button>
         ),
         accessorKey: 'detectedAt',
@@ -300,14 +306,14 @@ export function SeoBrokenLinksPage() {
       },
       {
         id: 'status',
-        header: 'Status',
+        header: t('common.status'),
         accessorKey: 'status',
         enableSorting: true,
         cell: ({ row }) => {
           const s = LINK_STATUS_MAP[row.original.status];
           return (
             <ColoredBadge
-              label={s?.label ?? row.original.status}
+              label={s ? t(s.labelKey) : row.original.status}
               colorClass={s?.colorClass ?? ''}
             />
           );
@@ -330,14 +336,14 @@ export function SeoBrokenLinksPage() {
                   fixMutation.mutate(row.original.id);
                 }}
                 disabled={fixMutation.isPending || !isBroken}
-                title="Mark as Fixed"
+                title={t('seo.markAsFixed')}
               >
                 {fixMutation.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                 ) : (
                   <CheckCircle className="h-3.5 w-3.5 mr-1" />
                 )}
-                Fix
+                {t('seo.fix')}
               </Button>
               <Button
                 variant="ghost"
@@ -348,14 +354,14 @@ export function SeoBrokenLinksPage() {
                   ignoreMutation.mutate(row.original.id);
                 }}
                 disabled={ignoreMutation.isPending || !isBroken}
-                title="Ignore this link"
+                title={t('seo.ignoreThisLink')}
               >
                 {ignoreMutation.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                 ) : (
                   <EyeOff className="h-3.5 w-3.5 mr-1" />
                 )}
-                Ignore
+                {t('seo.ignore')}
               </Button>
               <Button
                 variant="ghost"
@@ -366,14 +372,14 @@ export function SeoBrokenLinksPage() {
                   recheckMutation.mutate(row.original.id);
                 }}
                 disabled={recheckMutation.isPending}
-                title="Reset and recheck"
+                title={t('seo.resetAndRecheck')}
               >
                 {recheckMutation.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                 ) : (
                   <RefreshCw className="h-3.5 w-3.5 mr-1" />
                 )}
-                Recheck
+                {t('seo.recheck')}
               </Button>
               <Button
                 variant="ghost"
@@ -384,21 +390,21 @@ export function SeoBrokenLinksPage() {
                   createRedirectFromBroken(row.original.brokenUrl);
                 }}
                 disabled={redirectFromBroken.isPending}
-                title="Create redirect for this broken URL"
+                title={t('seo.createRedirectForBroken')}
               >
                 {redirectFromBroken.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                 ) : (
                   <Navigation className="h-3.5 w-3.5 mr-1" />
                 )}
-                Redirect
+                {t('seo.redirect')}
               </Button>
             </div>
           );
         },
       },
     ],
-    [fixMutation, ignoreMutation, recheckMutation, redirectFromBroken],
+    [fixMutation, ignoreMutation, recheckMutation, redirectFromBroken, t],
   );
 
   // Filter content
@@ -419,7 +425,7 @@ export function SeoBrokenLinksPage() {
                 : 'text-muted-foreground hover:text-foreground')
             }
           >
-            {f.label}
+            {t(f.labelKey)}
           </button>
         ))}
       </div>
@@ -429,8 +435,8 @@ export function SeoBrokenLinksPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Broken Links"
-        description="Find and fix broken links across your website"
+        title={t('seo.brokenLinks')}
+        description={t('seo.brokenLinksDescription')}
         breadcrumbs={false}
         action={
           <Button
@@ -443,7 +449,7 @@ export function SeoBrokenLinksPage() {
             ) : (
               <ScanSearch className="h-4 w-4 mr-2" />
             )}
-            Scan Website
+            {t('seo.scanWebsite')}
           </Button>
         }
       />
@@ -459,14 +465,14 @@ export function SeoBrokenLinksPage() {
         onSortChange={(field, order) => table.setSortField(field, order)}
         sortField={table.sortField}
         sortOrder={table.sortOrder}
-        searchPlaceholder="Search by URL or source page..."
+        searchPlaceholder={t('seo.searchByUrlOrSource')}
         searchValue={table.searchValue}
         onSearch={(v) => {
           table.setSearchValue(v);
           table.setCurrentPage(1);
         }}
         getRowId={(row) => row.id}
-        emptyMessage="No broken links found. Run a scan to check your website."
+        emptyMessage={t('seo.brokenLinksEmpty')}
         filterContent={filterContent}
       />
     </div>

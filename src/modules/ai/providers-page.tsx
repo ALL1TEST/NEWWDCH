@@ -59,6 +59,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { useT } from '@/lib/i18n';
 import {
   Plus,
   Search,
@@ -170,7 +171,7 @@ function sanitizeSecrets(text: string): string {
   return cleaned;
 }
 
-function parseErrorDiagnostic(lastError: string | null): ErrorDiagnostic | null {
+function parseErrorDiagnostic(lastError: string | null, t: (key: string) => string): ErrorDiagnostic | null {
   if (!lastError || lastError.trim() === '') return null;
 
   const sanitized = sanitizeSecrets(lastError);
@@ -204,41 +205,41 @@ function parseErrorDiagnostic(lastError: string | null): ErrorDiagnostic | null 
   rawSnippet = sanitized.slice(0, 300);
 
   // Map HTTP status → category + suggestion
-  let category = 'Connection Error';
+  let category = t('ai.diagConnectionError');
   let suggestion: string | null = null;
 
   if (httpStatus !== null) {
     if (httpStatus === 401) {
-      category = 'Authentication Failed (401)';
-      suggestion = 'The API key appears to be invalid or expired. Verify the key in the provider settings and update it if necessary.';
+      category = t('ai.diagAuthFailed');
+      suggestion = t('ai.diagAuthFailedSuggestion');
     } else if (httpStatus === 403) {
-      category = 'Access Denied (403)';
-      suggestion = 'Access was denied by the provider. This may be due to region restrictions, account permissions, or an expired plan. Check your provider account status.';
+      category = t('ai.diagAccessDenied');
+      suggestion = t('ai.diagAccessDeniedSuggestion');
     } else if (httpStatus === 404) {
-      category = 'Endpoint Not Found (404)';
-      suggestion = 'The Base URL or models endpoint was not found. Verify the Base URL is correct and includes the API version path (e.g. /v1).';
+      category = t('ai.diagEndpointNotFound');
+      suggestion = t('ai.diagEndpointNotFoundSuggestion');
     } else if (httpStatus === 429) {
-      category = 'Rate Limit Exceeded (429)';
-      suggestion = 'Too many requests were sent. Wait a moment and try again. Consider upgrading your provider plan for higher rate limits.';
+      category = t('ai.diagRateLimit');
+      suggestion = t('ai.diagRateLimitSuggestion');
     } else if (httpStatus >= 500) {
-      category = `Provider Server Error (${httpStatus})`;
-      suggestion = 'The provider\'s server encountered an error. Try again later. If the problem persists, check the provider\'s status page.';
+      category = `${t('ai.diagProviderServerErrorPrefix')} (${httpStatus})`;
+      suggestion = t('ai.diagProviderServerErrorSuggestion');
     } else if (httpStatus >= 400) {
-      category = `Request Error (${httpStatus})`;
-      suggestion = 'The request was rejected by the provider. Review the error details and adjust your configuration.';
+      category = `${t('ai.diagRequestErrorPrefix')} (${httpStatus})`;
+      suggestion = t('ai.diagRequestErrorSuggestion');
     }
   } else {
     // No HTTP status — likely a network/timeout error
     const lower = sanitized.toLowerCase();
     if (lower.includes('timeout') || lower.includes('timed out')) {
-      category = 'Timeout';
-      suggestion = 'The provider did not respond within the timeout. The provider may be slow or unreachable. Try again or check the provider\'s status.';
+      category = t('ai.diagTimeout');
+      suggestion = t('ai.diagTimeoutSuggestion');
     } else if (lower.includes('fetch failed') || lower.includes('enotfound') || lower.includes('econnrefused') || lower.includes('network')) {
-      category = 'Network Error';
-      suggestion = 'Could not reach the provider. Verify the Base URL is correct, check your network connection, and ensure the provider endpoint is accessible.';
+      category = t('ai.diagNetworkError');
+      suggestion = t('ai.diagNetworkSuggestion');
     } else if (lower.includes('ssl') || lower.includes('certificate')) {
-      category = 'SSL/Certificate Error';
-      suggestion = 'There was an SSL/TLS certificate issue. Verify the Base URL uses https and the provider\'s certificate is valid.';
+      category = t('ai.diagSslError');
+      suggestion = t('ai.diagSslSuggestion');
     }
   }
 
@@ -255,12 +256,6 @@ function formatLastAttempt(iso: string | null): string | null {
   }
 }
 
-const CONNECTION_STATUS_CONFIG: Record<AiConnectionStatus, { color: string; label: string }> = {
-  CONNECTED: { color: 'bg-green-500', label: 'Connected' },
-  DISCONNECTED: { color: 'bg-zinc-400', label: 'Disconnected' },
-  ERROR: { color: 'bg-red-500', label: 'Error' },
-};
-
 const emptyForm: ProviderFormData = {
   name: '',
   kind: 'OPENAI',
@@ -273,6 +268,16 @@ const emptyForm: ProviderFormData = {
 // -------------------- Component --------------------
 
 export function ProvidersPage() {
+  const { t } = useT();
+
+  // Connection status badge labels/colors — inside the component so the
+  // labels resolve through t() for the active locale.
+  const CONNECTION_STATUS_CONFIG: Record<AiConnectionStatus, { color: string; label: string }> = {
+    CONNECTED: { color: 'bg-green-500', label: t('ai.connected') },
+    DISCONNECTED: { color: 'bg-zinc-400', label: t('ai.disconnected') },
+    ERROR: { color: 'bg-red-500', label: t('ai.error') },
+  };
+
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
@@ -316,11 +321,11 @@ export function ProvidersPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
-      toast.success(editingProvider ? 'Provider updated' : 'Provider created');
+      toast.success(editingProvider ? t('ai.providerUpdated') : t('ai.providerCreated'));
       handleCloseDialog();
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to save provider');
+      toast.error(err.message || t('ai.failedToSaveProvider'));
     },
   });
 
@@ -333,12 +338,12 @@ export function ProvidersPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
-      toast.success('Provider deleted');
+      toast.success(t('ai.providerDeleted'));
       setDeleteDialogOpen(false);
       setDeletingProvider(null);
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to delete provider');
+      toast.error(err.message || t('ai.failedToDeleteProvider'));
     },
   });
 
@@ -348,14 +353,14 @@ export function ProvidersPage() {
     onSuccess: (result: unknown) => {
       const res = result as { success?: boolean; latency?: number; message?: string; status?: string };
       if (res.success) {
-        toast.success(`Connection successful (${res.latency ?? 0}ms)`);
+        toast.success(`${t('ai.connectionSuccessful')} (${res.latency ?? 0}ms)`);
       } else {
-        toast.error(res.message || `Connection ${res.status || 'failed'}`);
+        toast.error(res.message || `${t('ai.connectionPrefix')}${res.status || t('ai.failedWord')}`);
       }
       queryClient.invalidateQueries({ queryKey: queryKeys.aiProviders.all });
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Connection test failed');
+      toast.error(err.message || t('ai.connectionTestFailed'));
     },
   });
 
@@ -364,12 +369,12 @@ export function ProvidersPage() {
     mutationFn: (id: string) => postApi(`/api/ai/providers/${id}/sync-models`),
     onSuccess: (result: unknown) => {
       const res = result as { syncedCount?: number; count?: number };
-      toast.success(`Synced ${res.syncedCount ?? res.count ?? 0} models`);
+      toast.success(`${t('ai.syncedPrefix')} ${res.syncedCount ?? res.count ?? 0} ${t('ai.modelsSuffix')}`);
       queryClient.invalidateQueries({ queryKey: queryKeys.aiProviders.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to sync models');
+      toast.error(err.message || t('ai.failedToSyncModels'));
     },
   });
 
@@ -382,10 +387,10 @@ export function ProvidersPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
-      toast.success('Default provider updated');
+      toast.success(t('ai.defaultProviderUpdated'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to set default');
+      toast.error(err.message || t('ai.failedToSetDefault'));
     },
   });
 
@@ -400,7 +405,7 @@ export function ProvidersPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to update provider');
+      toast.error(err.message || t('ai.failedToUpdateProvider'));
     },
   });
 
@@ -435,16 +440,16 @@ export function ProvidersPage() {
 
   const handleSave = () => {
     if (!formData.name.trim()) {
-      toast.error('Name is required');
+      toast.error(t('ai.nameRequired'));
       return;
     }
     if (!editingProvider && !formData.apiKey.trim()) {
-      toast.error('API key is required');
+      toast.error(t('ai.apiKeyRequired'));
       return;
     }
     // CUSTOM providers require a Base URL
     if (formData.kind === 'CUSTOM' && !formData.baseUrl.trim()) {
-      toast.error('Base URL is required for Custom providers');
+      toast.error(t('ai.baseUrlRequiredForCustom'));
       return;
     }
     // Validate Base URL format for CUSTOM providers
@@ -452,11 +457,11 @@ export function ProvidersPage() {
       try {
         const u = new URL(formData.baseUrl);
         if (!['http:', 'https:'].includes(u.protocol)) {
-          toast.error('Base URL must use http or https protocol');
+          toast.error(t('ai.baseUrlProtocol'));
           return;
         }
       } catch {
-        toast.error('Base URL is not a valid URL');
+        toast.error(t('ai.baseUrlInvalid'));
         return;
       }
     }
@@ -491,7 +496,7 @@ export function ProvidersPage() {
               <Server className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
             </div>
             <div>
-              <p className="text-sm text-zinc-500">Total Providers</p>
+              <p className="text-sm text-zinc-500">{t('ai.totalProviders')}</p>
               <div className="text-2xl font-bold">{isLoading ? <Skeleton className="h-8 w-12 inline-block" /> : totalProviders}</div>
             </div>
           </CardContent>
@@ -502,7 +507,7 @@ export function ProvidersPage() {
               <Wifi className="h-5 w-5 text-green-600" />
             </div>
             <div>
-              <p className="text-sm text-zinc-500">Connected</p>
+              <p className="text-sm text-zinc-500">{t('ai.connected')}</p>
               <div className="text-2xl font-bold">{isLoading ? <Skeleton className="h-8 w-12 inline-block" /> : connectedCount}</div>
             </div>
           </CardContent>
@@ -513,8 +518,8 @@ export function ProvidersPage() {
               <Star className="h-5 w-5 text-amber-600" />
             </div>
             <div>
-              <p className="text-sm text-zinc-500">Default Provider</p>
-              <div className="text-lg font-bold truncate max-w-[200px]">{isLoading ? <Skeleton className="h-6 w-32 inline-block" /> : defaultProvider?.name ?? 'None'}</div>
+              <p className="text-sm text-zinc-500">{t('ai.defaultProvider')}</p>
+              <div className="text-lg font-bold truncate max-w-[200px]">{isLoading ? <Skeleton className="h-6 w-32 inline-block" /> : defaultProvider?.name ?? t('ai.none')}</div>
             </div>
           </CardContent>
         </Card>
@@ -524,17 +529,17 @@ export function ProvidersPage() {
       <Card>
         <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <CardTitle className="text-lg">AI Providers</CardTitle>
+            <CardTitle className="text-lg">{t('ai.providersTitle')}</CardTitle>
             <Button onClick={handleOpenCreate} size="sm">
               <Plus className="h-4 w-4 mr-2" />
-              Add Provider
+              {t('ai.addProvider')}
             </Button>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 mt-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
               <Input
-                placeholder="Search providers..."
+                placeholder={t('ai.searchProviders')}
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 className="pl-9"
@@ -542,24 +547,24 @@ export function ProvidersPage() {
             </div>
             <Select value={kindFilter} onValueChange={(v) => { setKindFilter(v); setPage(1); }}>
               <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Provider Kind" />
+                <SelectValue placeholder={t('ai.providerKind')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Kinds</SelectItem>
+                <SelectItem value="all">{t('ai.allKinds')}</SelectItem>
                 {PROVIDER_KINDS.map((k) => (
-                  <SelectItem key={k} value={k}>{PROVIDER_CONFIGS[k].label}</SelectItem>
+                  <SelectItem key={k} value={k}>{k === 'CUSTOM' ? t('ai.custom') : PROVIDER_CONFIGS[k].label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
               <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Status" />
+                <SelectValue placeholder={t('common.status')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="CONNECTED">Connected</SelectItem>
-                <SelectItem value="DISCONNECTED">Disconnected</SelectItem>
-                <SelectItem value="ERROR">Error</SelectItem>
+                <SelectItem value="all">{t('ai.allStatus')}</SelectItem>
+                <SelectItem value="CONNECTED">{t('ai.connected')}</SelectItem>
+                <SelectItem value="DISCONNECTED">{t('ai.disconnected')}</SelectItem>
+                <SelectItem value="ERROR">{t('ai.error')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -569,14 +574,14 @@ export function ProvidersPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Kind</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="hidden md:table-cell">Latency</TableHead>
-                  <TableHead className="hidden lg:table-cell">Last Sync</TableHead>
-                  <TableHead>Default</TableHead>
-                  <TableHead>Active</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t('common.name')}</TableHead>
+                  <TableHead>{t('ai.kind')}</TableHead>
+                  <TableHead>{t('common.status')}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t('ai.latency')}</TableHead>
+                  <TableHead className="hidden lg:table-cell">{t('ai.lastSync')}</TableHead>
+                  <TableHead>{t('ai.default')}</TableHead>
+                  <TableHead>{t('common.active')}</TableHead>
+                  <TableHead className="text-right">{t('common.actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -592,23 +597,23 @@ export function ProvidersPage() {
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8 text-zinc-500">
                       <AlertCircle className="h-8 w-8 mx-auto mb-2 text-red-400" />
-                      Failed to load providers
+                      {t('ai.failedToLoadProviders')}
                     </TableCell>
                   </TableRow>
                 ) : providers.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8 text-zinc-500">
                       <Server className="h-8 w-8 mx-auto mb-2 text-zinc-300" />
-                      No providers found. Click &quot;Add Provider&quot; to get started.
+                      {t('ai.noProvidersHint')}
                     </TableCell>
                   </TableRow>
                 ) : (
                   providers.map((provider) => {
                     const kc = kindConfig(provider.kind);
                     const statusConfig = CONNECTION_STATUS_CONFIG[provider.connectionStatus]
-                      ?? { color: 'bg-zinc-400', label: provider.connectionStatus || 'Unknown' };
+                      ?? { color: 'bg-zinc-400', label: provider.connectionStatus || t('ai.unknown') };
                     const errorDiag = provider.connectionStatus === 'ERROR'
-                      ? parseErrorDiagnostic(provider.lastError)
+                      ? parseErrorDiagnostic(provider.lastError, t)
                       : null;
                     const lastAttempt = formatLastAttempt(provider.lastHealthCheckAt);
                     return (
@@ -616,7 +621,7 @@ export function ProvidersPage() {
                         <TableCell className="font-medium">{provider.name}</TableCell>
                         <TableCell>
                           <Badge variant="secondary" className={kc.color}>
-                            {kc.label}
+                            {provider.kind === 'CUSTOM' ? t('ai.custom') : kc.label}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -629,7 +634,7 @@ export function ProvidersPage() {
                                   <button
                                     type="button"
                                     className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-                                    aria-label="View error details"
+                                    aria-label={t('ai.viewErrorDetails')}
                                   >
                                     <HelpCircle className="h-3.5 w-3.5" />
                                   </button>
@@ -647,31 +652,31 @@ export function ProvidersPage() {
                                     </div>
                                     {errorDiag.errorMessage && (
                                       <div className="text-muted-foreground">
-                                        <span className="font-medium text-foreground">Message: </span>
+                                        <span className="font-medium text-foreground">{t('ai.diagMessage')} </span>
                                         {errorDiag.errorMessage}
                                       </div>
                                     )}
                                     {errorDiag.errorType && (
                                       <div className="text-muted-foreground flex items-center gap-1 flex-wrap">
-                                        <span className="font-medium text-foreground">Type:</span>
+                                        <span className="font-medium text-foreground">{t('ai.diagType')}</span>
                                         <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{errorDiag.errorType}</code>
                                       </div>
                                     )}
                                     {provider.baseUrl && (
                                       <div className="text-muted-foreground flex items-center gap-1 flex-wrap">
-                                        <span className="font-medium text-foreground">Endpoint:</span>
+                                        <span className="font-medium text-foreground">{t('ai.diagEndpoint')}</span>
                                         <code className="bg-muted px-1 py-0.5 rounded text-[10px] break-all">{provider.baseUrl}</code>
                                       </div>
                                     )}
                                     {lastAttempt && (
                                       <div className="text-muted-foreground">
-                                        <span className="font-medium text-foreground">Last attempt: </span>
+                                        <span className="font-medium text-foreground">{t('ai.diagLastAttempt')} </span>
                                         {lastAttempt}
                                       </div>
                                     )}
                                     {errorDiag.suggestion && (
                                       <div className="text-muted-foreground border-t pt-2 mt-2">
-                                        <span className="font-medium text-foreground">Suggested fix: </span>
+                                        <span className="font-medium text-foreground">{t('ai.diagSuggestedFix')} </span>
                                         {errorDiag.suggestion}
                                       </div>
                                     )}
@@ -692,7 +697,7 @@ export function ProvidersPage() {
                         <TableCell>
                           {provider.isDefault && (
                             <Badge variant="secondary" className="bg-amber-100 text-amber-700">
-                              Default
+                              {t('ai.default')}
                             </Badge>
                           )}
                         </TableCell>
@@ -721,32 +726,32 @@ export function ProvidersPage() {
                                 disabled={testMutation.variables === provider.id && testMutation.isPending}
                               >
                                 <Zap className="h-4 w-4 mr-2" />
-                                Test Connection
+                                {t('ai.testConnection')}
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => syncMutation.mutate(provider.id)}
                                 disabled={syncMutation.variables === provider.id && syncMutation.isPending}
                               >
                                 <RefreshCw className="h-4 w-4 mr-2" />
-                                Sync Models
+                                {t('ai.syncModels')}
                               </DropdownMenuItem>
                               {!provider.isDefault && (
                                 <DropdownMenuItem onClick={() => setDefaultMutation.mutate(provider.id)}>
                                   <Star className="h-4 w-4 mr-2" />
-                                  Set Default
+                                  {t('ai.setDefault')}
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => handleOpenEdit(provider)}>
                                 <Pencil className="h-4 w-4 mr-2" />
-                                Edit
+                                {t('common.edit')}
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-red-600"
                                 onClick={() => { setDeletingProvider(provider); setDeleteDialogOpen(true); }}
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />
-                                Delete
+                                {t('common.delete')}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -764,8 +769,8 @@ export function ProvidersPage() {
           {pagination && pagination.totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-3 border-t">
               <p className="text-sm text-zinc-500">
-                Showing {(pagination.page - 1) * pagination.pageSize + 1}–
-                {Math.min(pagination.page * pagination.pageSize, pagination.total)} of {pagination.total}
+                {t('common.showing')} {(pagination.page - 1) * pagination.pageSize + 1}–
+                {Math.min(pagination.page * pagination.pageSize, pagination.total)} {t('common.of')} {pagination.total}
               </p>
               <div className="flex items-center gap-2">
                 <Button
@@ -775,7 +780,7 @@ export function ProvidersPage() {
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <span className="text-sm">Page {pagination.page} of {pagination.totalPages}</span>
+                <span className="text-sm">{t('ai.pageLabel')} {pagination.page} {t('common.of')} {pagination.totalPages}</span>
                 <Button
                   variant="outline" size="sm"
                   disabled={pagination.page >= pagination.totalPages}
@@ -793,34 +798,34 @@ export function ProvidersPage() {
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) handleCloseDialog(); }}>
         <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingProvider ? 'Edit Provider' : 'Add Provider'}</DialogTitle>
+            <DialogTitle>{editingProvider ? t('ai.editProvider') : t('ai.addProvider')}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="provider-name">Name</Label>
+              <Label htmlFor="provider-name">{t('common.name')}</Label>
               <Input
                 id="provider-name"
-                placeholder="e.g. My OpenAI"
+                placeholder={t('ai.namePlaceholder')}
                 value={formData.name}
                 onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="provider-kind">Provider Kind</Label>
+              <Label htmlFor="provider-kind">{t('ai.providerKind')}</Label>
               <Select value={formData.kind} onValueChange={handleKindChange}>
                 <SelectTrigger id="provider-kind">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {PROVIDER_KINDS.map((k) => (
-                    <SelectItem key={k} value={k}>{PROVIDER_CONFIGS[k].label}</SelectItem>
+                    <SelectItem key={k} value={k}>{k === 'CUSTOM' ? t('ai.custom') : PROVIDER_CONFIGS[k].label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="provider-url">
-                Base URL{formData.kind === 'CUSTOM' ? ' *' : ''}
+                {t('ai.baseUrl')}{formData.kind === 'CUSTOM' ? ' *' : ''}
               </Label>
               <Input
                 id="provider-url"
@@ -831,17 +836,17 @@ export function ProvidersPage() {
               />
               {formData.kind === 'CUSTOM' && (
                 <p className="text-xs text-muted-foreground">
-                  Enter the base URL of your OpenAI-compatible provider (e.g. https://api.example.com/v1). The provider must expose the OpenAI-compatible /chat/completions and /models endpoints.
+                  {t('ai.baseUrlHint')}
                 </p>
               )}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="provider-key">API Key</Label>
+              <Label htmlFor="provider-key">{t('ai.apiKey')}</Label>
               <div className="relative">
                 <Input
                   id="provider-key"
                   type={showApiKey ? 'text' : 'password'}
-                  placeholder={editingProvider ? 'Leave blank to keep existing key' : 'sk-...'}
+                  placeholder={editingProvider ? t('ai.apiKeyKeepPlaceholder') : 'sk-...'}
                   value={formData.apiKey}
                   onChange={(e) => setFormData((p) => ({ ...p, apiKey: e.target.value }))}
                 />
@@ -857,17 +862,17 @@ export function ProvidersPage() {
               </div>
               {editingProvider && (
                 <p className="text-xs text-muted-foreground">
-                  Leave blank to keep the existing API key. The key is stored encrypted and never displayed in full.
+                  {t('ai.apiKeyHint')}
                 </p>
               )}
             </div>
             {formData.kind === 'AZURE_OPENAI' && (
               <p className="text-xs text-muted-foreground">
-                Note: Azure OpenAI is a legacy kind and no longer configurable from this form.
+                {t('ai.azureLegacyNote')}
               </p>
             )}
             <div className="flex items-center justify-between">
-              <Label htmlFor="provider-active">Active</Label>
+              <Label htmlFor="provider-active">{t('common.active')}</Label>
               <Switch
                 id="provider-active"
                 checked={formData.isActive}
@@ -876,10 +881,10 @@ export function ProvidersPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={handleCloseDialog}>Cancel</Button>
+            <Button variant="outline" onClick={handleCloseDialog}>{t('common.cancel')}</Button>
             <Button onClick={handleSave} disabled={saveMutation.isPending}>
               {saveMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editingProvider ? 'Update' : 'Create'}
+              {editingProvider ? t('ai.update') : t('common.create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -889,20 +894,20 @@ export function ProvidersPage() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Provider</AlertDialogTitle>
+            <AlertDialogTitle>{t('ai.deleteProvider')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &quot;{deletingProvider?.name}&quot;? This action cannot be undone.
+              {t('ai.deleteConfirmPrefix')}{deletingProvider?.name}{t('ai.deleteConfirmSuffix')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700"
               onClick={() => deletingProvider && deleteMutation.mutate(deletingProvider.id)}
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Delete
+              {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

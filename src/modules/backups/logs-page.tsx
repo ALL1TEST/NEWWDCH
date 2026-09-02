@@ -35,6 +35,7 @@ import type { ApiResponse } from '@/shared/types';
 import { toast } from 'sonner';
 import type { ColumnDef } from '@tanstack/react-table';
 import { PlatformPageHeader } from '@/modules/platform/shared';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -61,25 +62,27 @@ interface LogRow {
 
 // -------------------- Filter Options --------------------
 
+// Labels resolve via t() at render time (labelKey pattern); the `value`
+// strings are the raw API filter params and must stay untouched.
 const ACTION_OPTIONS = [
-  { value: 'all', label: 'All Actions' },
-  { value: 'create', label: 'Create' },
-  { value: 'restore', label: 'Restore' },
-  { value: 'verify', label: 'Verify' },
-  { value: 'download', label: 'Download' },
-  { value: 'delete', label: 'Delete' },
-  { value: 'schedule', label: 'Schedule' },
-  { value: 'schedule_run', label: 'Schedule Run' },
-  { value: 'retention_delete', label: 'Retention Delete' },
-  { value: 'storage_test', label: 'Storage Test' },
-  { value: 'storage_create', label: 'Storage Create' },
+  { value: 'all', labelKey: 'backups.allActions' },
+  { value: 'create', labelKey: 'common.create' },
+  { value: 'restore', labelKey: 'backups.restore' },
+  { value: 'verify', labelKey: 'backups.verify' },
+  { value: 'download', labelKey: 'backups.download' },
+  { value: 'delete', labelKey: 'common.delete' },
+  { value: 'schedule', labelKey: 'backups.schedule' },
+  { value: 'schedule_run', labelKey: 'backups.scheduleRun' },
+  { value: 'retention_delete', labelKey: 'backups.retentionDelete' },
+  { value: 'storage_test', labelKey: 'backups.storageTest' },
+  { value: 'storage_create', labelKey: 'backups.storageCreate' },
 ];
 
 const STATUS_OPTIONS = [
-  { value: 'all', label: 'All Status' },
-  { value: 'success', label: 'Success' },
-  { value: 'failed', label: 'Failed' },
-  { value: 'in_progress', label: 'In Progress' },
+  { value: 'all', labelKey: 'backups.allStatus' },
+  { value: 'success', labelKey: 'backups.success' },
+  { value: 'failed', labelKey: 'backups.failed' },
+  { value: 'in_progress', labelKey: 'backups.inProgress' },
 ];
 
 // -------------------- Search Empty State (inline) --------------------
@@ -101,11 +104,12 @@ function NoLogsSearchEmpty({
   onClear: () => void;
   clearLabel: string;
 }) {
+  const { t } = useT();
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
       <FileText className="h-10 w-10 text-muted-foreground/40 mb-3" strokeWidth={1.5} />
-      <p className="text-sm font-medium text-foreground">No logs found</p>
-      <p className="text-xs text-muted-foreground mt-1">No log entries match your search.</p>
+      <p className="text-sm font-medium text-foreground">{t('backups.noLogsFound')}</p>
+      <p className="text-xs text-muted-foreground mt-1">{t('backups.noLogsMatch')}</p>
       <Button variant="outline" size="sm" className="mt-4" onClick={onClear}>
         {clearLabel}
       </Button>
@@ -147,6 +151,7 @@ function ErrorCell({ value }: { value: string | null }) {
   const [expanded, setExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
   const ref = useRef<HTMLParagraphElement>(null);
+  const { t } = useT();
 
   // Stale-state prevention: each row owns its own expanded state via this
   // component instance, and TanStack keys rows by id (getRowId=row.id). When
@@ -195,7 +200,7 @@ function ErrorCell({ value }: { value: string | null }) {
           className="mt-1 text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:underline"
           aria-expanded={expanded}
         >
-          {expanded ? 'Read less' : 'Read more'}
+          {expanded ? t('backups.readLess') : t('backups.readMore')}
         </button>
       )}
     </div>
@@ -206,6 +211,7 @@ function ErrorCell({ value }: { value: string | null }) {
 
 export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' } = {}) {
   const isPlatform = scope === 'platform';
+  const { t } = useT();
   const [actionFilter, setActionFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');
@@ -276,17 +282,20 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
   // Adaptive clear-button label that reflects what is actually active, so
   // the action is never misleading.
   const clearLabel = hasSearch && hasFilter
-    ? 'Clear search & filters'
+    ? t('backups.clearSearchFilters')
     : hasSearch
-      ? 'Clear search'
-      : 'Clear filters';
+      ? t('backups.clearSearch')
+      : t('backups.clearFilters');
 
   const handleExport = () => {
     // Export logs as CSV
     if (logs.length === 0) {
-      toast.info('No logs to export');
+      toast.info(t('backups.noLogsToExport'));
       return;
     }
+    // NOTE: CSV header row intentionally kept in English — it mirrors the
+    // raw export column identifiers (machine-parseable artifact), matching
+    // the untranslated `backup-logs-<date>.csv` filename convention.
     const headers = ['Action', 'Status', 'Backup Name', 'DB Size', 'File Count', 'Duration', 'Provider', 'Verification', 'Error', 'Created'];
     const rows = logs.map((log) => [
       log.action,
@@ -308,14 +317,14 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
     a.download = `backup-logs-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success('Logs exported');
+    toast.success(t('backups.logsExported'));
   };
 
   const columns = useMemo<ColumnDef<LogRow>[]>(
     () => [
       {
         id: 'action',
-        header: 'Action',
+        header: t('backups.action'),
         accessorKey: 'action',
         size: 140,
         cell: ({ getValue }) => {
@@ -344,14 +353,14 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
       },
       {
         id: 'status',
-        header: 'Status',
+        header: t('common.status'),
         accessorKey: 'status',
         size: 120,
         cell: ({ getValue }) => <StatusBadge status={getValue() as string} size="sm" />,
       },
       {
         id: 'backupName',
-        header: 'Backup Name',
+        header: t('backups.backupName'),
         // The API returns the related Backup via a nested `backup` object
         // (not a flat `backupName`), so read the name off the relation.
         accessorFn: (row) => row.backup?.name ?? null,
@@ -367,7 +376,7 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
       },
       {
         id: 'databaseSize',
-        header: 'DB Size',
+        header: t('backups.dbSize'),
         accessorKey: 'databaseSize',
         enableSorting: false,
         size: 100,
@@ -382,7 +391,7 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
       },
       {
         id: 'fileCount',
-        header: 'Files',
+        header: t('backups.files'),
         accessorKey: 'fileCount',
         enableSorting: false,
         size: 80,
@@ -397,7 +406,7 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
       },
       {
         id: 'durationMs',
-        header: 'Duration',
+        header: t('backups.duration'),
         accessorKey: 'durationMs',
         enableSorting: false,
         size: 90,
@@ -409,7 +418,7 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
       },
       {
         id: 'storageProvider',
-        header: 'Provider',
+        header: t('backups.provider'),
         accessorKey: 'storageProvider',
         enableSorting: false,
         size: 120,
@@ -421,7 +430,7 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
       },
       {
         id: 'verificationResult',
-        header: 'Verification',
+        header: t('backups.verification'),
         accessorKey: 'verificationResult',
         enableSorting: false,
         size: 110,
@@ -433,7 +442,7 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
       },
       {
         id: 'errorMessage',
-        header: 'Error',
+        header: t('backups.error'),
         accessorKey: 'errorMessage',
         enableSorting: false,
         size: 220,
@@ -447,43 +456,43 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
       },
       ColumnDefHelper.dateColumn<LogRow>({
         id: 'createdAt',
-        header: 'Created',
+        header: t('backups.created'),
         accessorKey: 'createdAt',
         format: (d) => formatRelativeTime(d),
         size: 140,
       }),
     ],
-    [],
+    [t],
   );
 
   const filterContent = (
     <div className="flex flex-wrap items-center gap-2">
       <Select value={actionFilter} onValueChange={(v) => { setActionFilter(v); table.setCurrentPage(1); }}>
         <SelectTrigger className="h-9 w-[140px]">
-          <SelectValue placeholder="Action" />
+          <SelectValue placeholder={t('backups.action')} />
         </SelectTrigger>
         <SelectContent>
           {ACTION_OPTIONS.map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
+              {t(opt.labelKey)}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
       <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); table.setCurrentPage(1); }}>
         <SelectTrigger className="h-9 w-[130px]">
-          <SelectValue placeholder="Status" />
+          <SelectValue placeholder={t('common.status')} />
         </SelectTrigger>
         <SelectContent>
           {STATUS_OPTIONS.map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
+              {t(opt.labelKey)}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
       <div className="flex items-center gap-1.5">
-        <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
+        <Label className="text-xs text-muted-foreground whitespace-nowrap">{t('backups.from')}</Label>
         <Input
           type="date"
           value={fromDate}
@@ -492,7 +501,7 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
         />
       </div>
       <div className="flex items-center gap-1.5">
-        <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
+        <Label className="text-xs text-muted-foreground whitespace-nowrap">{t('backups.to')}</Label>
         <Input
           type="date"
           value={toDate}
@@ -507,24 +516,24 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
     <div className="space-y-4">
       {isPlatform ? (
         <PlatformPageHeader
-          title="Backup Logs"
-          subtitle="Platform-wide audit trail of every backup operation across all customers and sites."
+          title={t('backups.logsTitle')}
+          subtitle={t('backups.logsPlatformSubtitle')}
           actions={
             <Button size="sm" variant="outline" onClick={handleExport} disabled={logs.length === 0}>
               <Download className="h-4 w-4 mr-2" />
-              Export CSV
+              {t('backups.exportCsv')}
             </Button>
           }
         />
       ) : (
         <PageHeader
           breadcrumbs={false}
-          title="Backup Logs"
-          description="View activity logs for all backup operations"
+          title={t('backups.logsTitle')}
+          description={t('backups.logsDescription')}
           action={
             <Button size="sm" variant="outline" onClick={handleExport} disabled={logs.length === 0}>
               <Download className="h-4 w-4 mr-2" />
-              Export CSV
+              {t('backups.exportCsv')}
             </Button>
           }
         />
@@ -533,8 +542,8 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
       {isInitialEmpty ? (
         <EmptyState
           icon={FileText}
-          title="No log entries yet"
-          description="Backup activity logs will appear here once operations are performed."
+          title={t('backups.noLogsYet')}
+          description={t('backups.logsWillAppear')}
         />
       ) : (
         <DataTable
@@ -548,7 +557,7 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
           onSortChange={(f, o) => table.setSortField(f, o)}
           sortField={table.sortField}
           sortOrder={table.sortOrder}
-          searchPlaceholder="Search logs..."
+          searchPlaceholder={t('backups.searchLogsPlaceholder')}
           searchValue={table.searchValue}
           onSearch={(v) => {
             table.setSearchValue(v);
@@ -579,7 +588,7 @@ export function LogsPage({ scope = 'client' }: { scope?: 'client' | 'platform' }
           // remain visible above it). The result count (totalItems=0) flows
           // through so the footer correctly shows 0 matching items. The
           // clear button resets search + all filters (label adapts).
-          emptyMessage="No log entries found."
+          emptyMessage={t('backups.noLogEntriesFound')}
           emptyState={
             isResultEmpty ? (
               <NoLogsSearchEmpty onClear={clearSearchAndFilters} clearLabel={clearLabel} />

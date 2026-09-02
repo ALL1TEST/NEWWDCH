@@ -20,6 +20,7 @@ import {
 import {
   Save, Loader2, Type, Image as ImageIcon,
 } from 'lucide-react';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -65,6 +66,7 @@ export function SettingsPage() {
 }
 
 function SettingsPageInner() {
+  const { t } = useT();
   const queryClient = useQueryClient();
 
   const defaultSettings: AiSettings = {
@@ -130,9 +132,9 @@ function SettingsPageInner() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       setLocalEdits({});
-      toast.success('Settings saved');
+      toast.success(t('ai.settingsSaved'));
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to save'),
+    onError: (err: Error) => toast.error(err.message || t('ai.failedToSave')),
   });
 
   const handleSave = () => {
@@ -148,7 +150,7 @@ function SettingsPageInner() {
       <div className="space-y-6">
         <Card>
           <CardContent className="p-6">
-            <p className="text-destructive">Failed to load AI settings. Please refresh the page.</p>
+            <p className="text-destructive">{t('ai.failedToLoadSettings')}</p>
           </CardContent>
         </Card>
       </div>
@@ -160,14 +162,14 @@ function SettingsPageInner() {
       {/* Text AI Settings */}
       <Card>
         <CardHeader className="pb-4">
-          <CardTitle className="text-base flex items-center gap-2"><Type className="h-4 w-4" /> Text AI Settings</CardTitle>
-          <CardDescription>Default provider and model for text generation (articles, SEO, prompts).</CardDescription>
+          <CardTitle className="text-base flex items-center gap-2"><Type className="h-4 w-4" /> {t('ai.textAiSettings')}</CardTitle>
+          <CardDescription>{t('ai.textAiSettingsDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Default Text Provider */}
             <div className="grid gap-2">
-              <Label>Default Provider</Label>
+              <Label>{t('ai.defaultProvider')}</Label>
               <Select
                 value={settings.defaultProviderId ?? ''}
                 onValueChange={(v) => {
@@ -175,7 +177,7 @@ function SettingsPageInner() {
                   updateField('defaultModelId', ''); // reset model when provider changes
                 }}
               >
-                <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t('ai.selectProvider')} /></SelectTrigger>
                 <SelectContent>
                   {activeProviders.map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -183,19 +185,19 @@ function SettingsPageInner() {
                 </SelectContent>
               </Select>
               {activeProviders.length === 0 && (
-                <p className="text-xs text-muted-foreground">No active providers. Add a provider in the Providers tab.</p>
+                <p className="text-xs text-muted-foreground">{t('ai.noActiveProviders')}</p>
               )}
             </div>
 
             {/* Default Text Model (filtered by provider + type=TEXT) */}
             <div className="grid gap-2">
-              <Label>Default Model</Label>
+              <Label>{t('ai.defaultModel')}</Label>
               <Select
                 value={settings.defaultModelId ?? ''}
                 onValueChange={(v) => updateField('defaultModelId', v)}
                 disabled={!settings.defaultProviderId}
               >
-                <SelectTrigger><SelectValue placeholder={settings.defaultProviderId ? 'Select model' : 'Select provider first'} /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={settings.defaultProviderId ? t('ai.selectModel') : t('ai.selectProviderFirst')} /></SelectTrigger>
                 <SelectContent>
                   {textModels.map((m) => (
                     <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
@@ -203,7 +205,7 @@ function SettingsPageInner() {
                 </SelectContent>
               </Select>
               {settings.defaultProviderId && textModels.length === 0 && (
-                <p className="text-xs text-muted-foreground">No active text models for this provider. Add models in the Models tab.</p>
+                <p className="text-xs text-muted-foreground">{t('ai.noActiveTextModels')}</p>
               )}
             </div>
           </div>
@@ -211,7 +213,7 @@ function SettingsPageInner() {
           {/* Temperature */}
           <div className="grid gap-1">
             <div className="flex justify-between text-sm">
-              <Label>Default Temperature</Label>
+              <Label>{t('ai.defaultTemperature')}</Label>
               <span className="text-muted-foreground">{settings.defaultTemperature.toFixed(1)}</span>
             </div>
             <Slider min={0} max={2} step={0.1} value={[settings.defaultTemperature ?? 0.7]} onValueChange={([v]) => updateField('defaultTemperature', v)} />
@@ -219,7 +221,7 @@ function SettingsPageInner() {
 
           {/* Max Tokens */}
           <div className="grid gap-2">
-            <Label htmlFor="max-tokens">Default Max Tokens</Label>
+            <Label htmlFor="max-tokens">{t('ai.defaultMaxTokens')}</Label>
             <Input
               id="max-tokens"
               type="number"
@@ -236,14 +238,14 @@ function SettingsPageInner() {
       {/* Image AI Settings */}
       <Card>
         <CardHeader className="pb-4">
-          <CardTitle className="text-base flex items-center gap-2"><ImageIcon className="h-4 w-4" /> Image AI Settings</CardTitle>
-          <CardDescription>Default provider and model for image generation.</CardDescription>
+          <CardTitle className="text-base flex items-center gap-2"><ImageIcon className="h-4 w-4" /> {t('ai.imageAiSettings')}</CardTitle>
+          <CardDescription>{t('ai.imageAiSettingsDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Default Image Provider */}
             <div className="grid gap-2">
-              <Label>Default Image Provider</Label>
+              <Label>{t('ai.defaultImageProvider')}</Label>
               <Select
                 value={settings.imageProviderId ?? ''}
                 onValueChange={(v) => {
@@ -251,7 +253,7 @@ function SettingsPageInner() {
                   updateField('imageModelId', ''); // reset model when provider changes
                 }}
               >
-                <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t('ai.selectProvider')} /></SelectTrigger>
                 <SelectContent>
                   {imageProviders.map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -259,19 +261,19 @@ function SettingsPageInner() {
                 </SelectContent>
               </Select>
               {imageProviders.length === 0 && (
-                <p className="text-xs text-muted-foreground">No providers with image models. Add an IMAGE model in the Models tab first.</p>
+                <p className="text-xs text-muted-foreground">{t('ai.noImageProviders')}</p>
               )}
             </div>
 
             {/* Default Image Model (filtered by provider + type=IMAGE) */}
             <div className="grid gap-2">
-              <Label>Default Image Model</Label>
+              <Label>{t('ai.defaultImageModel')}</Label>
               <Select
                 value={settings.imageModelId ?? ''}
                 onValueChange={(v) => updateField('imageModelId', v)}
                 disabled={!settings.imageProviderId}
               >
-                <SelectTrigger><SelectValue placeholder={settings.imageProviderId ? 'Select model' : 'Select provider first'} /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={settings.imageProviderId ? t('ai.selectModel') : t('ai.selectProviderFirst')} /></SelectTrigger>
                 <SelectContent>
                   {imageModels.map((m) => (
                     <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
@@ -279,7 +281,7 @@ function SettingsPageInner() {
                 </SelectContent>
               </Select>
               {settings.imageProviderId && imageModels.length === 0 && (
-                <p className="text-xs text-muted-foreground">No active image models for this provider. Add models in the Models tab.</p>
+                <p className="text-xs text-muted-foreground">{t('ai.noActiveImageModels')}</p>
               )}
             </div>
           </div>
@@ -290,7 +292,7 @@ function SettingsPageInner() {
       <div className="flex justify-end">
         <Button onClick={handleSave} disabled={saveMutation.isPending}>
           {saveMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-          Save Settings
+          {t('ai.saveSettings')}
         </Button>
       </div>
     </div>

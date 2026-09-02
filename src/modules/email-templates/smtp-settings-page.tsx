@@ -55,6 +55,7 @@ import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { cn, formatRelativeTime, labelize } from '@/lib/utils';
 import type { EmailProvider, PaginatedResponse } from '@/shared/types';
+import { useT } from '@/lib/i18n';
 
 // ============================================================
 // Types
@@ -183,6 +184,7 @@ function ProviderDialog({
 }) {
   const [form, setForm] = useState<ProviderFormData>(() => data ?? EMPTY_FORM);
   const isApiProvider = API_BASED_PROVIDERS.has(form.provider);
+  const { t } = useT();
 
   const update = (patch: Partial<ProviderFormData>) =>
     setForm((prev) => ({ ...prev, ...patch }));
@@ -190,15 +192,15 @@ function ProviderDialog({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) {
-      toast.error('Name is required');
+      toast.error(t('emailTemplates.providerNameRequired'));
       return;
     }
     if (!isApiProvider && !form.host.trim()) {
-      toast.error('Host is required for SMTP providers');
+      toast.error(t('emailTemplates.hostRequired'));
       return;
     }
     if (!form.fromEmail.trim()) {
-      toast.error('From Email is required');
+      toast.error(t('emailTemplates.fromEmailRequired'));
       return;
     }
     onSubmit(form);
@@ -208,33 +210,33 @@ function ProviderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{data ? 'Edit Provider' : 'Add Provider'}</DialogTitle>
+          <DialogTitle>{data ? t('emailTemplates.editProvider') : t('emailTemplates.addProvider')}</DialogTitle>
           <DialogDescription>
-            Configure an email delivery provider for sending emails.
+            {t('emailTemplates.providerDialogDesc')}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="grid gap-4 py-2">
           {/* Name */}
           <div className="grid gap-2">
-            <Label htmlFor="provider-name">Name</Label>
+            <Label htmlFor="provider-name">{t('common.name')}</Label>
             <Input
               id="provider-name"
               value={form.name}
               onChange={(e) => update({ name: e.target.value })}
-              placeholder="e.g. Production SMTP"
+              placeholder={t('emailTemplates.providerNamePlaceholder')}
             />
           </div>
 
           {/* Provider Select */}
           <div className="grid gap-2">
-            <Label htmlFor="provider-type">Provider</Label>
+            <Label htmlFor="provider-type">{t('emailTemplates.provider')}</Label>
             <Select
               value={form.provider}
               onValueChange={(v) => update({ provider: v as EmailProvider })}
             >
               <SelectTrigger id="provider-type">
-                <SelectValue placeholder="Select provider" />
+                <SelectValue placeholder={t('emailTemplates.selectProvider')} />
               </SelectTrigger>
               <SelectContent>
                 {PROVIDER_OPTIONS.map((opt) => (
@@ -254,7 +256,7 @@ function ProviderDialog({
             <>
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2 grid gap-2">
-                  <Label htmlFor="smtp-host">Host</Label>
+                  <Label htmlFor="smtp-host">{t('emailTemplates.host')}</Label>
                   <Input
                     id="smtp-host"
                     value={form.host}
@@ -263,7 +265,7 @@ function ProviderDialog({
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="smtp-port">Port</Label>
+                  <Label htmlFor="smtp-port">{t('smtp.port')}</Label>
                   <Input
                     id="smtp-port"
                     type="number"
@@ -276,22 +278,22 @@ function ProviderDialog({
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="smtp-username">Username</Label>
+                <Label htmlFor="smtp-username">{t('smtp.username')}</Label>
                 <Input
                   id="smtp-username"
                   value={form.username}
                   onChange={(e) => update({ username: e.target.value })}
-                  placeholder="Username or API key"
+                  placeholder={t('emailTemplates.usernameOrApiKey')}
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="smtp-password">Password</Label>
+                <Label htmlFor="smtp-password">{t('smtp.password')}</Label>
                 <Input
                   id="smtp-password"
                   type="password"
                   value={form.password}
                   onChange={(e) => update({ password: e.target.value })}
-                  placeholder={data ? 'Leave blank to keep current' : 'Password or secret'}
+                  placeholder={data ? t('emailTemplates.leaveBlankKeepCurrent') : t('emailTemplates.passwordOrSecret')}
                 />
               </div>
             </>
@@ -301,24 +303,24 @@ function ProviderDialog({
           {isApiProvider && (
             <>
               <div className="grid gap-2">
-                <Label htmlFor="api-key">API Key</Label>
+                <Label htmlFor="api-key">{t('emailTemplates.apiKey')}</Label>
                 <Input
                   id="api-key"
                   type="password"
                   value={form.password}
                   onChange={(e) => update({ password: e.target.value })}
-                  placeholder={data ? 'Leave blank to keep current' : 'Enter your API key'}
+                  placeholder={data ? t('emailTemplates.leaveBlankKeepCurrent') : t('emailTemplates.enterApiKey')}
                 />
               </div>
               {form.provider === 'SES' && (
                 <div className="grid gap-2">
-                  <Label htmlFor="ses-region">AWS Region</Label>
+                  <Label htmlFor="ses-region">{t('emailTemplates.awsRegion')}</Label>
                   <Select
                     value={form.region}
                     onValueChange={(v) => update({ region: v })}
                   >
                     <SelectTrigger id="ses-region">
-                      <SelectValue placeholder="Select region" />
+                      <SelectValue placeholder={t('emailTemplates.selectRegion')} />
                     </SelectTrigger>
                     <SelectContent>
                       {SES_REGIONS.map((r) => (
@@ -336,23 +338,23 @@ function ProviderDialog({
           {/* Separator */}
           <div className="border-t pt-4 mt-1">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-              Sender Information
+              {t('emailTemplates.senderInformation')}
             </p>
           </div>
 
           {/* From Name + From Email */}
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label htmlFor="from-name">From Name</Label>
+              <Label htmlFor="from-name">{t('smtp.fromName')}</Label>
               <Input
                 id="from-name"
                 value={form.fromName}
                 onChange={(e) => update({ fromName: e.target.value })}
-                placeholder="Travel Blog"
+                placeholder={t('emailTemplates.fromNamePlaceholder')}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="from-email">From Email</Label>
+              <Label htmlFor="from-email">{t('smtp.fromEmail')}</Label>
               <Input
                 id="from-email"
                 type="email"
@@ -365,7 +367,7 @@ function ProviderDialog({
 
           {/* Reply-To */}
           <div className="grid gap-2">
-            <Label htmlFor="reply-to">Reply-To</Label>
+            <Label htmlFor="reply-to">{t('emailTemplates.replyTo')}</Label>
             <Input
               id="reply-to"
               type="email"
@@ -378,16 +380,16 @@ function ProviderDialog({
           {/* Separator */}
           <div className="border-t pt-4 mt-1">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-              Settings
+              {t('title.settings')}
             </p>
           </div>
 
           {/* Is Default Toggle */}
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Default Provider</Label>
+              <Label className="text-sm font-medium">{t('emailTemplates.defaultProvider')}</Label>
               <p className="text-xs text-muted-foreground">
-                Use this provider as the default for all outgoing emails.
+                {t('emailTemplates.defaultProviderHint')}
               </p>
             </div>
             <Switch
@@ -399,9 +401,9 @@ function ProviderDialog({
           {/* Is Active Toggle */}
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Active</Label>
+              <Label className="text-sm font-medium">{t('common.active')}</Label>
               <p className="text-xs text-muted-foreground">
-                Enable or disable this provider for sending emails.
+                {t('emailTemplates.activeProviderHint')}
               </p>
             </div>
             <Switch
@@ -418,11 +420,11 @@ function ProviderDialog({
               onClick={() => onOpenChange(false)}
               disabled={isLoading}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={isLoading}>
               {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {data ? 'Save Changes' : 'Add Provider'}
+              {data ? t('common.saveChanges') : t('emailTemplates.addProvider')}
             </Button>
           </DialogFooter>
         </form>
@@ -437,6 +439,7 @@ function ProviderDialog({
 
 export function SmtpSettingsPage() {
   const queryClient = useQueryClient();
+  const { t } = useT();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ProviderFormData | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SmtpSetting | null>(null);
@@ -493,10 +496,10 @@ export function SmtpSettingsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.smtpSettings.all });
       setDialogOpen(false);
       setEditingItem(null);
-      toast.success(editingItem ? 'Provider updated' : 'Provider added');
+      toast.success(editingItem ? t('emailTemplates.providerUpdated') : t('emailTemplates.providerAdded'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to save provider');
+      toast.error(err.message || t('emailTemplates.saveProviderFailed'));
     },
   });
 
@@ -507,10 +510,10 @@ export function SmtpSettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.smtpSettings.all });
       setDeleteTarget(null);
-      toast.success('Provider deleted');
+      toast.success(t('emailTemplates.providerDeleted'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to delete provider');
+      toast.error(err.message || t('emailTemplates.deleteProviderFailed'));
     },
   });
 
@@ -556,12 +559,12 @@ export function SmtpSettingsPage() {
     <div className="space-y-6">
       {/* ==================== Page Header ==================== */}
       <PageHeader
-        title="SMTP Settings"
-        description="Configure email delivery providers and SMTP settings for your sites."
+        title={t('smtp.title')}
+        description={t('emailTemplates.smtpDescription')}
         action={
           <Button onClick={handleOpenCreate} size="sm">
             <Plus className="h-4 w-4" />
-            Add Provider
+            {t('emailTemplates.addProvider')}
           </Button>
         }
       />
@@ -575,15 +578,15 @@ export function SmtpSettingsPage() {
         </div>
       ) : isError ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-sm text-muted-foreground">Failed to load SMTP settings.</p>
+          <p className="text-sm text-muted-foreground">{t('emailTemplates.smtpLoadFailed')}</p>
         </div>
       ) : settings.length === 0 ? (
         <EmptyState
           icon={Server}
-          title="No Email Providers"
-          description="Add your first email delivery provider to start sending transactional and marketing emails."
+          title={t('emailTemplates.noProviders')}
+          description={t('emailTemplates.noProvidersDesc')}
           action={{
-            label: 'Add Provider',
+            label: t('emailTemplates.addProvider'),
             onClick: handleOpenCreate,
             icon: <Plus className="h-4 w-4" />,
           }}
@@ -618,13 +621,13 @@ export function SmtpSettingsPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Provider"
+        title={t('emailTemplates.deleteProvider')}
         description={
           deleteTarget
-            ? `Are you sure you want to delete "${deleteTarget.name}"? This action cannot be undone.`
+            ? `${t('emailTemplates.deleteProviderConfirmPrefix')}${deleteTarget.name}${t('emailTemplates.deleteProviderConfirmSuffix')}`
             : ''
         }
-        confirmLabel="Delete"
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={handleDelete}
         isLoading={deleteMutation.isPending}
@@ -647,6 +650,7 @@ function ProviderCard({
   onDelete: () => void;
 }) {
   const isApiProvider = API_BASED_PROVIDERS.has(setting.provider);
+  const { t } = useT();
 
   return (
     <div
@@ -676,7 +680,7 @@ function ProviderCard({
               {setting.isDefault && (
                 <Badge className="bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800 shrink-0">
                   <Star className="h-3 w-3" />
-                  Default
+                  {t('emailTemplates.defaultBadge')}
                 </Badge>
               )}
             </div>
@@ -694,7 +698,7 @@ function ProviderCard({
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={onEdit}>
               <Pencil className="h-4 w-4" />
-              Edit
+              {t('common.edit')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -702,7 +706,7 @@ function ProviderCard({
               className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
             >
               <Trash2 className="h-4 w-4" />
-              Delete
+              {t('common.delete')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -712,7 +716,7 @@ function ProviderCard({
       <div className="px-4 pb-4 space-y-2.5">
         {/* Host/Endpoint info */}
         {isApiProvider ? (
-          <InfoRow label="API Key">
+          <InfoRow label={t('emailTemplates.apiKey')}>
             <span className="font-mono text-xs">
               {setting.username
                 ? `${setting.username.slice(0, 8)}${'•'.repeat(16)}`
@@ -720,7 +724,7 @@ function ProviderCard({
             </span>
           </InfoRow>
         ) : (
-          <InfoRow label="Host">
+          <InfoRow label={t('emailTemplates.host')}>
             <span className="font-mono text-xs truncate">
               {setting.host || '—'}
             </span>
@@ -732,7 +736,7 @@ function ProviderCard({
 
         {/* From Email */}
         {setting.fromEmail && (
-          <InfoRow label="From">
+          <InfoRow label={t('emailTemplates.fromLabel')}>
             <span className="text-xs text-muted-foreground truncate">
               {setting.fromName && `${setting.fromName} <`}{setting.fromEmail}{setting.fromName && '>'}
             </span>
@@ -750,10 +754,10 @@ function ProviderCard({
                 : 'bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
             )}
           >
-            {setting.isActive ? 'Active' : 'Inactive'}
+            {setting.isActive ? t('common.active') : t('common.inactive')}
           </Badge>
           <span className="text-[11px] text-muted-foreground">
-            Updated {formatRelativeTime(setting.updatedAt)}
+            {t('emailTemplates.updated')} {formatRelativeTime(setting.updatedAt)}
           </span>
         </div>
       </div>

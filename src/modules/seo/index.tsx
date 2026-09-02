@@ -4,6 +4,7 @@ import React, { Suspense } from 'react';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { Loader2, Search, ClipboardCheck, BarChart3, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 import { SeoOverviewPage } from './seo-overview-page';
 import { SeoAuditPage } from './seo-audit-page';
 import { SeoSearchConsolePage } from './seo-search-console-page';
@@ -20,16 +21,19 @@ function PageLoader() {
 
 // ==================== SEO Sub-Navigation ====================
 
+// labelKey values are resolved via t() at render time (see ai-page.tsx for
+// the same display-only labelKey pattern).
 const SEO_TABS = [
-  { key: null, label: 'Overview', icon: Search },
-  { key: 'audit', label: 'SEO Audit', icon: ClipboardCheck },
-  { key: 'search-console', label: 'Search Console', icon: BarChart3 },
-  { key: 'settings', label: 'Settings', icon: Settings },
+  { key: null, labelKey: 'nav.overview', icon: Search },
+  { key: 'audit', labelKey: 'seo.auditTitle', icon: ClipboardCheck },
+  { key: 'search-console', labelKey: 'seo.searchConsole', icon: BarChart3 },
+  { key: 'settings', labelKey: 'title.settings', icon: Settings },
 ] as const;
 
 function SeoSubNav() {
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
+  const { t } = useT();
 
   return (
     <div className="mb-6 overflow-x-auto -mx-1 px-1">
@@ -55,7 +59,7 @@ function SeoSubNav() {
               )}
             >
               <Icon className="h-3.5 w-3.5" />
-              {tab.label}
+              {t(tab.labelKey)}
             </button>
           );
         })}

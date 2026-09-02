@@ -252,6 +252,8 @@ const NAV_LABEL_KEYS: Record<string, string> = {
   '#platform-backups': 'nav.backups',
   // Internal Account nav
   '#internal-dashboard': 'nav.internalDashboard',
+  '#analytics': 'nav.analytics',
+  '#billing': 'nav.billing',
 };
 
 const NAV_ITEMS: NavItem[] = [
@@ -390,11 +392,34 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
 ];
 
 // -------------------- Internal Account Navigation --------------------
-// Shown ONLY to the INTERNAL-role account (the platform team's internal
-// SaaS account). Completely separate from both the client CMS nav and
-// the Platform Admin nav — the Internal Account gets its own dashboard
-// experience. Profile / language / theme are reached through the shared
-// avatar dropdown (same as every account type).
+// Shown ONLY to the INTERNAL-role account (the SaaS owner's internal
+// account with FULL platform access). DERIVED from the complete
+// client CMS NAV_ITEMS so it always mirrors the full module
+// structure (any future client module automatically appears here):
+//   • the client '#' Dashboard entry is replaced by the Internal
+//     Account's own #internal-dashboard
+//   • Analytics — available in the module registry but removed from
+//     the client nav — is restored for the Internal Account (full
+//     access, placed between Automation and Settings)
+//   • Billing & Subscription is appended (the account's own internal
+//     billing status page)
+// Plan feature filtering NEVER applies to this list (the sidebar's
+// visibleItems memo returns it unfiltered — the Internal Account is
+// not a customer subscription). Profile / language / theme stay in
+// the shared avatar dropdown, same as every account type.
+
+const internalNavBody: NavItem[] = [];
+for (const item of NAV_ITEMS) {
+  // The client '#' dashboard is replaced by the Internal Account's own
+  // dedicated dashboard entry (see INTERNAL_NAV_ITEMS below).
+  if (item.href === '#') continue;
+  // Analytics sits between Automation and Settings (full module set).
+  if (item.href === '#settings') {
+    internalNavBody.push({ label: 'Analytics', href: '#analytics', icon: 'BarChart3' });
+  }
+  internalNavBody.push(item);
+}
+internalNavBody.push({ label: 'Billing & Subscription', href: '#billing', icon: 'CreditCard' });
 
 const INTERNAL_NAV_ITEMS: NavItem[] = [
   {
@@ -402,6 +427,7 @@ const INTERNAL_NAV_ITEMS: NavItem[] = [
     href: '#internal-dashboard',
     icon: 'LayoutDashboard',
   },
+  ...internalNavBody,
 ];
 
 // -------------------- Explicit Top-Level Section Mapping --------------------
@@ -1179,10 +1205,10 @@ export function AppSidebar() {
         {/* All Sites site selector — lives directly BELOW the CMS Admin logo
             in BOTH sidebar states. Platform admins do not have "their" site
             (they manage all customers), so the selector is hidden for them.
-            The Internal Account (internal SaaS account) is not a client CMS
-            user either — no personal site context — so it is hidden for it
-            too. */}
-        {!isPlatformAdmin && !isInternalAccount && <SiteSelector />}
+            The Internal Account has full CMS access and works with the same
+            sites (All Sites network view by default), so the selector is
+            shown for it exactly like the Admin User experience. */}
+        {!isPlatformAdmin && <SiteSelector />}
       </SidebarHeader>
 
       <SidebarSeparator className="mx-0" />

@@ -226,7 +226,16 @@ function KpiGridSkeleton() {
 }
 
 // -------------------- Component --------------------
-export function DashboardPage() {
+
+/**
+ * The complete CMS dashboard widget suite (everything below the page
+ * header): executive KPIs, the Site Network grid, the Pending Action
+ * center, the Traffic Overview chart, Recent Content and the Content
+ * Pipeline chart. Shared by the Admin User Executive Dashboard AND the
+ * Internal Account dashboard (which renders the same full widget
+ * content under its own Internal Account identity header).
+ */
+export function DashboardWidgets() {
   const { t } = useT();
 
   const isAllSites = useSiteStore((s) => s.isAllSites());
@@ -270,13 +279,6 @@ export function DashboardPage() {
     [data.content],
   );
 
-  // Title
-  const pageTitle = isAllSites
-    ? t('title.executiveDashboard')
-    : activeSite
-      ? `${activeSite.name} ${t('dashboard.dashboardSuffix')}`
-      : t('title.dashboard');
-
   // Handle clicking a site card in All Sites mode → switch to that site
   const handleSiteClick = (site: SiteBreakdown) => {
     setActiveSite(site.id);
@@ -284,16 +286,8 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-foreground">{pageTitle}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {isAllSites
-            ? t('dashboard.descriptionAll')
-            : `${t('dashboard.managingForPrefix')} ${activeSite?.name ?? t('dashboard.thisSite')}.`}
-        </p>
-      </div>
-
+      {/* Widget sections (KPIs, Site Network, Pending Actions,
+          Traffic, Recent Content, Content Pipeline) */}
       {/* Section 1: Executive KPIs */}
       {isLoading ? (
         <KpiGridSkeleton />
@@ -562,6 +556,43 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+// -------------------- Page wrapper --------------------
+
+/**
+ * The Admin User (client CMS) Executive Dashboard page: the site-scope
+ * aware page header (Executive Dashboard / "<Site> Dashboard") above
+ * the shared full widget suite.
+ */
+export function DashboardPage() {
+  const { t } = useT();
+
+  const isAllSites = useSiteStore((s) => s.isAllSites());
+  const activeSite = useSiteStore((s) => s.getActiveSite());
+
+  // Title
+  const pageTitle = isAllSites
+    ? t('title.executiveDashboard')
+    : activeSite
+      ? `${activeSite.name} ${t('dashboard.dashboardSuffix')}`
+      : t('title.dashboard');
+
+  return (
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div>
+        <h1 className="text-xl font-bold tracking-tight text-foreground">{pageTitle}</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {isAllSites
+            ? t('dashboard.descriptionAll')
+            : `${t('dashboard.managingForPrefix')} ${activeSite?.name ?? t('dashboard.thisSite')}.`}
+        </p>
+      </div>
+
+      <DashboardWidgets />
     </div>
   );
 }

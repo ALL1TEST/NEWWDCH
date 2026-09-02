@@ -19,6 +19,7 @@ import { PageHeader } from '@/components/patterns';
 import { getApi, patchApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useSiteStore } from '@/lib/stores/site-store';
+import { useT } from '@/lib/i18n';
 import { toast } from 'sonner';
 
 interface ContentOption {
@@ -43,6 +44,7 @@ interface SocialPreviewData {
 }
 
 export function SeoSocialPreviewPage() {
+  const { t } = useT();
   const [selectedId, setSelectedId] = useState('');
   const [ogTitle, setOgTitle] = useState('');
   const [ogDescription, setOgDescription] = useState('');
@@ -68,8 +70,8 @@ export function SeoSocialPreviewPage() {
   });
 
   // Derive live preview values (no local state to avoid setState-in-effect)
-  const displayTitle = ogTitle || previewData?.ogTitle || 'Page Title';
-  const displayDesc = ogDescription || previewData?.ogDescription || 'Page description will appear here...';
+  const displayTitle = ogTitle || previewData?.ogTitle || t('seo.pageTitle');
+  const displayDesc = ogDescription || previewData?.ogDescription || t('seo.pageDescriptionPlaceholder');
   const displayImage = previewData?.ogImage ?? null;
   const displayUrl = previewData?.ogUrl ?? `https://${domain}/`;
   const localDomain = previewData?.domain ?? domain;
@@ -83,16 +85,16 @@ export function SeoSocialPreviewPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Social Preview" description="Preview how your pages appear when shared on social media" breadcrumbs={false} />
+      <PageHeader title={t('seo.socialPreviewTitle')} description={t('seo.socialPreviewDescription')} breadcrumbs={false} />
 
       {/* Content Selector */}
       <Card className="p-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
           <div className="flex-1 w-full space-y-1.5">
-            <Label className="text-sm">Select Content</Label>
+            <Label className="text-sm">{t('seo.selectContent')}</Label>
             <Select value={selectedId} onValueChange={setSelectedId}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Choose a published page..." />
+                <SelectValue placeholder={t('seo.choosePublishedPage')} />
               </SelectTrigger>
               <SelectContent>
                 {contentItems.map((item: ContentOption) => (
@@ -103,7 +105,7 @@ export function SeoSocialPreviewPage() {
           </div>
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={!selectedId || previewLoading}>
             <RefreshCw className={cn('h-3.5 w-3.5 mr-1.5', previewLoading && 'animate-spin')} />
-            Refresh
+            {t('common.refresh')}
           </Button>
         </div>
       </Card>
@@ -111,7 +113,7 @@ export function SeoSocialPreviewPage() {
       {!selectedId ? (
         <Card className="p-12 text-center">
           <Search className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
-          <p className="text-sm text-muted-foreground">Select a content item to see its social preview</p>
+          <p className="text-sm text-muted-foreground">{t('seo.selectForSocialPreview')}</p>
         </Card>
       ) : previewLoading ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -127,14 +129,14 @@ export function SeoSocialPreviewPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   <div className="h-5 w-5 rounded bg-blue-600 flex items-center justify-center text-white text-[10px] font-bold">f</div>
-                  <CardTitle className="text-sm font-semibold">Facebook / Open Graph</CardTitle>
+                  <CardTitle className="text-sm font-semibold">{t('seo.facebookOpenGraph')}</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="rounded-lg border overflow-hidden bg-white dark:bg-zinc-900">
                   {displayImage ? (
                     <div className="relative aspect-[1.91/1] bg-muted">
-                      <img src={displayImage} alt="OG Preview" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      <img src={displayImage} alt={t('seo.ogPreviewAlt')} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     </div>
                   ) : (
                     <div className="flex items-center justify-center aspect-[1.91/1] bg-muted">
@@ -155,7 +157,7 @@ export function SeoSocialPreviewPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   <div className="h-5 w-5 rounded-full bg-black dark:bg-white flex items-center justify-center text-white dark:text-black text-[10px] font-bold">𝕏</div>
-                  <CardTitle className="text-sm font-semibold">Twitter / X</CardTitle>
+                  <CardTitle className="text-sm font-semibold">{t('seo.twitterX')}</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
@@ -171,7 +173,7 @@ export function SeoSocialPreviewPage() {
                     </div>
                     {displayImage && (
                       <div className="w-full sm:w-36 h-36 sm:h-auto bg-muted shrink-0">
-                        <img src={displayImage} alt="Twitter Preview" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        <img src={displayImage} alt={t('seo.twitterPreviewAlt')} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                       </div>
                     )}
                   </div>
@@ -182,26 +184,26 @@ export function SeoSocialPreviewPage() {
 
           {/* Edit Fields */}
           <Card className="p-6">
-            <h3 className="font-semibold text-sm mb-4">Social Metadata</h3>
+            <h3 className="font-semibold text-sm mb-4">{t('seo.socialMetadata')}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="og-title">OG Title</Label>
-                <Input id="og-title" value={ogTitle} onChange={(e) => setOgTitle(e.target.value)} placeholder="Open Graph title" />
+                <Label htmlFor="og-title">{t('seo.ogTitle')}</Label>
+                <Input id="og-title" value={ogTitle} onChange={(e) => setOgTitle(e.target.value)} placeholder={t('seo.ogTitlePlaceholder')} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="og-type">OG Type</Label>
+                <Label htmlFor="og-type">{t('seo.ogType')}</Label>
                 <Select value={ogType} onValueChange={setOgType}>
                   <SelectTrigger id="og-type"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="article">Article</SelectItem>
-                    <SelectItem value="website">Website</SelectItem>
-                    <SelectItem value="blog">Blog</SelectItem>
+                    <SelectItem value="article">{t('seo.ogTypeArticle')}</SelectItem>
+                    <SelectItem value="website">{t('seo.ogTypeWebsite')}</SelectItem>
+                    <SelectItem value="blog">{t('seo.ogTypeBlog')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="og-desc">OG Description</Label>
-                <textarea id="og-desc" className="flex w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-y" value={ogDescription} onChange={(e) => setOgDescription(e.target.value)} placeholder="Open Graph description" />
+                <Label htmlFor="og-desc">{t('seo.ogDescription')}</Label>
+                <textarea id="og-desc" className="flex w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-y" value={ogDescription} onChange={(e) => setOgDescription(e.target.value)} placeholder={t('seo.ogDescriptionPlaceholder')} />
               </div>
             </div>
           </Card>

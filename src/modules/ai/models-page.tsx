@@ -27,6 +27,7 @@ import {
   Search, Star, RefreshCw, Boxes, ChevronLeft, ChevronRight, Loader2, Plus, Pencil, Trash2, Type as TypeIcon,
 } from 'lucide-react';
 import { ConfirmDialog } from '@/components/patterns';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -54,8 +55,8 @@ interface AiProvider {
 }
 
 const MODEL_TYPES = [
-  { value: 'TEXT', label: 'Text' },
-  { value: 'IMAGE', label: 'Image' },
+  { value: 'TEXT', labelKey: 'ai.textType' },
+  { value: 'IMAGE', labelKey: 'ai.imageType' },
 ] as const;
 
 const EMPTY_FORM = {
@@ -70,6 +71,7 @@ const EMPTY_FORM = {
 // -------------------- Component --------------------
 
 export function ModelsPage() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
@@ -114,10 +116,10 @@ export function ModelsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
-      toast.success('Model created');
+      toast.success(t('ai.modelCreated'));
       setFormOpen(false);
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to create model'),
+    onError: (err: Error) => toast.error(err.message || t('ai.failedToCreateModel')),
   });
 
   // Update mutation
@@ -129,10 +131,10 @@ export function ModelsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
-      toast.success('Model updated');
+      toast.success(t('ai.modelUpdated'));
       setFormOpen(false);
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to update model'),
+    onError: (err: Error) => toast.error(err.message || t('ai.failedToUpdateModel')),
   });
 
   // Delete mutation
@@ -143,10 +145,10 @@ export function ModelsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
-      toast.success('Model deleted');
+      toast.success(t('ai.modelDeleted'));
       setDeleteTarget(null);
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to delete model'),
+    onError: (err: Error) => toast.error(err.message || t('ai.failedToDeleteModel')),
   });
 
   // Toggle active
@@ -158,7 +160,7 @@ export function ModelsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to update model'),
+    onError: (err: Error) => toast.error(err.message || t('ai.failedToUpdateModel')),
   });
 
   // Set default
@@ -168,9 +170,9 @@ export function ModelsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
-      toast.success('Default model updated');
+      toast.success(t('ai.defaultModelUpdated'));
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to set default'),
+    onError: (err: Error) => toast.error(err.message || t('ai.failedToSetDefault')),
   });
 
   // Sync all providers mutation (optional feature)
@@ -193,12 +195,12 @@ export function ModelsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiProviders.all });
       if (failed.length > 0) {
-        toast.warning(`Synced ${totalSynced} models. Failed: ${failed.join(', ')}`);
+        toast.warning(`${t('ai.syncedPrefix')} ${totalSynced} ${t('ai.modelsSuffix')}. ${t('ai.syncFailedListPrefix')} ${failed.join(', ')}`);
       } else {
-        toast.success(`Synced ${totalSynced} models across all providers`);
+        toast.success(`${t('ai.syncedPrefix')} ${totalSynced} ${t('ai.modelsAcrossProvidersSuffix')}`);
       }
     },
-    onError: (err: Error) => toast.error(err.message || 'Sync failed'),
+    onError: (err: Error) => toast.error(err.message || t('ai.syncFailed')),
   });
 
   const handleAdd = () => {
@@ -222,7 +224,7 @@ export function ModelsPage() {
 
   const handleSubmit = () => {
     if (!formData.name.trim() || !formData.modelId.trim() || !formData.providerId) {
-      toast.error('Please fill in all required fields');
+      toast.error(t('ai.fillRequiredFields'));
       return;
     }
     if (editingId) {
@@ -238,15 +240,15 @@ export function ModelsPage() {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold">AI Models</h2>
+            <h2 className="text-lg font-semibold">{t('ai.modelsTitle')}</h2>
             <div className="flex items-center gap-2">
               <Button size="sm" onClick={handleAdd}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add Model
+                {t('ai.addModel')}
               </Button>
               <Button variant="outline" size="sm" onClick={() => syncAllMutation.mutate()} disabled={syncAllMutation.isPending}>
                 {syncAllMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                Sync All
+                {t('ai.syncAll')}
               </Button>
             </div>
           </div>
@@ -254,7 +256,7 @@ export function ModelsPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
               <Input
-                placeholder="Search models..."
+                placeholder={t('ai.searchModels')}
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 className="pl-9"
@@ -262,10 +264,10 @@ export function ModelsPage() {
             </div>
             <Select value={providerFilter} onValueChange={(v) => { setProviderFilter(v); setPage(1); }}>
               <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue placeholder="Provider" />
+                <SelectValue placeholder={t('ai.provider')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Providers</SelectItem>
+                <SelectItem value="all">{t('ai.allProviders')}</SelectItem>
                 {providers.map((p) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                 ))}
@@ -273,12 +275,12 @@ export function ModelsPage() {
             </Select>
             <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setPage(1); }}>
               <SelectTrigger className="w-full sm:w-[140px]">
-                <SelectValue placeholder="Type" />
+                <SelectValue placeholder={t('ai.type')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="TEXT">Text</SelectItem>
-                <SelectItem value="IMAGE">Image</SelectItem>
+                <SelectItem value="all">{t('ai.allTypes')}</SelectItem>
+                <SelectItem value="TEXT">{t('ai.textType')}</SelectItem>
+                <SelectItem value="IMAGE">{t('ai.imageType')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -291,13 +293,13 @@ export function ModelsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Model Name</TableHead>
-                <TableHead>Model ID</TableHead>
-                <TableHead>Provider</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Default</TableHead>
-                <TableHead>Active</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{t('ai.modelName')}</TableHead>
+                <TableHead>{t('ai.modelId')}</TableHead>
+                <TableHead>{t('ai.provider')}</TableHead>
+                <TableHead>{t('ai.type')}</TableHead>
+                <TableHead>{t('ai.default')}</TableHead>
+                <TableHead>{t('common.active')}</TableHead>
+                <TableHead className="text-right">{t('common.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -308,29 +310,29 @@ export function ModelsPage() {
                   ))}</TableRow>
                 ))
               ) : isError ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-zinc-500">Failed to load models</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-zinc-500">{t('ai.failedToLoadModels')}</TableCell></TableRow>
               ) : models.length === 0 ? (
                 <TableRow><TableCell colSpan={7} className="text-center py-8 text-zinc-500">
                   <Boxes className="h-8 w-8 mx-auto mb-2 text-zinc-300" />
-                  No models found. Click &quot;Add Model&quot; to create one manually.
+                  {t('ai.noModelsHint')}
                 </TableCell></TableRow>
               ) : models.map((model) => (
                 <TableRow key={model.id}>
                   <TableCell className="font-medium">{model.name}</TableCell>
                   <TableCell><span className="font-mono text-xs text-muted-foreground">{model.modelId}</span></TableCell>
-                  <TableCell>{model.provider?.name ?? 'Unknown provider'}</TableCell>
+                  <TableCell>{model.provider?.name ?? t('ai.unknownProvider')}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={model.type?.toUpperCase() === 'IMAGE'
                       ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-transparent'
                       : 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400 border-transparent'}>
-                      {model.type?.toUpperCase() === 'IMAGE' ? 'Image' : 'Text'}
+                      {model.type?.toUpperCase() === 'IMAGE' ? t('ai.imageType') : t('ai.textType')}
                     </Badge>
                   </TableCell>
                   <TableCell>
                     {model.isDefault ? (
-                      <Badge variant="secondary" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Default</Badge>
+                      <Badge variant="secondary" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">{t('ai.default')}</Badge>
                     ) : (
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setDefaultMutation.mutate(model.id)} title="Set as default">
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setDefaultMutation.mutate(model.id)} title={t('ai.setAsDefault')}>
                         <Star className="h-3.5 w-3.5 text-zinc-400" />
                       </Button>
                     )}
@@ -340,10 +342,10 @@ export function ModelsPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-0.5">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleEdit(model)} title="Edit">
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleEdit(model)} title={t('common.edit')}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(model)} title="Delete">
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(model)} title={t('common.delete')}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -356,7 +358,7 @@ export function ModelsPage() {
           {pagination && pagination.totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-3 border-t">
               <p className="text-sm text-zinc-500">
-                {(pagination.page - 1) * pagination.pageSize + 1}–{Math.min(pagination.page * pagination.pageSize, pagination.total)} of {pagination.total}
+                {(pagination.page - 1) * pagination.pageSize + 1}–{Math.min(pagination.page * pagination.pageSize, pagination.total)} {t('common.of')} {pagination.total}
               </p>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" disabled={pagination.page <= 1} onClick={() => setPage((p) => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
@@ -374,43 +376,43 @@ export function ModelsPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <TypeIcon className="h-5 w-5" />
-              {editingId ? 'Edit Model' : 'Add Model'}
+              {editingId ? t('ai.editModel') : t('ai.addModel')}
             </DialogTitle>
             <DialogDescription>
-              {editingId ? 'Update model details.' : 'Manually add a new AI model.'}
+              {editingId ? t('ai.editModelDesc') : t('ai.addModelDesc')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             {/* Model Name */}
             <div className="space-y-1.5">
-              <Label>Model Name <span className="text-destructive">*</span></Label>
+              <Label>{t('ai.modelName')} <span className="text-destructive">*</span></Label>
               <Input
                 value={formData.name}
                 onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
-                placeholder="e.g. GPT-4o"
+                placeholder={t('ai.modelNamePlaceholder')}
               />
             </div>
 
             {/* Model ID */}
             <div className="space-y-1.5">
-              <Label>Model ID <span className="text-destructive">*</span></Label>
+              <Label>{t('ai.modelId')} <span className="text-destructive">*</span></Label>
               <Input
                 value={formData.modelId}
                 onChange={(e) => setFormData((p) => ({ ...p, modelId: e.target.value }))}
-                placeholder="e.g. gpt-4o"
+                placeholder={t('ai.modelIdPlaceholder')}
                 className="font-mono text-sm"
               />
             </div>
 
             {/* Provider */}
             <div className="space-y-1.5">
-              <Label>Provider <span className="text-destructive">*</span></Label>
+              <Label>{t('ai.provider')} <span className="text-destructive">*</span></Label>
               <Select
                 value={formData.providerId}
                 onValueChange={(v) => setFormData((p) => ({ ...p, providerId: v }))}
               >
-                <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t('ai.selectProvider')} /></SelectTrigger>
                 <SelectContent>
                   {providers.filter((p) => p.isActive || p.id === formData.providerId).map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -421,15 +423,15 @@ export function ModelsPage() {
 
             {/* Type */}
             <div className="space-y-1.5">
-              <Label>Type <span className="text-destructive">*</span></Label>
+              <Label>{t('ai.type')} <span className="text-destructive">*</span></Label>
               <Select
                 value={formData.type}
                 onValueChange={(v) => setFormData((p) => ({ ...p, type: v as 'TEXT' | 'IMAGE' }))}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {MODEL_TYPES.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  {MODEL_TYPES.map((mt) => (
+                    <SelectItem key={mt.value} value={mt.value}>{t(mt.labelKey)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -439,23 +441,23 @@ export function ModelsPage() {
             <div className="flex items-center justify-between pt-2">
               <div className="flex items-center gap-2">
                 <Switch checked={formData.isActive} onCheckedChange={(v) => setFormData((p) => ({ ...p, isActive: v }))} />
-                <Label>Active</Label>
+                <Label>{t('common.active')}</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Switch checked={formData.isDefault} onCheckedChange={(v) => setFormData((p) => ({ ...p, isDefault: v }))} />
-                <Label>Set as Default</Label>
+                <Label>{t('ai.setAsDefaultLabel')}</Label>
               </div>
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setFormOpen(false)}>{t('common.cancel')}</Button>
             <Button
               onClick={handleSubmit}
               disabled={createMutation.isPending || updateMutation.isPending}
             >
               {createMutation.isPending || updateMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              {editingId ? 'Save Changes' : 'Add Model'}
+              {editingId ? t('common.saveChanges') : t('ai.addModel')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -465,15 +467,15 @@ export function ModelsPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Model"
+        title={t('ai.deleteModel')}
         description={
           deleteTarget
             ? deleteTarget.isDefault
-              ? `"${deleteTarget.name}" is currently the default model. Deleting it will clear the default setting. Are you sure you want to delete it?`
-              : `Are you sure you want to delete "${deleteTarget.name}"? This action cannot be undone.`
+              ? `${t('ai.deleteModelDefaultPrefix')}${deleteTarget.name}${t('ai.deleteModelDefaultSuffix')}`
+              : `${t('ai.deleteConfirmPrefix')}${deleteTarget.name}${t('ai.deleteConfirmSuffix')}`
             : undefined
         }
-        confirmLabel="Delete"
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
         isLoading={deleteMutation.isPending}

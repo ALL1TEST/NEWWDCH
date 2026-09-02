@@ -151,6 +151,7 @@ export const coreEn: Record<string, string> = {
   'title.newsletters': 'Newsletters',
   'title.categories': 'Categories',
   'title.tags': 'Tags',
+  'title.analytics': 'Analytics',
   'title.jobs': 'Jobs',
   'title.seo': 'SEO',
   'title.ai': 'AI',

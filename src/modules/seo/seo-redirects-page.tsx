@@ -61,6 +61,7 @@ import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { truncate, cn } from '@/lib/utils';
 import { useSiteStore } from '@/lib/stores/site-store';
+import { useT } from '@/lib/i18n';
 import { toast } from 'sonner';
 import type { PaginatedResponse, RedirectType } from '@/shared/types';
 import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
@@ -97,18 +98,20 @@ const EMPTY_REDIRECT_FORM: RedirectFormData = {
 };
 
 interface TypeOption {
-  label: string;
-  short: string;
+  labelKey: string;
+  shortKey: string;
   value: RedirectType;
   code: string;
   tone: 'permanent' | 'temporary';
 }
 
+// labelKey/shortKey values are resolved via t() at render time (display-only
+// fields; the value/code still drive selection and filtering).
 const REDIRECT_TYPE_OPTIONS: TypeOption[] = [
-  { label: '301 Permanent', short: 'Permanent', value: 'PERMANENT_301', code: '301', tone: 'permanent' },
-  { label: '302 Temporary', short: 'Temporary', value: 'TEMPORARY_302', code: '302', tone: 'temporary' },
-  { label: '307 Temporary', short: 'Temporary', value: 'TEMPORARY_307', code: '307', tone: 'temporary' },
-  { label: '308 Permanent', short: 'Permanent', value: 'PERMANENT_308', code: '308', tone: 'permanent' },
+  { labelKey: 'seo.type301Permanent', shortKey: 'seo.permanent', value: 'PERMANENT_301', code: '301', tone: 'permanent' },
+  { labelKey: 'seo.type302Temporary', shortKey: 'seo.temporary', value: 'TEMPORARY_302', code: '302', tone: 'temporary' },
+  { labelKey: 'seo.type307Temporary', shortKey: 'seo.temporary', value: 'TEMPORARY_307', code: '307', tone: 'temporary' },
+  { labelKey: 'seo.type308Permanent', shortKey: 'seo.permanent', value: 'PERMANENT_308', code: '308', tone: 'permanent' },
 ];
 
 function getTypeOption(type: RedirectType): TypeOption {
@@ -130,7 +133,7 @@ function formatDate(dateStr: string | null | undefined): string {
   }
 }
 
-function formatRelative(dateStr: string | null | undefined): string {
+function formatRelative(dateStr: string | null | undefined, t: (key: string) => string): string {
   if (!dateStr) return '—';
   try {
     const date = new Date(dateStr);
@@ -141,10 +144,10 @@ function formatRelative(dateStr: string | null | undefined): string {
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
     if (days > 30) return formatDate(dateStr);
-    if (days > 0) return `${days}d ago`;
-    if (hours > 0) return `${hours}h ago`;
-    if (minutes > 0) return `${minutes}m ago`;
-    return 'just now';
+    if (days > 0) return `${days}${t('seo.daysAgo')}`;
+    if (hours > 0) return `${hours}${t('seo.hoursAgo')}`;
+    if (minutes > 0) return `${minutes}${t('seo.minutesAgo')}`;
+    return t('seo.justNow');
   } catch {
     return '—';
   }
@@ -153,6 +156,7 @@ function formatRelative(dateStr: string | null | undefined): string {
 // ==================== Type Badge ====================
 
 function RedirectTypeBadge({ type }: { type: RedirectType }) {
+  const { t } = useT();
   const opt = getTypeOption(type);
   const toneClasses =
     opt.tone === 'permanent'
@@ -165,7 +169,7 @@ function RedirectTypeBadge({ type }: { type: RedirectType }) {
     >
       <span className="font-mono text-[10px] font-bold opacity-80">{opt.code}</span>
       <span className="opacity-40">·</span>
-      <span>{opt.short}</span>
+      <span>{t(opt.shortKey)}</span>
     </Badge>
   );
 }
@@ -193,6 +197,7 @@ function buildRedirectUrl(path: string, domain: string | null | undefined): stri
 }
 
 function PathLink({ path }: { path: string }) {
+  const { t } = useT();
   const activeSite = useSiteStore((s) => s.getActiveSite());
   const href = useMemo(
     () => buildRedirectUrl(path, activeSite?.domain),
@@ -205,7 +210,7 @@ function PathLink({ path }: { path: string }) {
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}
       className="inline-flex items-center gap-1 font-mono text-sm text-foreground/80 hover:text-primary hover:underline underline-offset-2 max-w-[260px] min-w-0 transition-colors"
-      title={`Open ${path} in a new tab`}
+      title={`${t('seo.openInNewTabPrefix')} ${path} ${t('seo.openInNewTabSuffix')}`}
     >
       <span className="truncate">{path}</span>
       <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
@@ -222,6 +227,7 @@ interface StatusCellProps {
 }
 
 function StatusToggleCell({ row, onToggle, isPending }: StatusCellProps) {
+  const { t } = useT();
   const active = row.active;
   // The Status column contains ONLY the functional toggle. The switch's
   // checked/unchecked state communicates active/inactive; no text label.
@@ -237,7 +243,7 @@ function StatusToggleCell({ row, onToggle, isPending }: StatusCellProps) {
             onToggle(row.id, checked);
           }
         }}
-        aria-label={active ? 'Deactivate redirect' : 'Activate redirect'}
+        aria-label={active ? t('seo.deactivateRedirect') : t('seo.activateRedirect')}
         className={cn(
           'cursor-pointer',
           // Active/on color = BLACK (was emerald).
@@ -289,19 +295,19 @@ function SortableHeader({
 
 // ==================== Validation ====================
 
-function validateRedirectForm(form: RedirectFormData, isEdit: boolean): string | null {
-  if (!form.fromPath.trim()) return 'From path is required.';
-  if (!form.fromPath.startsWith('/')) return 'From path must start with "/".';
-  if (!form.toPath.trim()) return 'To path is required.';
-  if (!form.toPath.startsWith('/')) return 'To path must start with "/".';
+function validateRedirectForm(form: RedirectFormData, isEdit: boolean, t: (key: string) => string): string | null {
+  if (!form.fromPath.trim()) return t('seo.fromPathRequired');
+  if (!form.fromPath.startsWith('/')) return t('seo.fromPathMustStart');
+  if (!form.toPath.trim()) return t('seo.toPathRequired');
+  if (!form.toPath.startsWith('/')) return t('seo.toPathMustStart');
   // Self-redirect check (case-insensitive — /About and /about are the same URL).
   if (form.fromPath.trim().toLowerCase() === form.toPath.trim().toLowerCase()) {
-    return 'From path and to path cannot be the same (self-redirect).';
+    return t('seo.selfRedirect');
   }
   // Basic path validity — no spaces, no illegal chars.
   const pathRe = /^\/[^\s]*$/;
-  if (!pathRe.test(form.fromPath.trim())) return 'From path contains invalid characters.';
-  if (!pathRe.test(form.toPath.trim())) return 'To path contains invalid characters.';
+  if (!pathRe.test(form.fromPath.trim())) return t('seo.fromPathInvalid');
+  if (!pathRe.test(form.toPath.trim())) return t('seo.toPathInvalid');
   return null;
 }
 
@@ -309,20 +315,20 @@ function validateRedirectForm(form: RedirectFormData, isEdit: boolean): string |
 //
 // Returns per-field error strings (empty = valid). Used by the form dialog to
 // show inline errors only after a field is touched — never on modal open.
-function getFieldErrors(form: RedirectFormData): { from: string; to: string } {
+function getFieldErrors(form: RedirectFormData, t: (key: string) => string): { from: string; to: string } {
   const from = form.fromPath.trim();
   const to = form.toPath.trim();
   let fromErr = '';
   let toErr = '';
-  if (!from) fromErr = 'From path is required.';
-  else if (!form.fromPath.startsWith('/')) fromErr = 'From path must start with "/".';
-  else if (!/^\/[^\s]*$/.test(form.fromPath.trim())) fromErr = 'From path contains invalid characters.';
-  if (!to) toErr = 'To path is required.';
-  else if (!form.toPath.startsWith('/')) toErr = 'To path must start with "/".';
-  else if (!/^\/[^\s]*$/.test(form.toPath.trim())) toErr = 'To path contains invalid characters.';
+  if (!from) fromErr = t('seo.fromPathRequired');
+  else if (!form.fromPath.startsWith('/')) fromErr = t('seo.fromPathMustStart');
+  else if (!/^\/[^\s]*$/.test(form.fromPath.trim())) fromErr = t('seo.fromPathInvalid');
+  if (!to) toErr = t('seo.toPathRequired');
+  else if (!form.toPath.startsWith('/')) toErr = t('seo.toPathMustStart');
+  else if (!/^\/[^\s]*$/.test(form.toPath.trim())) toErr = t('seo.toPathInvalid');
   // Self-redirect — surface on the From field (cross-field check).
   if (!fromErr && !toErr && from.toLowerCase() === to.toLowerCase()) {
-    fromErr = 'From path and to path cannot be the same (self-redirect).';
+    fromErr = t('seo.selfRedirect');
   }
   return { from: fromErr, to: toErr };
 }
@@ -357,6 +363,7 @@ function RedirectFormDialog({
   // Track which fields the user has interacted with (blurred). Validation
   // errors are only revealed after a field is touched — never on modal open.
   const [touched, setTouched] = useState({ from: false, to: false });
+  const { t } = useT();
   // Reset touched whenever the dialog opens (render-phase sync, not an effect —
   // mirrors the key-based pattern used elsewhere so stale errors from a prior
   // session never carry over into a freshly opened modal).
@@ -366,7 +373,7 @@ function RedirectFormDialog({
     if (open) setTouched({ from: false, to: false });
   }
 
-  const errs = getFieldErrors(data);
+  const errs = getFieldErrors(data, t);
   const hasError = Boolean(errs.from) || Boolean(errs.to);
 
   return (
@@ -378,7 +385,7 @@ function RedirectFormDialog({
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="redirect-from">From Path *</Label>
+            <Label htmlFor="redirect-from">{t('seo.fromPath')} *</Label>
             <Input
               id="redirect-from"
               value={data.fromPath}
@@ -390,7 +397,7 @@ function RedirectFormDialog({
               aria-invalid={touched.from && !!errs.from}
             />
             <p className="text-xs text-muted-foreground">
-              The original URL path that should be redirected. Must start with &quot;/&quot;.
+              {t('seo.fromPathHint')}
             </p>
             {touched.from && errs.from && (
               <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
@@ -400,7 +407,7 @@ function RedirectFormDialog({
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="redirect-to">To Path *</Label>
+            <Label htmlFor="redirect-to">{t('seo.toPath')} *</Label>
             <Input
               id="redirect-to"
               value={data.toPath}
@@ -411,7 +418,7 @@ function RedirectFormDialog({
               aria-invalid={touched.to && !!errs.to}
             />
             <p className="text-xs text-muted-foreground">
-              The destination URL path. Must start with &quot;/&quot;.
+              {t('seo.toPathHint')}
             </p>
             {touched.to && errs.to && (
               <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
@@ -421,13 +428,13 @@ function RedirectFormDialog({
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="redirect-type">Redirect Type *</Label>
+            <Label htmlFor="redirect-type">{t('seo.redirectType')} *</Label>
             <Select
               value={data.type}
               onValueChange={(v) => onChange({ ...data, type: v as RedirectType })}
             >
               <SelectTrigger id="redirect-type">
-                <SelectValue placeholder="Select redirect type" />
+                <SelectValue placeholder={t('seo.selectRedirectType')} />
               </SelectTrigger>
               <SelectContent>
                 {REDIRECT_TYPE_OPTIONS.map((opt) => (
@@ -435,24 +442,23 @@ function RedirectFormDialog({
                     <span className="font-mono text-xs font-bold mr-2 opacity-70">
                       {opt.code}
                     </span>
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              <span className="font-medium">301/308</span> are permanent (cached by browsers).
-              <span className="font-medium"> 302/307</span> are temporary.
+              <span className="font-medium">301/308</span> {t('seo.typePermHint')}
+              <span className="font-medium"> 302/307</span> {t('seo.typeTempHint')}
             </p>
           </div>
           <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
             <div className="space-y-0.5">
               <Label htmlFor="redirect-active" className="text-sm font-medium">
-                Active
+                {t('common.active')}
               </Label>
               <p className="text-xs text-muted-foreground">
-                When active, requests to the From Path will be redirected.
-                When inactive, the redirect is ignored.
+                {t('seo.activeHint')}
               </p>
             </div>
             <Switch
@@ -468,7 +474,7 @@ function RedirectFormDialog({
             onClick={() => onOpenChange(false)}
             disabled={isPending}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={onSubmit}
@@ -502,6 +508,7 @@ const CSV_TEMPLATE = `fromPath,toPath,type,status
 /legacy-product,/products,302,inactive`;
 
 function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [csvContent, setCsvContent] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -516,7 +523,7 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
       setValidation(data as unknown as CsvValidationResult);
       setStep('preview');
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to validate CSV'),
+    onError: (err: Error) => toast.error(err.message || t('seo.csvValidateFailed')),
   });
 
   const importMutation = useMutation({
@@ -531,13 +538,13 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
       setStep('done');
       queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all });
       if (result.imported > 0) {
-        toast.success(`Imported ${result.imported} redirect${result.imported === 1 ? '' : 's'}`);
+        toast.success(`${t('seo.importedPrefix')} ${result.imported} ${result.imported === 1 ? t('seo.redirectSingular') : t('seo.redirects')}`);
       }
       if (result.errorsDuringImport > 0) {
-        toast.error(`${result.errorsDuringImport} row(s) failed to import`);
+        toast.error(`${result.errorsDuringImport} ${t('seo.rowsFailedToImport')}`);
       }
     },
-    onError: (err: Error) => toast.error(err.message || 'Import failed'),
+    onError: (err: Error) => toast.error(err.message || t('seo.importFailedToast')),
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -590,15 +597,15 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Import Redirects CSV</DialogTitle>
+          <DialogTitle>{t('seo.importCsvTitle')}</DialogTitle>
           <DialogDescription>
-            Upload a CSV with columns:{' '}
+            {t('seo.csvDescPrefix')}{' '}
             <code className="text-xs bg-muted px-1 py-0.5 rounded">fromPath</code>,{' '}
             <code className="text-xs bg-muted px-1 py-0.5 rounded">toPath</code>,{' '}
             <code className="text-xs bg-muted px-1 py-0.5 rounded">type</code>{' '}
-            (301/302/307/308),{' '}
+            {t('seo.csvDescTypeSuffix')}{' '}
             <code className="text-xs bg-muted px-1 py-0.5 rounded">status</code>{' '}
-            (active/inactive).
+            {t('seo.csvDescStatusSuffix')}
           </DialogDescription>
         </DialogHeader>
 
@@ -619,14 +626,14 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
               />
               <Upload className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
               <p className="text-sm font-medium">
-                Drop CSV file here or click to browse
+                {t('seo.dropCsvHere')}
               </p>
               {file && (
                 <p className="text-xs text-muted-foreground mt-1">{file.name}</p>
               )}
             </div>
             <div className="space-y-2">
-              <Label>Or paste CSV content:</Label>
+              <Label>{t('seo.pasteCsvContent')}</Label>
               <textarea
                 className="w-full min-h-[120px] rounded-md border border-border bg-transparent px-3 py-2 text-xs font-mono shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
                 placeholder={CSV_TEMPLATE}
@@ -636,7 +643,7 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={handleClose}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button
                 onClick={handleValidate}
@@ -645,7 +652,7 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                 {validateMutation.isPending && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
-                Validate &amp; Preview
+                {t('seo.validatePreview')}
               </Button>
             </DialogFooter>
           </div>
@@ -658,19 +665,19 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                 <p className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
                   {validation.validRows}
                 </p>
-                <p className="text-xs text-muted-foreground">Valid</p>
+                <p className="text-xs text-muted-foreground">{t('seo.valid')}</p>
               </div>
               <div className="rounded-lg border p-3 text-center">
                 <p className="text-lg font-bold tabular-nums text-red-600 dark:text-red-400">
                   {validation.invalidRows}
                 </p>
-                <p className="text-xs text-muted-foreground">Invalid</p>
+                <p className="text-xs text-muted-foreground">{t('seo.invalid')}</p>
               </div>
               <div className="rounded-lg border p-3 text-center">
                 <p className="text-lg font-bold tabular-nums">
                   {validation.errors.length}
                 </p>
-                <p className="text-xs text-muted-foreground">Errors</p>
+                <p className="text-xs text-muted-foreground">{t('seo.errors')}</p>
               </div>
             </div>
             {validation.errors.length > 0 && (
@@ -679,7 +686,7 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                   <div key={i} className="flex items-start gap-2 text-xs">
                     <XCircle className="h-3 w-3 mt-0.5 text-red-500 shrink-0" />
                     <span>
-                      <span className="font-medium">Row {err.row}:</span> {err.message}
+                      <span className="font-medium">{t('seo.row')} {err.row}:</span> {err.message}
                     </span>
                   </div>
                 ))}
@@ -687,7 +694,7 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
             )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setStep('upload')}>
-                Back
+                {t('common.back')}
               </Button>
               <Button
                 onClick={handleImport}
@@ -697,8 +704,8 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
                 {importMutation.isPending
-                  ? 'Importing...'
-                  : `Import ${validation.validRows} Redirect${validation.validRows === 1 ? '' : 's'}`}
+                  ? t('seo.importing')
+                  : `${t('seo.importPrefix')} ${validation.validRows} ${validation.validRows === 1 ? t('seo.redirectSingular') : t('seo.redirects')}`}
               </Button>
             </DialogFooter>
           </div>
@@ -712,30 +719,30 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
               <CheckCircle2 className="h-10 w-10 mx-auto text-emerald-500" />
             )}
             <p className="font-semibold">
-              {importResult.imported > 0 ? 'Import Complete' : 'Import Failed'}
+              {importResult.imported > 0 ? t('seo.importComplete') : t('seo.importFailed')}
             </p>
             <div className="grid grid-cols-3 gap-3 max-w-xs mx-auto">
               <div>
                 <p className="text-lg font-bold tabular-nums text-emerald-600">
                   {importResult.imported}
                 </p>
-                <p className="text-xs text-muted-foreground">Imported</p>
+                <p className="text-xs text-muted-foreground">{t('seo.imported')}</p>
               </div>
               <div>
                 <p className="text-lg font-bold tabular-nums text-amber-600">
                   {importResult.skipped}
                 </p>
-                <p className="text-xs text-muted-foreground">Skipped</p>
+                <p className="text-xs text-muted-foreground">{t('seo.skipped')}</p>
               </div>
               <div>
                 <p className="text-lg font-bold tabular-nums text-red-600">
                   {importResult.errorsDuringImport}
                 </p>
-                <p className="text-xs text-muted-foreground">Errors</p>
+                <p className="text-xs text-muted-foreground">{t('seo.errors')}</p>
               </div>
             </div>
             <DialogFooter className="justify-center">
-              <Button onClick={handleClose}>Done</Button>
+              <Button onClick={handleClose}>{t('seo.done')}</Button>
             </DialogFooter>
           </div>
         )}
@@ -747,6 +754,7 @@ function CsvImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
 // ==================== Main Page ====================
 
 export function SeoRedirectsPage() {
+  const { t } = useT();
   const queryClient = useQueryClient();
 
   // Dialog state
@@ -854,10 +862,10 @@ export function SeoRedirectsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all });
       setIsCreateOpen(false);
       setCreateForm(EMPTY_REDIRECT_FORM);
-      toast.success('Redirect created');
+      toast.success(t('seo.redirectCreated'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to create redirect');
+      toast.error(err.message || t('seo.redirectCreateFailed'));
     },
   });
 
@@ -872,10 +880,10 @@ export function SeoRedirectsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all });
       setEditTarget(null);
-      toast.success('Redirect updated');
+      toast.success(t('seo.redirectUpdated'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to update redirect');
+      toast.error(err.message || t('seo.redirectUpdateFailed'));
     },
   });
 
@@ -888,10 +896,10 @@ export function SeoRedirectsPage() {
       removeCachedRow(id);
       queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all });
       setDeleteTarget(null);
-      toast.success('Redirect deleted');
+      toast.success(t('seo.redirectDeleted'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to delete redirect');
+      toast.error(err.message || t('seo.redirectDeleteFailed'));
     },
   });
 
@@ -913,7 +921,7 @@ export function SeoRedirectsPage() {
     },
     onSuccess: (_data, variables) => {
       toast.success(
-        variables.active ? 'Redirect enabled' : 'Redirect disabled',
+        variables.active ? t('seo.redirectEnabled') : t('seo.redirectDisabled'),
       );
       // Refetch to pick up the server-side updatedAt + any hit-count changes.
       queryClient.invalidateQueries({ queryKey: queryKeys.redirects.all });
@@ -923,7 +931,7 @@ export function SeoRedirectsPage() {
       if (context?.prev) {
         queryClient.setQueryData(queryKey, context.prev);
       }
-      toast.error(err.message || 'Failed to update redirect status');
+      toast.error(err.message || t('seo.redirectStatusFailed'));
     },
     onSettled: () => {
       setTogglingId(null);
@@ -934,7 +942,7 @@ export function SeoRedirectsPage() {
     mutationFn: async () => {
       const resp = await fetch('/api/redirects/bulk?action=export');
       if (!resp.ok) {
-        let message = 'Export failed';
+        let message = t('seo.exportFailed');
         try {
           const j = await resp.json();
           message = j?.error?.message ?? message;
@@ -954,8 +962,8 @@ export function SeoRedirectsPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     },
-    onSuccess: () => toast.success('Redirects exported to redirects.csv'),
-    onError: (err: Error) => toast.error(err.message || 'Export failed'),
+    onSuccess: () => toast.success(t('seo.redirectsExported')),
+    onError: (err: Error) => toast.error(err.message || t('seo.exportFailed')),
   });
 
   const handleExport = useCallback(() => exportMutation.mutate(), [exportMutation]);
@@ -973,23 +981,23 @@ export function SeoRedirectsPage() {
   }, []);
 
   const handleCreate = useCallback(() => {
-    const error = validateRedirectForm(createForm, false);
+    const error = validateRedirectForm(createForm, false, t);
     if (error) {
       toast.error(error);
       return;
     }
     createMutation.mutate(createForm);
-  }, [createForm, createMutation]);
+  }, [createForm, createMutation, t]);
 
   const handleUpdate = useCallback(() => {
     if (!editTarget) return;
-    const error = validateRedirectForm(editForm, true);
+    const error = validateRedirectForm(editForm, true, t);
     if (error) {
       toast.error(error);
       return;
     }
     updateMutation.mutate({ id: editTarget.id, formData: editForm });
-  }, [editTarget, editForm, updateMutation]);
+  }, [editTarget, editForm, updateMutation, t]);
 
   const handleToggle = useCallback(
     (id: string, nextActive: boolean) => {
@@ -1011,18 +1019,18 @@ export function SeoRedirectsPage() {
       return (
         <EmptyState
           icon={Search}
-          title="No redirects found"
-          description="Try changing your search or filters."
+          title={t('seo.noRedirectsFoundTitle')}
+          description={t('seo.tryChangingSearch')}
         />
       );
     }
     return (
       <EmptyState
         icon={GitBranch}
-        title="No redirects configured"
-        description="Create your first redirect to manage moved or changed URLs."
+        title={t('seo.noRedirectsConfigured')}
+        description={t('seo.createFirstRedirectHint')}
         action={{
-          label: 'Create Redirect',
+          label: t('seo.createRedirect'),
           onClick: () => {
             setCreateForm(EMPTY_REDIRECT_FORM);
             setIsCreateOpen(true);
@@ -1031,7 +1039,7 @@ export function SeoRedirectsPage() {
         }}
       />
     );
-  }, [hasFiltersOrSearch]);
+  }, [hasFiltersOrSearch, t]);
 
   // ---- Columns ---------------------------------------------------------
 
@@ -1042,7 +1050,7 @@ export function SeoRedirectsPage() {
         accessorKey: 'fromPath',
         enableSorting: true,
         size: 220,
-        header: ({ column }) => <SortableHeader label="From Path" column={column} />,
+        header: ({ column }) => <SortableHeader label={t('seo.fromPath')} column={column} />,
         cell: ({ row }) => <PathLink path={row.original.fromPath} />,
       },
       {
@@ -1050,7 +1058,7 @@ export function SeoRedirectsPage() {
         accessorKey: 'toPath',
         enableSorting: true,
         size: 220,
-        header: ({ column }) => <SortableHeader label="To Path" column={column} />,
+        header: ({ column }) => <SortableHeader label={t('seo.toPath')} column={column} />,
         cell: ({ row }) => <PathLink path={row.original.toPath} />,
       },
       {
@@ -1058,7 +1066,7 @@ export function SeoRedirectsPage() {
         accessorKey: 'type',
         enableSorting: true,
         size: 150,
-        header: ({ column }) => <SortableHeader label="Type" column={column} />,
+        header: ({ column }) => <SortableHeader label={t('seo.type')} column={column} />,
         cell: ({ row }) => <RedirectTypeBadge type={row.original.type} />,
       },
       {
@@ -1067,12 +1075,12 @@ export function SeoRedirectsPage() {
         enableSorting: true,
         size: 90,
         header: ({ column }) => (
-          <SortableHeader label="Hits" column={column} align="right" />
+          <SortableHeader label={t('seo.hits')} column={column} align="right" />
         ),
         cell: ({ row }) => (
           <span
             className="tabular-nums text-sm font-medium text-foreground/80 block text-right"
-            title={`${row.original.hits.toLocaleString()} total hits`}
+            title={`${row.original.hits.toLocaleString()} ${t('seo.totalHits')}`}
           >
             {row.original.hits.toLocaleString()}
           </span>
@@ -1083,7 +1091,7 @@ export function SeoRedirectsPage() {
         accessorKey: 'createdAt',
         enableSorting: true,
         size: 120,
-        header: ({ column }) => <SortableHeader label="Created" column={column} />,
+        header: ({ column }) => <SortableHeader label={t('seo.created')} column={column} />,
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground" title={row.original.createdAt}>
             {formatDate(row.original.createdAt)}
@@ -1095,13 +1103,13 @@ export function SeoRedirectsPage() {
         accessorKey: 'updatedAt',
         enableSorting: true,
         size: 120,
-        header: ({ column }) => <SortableHeader label="Updated" column={column} />,
+        header: ({ column }) => <SortableHeader label={t('seo.updated')} column={column} />,
         cell: ({ row }) => (
           <span
             className="text-sm text-muted-foreground"
             title={new Date(row.original.updatedAt).toLocaleString()}
           >
-            {formatRelative(row.original.updatedAt)}
+            {formatRelative(row.original.updatedAt, t)}
           </span>
         ),
       },
@@ -1110,7 +1118,7 @@ export function SeoRedirectsPage() {
         accessorKey: 'active',
         enableSorting: true,
         size: 150,
-        header: ({ column }) => <SortableHeader label="Status" column={column} />,
+        header: ({ column }) => <SortableHeader label={t('common.status')} column={column} />,
         cell: ({ row }) => (
           <StatusToggleCell
             row={row.original}
@@ -1132,13 +1140,13 @@ export function SeoRedirectsPage() {
                 onClick={(e) => e.stopPropagation()}
               >
                 <MoreHorizontal className="h-4 w-4" />
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t('common.actions')}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem onClick={() => handleOpenEdit(row)}>
                 <Pencil className="h-4 w-4 mr-2" />
-                Edit
+                {t('common.edit')}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -1146,14 +1154,14 @@ export function SeoRedirectsPage() {
                 onClick={() => setDeleteTarget(row)}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                Delete
+                {t('common.delete')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         ),
       }),
     ],
-    [handleOpenEdit, handleToggle, togglingId],
+    [handleOpenEdit, handleToggle, togglingId, t],
   );
 
   return (
@@ -1164,10 +1172,10 @@ export function SeoRedirectsPage() {
           <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-red-700 dark:text-red-400">
-              Failed to load redirects
+              {t('seo.redirectsLoadFailed')}
             </p>
             <p className="text-xs text-red-600/80 dark:text-red-400/80 mt-0.5">
-              {(error as Error)?.message || 'Please try again later.'}
+              {(error as Error)?.message || t('seo.tryAgainLater')}
             </p>
           </div>
           <Button
@@ -1178,7 +1186,7 @@ export function SeoRedirectsPage() {
             }
           >
             <Loader2 className="h-3.5 w-3.5 mr-1.5" />
-            Retry
+            {t('common.retry')}
           </Button>
         </div>
       )}
@@ -1190,7 +1198,7 @@ export function SeoRedirectsPage() {
           <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search redirects by path..."
+              placeholder={t('seo.searchRedirects')}
               value={table.searchValue}
               onChange={(e) => {
                 table.setSearchValue(e.target.value);
@@ -1207,13 +1215,13 @@ export function SeoRedirectsPage() {
             }}
           >
             <SelectTrigger size="sm" className="w-[150px] text-xs">
-              <SelectValue placeholder="All Types" />
+              <SelectValue placeholder={t('seo.allTypes')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="all">{t('seo.allTypes')}</SelectItem>
               {REDIRECT_TYPE_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
+                  {t(opt.labelKey)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -1226,12 +1234,12 @@ export function SeoRedirectsPage() {
             }}
           >
             <SelectTrigger size="sm" className="w-[130px] text-xs">
-              <SelectValue placeholder="All Status" />
+              <SelectValue placeholder={t('seo.allStatus')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="all">{t('seo.allStatus')}</SelectItem>
+              <SelectItem value="active">{t('common.active')}</SelectItem>
+              <SelectItem value="inactive">{t('common.inactive')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -1248,7 +1256,7 @@ export function SeoRedirectsPage() {
             ) : (
               <Download className="h-4 w-4 mr-2" />
             )}
-            Export CSV
+            {t('seo.exportCsv')}
           </Button>
           <Button
             variant="outline"
@@ -1256,7 +1264,7 @@ export function SeoRedirectsPage() {
             onClick={() => setImportDialogOpen(true)}
           >
             <Upload className="h-4 w-4 mr-2" />
-            Import CSV
+            {t('seo.importCsv')}
           </Button>
           <Button
             onClick={() => {
@@ -1266,7 +1274,7 @@ export function SeoRedirectsPage() {
             size="sm"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Create Redirect
+            {t('seo.createRedirect')}
           </Button>
         </div>
       </div>
@@ -1284,7 +1292,7 @@ export function SeoRedirectsPage() {
         sortField={table.sortField}
         sortOrder={table.sortOrder}
         getRowId={(row) => row.id}
-        emptyMessage="No redirects found."
+        emptyMessage={t('seo.noRedirectsFound')}
         emptyState={emptyState}
       />
 
@@ -1296,9 +1304,9 @@ export function SeoRedirectsPage() {
         onChange={setCreateForm}
         onSubmit={handleCreate}
         isPending={createMutation.isPending}
-        title="Create Redirect"
-        description="Set up a new URL redirect rule for your site."
-        submitLabel="Create Redirect"
+        title={t('seo.createRedirect')}
+        description={t('seo.createRedirectDesc')}
+        submitLabel={t('seo.createRedirect')}
       />
 
       {/* Edit Dialog */}
@@ -1309,13 +1317,13 @@ export function SeoRedirectsPage() {
         onChange={setEditForm}
         onSubmit={handleUpdate}
         isPending={updateMutation.isPending}
-        title="Edit Redirect"
+        title={t('seo.editRedirect')}
         description={
           editTarget
-            ? `Update redirect from "${truncate(editTarget.fromPath, 40)}"`
-            : 'Update redirect'
+            ? `${t('seo.updateRedirectPrefix')}${truncate(editTarget.fromPath, 40)}${t('seo.updateRedirectSuffix')}`
+            : t('seo.updateRedirect')
         }
-        submitLabel="Save Changes"
+        submitLabel={t('common.saveChanges')}
         isEdit
       />
 
@@ -1329,13 +1337,13 @@ export function SeoRedirectsPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Redirect"
+        title={t('seo.deleteRedirect')}
         description={
           deleteTarget
-            ? `Are you sure you want to delete the redirect from "${truncate(deleteTarget.fromPath, 50)}" to "${truncate(deleteTarget.toPath, 50)}"? This action cannot be undone.`
+            ? `${t('seo.deleteRedirectPrefix')}${truncate(deleteTarget.fromPath, 50)}${t('seo.deleteRedirectMid')}${truncate(deleteTarget.toPath, 50)}${t('seo.deleteRedirectSuffix')}`
             : undefined
         }
-        confirmLabel="Delete"
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => {
           if (deleteTarget) deleteMutation.mutate(deleteTarget.id);

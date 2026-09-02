@@ -59,6 +59,7 @@ import { toast } from 'sonner';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { PlatformPageHeader } from '@/modules/platform/shared';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -111,13 +112,14 @@ function TypeBadge({ type }: { type: BackupType }) {
 }
 
 function EncryptionBadge({ status }: { status: string }) {
+  const { t } = useT();
   if (status !== 'ENCRYPTED') {
     return <span className="text-muted-foreground text-xs">—</span>;
   }
   return (
     <Badge variant="outline" className="border-transparent bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 font-medium">
       <Lock className="h-3 w-3 mr-1" />
-      Encrypted
+      {t('backups.encrypted')}
     </Badge>
   );
 }
@@ -135,13 +137,14 @@ function VerificationBadge({ status }: { status: string | null }) {
  * zero results. Distinct from the standalone "No backups yet" state which only
  * shows when the system genuinely has zero backups. */
 function NoSearchResultsEmpty({ onClear }: { onClear: () => void }) {
+  const { t } = useT();
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
       <DatabaseBackup className="h-10 w-10 text-muted-foreground/40 mb-3" strokeWidth={1.5} />
-      <p className="text-sm font-medium text-foreground">No backups found</p>
-      <p className="text-xs text-muted-foreground mt-1">No backups match your search.</p>
+      <p className="text-sm font-medium text-foreground">{t('backups.noBackupsFound')}</p>
+      <p className="text-xs text-muted-foreground mt-1">{t('backups.noSearchMatch')}</p>
       <Button variant="outline" size="sm" className="mt-4" onClick={onClear}>
-        Clear search
+        {t('backups.clearSearch')}
       </Button>
     </div>
   );
@@ -163,6 +166,7 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
   const queryClient = useQueryClient();
   const currentUserId = useAuthStore((s) => s.user?.id ?? null);
   const isPlatform = scope === 'platform';
+  const { t } = useT();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<CreateBackupForm>(initialForm);
   const [deleteTarget, setDeleteTarget] = useState<BackupRow | null>(null);
@@ -228,11 +232,11 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStats.all });
-      toast.success('Backup creation started');
+      toast.success(t('backups.creationStarted'));
       setDialogOpen(false);
       setForm(initialForm);
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to create backup'),
+    onError: (err: Error) => toast.error(err.message || t('backups.createFailed')),
   });
 
   // Verify + restore per-id POSTs require `{ createdById }` in the
@@ -247,9 +251,9 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
-      toast.success('Verification started');
+      toast.success(t('backups.verificationStarted'));
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to verify backup'),
+    onError: (err: Error) => toast.error(err.message || t('backups.verifyFailed')),
   });
 
   const restoreMutation = useMutation({
@@ -260,11 +264,11 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       setRestoreTarget(null);
-      toast.success('Restore initiated successfully');
+      toast.success(t('backups.restoreInitiated'));
     },
     onError: (err: Error) => {
       setRestoreTarget(null);
-      toast.error(err.message || 'Failed to restore backup');
+      toast.error(err.message || t('backups.restoreFailed'));
     },
   });
 
@@ -276,11 +280,11 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
       queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStats.all });
       setDeleteTarget(null);
-      toast.success('Backup deleted');
+      toast.success(t('backups.deleted'));
     },
     onError: (err: Error) => {
       setDeleteTarget(null);
-      toast.error(err.message || 'Failed to delete backup');
+      toast.error(err.message || t('backups.deleteFailed'));
     },
   });
 
@@ -296,7 +300,7 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
   const columns: ColumnDef<BackupRow>[] = [
       {
         id: 'name',
-        header: 'Name',
+        header: t('common.name'),
         accessorKey: 'name',
         size: 220,
         // No `truncate`/`overflow-hidden` — full name always visible.
@@ -310,7 +314,7 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
       },
       {
         id: 'scope',
-        header: 'Scope',
+        header: t('backups.scope'),
         accessorKey: 'scope',
         enableSorting: false,
         size: 120,
@@ -318,7 +322,7 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
       },
       {
         id: 'type',
-        header: 'Type',
+        header: t('backups.type'),
         accessorKey: 'type',
         enableSorting: false,
         size: 110,
@@ -326,7 +330,7 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
       },
       {
         id: 'size',
-        header: 'Size',
+        header: t('backups.size'),
         accessorFn: (row) => row.size,
         enableSorting: false,
         size: 80,
@@ -338,7 +342,7 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
       },
       {
         id: 'storageProvider',
-        header: 'Storage',
+        header: t('backups.storage'),
         accessorKey: 'storageProvider',
         enableSorting: false,
         size: 120,
@@ -351,7 +355,7 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
       },
       {
         id: 'encryptionEnabled',
-        header: 'Encryption',
+        header: t('backups.encryption'),
         accessorKey: 'encryptionStatus',
         enableSorting: false,
         size: 120,
@@ -359,7 +363,7 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
       },
       {
         id: 'verificationStatus',
-        header: 'Verification',
+        header: t('backups.verification'),
         accessorKey: 'verificationStatus',
         enableSorting: false,
         size: 110,
@@ -367,14 +371,14 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
       },
       {
         id: 'status',
-        header: 'Status',
+        header: t('common.status'),
         accessorKey: 'status',
         size: 110,
         cell: ({ getValue }) => <StatusBadge status={getValue() as string} size="sm" />,
       },
       {
         id: 'duration',
-        header: 'Duration',
+        header: t('backups.duration'),
         accessorKey: 'durationMs',
         enableSorting: false,
         size: 90,
@@ -386,7 +390,7 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
       },
       {
         id: 'createdAt',
-        header: 'Created',
+        header: t('backups.created'),
         accessorKey: 'createdAt',
         size: 170,
         // Full relative timestamp visible (e.g. "Yesterday at 11:56 AM").
@@ -415,21 +419,21 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
                 onClick={() => window.open(`/api/backups/${row.id}/download`, '_blank')}
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download
+                {t('backups.download')}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => verifyMutation.mutate(row.id)}
                 disabled={row.status !== 'COMPLETED' || verifyMutation.isPending}
               >
                 <ShieldCheck className="h-4 w-4 mr-2" />
-                Verify
+                {t('backups.verify')}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setRestoreTarget(row)}
                 disabled={row.status !== 'COMPLETED'}
               >
                 <RotateCcw className="h-4 w-4 mr-2" />
-                Restore
+                {t('backups.restore')}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -437,7 +441,7 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
                 onClick={() => setDeleteTarget(row)}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                Delete
+                {t('common.delete')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -453,24 +457,24 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
     <div className="space-y-4">
       {isPlatform ? (
         <PlatformPageHeader
-          title="Backups"
-          subtitle="Platform-wide backup management. Restore, verify, and download backups across all customers and sites."
+          title={t('title.backups')}
+          subtitle={t('backups.listPlatformSubtitle')}
           actions={
             <Button size="sm" onClick={() => setDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Create Backup
+              {t('backups.createBackup')}
             </Button>
           }
         />
       ) : (
         <PageHeader
           breadcrumbs={false}
-          title="Backups"
-          description="View and manage all backup operations"
+          title={t('title.backups')}
+          description={t('backups.listDescription')}
           action={
             <Button size="sm" onClick={() => setDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Create Backup
+              {t('backups.createBackup')}
             </Button>
           }
         />
@@ -479,9 +483,9 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
       {isInitialEmpty ? (
         <EmptyState
           icon={DatabaseBackup}
-          title="No backups yet"
-          description="Create your first backup to protect your data."
-          action={{ label: 'Create Backup', onClick: () => setDialogOpen(true) }}
+          title={t('backups.noBackupsYet')}
+          description={t('backups.createFirstBackup')}
+          action={{ label: t('backups.createBackup'), onClick: () => setDialogOpen(true) }}
         />
       ) : (
         <DataTable
@@ -495,7 +499,7 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
           onSortChange={(f, o) => table.setSortField(f, o)}
           sortField={table.sortField}
           sortOrder={table.sortOrder}
-          searchPlaceholder="Search backups..."
+          searchPlaceholder={t('backups.searchPlaceholder')}
           searchValue={table.searchValue}
           onSearch={(v) => {
             table.setSearchValue(v);
@@ -513,7 +517,7 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
           // pagination/footer lives outside the scroll area and always
           // aligns with the card edges.
           tableMinWidth={1310}
-          emptyMessage="No backups found."
+          emptyMessage={t('backups.noBackupsFoundMessage')}
           emptyState={
             isSearchEmpty ? (
               <NoSearchResultsEmpty
@@ -531,33 +535,33 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle>Create Backup</DialogTitle>
+            <DialogTitle>{t('backups.createBackup')}</DialogTitle>
             <DialogDescription>
-              Start a new backup of your system data.
+              {t('backups.createDialogDesc')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="backup-name">Name</Label>
+              <Label htmlFor="backup-name">{t('common.name')}</Label>
               <Input
                 id="backup-name"
-                placeholder="e.g., Daily backup"
+                placeholder={t('backups.namePlaceholder')}
                 value={form.name}
                 onChange={(e) => updateForm('name', e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="backup-desc">Description</Label>
+              <Label htmlFor="backup-desc">{t('backups.description')}</Label>
               <Textarea
                 id="backup-desc"
-                placeholder="Optional description..."
+                placeholder={t('backups.optionalDescription')}
                 value={form.description}
                 onChange={(e) => updateForm('description', e.target.value)}
                 rows={2}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="backup-scope">Scope</Label>
+              <Label htmlFor="backup-scope">{t('backups.scope')}</Label>
               <Select value={form.scope} onValueChange={(v) => updateForm('scope', v)}>
                 <SelectTrigger id="backup-scope">
                   <SelectValue />
@@ -570,10 +574,10 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="backup-storage">Storage Destination</Label>
+              <Label htmlFor="backup-storage">{t('backups.storageDestination')}</Label>
               <Select value={form.storageId} onValueChange={(v) => updateForm('storageId', v)}>
                 <SelectTrigger id="backup-storage">
-                  <SelectValue placeholder="Select a storage destination" />
+                  <SelectValue placeholder={t('backups.selectStorage')} />
                 </SelectTrigger>
                 <SelectContent>
                   {storageDestinations.map((s) => (
@@ -587,13 +591,13 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
                 </SelectContent>
               </Select>
               {storageDestinations.length === 0 && (
-                <p className="text-xs text-amber-600">No storage destinations configured. Add one in Storage first.</p>
+                <p className="text-xs text-amber-600">{t('backups.noStorageConfigured')}</p>
               )}
             </div>
             <div className="flex items-center justify-between">
               <div>
-                <Label htmlFor="backup-encryption">Encryption</Label>
-                <p className="text-xs text-muted-foreground">Encrypt backup with AES-256</p>
+                <Label htmlFor="backup-encryption">{t('backups.encryption')}</Label>
+                <p className="text-xs text-muted-foreground">{t('backups.encryptHint')}</p>
               </div>
               <Switch
                 id="backup-encryption"
@@ -604,14 +608,14 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={() => createMutation.mutate(form)}
               disabled={createMutation.isPending || !form.name.trim() || !form.storageId}
             >
               {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Create Backup
+              {t('backups.createBackup')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -621,13 +625,13 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
       <ConfirmDialog
         open={!!restoreTarget}
         onOpenChange={(v) => !v && setRestoreTarget(null)}
-        title="Restore Backup"
+        title={t('backups.restoreBackup')}
         description={
           restoreTarget
-            ? `Are you sure you want to restore from "${restoreTarget.name}"? This will overwrite current data with the backup. This action cannot be undone.`
+            ? `${t('backups.restoreConfirmPrefix')}${restoreTarget.name}${t('backups.restoreConfirmSuffix')}`
             : undefined
         }
-        confirmLabel="Restore"
+        confirmLabel={t('backups.restore')}
         variant="destructive"
         onConfirm={() => {
           if (restoreTarget) restoreMutation.mutate(restoreTarget.id);
@@ -639,13 +643,13 @@ export function BackupsListPage({ scope = 'client' }: { scope?: 'client' | 'plat
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
-        title="Delete Backup"
+        title={t('backups.deleteBackupTitle')}
         description={
           deleteTarget
-            ? `Are you sure you want to delete "${deleteTarget.name}"? This action cannot be undone.`
+            ? `${t('backups.deleteConfirmPrefix')}${deleteTarget.name}${t('backups.deleteConfirmSuffix')}`
             : undefined
         }
-        confirmLabel="Delete"
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => {
           if (deleteTarget) deleteMutation.mutate(deleteTarget.id);

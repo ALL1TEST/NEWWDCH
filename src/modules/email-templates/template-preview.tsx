@@ -22,6 +22,7 @@ import {
 import { getApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 import type {
   EmailTemplateStatus,
   EmailTemplateCategory,
@@ -192,6 +193,7 @@ export function TemplatePreview({ templateId, scope = 'client', onBack }: Templa
   void scope;
   const [device, setDevice] = useState<DeviceMode>('desktop');
   const [darkMode, setDarkMode] = useState(false);
+  const { t } = useT();
 
   // -------------------- Fetch Template --------------------
 
@@ -315,13 +317,13 @@ export function TemplatePreview({ templateId, scope = 'client', onBack }: Templa
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Back</TooltipContent>
+            <TooltipContent>{t('common.back')}</TooltipContent>
           </Tooltip>
           <h2 className="text-base font-semibold text-foreground truncate">
-            Email Preview
+            {t('emailTemplates.emailPreview')}
           </h2>
           <Badge className="shrink-0 bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800">
-            TEST MODE
+            {t('emailTemplates.testMode')}
           </Badge>
         </div>
 
@@ -342,7 +344,7 @@ export function TemplatePreview({ templateId, scope = 'client', onBack }: Templa
                   <Monitor className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Desktop</TooltipContent>
+              <TooltipContent>{t('emailTemplates.desktop')}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -358,7 +360,7 @@ export function TemplatePreview({ templateId, scope = 'client', onBack }: Templa
                   <Tablet className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Tablet</TooltipContent>
+              <TooltipContent>{t('emailTemplates.tablet')}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -374,7 +376,7 @@ export function TemplatePreview({ templateId, scope = 'client', onBack }: Templa
                   <Smartphone className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Mobile</TooltipContent>
+              <TooltipContent>{t('emailTemplates.mobile')}</TooltipContent>
             </Tooltip>
           </div>
 
@@ -391,7 +393,7 @@ export function TemplatePreview({ templateId, scope = 'client', onBack }: Templa
                 {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{darkMode ? 'Light Mode' : 'Dark Mode'}</TooltipContent>
+            <TooltipContent>{darkMode ? t('emailTemplates.lightMode') : t('emailTemplates.darkMode')}</TooltipContent>
           </Tooltip>
         </div>
       </div>
@@ -405,9 +407,9 @@ export function TemplatePreview({ templateId, scope = 'client', onBack }: Templa
           </div>
         ) : isError || !template ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-sm text-muted-foreground">Failed to load email template.</p>
+            <p className="text-sm text-muted-foreground">{t('emailTemplates.loadFailed')}</p>
             <Button variant="outline" className="mt-4" onClick={onBack}>
-              Go Back
+              {t('emailTemplates.goBack')}
             </Button>
           </div>
         ) : (
@@ -416,13 +418,13 @@ export function TemplatePreview({ templateId, scope = 'client', onBack }: Templa
             <div className="rounded-lg border bg-card shadow-sm">
               <div className="px-4 py-3 border-b bg-muted/30">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Email Details
+                  {t('emailTemplates.emailDetails')}
                 </p>
               </div>
               <div className="divide-y">
                 <div className="flex items-start gap-3 px-4 py-2.5">
                   <span className="text-xs font-medium text-muted-foreground w-16 shrink-0 pt-0.5">
-                    To
+                    {t('emailTemplates.to')}
                   </span>
                   <span className="text-sm text-foreground break-all">
                     john.doe@example.com
@@ -430,7 +432,7 @@ export function TemplatePreview({ templateId, scope = 'client', onBack }: Templa
                 </div>
                 <div className="flex items-start gap-3 px-4 py-2.5">
                   <span className="text-xs font-medium text-muted-foreground w-16 shrink-0 pt-0.5">
-                    From
+                    {t('emailTemplates.fromLabel')}
                   </span>
                   <span className="text-sm text-foreground break-all">
                     {template.fromName || 'Travel Blog'}{' '}
@@ -440,7 +442,7 @@ export function TemplatePreview({ templateId, scope = 'client', onBack }: Templa
                 {template.replyTo && (
                   <div className="flex items-start gap-3 px-4 py-2.5">
                     <span className="text-xs font-medium text-muted-foreground w-16 shrink-0 pt-0.5">
-                      Reply-To
+                      {t('emailTemplates.replyTo')}
                     </span>
                     <span className="text-sm text-foreground break-all">
                       {template.replyTo}
@@ -449,7 +451,7 @@ export function TemplatePreview({ templateId, scope = 'client', onBack }: Templa
                 )}
                 <div className="flex items-start gap-3 px-4 py-2.5">
                   <span className="text-xs font-medium text-muted-foreground w-16 shrink-0 pt-0.5">
-                    Subject
+                    {t('emailTemplates.subjectLabel')}
                   </span>
                   <span className="text-sm text-foreground font-medium break-all">
                     {processedSubject}
@@ -492,8 +494,8 @@ export function TemplatePreview({ templateId, scope = 'client', onBack }: Templa
 
             {/* ==================== Footer Info ==================== */}
             <div className="flex items-center justify-between text-xs text-muted-foreground px-1 py-2">
-              <span>Template: {template.name}</span>
-              <span>Category: {template.category.replace(/_/g, ' ')}</span>
+              <span>{t('emailTemplates.templateLabel')} {template.name}</span>
+              <span>{t('emailTemplates.categoryLabel')} {template.category.replace(/_/g, ' ')}</span>
             </div>
           </div>
         )}

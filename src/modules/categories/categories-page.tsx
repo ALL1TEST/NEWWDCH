@@ -72,6 +72,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { ConfirmDialog } from '@/components/patterns';
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
+import { useT } from '@/lib/i18n';
 import { cn, slugify } from '@/lib/utils';
 
 // -------------------- Types --------------------
@@ -129,6 +130,8 @@ interface CategoryFormProps {
 }
 
 function CategoryForm({ data, onChange, allCategories, excludeId, autoFocus }: CategoryFormProps) {
+  const { t } = useT();
+
   const handleNameChange = useCallback(
     (name: string) => {
       onChange({ ...data, name, slug: slugify(name) });
@@ -155,45 +158,45 @@ function CategoryForm({ data, onChange, allCategories, excludeId, autoFocus }: C
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="cat-name">Name</Label>
+        <Label htmlFor="cat-name">{t('common.name')}</Label>
         <Input
           id="cat-name"
           value={data.name}
           onChange={(e) => handleNameChange(e.target.value)}
-          placeholder="Category name"
+          placeholder={t('categories.namePlaceholder')}
           autoFocus={autoFocus}
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="cat-slug">Slug</Label>
+        <Label htmlFor="cat-slug">{t('categories.slug')}</Label>
         <Input
           id="cat-slug"
           value={data.slug}
           onChange={(e) => onChange({ ...data, slug: e.target.value })}
-          placeholder="category-slug"
+          placeholder={t('categories.slugPlaceholder')}
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="cat-description">Description</Label>
+        <Label htmlFor="cat-description">{t('categories.description')}</Label>
         <Textarea
           id="cat-description"
           value={data.description}
           onChange={(e) => onChange({ ...data, description: e.target.value })}
-          placeholder="Optional description"
+          placeholder={t('categories.descriptionPlaceholder')}
           rows={3}
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="cat-parent">Parent Category</Label>
+        <Label htmlFor="cat-parent">{t('categories.parentCategory')}</Label>
         <Select
           value={data.parentId ?? '__root__'}
           onValueChange={(v) => onChange({ ...data, parentId: v === '__root__' ? null : v })}
         >
           <SelectTrigger id="cat-parent">
-            <SelectValue placeholder="None (root level)" />
+            <SelectValue placeholder={t('categories.noneRootLevel')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__root__">None (root level)</SelectItem>
+            <SelectItem value="__root__">{t('categories.noneRootLevel')}</SelectItem>
             {parentOptions.map((cat) => (
               <SelectItem key={cat.id} value={cat.id}>
                 {cat.name}
@@ -231,6 +234,7 @@ function CategoryCard({
   onDelete,
   onCreateSub,
 }: CategoryCardProps) {
+  const { t } = useT();
   const parent = category.parentId ? categoryMap[category.parentId] : null;
   const hasSeo = category.description && category.description.trim().length > 0;
 
@@ -249,7 +253,7 @@ function CategoryCard({
         <Checkbox
           checked={isChecked}
           onCheckedChange={(checked) => onCheck(category.id, !!checked)}
-          aria-label={`Select ${category.name}`}
+          aria-label={`${t('categories.selectAriaPrefix')}${category.name}`}
         />
       </div>
 
@@ -265,7 +269,7 @@ function CategoryCard({
                 <Pencil className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>Edit</TooltipContent>
+            <TooltipContent>{t('common.edit')}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -276,7 +280,7 @@ function CategoryCard({
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>Delete</TooltipContent>
+            <TooltipContent>{t('common.delete')}</TooltipContent>
           </Tooltip>
           {category.childrenCount === 0 && (
             <Tooltip>
@@ -288,7 +292,7 @@ function CategoryCard({
                   <Plus className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent>Add sub-category</TooltipContent>
+              <TooltipContent>{t('categories.addSubCategory')}</TooltipContent>
             </Tooltip>
           )}
         </TooltipProvider>
@@ -315,13 +319,13 @@ function CategoryCard({
           {category.contentCount > 0 && (
             <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-medium gap-1">
               <FileText className="h-3 w-3" />
-              {category.contentCount} article{category.contentCount !== 1 ? 's' : ''}
+              {category.contentCount} {category.contentCount !== 1 ? t('categories.articlePlural') : t('categories.articleSingular')}
             </Badge>
           )}
           {category.childrenCount > 0 && (
             <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-medium gap-1">
               <FolderOpen className="h-3 w-3" />
-              {category.childrenCount} sub
+              {category.childrenCount} {t('categories.subCount')}
             </Badge>
           )}
           {parent && (
@@ -337,12 +341,12 @@ function CategoryCard({
           {hasSeo ? (
             <>
               <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-              <span className="text-[10px] text-emerald-600 font-medium">SEO Ready</span>
+              <span className="text-[10px] text-emerald-600 font-medium">{t('categories.seoReady')}</span>
             </>
           ) : (
             <>
               <XCircle className="h-3 w-3 text-amber-400" />
-              <span className="text-[10px] text-amber-500 font-medium">No description</span>
+              <span className="text-[10px] text-amber-500 font-medium">{t('categories.noDescription')}</span>
             </>
           )}
         </div>
@@ -380,6 +384,7 @@ function SortableCategoryRow({
   onCreateSub,
   depth,
 }: SortableRowProps) {
+  const { t } = useT();
   const node = categoryMap[id];
   const children = childrenMap[id] ?? [];
   const hasChildren = node.childrenCount > 0 || children.length > 0;
@@ -419,7 +424,7 @@ function SortableCategoryRow({
           className="shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
           {...attributes}
           {...listeners}
-          aria-label={`Drag ${node.name}`}
+          aria-label={`${t('categories.dragAriaPrefix')}${node.name}`}
         >
           <GripVertical className="h-4 w-4 text-muted-foreground" />
         </button>
@@ -428,7 +433,7 @@ function SortableCategoryRow({
         <Checkbox
           checked={isChecked}
           onCheckedChange={(checked) => onCheck(id, !!checked)}
-          aria-label={`Select ${node.name}`}
+          aria-label={`${t('categories.selectAriaPrefix')}${node.name}`}
         />
 
         {/* Expand/Collapse */}
@@ -436,7 +441,7 @@ function SortableCategoryRow({
           <button
             className="shrink-0 p-0.5 rounded-sm hover:bg-accent transition-colors"
             onClick={() => onToggle(id)}
-            aria-label={isExpanded ? 'Collapse' : 'Expand'}
+            aria-label={isExpanded ? t('categories.collapse') : t('categories.expand')}
             aria-expanded={isExpanded}
           >
             <ChevronRight
@@ -458,7 +463,7 @@ function SortableCategoryRow({
 
         {/* Article count */}
         <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-          {node.contentCount} article{node.contentCount !== 1 ? 's' : ''}
+          {node.contentCount} {node.contentCount !== 1 ? t('categories.articlePlural') : t('categories.articleSingular')}
         </span>
 
         {/* SEO indicator */}
@@ -480,7 +485,7 @@ function SortableCategoryRow({
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent>Edit</TooltipContent>
+              <TooltipContent>{t('common.edit')}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -491,7 +496,7 @@ function SortableCategoryRow({
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent>Delete</TooltipContent>
+              <TooltipContent>{t('common.delete')}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -502,7 +507,7 @@ function SortableCategoryRow({
                   <Plus className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent>Add sub-category</TooltipContent>
+              <TooltipContent>{t('categories.addSubCategory')}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         </div>
@@ -536,6 +541,7 @@ function SortableCategoryRow({
 // -------------------- Main Categories Page --------------------
 
 export function CategoriesPage() {
+  const { t } = useT();
   const queryClient = useQueryClient();
 
   // State
@@ -831,14 +837,14 @@ export function CategoriesPage() {
         {/* Page Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Categories</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{t('title.categories')}</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Organize your content with a structured category hierarchy
+              {t('categories.pageDescription')}
             </p>
           </div>
           <Button onClick={handleOpenCreate} size="sm">
             <Plus className="h-4 w-4 mr-2" />
-            New Category
+            {t('categories.newCategory')}
           </Button>
         </div>
 
@@ -849,7 +855,7 @@ export function CategoriesPage() {
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search categories..."
+                placeholder={t('categories.searchPlaceholder')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-8 h-9"
@@ -860,7 +866,7 @@ export function CategoriesPage() {
           {/* Right: Count + View toggle */}
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">
-              {allCategories.length} categor{allCategories.length === 1 ? 'y' : 'ies'}
+              {allCategories.length} {allCategories.length === 1 ? t('categories.categorySingular') : t('categories.categoryPlural')}
             </span>
             <div className="flex items-center border rounded-lg p-0.5">
               <button
@@ -871,7 +877,7 @@ export function CategoriesPage() {
                     : 'text-muted-foreground hover:text-foreground',
                 )}
                 onClick={() => setViewMode('grid')}
-                aria-label="Grid view"
+                aria-label={t('categories.gridView')}
               >
                 <LayoutGrid className="h-4 w-4" />
               </button>
@@ -883,7 +889,7 @@ export function CategoriesPage() {
                     : 'text-muted-foreground hover:text-foreground',
                 )}
                 onClick={() => setViewMode('list')}
-                aria-label="List view"
+                aria-label={t('categories.listView')}
               >
                 <List className="h-4 w-4" />
               </button>
@@ -895,7 +901,7 @@ export function CategoriesPage() {
         {hasSelection && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-card border shadow-lg rounded-xl px-4 py-2.5 animate-in slide-in-from-bottom-4 duration-200">
             <span className="text-sm font-medium">
-              {selectedIds.size} selected
+              {selectedIds.size} {t('categories.selectedCount')}
             </span>
             <Separator orientation="vertical" className="h-5" />
             <Button
@@ -904,7 +910,7 @@ export function CategoriesPage() {
               onClick={handleSelectAll}
               className="text-xs"
             >
-              {isAllSelected ? 'Deselect All' : 'Select All'}
+              {isAllSelected ? t('categories.deselectAll') : t('categories.selectAll')}
             </Button>
             <Button
               variant="destructive"
@@ -921,7 +927,7 @@ export function CategoriesPage() {
               ) : (
                 <Trash2 className="h-3.5 w-3.5 mr-1.5" />
               )}
-              Delete Selected
+              {t('categories.deleteSelected')}
             </Button>
             <button
               className="p-1 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
@@ -944,17 +950,17 @@ export function CategoriesPage() {
               <FolderOpen className="h-12 w-12 text-muted-foreground/40" />
             </div>
             <h3 className="text-lg font-semibold text-foreground">
-              No categories yet
+              {t('categories.emptyTitle')}
             </h3>
             <p className="text-sm text-muted-foreground mt-1.5 max-w-sm">
               {search
-                ? 'No categories match your search. Try a different query.'
-                : 'Get started by creating your first category to organize your content.'}
+                ? t('categories.emptySearch')
+                : t('categories.emptyDescription')}
             </p>
             {!search && (
               <Button className="mt-4" size="sm" onClick={handleOpenCreate}>
                 <Plus className="h-4 w-4 mr-2" />
-                Create Category
+                {t('categories.createCategory')}
               </Button>
             )}
           </div>
@@ -1015,12 +1021,12 @@ export function CategoriesPage() {
           <SheetContent>
             <SheetHeader>
               <SheetTitle>
-                {createParentId ? 'Create Sub-Category' : 'Create Category'}
+                {createParentId ? t('categories.createSubCategory') : t('categories.createCategory')}
               </SheetTitle>
               <SheetDescription>
                 {createParentId
-                  ? `Adding a new category under "${categoryMap[createParentId]?.name ?? ''}"`
-                  : 'Add a new root-level category to your content structure'}
+                  ? `${t('categories.createSubDescriptionPrefix')}${categoryMap[createParentId]?.name ?? ''}${t('categories.createSubDescriptionSuffix')}`
+                  : t('categories.createRootDescription')}
               </SheetDescription>
             </SheetHeader>
             <div className="flex-1 overflow-y-auto px-4">
@@ -1037,7 +1043,7 @@ export function CategoriesPage() {
                 onClick={() => setIsCreateOpen(false)}
                 disabled={createMutation.isPending}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button
                 onClick={() => createMutation.mutate(createForm)}
@@ -1046,7 +1052,7 @@ export function CategoriesPage() {
                 {createMutation.isPending && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
-                Create Category
+                {t('categories.createCategory')}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -1056,9 +1062,9 @@ export function CategoriesPage() {
         <Sheet open={isEditing} onOpenChange={(open) => { if (!open) { setIsEditing(false); setEditId(null); } }}>
           <SheetContent>
             <SheetHeader>
-              <SheetTitle>Edit Category</SheetTitle>
+              <SheetTitle>{t('categories.editCategory')}</SheetTitle>
               <SheetDescription>
-                Update the category details below
+                {t('categories.editDescription')}
               </SheetDescription>
             </SheetHeader>
             <div className="flex-1 overflow-y-auto px-4">
@@ -1076,7 +1082,7 @@ export function CategoriesPage() {
                 onClick={() => { setIsEditing(false); setEditId(null); }}
                 disabled={updateMutation.isPending}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button
                 onClick={() => {
@@ -1089,7 +1095,7 @@ export function CategoriesPage() {
                 {updateMutation.isPending && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
-                Save Changes
+                {t('common.saveChanges')}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -1099,13 +1105,13 @@ export function CategoriesPage() {
         <ConfirmDialog
           open={!!deleteTarget}
           onOpenChange={(open) => !open && setDeleteTarget(null)}
-          title="Delete Category"
+          title={t('categories.deleteCategory')}
           description={
             deleteTarget
-              ? `Are you sure you want to delete "${deleteTarget.name}"? This action cannot be undone.`
+              ? `${t('categories.deleteConfirmPrefix')}${deleteTarget.name}${t('categories.deleteConfirmSuffix')}`
               : undefined
           }
-          confirmLabel="Delete"
+          confirmLabel={t('common.delete')}
           variant="destructive"
           onConfirm={() => {
             if (deleteTarget) deleteMutation.mutate(deleteTarget.id);

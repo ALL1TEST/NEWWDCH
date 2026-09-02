@@ -25,6 +25,7 @@ import {
 import {
   Search, ChevronLeft, ChevronRight, Download, FileText, AlertCircle, CheckCircle2,
 } from 'lucide-react';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -59,6 +60,7 @@ interface AiModel {
 // -------------------- Component --------------------
 
 export function LogsPage() {
+  const { t } = useT();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
   const [search, setSearch] = useState('');
@@ -113,9 +115,9 @@ export function LogsPage() {
       a.download = `ai-logs-${new Date().toISOString().split('T')[0]}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success('CSV exported');
+      toast.success(t('ai.csvExported'));
     } catch {
-      toast.error('Failed to export CSV');
+      toast.error(t('ai.failedToExportCsv'));
     }
   };
 
@@ -130,42 +132,42 @@ export function LogsPage() {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold">AI Logs</h2>
+            <h2 className="text-lg font-semibold">{t('ai.logsTitle')}</h2>
             <Button variant="outline" size="sm" onClick={handleExportCsv}>
-              <Download className="h-4 w-4 mr-2" /> Export CSV
+              <Download className="h-4 w-4 mr-2" /> {t('ai.exportCsv')}
             </Button>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 mt-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
               <Input
-                placeholder="Search in question/response..."
+                placeholder={t('ai.searchLogs')}
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 className="pl-9"
               />
             </div>
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-              <SelectTrigger className="w-full sm:w-[130px]"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[130px]"><SelectValue placeholder={t('common.status')} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="success">Success</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
+                <SelectItem value="all">{t('ai.all')}</SelectItem>
+                <SelectItem value="success">{t('ai.success')}</SelectItem>
+                <SelectItem value="error">{t('ai.error')}</SelectItem>
               </SelectContent>
             </Select>
             <Select value={providerFilter} onValueChange={(v) => { setProviderFilter(v); setModelFilter('all'); setPage(1); }}>
-              <SelectTrigger className="w-full sm:w-[170px]"><SelectValue placeholder="Provider" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[170px]"><SelectValue placeholder={t('ai.provider')} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Providers</SelectItem>
+                <SelectItem value="all">{t('ai.allProviders')}</SelectItem>
                 {providers.map((p) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Select value={modelFilter} onValueChange={(v) => { setModelFilter(v); setPage(1); }} disabled={providerFilter === 'all'}>
-              <SelectTrigger className="w-full sm:w-[170px]"><SelectValue placeholder={providerFilter !== 'all' ? 'Model' : 'Select provider first'} /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[170px]"><SelectValue placeholder={providerFilter !== 'all' ? t('ai.model') : t('ai.selectProviderFirst')} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Models</SelectItem>
+                <SelectItem value="all">{t('ai.allModels')}</SelectItem>
                 {models.map((m) => (
                   <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                 ))}
@@ -182,16 +184,16 @@ export function LogsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Question</TableHead>
-                  <TableHead className="hidden lg:table-cell">Response</TableHead>
-                  <TableHead>Provider</TableHead>
-                  <TableHead className="hidden md:table-cell">Model</TableHead>
-                  <TableHead className="hidden md:table-cell">In Tok</TableHead>
-                  <TableHead className="hidden md:table-cell">Out Tok</TableHead>
-                  <TableHead className="hidden lg:table-cell">Cost</TableHead>
-                  <TableHead className="hidden xl:table-cell">Duration</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="hidden xl:table-cell">Date</TableHead>
+                  <TableHead>{t('ai.question')}</TableHead>
+                  <TableHead className="hidden lg:table-cell">{t('ai.response')}</TableHead>
+                  <TableHead>{t('ai.provider')}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t('ai.model')}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t('ai.inTok')}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t('ai.outTok')}</TableHead>
+                  <TableHead className="hidden lg:table-cell">{t('ai.cost')}</TableHead>
+                  <TableHead className="hidden xl:table-cell">{t('ai.duration')}</TableHead>
+                  <TableHead>{t('common.status')}</TableHead>
+                  <TableHead className="hidden xl:table-cell">{t('ai.date')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -203,11 +205,11 @@ export function LogsPage() {
                   ))
                 ) : isError ? (
                   <TableRow><TableCell colSpan={10} className="text-center py-8 text-zinc-500">
-                    <AlertCircle className="h-8 w-8 mx-auto mb-2 text-red-400" /> Failed to load logs
+                    <AlertCircle className="h-8 w-8 mx-auto mb-2 text-red-400" /> {t('ai.failedToLoadLogs')}
                   </TableCell></TableRow>
                 ) : logs.length === 0 ? (
                   <TableRow><TableCell colSpan={10} className="text-center py-8 text-zinc-500">
-                    <FileText className="h-8 w-8 mx-auto mb-2 text-zinc-300" /> No logs found.
+                    <FileText className="h-8 w-8 mx-auto mb-2 text-zinc-300" /> {t('ai.noLogs')}
                   </TableCell></TableRow>
                 ) : logs.map((log) => (
                   <TableRow
@@ -225,9 +227,9 @@ export function LogsPage() {
                     <TableCell className="hidden xl:table-cell text-sm">{log.durationMs != null ? `${(log.durationMs / 1000).toFixed(1)}s` : '—'}</TableCell>
                     <TableCell>
                       {log.status === 'success' ? (
-                        <Badge variant="secondary" className="bg-green-100 text-green-700"><CheckCircle2 className="h-3 w-3 mr-1" />OK</Badge>
+                        <Badge variant="secondary" className="bg-green-100 text-green-700"><CheckCircle2 className="h-3 w-3 mr-1" />{t('ai.ok')}</Badge>
                       ) : (
-                        <Badge variant="secondary" className="bg-red-100 text-red-700"><AlertCircle className="h-3 w-3 mr-1" />Err</Badge>
+                        <Badge variant="secondary" className="bg-red-100 text-red-700"><AlertCircle className="h-3 w-3 mr-1" />{t('ai.err')}</Badge>
                       )}
                     </TableCell>
                     <TableCell className="hidden xl:table-cell text-sm text-zinc-500">{new Date(log.createdAt).toLocaleString()}</TableCell>
@@ -240,7 +242,7 @@ export function LogsPage() {
 
           {pagination && pagination.totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-3 border-t">
-              <p className="text-sm text-zinc-500">{(pagination.page - 1) * pagination.pageSize + 1}–{Math.min(pagination.page * pagination.pageSize, pagination.total)} of {pagination.total}</p>
+              <p className="text-sm text-zinc-500">{(pagination.page - 1) * pagination.pageSize + 1}–{Math.min(pagination.page * pagination.pageSize, pagination.total)} {t('common.of')} {pagination.total}</p>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" disabled={pagination.page <= 1} onClick={() => setPage((p) => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
                 <span className="text-sm">{pagination.page} / {pagination.totalPages}</span>
@@ -255,32 +257,32 @@ export function LogsPage() {
       <Dialog open={!!expandedLog} onOpenChange={(open) => { if (!open) setExpandedLog(null); }}>
         <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Log Detail</DialogTitle>
+            <DialogTitle>{t('ai.logDetail')}</DialogTitle>
           </DialogHeader>
           {expandedLog && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div><p className="text-xs text-zinc-500">Status</p><Badge variant="secondary" className={expandedLog.status === 'success' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}>{expandedLog.status}</Badge></div>
-                <div><p className="text-xs text-zinc-500">Provider</p><p className="text-sm font-medium">{expandedLog.provider}</p></div>
-                <div><p className="text-xs text-zinc-500">Model</p><p className="text-sm font-medium">{expandedLog.model}</p></div>
-                <div><p className="text-xs text-zinc-500">Cost</p><p className="text-sm font-medium">{expandedLog.cost != null ? `$${expandedLog.cost.toFixed(4)}` : '—'}</p></div>
-                <div><p className="text-xs text-zinc-500">Input Tokens</p><p className="text-sm font-medium">{expandedLog.inputTokens?.toLocaleString() ?? '—'}</p></div>
-                <div><p className="text-xs text-zinc-500">Output Tokens</p><p className="text-sm font-medium">{expandedLog.outputTokens?.toLocaleString() ?? '—'}</p></div>
-                <div><p className="text-xs text-zinc-500">Duration</p><p className="text-sm font-medium">{expandedLog.durationMs != null ? `${(expandedLog.durationMs / 1000).toFixed(2)}s` : '—'}</p></div>
-                <div><p className="text-xs text-zinc-500">Date</p><p className="text-sm font-medium">{new Date(expandedLog.createdAt).toLocaleString()}</p></div>
+                <div><p className="text-xs text-zinc-500">{t('common.status')}</p><Badge variant="secondary" className={expandedLog.status === 'success' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}>{expandedLog.status}</Badge></div>
+                <div><p className="text-xs text-zinc-500">{t('ai.provider')}</p><p className="text-sm font-medium">{expandedLog.provider}</p></div>
+                <div><p className="text-xs text-zinc-500">{t('ai.model')}</p><p className="text-sm font-medium">{expandedLog.model}</p></div>
+                <div><p className="text-xs text-zinc-500">{t('ai.cost')}</p><p className="text-sm font-medium">{expandedLog.cost != null ? `$${expandedLog.cost.toFixed(4)}` : '—'}</p></div>
+                <div><p className="text-xs text-zinc-500">{t('ai.inputTokens')}</p><p className="text-sm font-medium">{expandedLog.inputTokens?.toLocaleString() ?? '—'}</p></div>
+                <div><p className="text-xs text-zinc-500">{t('ai.outputTokens')}</p><p className="text-sm font-medium">{expandedLog.outputTokens?.toLocaleString() ?? '—'}</p></div>
+                <div><p className="text-xs text-zinc-500">{t('ai.duration')}</p><p className="text-sm font-medium">{expandedLog.durationMs != null ? `${(expandedLog.durationMs / 1000).toFixed(2)}s` : '—'}</p></div>
+                <div><p className="text-xs text-zinc-500">{t('ai.date')}</p><p className="text-sm font-medium">{new Date(expandedLog.createdAt).toLocaleString()}</p></div>
               </div>
               {expandedLog.errorMessage && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-xs font-medium text-red-600 mb-1">Error</p>
+                  <p className="text-xs font-medium text-red-600 mb-1">{t('ai.error')}</p>
                   <p className="text-sm text-red-700">{expandedLog.errorMessage}</p>
                 </div>
               )}
               <div>
-                <p className="text-xs font-medium text-zinc-500 mb-1">Question</p>
+                <p className="text-xs font-medium text-zinc-500 mb-1">{t('ai.question')}</p>
                 <div className="bg-zinc-50 rounded-lg p-3 text-sm whitespace-pre-wrap">{expandedLog.question || '—'}</div>
               </div>
               <div>
-                <p className="text-xs font-medium text-zinc-500 mb-1">Response</p>
+                <p className="text-xs font-medium text-zinc-500 mb-1">{t('ai.response')}</p>
                 <div className="bg-zinc-50 rounded-lg p-3 text-sm whitespace-pre-wrap max-h-[300px] overflow-y-auto">{expandedLog.response || '—'}</div>
               </div>
             </div>

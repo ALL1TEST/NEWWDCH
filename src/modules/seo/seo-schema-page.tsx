@@ -17,6 +17,7 @@ import { PageHeader } from '@/components/patterns';
 import { getApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useSiteStore } from '@/lib/stores/site-store';
+import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -58,6 +59,7 @@ function JsonBlock({ data }: { data: Record<string, unknown> }) {
 }
 
 export function SeoSchemaPage() {
+  const { t } = useT();
   const [selectedId, setSelectedId] = useState('');
   const activeSite = useSiteStore((s) => s.getActiveSite());
   const domain = activeSite?.domain ?? 'example.com';
@@ -88,14 +90,14 @@ export function SeoSchemaPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Schema.org / JSON-LD" description="Inspect structured data generated for your content" breadcrumbs={false} />
+      <PageHeader title={t('seo.schemaTitle')} description={t('seo.schemaDescription')} breadcrumbs={false} />
 
       <Card className="p-4">
         <div className="flex items-end gap-3">
           <div className="flex-1 w-full space-y-1.5">
-            <label className="text-sm font-medium">Select Content</label>
+            <label className="text-sm font-medium">{t('seo.selectContent')}</label>
             <Select value={selectedId} onValueChange={setSelectedId}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="Choose content to inspect schemas..." /></SelectTrigger>
+              <SelectTrigger className="w-full"><SelectValue placeholder={t('seo.chooseContentSchemas')} /></SelectTrigger>
               <SelectContent>
                 {contentItems.map((item: ContentOption) => (
                   <SelectItem key={item.id} value={item.id}>{item.title}</SelectItem>
@@ -111,7 +113,7 @@ export function SeoSchemaPage() {
       ) : allSchemas.length === 0 ? (
         <Card className="p-12 text-center">
           <Code className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
-          <p className="text-sm text-muted-foreground">{selectedId ? 'No schemas generated for this content' : 'Select content to view generated schemas'}</p>
+          <p className="text-sm text-muted-foreground">{selectedId ? t('seo.noSchemasForContent') : t('seo.selectToViewSchemas')}</p>
         </Card>
       ) : (
         <Accordion type="multiple" defaultValue={allSchemas.map((s: SchemaItem) => s.type)} className="space-y-3">
@@ -131,7 +133,7 @@ export function SeoSchemaPage() {
       )}
 
       {!selectedId && siteSchemaItems.length > 0 && (
-        <p className="text-xs text-muted-foreground text-center">Showing site-level schemas. Select a content item to see Article/Breadcrumb schemas.</p>
+        <p className="text-xs text-muted-foreground text-center">{t('seo.siteLevelSchemasHint')}</p>
       )}
     </div>
   );

@@ -33,6 +33,7 @@ import { Separator } from '@/components/ui/separator';
 import { getApi, postApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useSiteStore } from '@/lib/stores/site-store';
+import { useT } from '@/lib/i18n';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -55,8 +56,8 @@ interface SitemapData {
 
 // ==================== Helpers ====================
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return 'Never';
+function formatDate(dateStr: string | null, t: (key: string) => string): string {
+  if (!dateStr) return t('seo.never');
   try {
     return new Date(dateStr).toLocaleString(undefined, {
       month: 'short',
@@ -66,31 +67,31 @@ function formatDate(dateStr: string | null): string {
       minute: '2-digit',
     });
   } catch {
-    return 'Unknown';
+    return t('seo.unknown');
   }
 }
 
-function getStatusBadge(status: string) {
+function getStatusBadge(status: string, t: (key: string) => string) {
   switch (status) {
     case 'GENERATED':
       return (
         <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-transparent font-medium">
           <CheckCircle2 className="h-3 w-3 mr-1" />
-          Generated
+          {t('seo.generated')}
         </Badge>
       );
     case 'PENDING':
       return (
         <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-transparent font-medium">
           <Clock className="h-3 w-3 mr-1" />
-          Pending
+          {t('seo.statusPending')}
         </Badge>
       );
     case 'ERROR':
       return (
         <Badge variant="destructive" className="font-medium">
           <XCircle className="h-3 w-3 mr-1" />
-          Error
+          {t('seo.statusError')}
         </Badge>
       );
     default:
@@ -171,6 +172,7 @@ function SitemapSkeleton() {
 // ==================== Main Page ====================
 
 export function SeoSitemapPage() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [previewOpen, setPreviewOpen] = useState(false);
   const activeSite = useSiteStore((s) => s.getActiveSite());
@@ -187,10 +189,10 @@ export function SeoSitemapPage() {
     mutationFn: () => postApi('/api/seo/sitemap?action=generate'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoSitemap.all });
-      toast.success('Sitemap generated successfully');
+      toast.success(t('seo.sitemapGenerated'));
     },
     onError: () => {
-      toast.error('Failed to generate sitemap');
+      toast.error(t('seo.sitemapGenerateFailed'));
     },
   });
 
@@ -199,10 +201,10 @@ export function SeoSitemapPage() {
     mutationFn: () => postApi('/api/seo/sitemap?action=toggle-auto'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoSitemap.all });
-      toast.success('Auto-generate setting updated');
+      toast.success(t('seo.autoGenerateUpdated'));
     },
     onError: () => {
-      toast.error('Failed to update auto-generate setting');
+      toast.error(t('seo.autoGenerateUpdateFailed'));
     },
   });
 
@@ -214,10 +216,10 @@ export function SeoSitemapPage() {
     },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoSitemap.all });
-      toast.success(res?.pingResult || 'Successfully pinged Google');
+      toast.success(res?.pingResult || t('seo.pingGoogleSuccess'));
     },
     onError: (err: Error & { details?: { httpStatus?: number } }) => {
-      const msg = err.message || 'Failed to ping Google';
+      const msg = err.message || t('seo.pingGoogleFailed');
       toast.error(msg);
     },
   });
@@ -230,10 +232,10 @@ export function SeoSitemapPage() {
     },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoSitemap.all });
-      toast.success(res?.pingResult || 'Successfully pinged Bing');
+      toast.success(res?.pingResult || t('seo.pingBingSuccess'));
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to ping Bing');
+      toast.error(err.message || t('seo.pingBingFailed'));
     },
   });
 
@@ -248,7 +250,7 @@ export function SeoSitemapPage() {
           <CardContent className="p-4 flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
             <p className="text-sm text-red-700 dark:text-red-400">
-              Failed to load sitemap data. Please try again later.
+              {t('seo.sitemapLoadFailed')}
             </p>
           </CardContent>
         </Card>
@@ -263,17 +265,17 @@ export function SeoSitemapPage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <FileCode className="h-5 w-5 text-muted-foreground" />
-                <h3 className="font-semibold text-sm">Sitemap Information</h3>
+                <h3 className="font-semibold text-sm">{t('seo.sitemapInformation')}</h3>
               </div>
               <div className="flex items-center gap-2">
-                {getStatusBadge(sitemap.status)}
+                {getStatusBadge(sitemap.status, t)}
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
               <InfoRow
                 icon={ExternalLink}
-                label="Current Sitemap URL"
+                label={t('seo.currentSitemapUrl')}
                 value={
                   <a
                     href={sitemapUrl}
@@ -288,23 +290,23 @@ export function SeoSitemapPage() {
               />
               <InfoRow
                 icon={Clock}
-                label="Last Generated"
-                value={formatDate(sitemap.lastGenerated)}
+                label={t('seo.lastGenerated')}
+                value={formatDate(sitemap.lastGenerated, t)}
               />
               <InfoRow
                 icon={Link2}
-                label="Total URLs"
+                label={t('seo.totalUrls')}
                 value={(sitemap.totalUrls ?? 0).toLocaleString()}
                 iconColor="text-emerald-600 dark:text-emerald-400"
               />
               <InfoRow
                 icon={Globe}
-                label="Last Ping — Google"
-                value={formatDate(sitemap.lastPingGoogle)}
+                label={t('seo.lastPingGoogle')}
+                value={formatDate(sitemap.lastPingGoogle, t)}
               />
               <InfoRow
                 icon={Zap}
-                label="Auto Generate"
+                label={t('seo.autoGenerate')}
                 value={
                   <div className="flex items-center gap-2">
                     <Switch
@@ -313,15 +315,15 @@ export function SeoSitemapPage() {
                       disabled={toggleAutoMutation.isPending}
                     />
                     <span className="text-xs text-muted-foreground">
-                      {sitemap.autoGenerate ? 'Enabled' : 'Disabled'}
+                      {sitemap.autoGenerate ? t('seo.enabled') : t('seo.disabled')}
                     </span>
                   </div>
                 }
               />
               <InfoRow
                 icon={Send}
-                label="Last Ping — Bing"
-                value={formatDate(sitemap.lastPingBing)}
+                label={t('seo.lastPingBing')}
+                value={formatDate(sitemap.lastPingBing, t)}
               />
             </div>
           </Card>
@@ -330,7 +332,7 @@ export function SeoSitemapPage() {
           <Card className="p-6">
             <div className="flex items-center gap-2 mb-4">
               <Zap className="h-5 w-5 text-muted-foreground" />
-              <h3 className="font-semibold text-sm">Actions</h3>
+              <h3 className="font-semibold text-sm">{t('common.actions')}</h3>
             </div>
             <div className="flex flex-wrap gap-3">
               <Button
@@ -342,7 +344,7 @@ export function SeoSitemapPage() {
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
                 )}
-                {generateMutation.isPending ? 'Generating...' : 'Generate Sitemap'}
+                {generateMutation.isPending ? t('seo.generating') : t('seo.generateSitemap')}
               </Button>
 
               <Button
@@ -355,7 +357,7 @@ export function SeoSitemapPage() {
                 ) : (
                   <Globe className="h-4 w-4 mr-2" />
                 )}
-                {pingGoogleMutation.isPending ? 'Pinging...' : 'Ping Google'}
+                {pingGoogleMutation.isPending ? t('seo.pinging') : t('seo.pingGoogle')}
               </Button>
 
               <Button
@@ -368,7 +370,7 @@ export function SeoSitemapPage() {
                 ) : (
                   <Zap className="h-4 w-4 mr-2" />
                 )}
-                {pingBingMutation.isPending ? 'Pinging...' : 'Ping Bing'}
+                {pingBingMutation.isPending ? t('seo.pinging') : t('seo.pingBing')}
               </Button>
 
               <Separator orientation="vertical" className="h-9 hidden sm:block" />
@@ -377,10 +379,10 @@ export function SeoSitemapPage() {
                 variant="outline"
                 onClick={() => setPreviewOpen(true)}
                 disabled={!xmlContent}
-                title={!xmlContent ? 'Generate a sitemap first' : undefined}
+                title={!xmlContent ? t('seo.generateFirst') : undefined}
               >
                 <Eye className="h-4 w-4 mr-2" />
-                Preview Sitemap
+                {t('seo.previewSitemap')}
               </Button>
 
               <Button
@@ -388,16 +390,16 @@ export function SeoSitemapPage() {
                 onClick={() => {
                   if (xmlContent) {
                     downloadBlob(xmlContent, 'sitemap.xml');
-                    toast.success('Sitemap downloaded');
+                    toast.success(t('seo.sitemapDownloaded'));
                   } else {
-                    toast.error('No sitemap content available. Generate a sitemap first.');
+                    toast.error(t('seo.noSitemapContent'));
                   }
                 }}
                 disabled={!xmlContent}
-                title={!xmlContent ? 'Generate a sitemap first' : undefined}
+                title={!xmlContent ? t('seo.generateFirst') : undefined}
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download Sitemap
+                {t('seo.downloadSitemap')}
               </Button>
             </div>
           </Card>
@@ -408,7 +410,7 @@ export function SeoSitemapPage() {
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-3xl max-h-[80vh]">
           <DialogHeader>
-            <DialogTitle>Sitemap XML Preview</DialogTitle>
+            <DialogTitle>{t('seo.sitemapXmlPreview')}</DialogTitle>
           </DialogHeader>
           <div className="overflow-auto rounded-lg border bg-muted/30 p-4 max-h-[60vh]">
             <pre className="text-xs font-mono whitespace-pre-wrap break-all text-foreground/80">

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard,
+  BarChart3,
   FileText,
   Image,
   Users,
@@ -28,7 +29,6 @@ import {
   Ticket,
   Zap,
   Loader2,
-  User,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -176,16 +176,24 @@ const PLATFORM_NAV_ITEMS: CommandItemDef[] = [
 
 // -------------------- Internal Account Navigation Items --------------------
 // Shown ONLY when the signed-in user is the INTERNAL-role account (the
-// platform team's internal SaaS account). Mirrors the internal sidebar
-// (INTERNAL_NAV_ITEMS in sidebar.tsx) — the Internal Account's own
-// dashboard + shared self-service account pages, never the client CMS
-// nav (those modules are access-denied for this account type).
+// SaaS owner's internal account with FULL platform access). DERIVED
+// from the complete client CMS command list so it mirrors the full
+// module structure (every client module + settings/backups/AI
+// sub-pages + categories/tags/jobs): the client 'dashboard' entry is
+// swapped for the Internal Account's own dashboard, Analytics
+// (module-registry page not in the client list) and Billing &
+// Subscription are added, and the 'Security' entry (a client-list
+// legacy whose module id is not in the module registry) is dropped.
+// Plan feature locking NEVER applies (see withoutFeatureLocked —
+// the Internal Account is not a customer subscription).
 
 const INTERNAL_NAV_ITEMS: CommandItemDef[] = [
-  { id: 'internal-dashboard', label: 'Dashboard', icon: LayoutDashboard, module: 'internal-dashboard' },
-  { id: 'internal-profile', label: 'Profile', icon: User, module: 'profile' },
-  { id: 'internal-notifications', label: 'Notifications', icon: Bell, module: 'notifications' },
-  { id: 'internal-billing', label: 'Billing', icon: CreditCard, module: 'billing' },
+  { id: 'internal-dashboard', label: 'Dashboard', icon: LayoutDashboard, shortcut: 'G D', module: 'internal-dashboard' },
+  ...NAV_ITEMS.filter(
+    (i) => i.id !== 'nav-dashboard' && i.id !== 'nav-security',
+  ).map((i) => ({ ...i, id: i.id.startsWith('nav-') ? `internal-${i.id.slice(4)}` : i.id })),
+  { id: 'internal-analytics', label: 'Analytics', icon: BarChart3, module: 'analytics' },
+  { id: 'internal-billing', label: 'Billing & Subscription', icon: CreditCard, module: 'billing' },
 ];
 
 // -------------------- Recent Items (in-memory) --------------------
@@ -502,7 +510,7 @@ export function CommandPalette() {
     // Templates + Newsletter, so all of those entries are hidden when
     // the plan enables NEITHER dependent.
     const withoutFeatureLocked = (items: CommandItemDef[]) =>
-      isPlatformStaff || !planEntitlements
+      isPlatformStaff || isInternalAccount || !planEntitlements
         ? items
         : items.filter((i) =>
             i.module === 'settings'
@@ -516,7 +524,11 @@ export function CommandPalette() {
     if (isPlatformStaff) {
       result.push({ heading: 'Platform Admin', items: PLATFORM_NAV_ITEMS });
     } else if (isInternalAccount) {
+      // Internal Account — the FULL CMS module command list (never
+      // feature-locked: full platform access, not a customer plan) +
+      // the same create Actions as the client experience.
       result.push({ heading: 'Internal Account', items: INTERNAL_NAV_ITEMS });
+      result.push({ heading: 'Actions', items: ACTION_ITEMS });
     } else {
       result.push({ heading: 'Navigation', items: withoutFeatureLocked(NAV_ITEMS) });
       result.push({ heading: 'Actions', items: ACTION_ITEMS });

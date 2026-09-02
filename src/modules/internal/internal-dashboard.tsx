@@ -2,15 +2,21 @@
 
 // ============================================================
 // INTERNAL ACCOUNT DASHBOARD — the dedicated dashboard of the
-// INTERNAL-role account (the platform team's internal SaaS account).
+// INTERNAL-role account (the SaaS owner's internal account).
 // ------------------------------------------------------------
 // This is a SEPARATE account type from both Platform Admin
 // (platform management dashboard) and the Admin User (client CMS
-// dashboard). The page:
-//   • clearly identifies the signed-in account as "Internal Account"
-//   • shows the account's own identity/session data
-//   • links to the shared profile page for self-service email /
-//     password / 2FA changes
+// dashboard). The account has FULL PLATFORM ACCESS — every CMS
+// feature, no plan restrictions — so its dashboard renders the
+// complete CMS dashboard widget suite (executive KPIs, Site
+// Network, Pending Actions, Traffic Overview, Recent Content,
+// Content Pipeline — the exact same DashboardWidgets component the
+// Admin User Executive Dashboard renders) while clearly identifying
+// the signed-in account as "Internal Account" (never Admin User,
+// never Platform Admin, never Free/Plus/Pro):
+//   • Internal Account identity header + INTERNAL badge
+//   • the full shared dashboard widget suite
+//   • the account's own identity/security cards
 // Data comes from the session-based /api/auth/me (identity) and
 // /api/auth/2fa/status (security) — no platform-admin APIs are used:
 // the Internal Account is deliberately NOT a platform admin.
@@ -32,13 +38,12 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { DashboardWidgets } from '@/modules/dashboard';
 import {
-  Building2,
   ShieldCheck,
   User as UserIcon,
   Mail,
   Lock,
-  CalendarClock,
   ArrowRight,
 } from 'lucide-react';
 import { getApi } from '@/lib/api-client';
@@ -74,42 +79,22 @@ export function InternalDashboardModule() {
   });
   const mfaEnabled = !!statusQuery.data?.mfaEnabled;
 
-  const kpis = [
-    {
-      label: t('internal.kpiAccountType'),
-      value: t('internal.accountTypeValue'),
-      icon: Building2,
-      description: t('internal.accountTypeDesc'),
-    },
-    {
-      label: t('internal.kpiBilling'),
-      value: user?.billingMode === 'INTERNAL' ? t('internal.billingValue') : (user?.billingMode ?? '—'),
-      icon: ShieldCheck,
-      description: t('internal.billingDesc'),
-    },
-    {
-      label: t('internal.kpiStatus'),
-      value: user?.status ?? '—',
-      icon: UserIcon,
-      description: user?.status === 'ACTIVE' ? t('internal.statusDesc') : undefined,
-    },
-    {
-      label: t('internal.kpiLastLogin'),
-      value: formatDate(user?.lastLoginAt ?? null),
-      icon: CalendarClock,
-      description: `${t('internal.memberSince')}: ${formatDate(user?.createdAt ?? null)}`,
-    },
-  ];
-
   return (
     <div className="space-y-6">
       {/* Page header — mirrors the PlatformPageHeader layout pattern
-          (title + subtitle, flush against the top of the content area). */}
+          (title + subtitle, flush against the top of the content area).
+          The INTERNAL badge + Internal Account title/subtitle keep the
+          page's own identity (never Admin User / Platform Admin). */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-1">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground">
-            {t('internal.title')}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight text-foreground">
+              {t('internal.title')}
+            </h1>
+            <Badge className="h-5 shrink-0 px-1.5 text-[10px] bg-emerald-600 dark:bg-emerald-500 text-white border-transparent">
+              {t('internal.badge')}
+            </Badge>
+          </div>
           <p className="text-sm text-muted-foreground mt-1">{t('internal.subtitle')}</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => navigate('profile')}>
@@ -118,31 +103,12 @@ export function InternalDashboardModule() {
         </Button>
       </div>
 
-      {/* KPI cards — the account's own type/billing/status data. Same
-          card grid pattern as the platform overview KPI row. */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {kpis.map((kpi) => {
-          const Icon = kpi.icon;
-          return (
-            <Card key={kpi.label}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {kpi.label}
-                </CardTitle>
-                <Icon className="h-4 w-4 text-muted-foreground" aria-hidden />
-              </CardHeader>
-              <CardContent>
-                <div className="text-lg font-bold text-foreground">{kpi.value}</div>
-                {kpi.description && (
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                    {kpi.description}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      {/* The FULL CMS dashboard content — the same complete widget
+          suite the Admin User Executive Dashboard renders (executive
+          KPIs, Site Network, Pending Actions, Traffic Overview, Recent
+          Content, Content Pipeline). Full platform access means a
+          populated dashboard, never an empty screen. */}
+      <DashboardWidgets />
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Account identity — the authenticated Internal Account identity

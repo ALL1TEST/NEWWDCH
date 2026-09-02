@@ -64,6 +64,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useT } from '@/lib/i18n';
 
 import { getApi, patchApi, postApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
@@ -110,11 +111,13 @@ interface TemplateSettings {
 
 interface DynamicVariable {
   key: string;
-  description: string;
+  /** i18n key for the variable's description (shown in tooltips). */
+  descriptionKey: string;
 }
 
 interface VariableGroup {
-  label: string;
+  /** i18n key for the group's display label. */
+  labelKey: string;
   icon: React.ReactNode;
   variables: DynamicVariable[];
 }
@@ -143,92 +146,92 @@ interface VariableGroup {
 
 const CLIENT_VARIABLE_GROUPS: VariableGroup[] = [
   {
-    label: 'Customer',
+    labelKey: 'emailTemplates.varGroupCustomer',
     icon: <MousePointerClick className="h-3.5 w-3.5" />,
     variables: [
-      { key: 'customer.first_name', description: 'Customer\'s first name' },
-      { key: 'customer.last_name', description: 'Customer\'s last name' },
-      { key: 'customer.email', description: 'Customer\'s email address' },
-      { key: 'customer.phone', description: 'Customer\'s phone number' },
-      { key: 'customer.avatar_url', description: 'Customer\'s avatar image URL' },
+      { key: 'customer.first_name', descriptionKey: 'emailTemplates.descCustomerFirstName' },
+      { key: 'customer.last_name', descriptionKey: 'emailTemplates.descCustomerLastName' },
+      { key: 'customer.email', descriptionKey: 'emailTemplates.descCustomerEmail' },
+      { key: 'customer.phone', descriptionKey: 'emailTemplates.descCustomerPhone' },
+      { key: 'customer.avatar_url', descriptionKey: 'emailTemplates.descCustomerAvatarUrl' },
     ],
   },
   {
-    label: 'Site',
+    labelKey: 'emailTemplates.varGroupSite',
     icon: <Code2 className="h-3.5 w-3.5" />,
     variables: [
-      { key: 'site.name', description: 'Site name' },
-      { key: 'site.url', description: 'Site URL' },
-      { key: 'site.logo', description: 'Site logo URL' },
-      { key: 'site.description', description: 'Site description' },
-      { key: 'site.domain', description: 'Site domain' },
+      { key: 'site.name', descriptionKey: 'emailTemplates.descSiteName' },
+      { key: 'site.url', descriptionKey: 'emailTemplates.descSiteUrl' },
+      { key: 'site.logo', descriptionKey: 'emailTemplates.descSiteLogo' },
+      { key: 'site.description', descriptionKey: 'emailTemplates.descSiteDescription' },
+      { key: 'site.domain', descriptionKey: 'emailTemplates.descSiteDomain' },
     ],
   },
   {
-    label: 'Company',
+    labelKey: 'emailTemplates.varGroupCompany',
     icon: <Mail className="h-3.5 w-3.5" />,
     variables: [
-      { key: 'company.name', description: 'Company name' },
-      { key: 'company.logo', description: 'Company logo URL' },
-      { key: 'company.address', description: 'Company address' },
-      { key: 'company.phone', description: 'Company phone number' },
-      { key: 'company.email', description: 'Company email address' },
+      { key: 'company.name', descriptionKey: 'emailTemplates.descCompanyName' },
+      { key: 'company.logo', descriptionKey: 'emailTemplates.descCompanyLogo' },
+      { key: 'company.address', descriptionKey: 'emailTemplates.descCompanyAddress' },
+      { key: 'company.phone', descriptionKey: 'emailTemplates.descCompanyPhone' },
+      { key: 'company.email', descriptionKey: 'emailTemplates.descCompanyEmail' },
     ],
   },
   {
-    label: 'User',
+    labelKey: 'emailTemplates.varGroupUser',
     icon: <MousePointerClick className="h-3.5 w-3.5" />,
     variables: [
-      { key: 'user.name', description: 'User\'s full name' },
-      { key: 'user.email', description: 'User\'s email address' },
-      { key: 'user.role', description: 'User\'s role' },
-      { key: 'user.avatar_url', description: 'User\'s avatar image URL' },
+      { key: 'user.name', descriptionKey: 'emailTemplates.descUserName' },
+      { key: 'user.email', descriptionKey: 'emailTemplates.descUserEmail' },
+      { key: 'user.role', descriptionKey: 'emailTemplates.descUserRole' },
+      { key: 'user.avatar_url', descriptionKey: 'emailTemplates.descUserAvatarUrl' },
     ],
   },
   {
-    label: 'Article',
+    labelKey: 'emailTemplates.varGroupArticle',
     icon: <Code2 className="h-3.5 w-3.5" />,
     variables: [
-      { key: 'article.title', description: 'Article title' },
-      { key: 'article.url', description: 'Article URL' },
-      { key: 'article.excerpt', description: 'Article excerpt/summary' },
-      { key: 'article.author', description: 'Article author name' },
-      { key: 'article.published_at', description: 'Article publish date' },
-      { key: 'article.featured_image', description: 'Article featured image URL' },
+      { key: 'article.title', descriptionKey: 'emailTemplates.descArticleTitle' },
+      { key: 'article.url', descriptionKey: 'emailTemplates.descArticleUrl' },
+      { key: 'article.excerpt', descriptionKey: 'emailTemplates.descArticleExcerpt' },
+      { key: 'article.author', descriptionKey: 'emailTemplates.descArticleAuthor' },
+      { key: 'article.published_at', descriptionKey: 'emailTemplates.descArticlePublishedAt' },
+      { key: 'article.featured_image', descriptionKey: 'emailTemplates.descArticleFeaturedImage' },
     ],
   },
   {
-    label: 'Comment',
+    labelKey: 'emailTemplates.varGroupComment',
     icon: <Mail className="h-3.5 w-3.5" />,
     variables: [
-      { key: 'comment.author', description: 'Comment author name' },
-      { key: 'comment.content', description: 'Comment content text' },
-      { key: 'comment.article_title', description: 'Title of the article commented on' },
-      { key: 'comment.url', description: 'Comment URL' },
-      { key: 'comment.created_at', description: 'Comment creation date' },
+      { key: 'comment.author', descriptionKey: 'emailTemplates.descCommentAuthor' },
+      { key: 'comment.content', descriptionKey: 'emailTemplates.descCommentContent' },
+      { key: 'comment.article_title', descriptionKey: 'emailTemplates.descCommentArticleTitle' },
+      { key: 'comment.url', descriptionKey: 'emailTemplates.descCommentUrl' },
+      { key: 'comment.created_at', descriptionKey: 'emailTemplates.descCommentCreatedAt' },
     ],
   },
   {
-    label: 'Newsletter',
+    labelKey: 'emailTemplates.varGroupNewsletter',
     icon: <Send className="h-3.5 w-3.5" />,
     variables: [
-      { key: 'newsletter.name', description: 'Newsletter name' },
-      { key: 'newsletter.subject', description: 'Newsletter subject line' },
-      { key: 'newsletter.unsubscribe_url', description: 'Unsubscribe link' },
-      { key: 'newsletter.preview_url', description: 'Newsletter preview URL' },
+      { key: 'newsletter.name', descriptionKey: 'emailTemplates.descNewsletterName' },
+      { key: 'newsletter.subject', descriptionKey: 'emailTemplates.descNewsletterSubject' },
+      { key: 'newsletter.unsubscribe_url', descriptionKey: 'emailTemplates.descNewsletterUnsubscribeUrl' },
+      { key: 'newsletter.preview_url', descriptionKey: 'emailTemplates.descNewsletterPreviewUrl' },
     ],
   },
   {
-    label: 'System',
+    labelKey: 'emailTemplates.varGroupSystem',
     icon: <Code2 className="h-3.5 w-3.5" />,
     variables: [
-      { key: 'current_date', description: 'Current date' },
-      { key: 'current_year', description: 'Current year' },
-      { key: 'current_month', description: 'Current month name' },
-      { key: 'verification_url', description: 'Email verification link' },
-      { key: 'reset_password_url', description: 'Password reset link' },
-      { key: 'invite_url', description: 'Invitation accept link' },
-      { key: 'unsubscribe_url', description: 'Global unsubscribe link' },
+      { key: 'current_date', descriptionKey: 'emailTemplates.descCurrentDate' },
+      { key: 'current_year', descriptionKey: 'emailTemplates.descCurrentYear' },
+      { key: 'current_month', descriptionKey: 'emailTemplates.descCurrentMonth' },
+      { key: 'verification_url', descriptionKey: 'emailTemplates.descVerificationUrl' },
+      { key: 'reset_password_url', descriptionKey: 'emailTemplates.descResetPasswordUrl' },
+      { key: 'invite_url', descriptionKey: 'emailTemplates.descInviteUrl' },
+      { key: 'unsubscribe_url', descriptionKey: 'emailTemplates.descUnsubscribeUrl' },
     ],
   },
 ];
@@ -244,53 +247,53 @@ const CLIENT_VARIABLE_GROUPS: VariableGroup[] = [
 // and see them replaced in the preview pane.
 const PLATFORM_VARIABLE_GROUPS: VariableGroup[] = [
   {
-    label: 'Customer',
+    labelKey: 'emailTemplates.varGroupCustomer',
     icon: <MousePointerClick className="h-3.5 w-3.5" />,
     variables: [
-      { key: 'customer.first_name', description: 'Customer\'s first name' },
-      { key: 'customer.last_name', description: 'Customer\'s last name' },
-      { key: 'customer.email', description: 'Customer\'s email address' },
+      { key: 'customer.first_name', descriptionKey: 'emailTemplates.descCustomerFirstName' },
+      { key: 'customer.last_name', descriptionKey: 'emailTemplates.descCustomerLastName' },
+      { key: 'customer.email', descriptionKey: 'emailTemplates.descCustomerEmail' },
     ],
   },
   {
-    label: 'Subscription',
+    labelKey: 'emailTemplates.varGroupSubscription',
     icon: <Send className="h-3.5 w-3.5" />,
     variables: [
-      { key: 'subscription.plan', description: 'Subscription plan name' },
-      { key: 'subscription.status', description: 'Subscription status' },
-      { key: 'subscription.billing_interval', description: 'Billing interval (monthly / yearly)' },
-      { key: 'subscription.next_billing', description: 'Next billing date' },
+      { key: 'subscription.plan', descriptionKey: 'emailTemplates.descSubscriptionPlan' },
+      { key: 'subscription.status', descriptionKey: 'emailTemplates.descSubscriptionStatus' },
+      { key: 'subscription.billing_interval', descriptionKey: 'emailTemplates.descSubscriptionBillingInterval' },
+      { key: 'subscription.next_billing', descriptionKey: 'emailTemplates.descSubscriptionNextBilling' },
     ],
   },
   {
-    label: 'Payment',
+    labelKey: 'emailTemplates.varGroupPayment',
     icon: <Mail className="h-3.5 w-3.5" />,
     variables: [
-      { key: 'payment.amount', description: 'Payment amount' },
-      { key: 'payment.currency', description: 'Payment currency' },
-      { key: 'payment.status', description: 'Payment status' },
-      { key: 'payment.date', description: 'Payment date' },
+      { key: 'payment.amount', descriptionKey: 'emailTemplates.descPaymentAmount' },
+      { key: 'payment.currency', descriptionKey: 'emailTemplates.descPaymentCurrency' },
+      { key: 'payment.status', descriptionKey: 'emailTemplates.descPaymentStatus' },
+      { key: 'payment.date', descriptionKey: 'emailTemplates.descPaymentDate' },
     ],
   },
   {
-    label: 'Platform',
+    labelKey: 'emailTemplates.varGroupPlatform',
     icon: <Mail className="h-3.5 w-3.5" />,
     variables: [
-      { key: 'platform.name', description: 'Platform name' },
-      { key: 'platform.url', description: 'Platform URL' },
-      { key: 'platform.support_email', description: 'Platform support email' },
+      { key: 'platform.name', descriptionKey: 'emailTemplates.descPlatformName' },
+      { key: 'platform.url', descriptionKey: 'emailTemplates.descPlatformUrl' },
+      { key: 'platform.support_email', descriptionKey: 'emailTemplates.descPlatformSupportEmail' },
     ],
   },
   {
-    label: 'System',
+    labelKey: 'emailTemplates.varGroupSystem',
     icon: <Code2 className="h-3.5 w-3.5" />,
     variables: [
-      { key: 'verification_url', description: 'Email verification link' },
-      { key: 'reset_password_url', description: 'Password reset link' },
-      { key: 'invite_url', description: 'Invitation accept link' },
-      { key: 'unsubscribe_url', description: 'Global unsubscribe link' },
-      { key: 'current_date', description: 'Current date' },
-      { key: 'current_year', description: 'Current year' },
+      { key: 'verification_url', descriptionKey: 'emailTemplates.descVerificationUrl' },
+      { key: 'reset_password_url', descriptionKey: 'emailTemplates.descResetPasswordUrl' },
+      { key: 'invite_url', descriptionKey: 'emailTemplates.descInviteUrl' },
+      { key: 'unsubscribe_url', descriptionKey: 'emailTemplates.descUnsubscribeUrl' },
+      { key: 'current_date', descriptionKey: 'emailTemplates.descCurrentDate' },
+      { key: 'current_year', descriptionKey: 'emailTemplates.descCurrentYear' },
     ],
   },
 ];
@@ -300,20 +303,20 @@ function getVariableGroups(scope: 'client' | 'platform'): VariableGroup[] {
   return scope === 'platform' ? PLATFORM_VARIABLE_GROUPS : CLIENT_VARIABLE_GROUPS;
 }
 
-const CATEGORY_OPTIONS: { value: EmailTemplateCategory; label: string }[] = [
-  { value: 'CUSTOMER_EMAILS', label: 'Customer Emails' },
-  { value: 'AUTHENTICATION', label: 'Authentication' },
-  { value: 'NEWSLETTER', label: 'Newsletter' },
-  { value: 'MARKETING', label: 'Marketing' },
-  { value: 'TRANSACTIONAL', label: 'Transactional' },
-  { value: 'NOTIFICATIONS', label: 'Notifications' },
-  { value: 'BILLING', label: 'Billing' },
-  { value: 'SYSTEM', label: 'System' },
+const CATEGORY_OPTIONS: { value: EmailTemplateCategory; labelKey: string }[] = [
+  { value: 'CUSTOMER_EMAILS', labelKey: 'emailTemplates.catCustomerEmails' },
+  { value: 'AUTHENTICATION', labelKey: 'emailTemplates.catAuthentication' },
+  { value: 'NEWSLETTER', labelKey: 'emailTemplates.catNewsletter' },
+  { value: 'MARKETING', labelKey: 'emailTemplates.catMarketing' },
+  { value: 'TRANSACTIONAL', labelKey: 'emailTemplates.catTransactional' },
+  { value: 'NOTIFICATIONS', labelKey: 'emailTemplates.catNotifications' },
+  { value: 'BILLING', labelKey: 'emailTemplates.catBilling' },
+  { value: 'SYSTEM', labelKey: 'emailTemplates.catSystem' },
 ];
 
-const STATUS_OPTIONS: { value: EmailTemplateStatus; label: string }[] = [
-  { value: 'DRAFT', label: 'Draft' },
-  { value: 'ENABLED', label: 'Enabled' },
+const STATUS_OPTIONS: { value: EmailTemplateStatus; labelKey: string }[] = [
+  { value: 'DRAFT', labelKey: 'emailTemplates.statusDraft' },
+  { value: 'ENABLED', labelKey: 'emailTemplates.statusEnabled' },
 ];
 
 // ============================================================
@@ -355,6 +358,7 @@ function LineNumbers({ text, scrollTop }: { text: string; scrollTop: number }) {
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
 
 function SaveIndicator({ state }: { state: SaveState }) {
+  const { t } = useT();
   return (
     <div className="flex items-center gap-2 text-xs">
       <div
@@ -375,10 +379,10 @@ function SaveIndicator({ state }: { state: SaveState }) {
           state === 'saved' && 'text-emerald-600 dark:text-emerald-400',
         )}
       >
-        {state === 'idle' && 'No changes'}
-        {state === 'dirty' && 'Unsaved changes'}
-        {state === 'saving' && 'Saving...'}
-        {state === 'saved' && 'Saved'}
+        {state === 'idle' && t('emailTemplates.saveStateIdle')}
+        {state === 'dirty' && t('emailTemplates.saveStateDirty')}
+        {state === 'saving' && t('emailTemplates.saveStateSaving')}
+        {state === 'saved' && t('emailTemplates.saveStateSaved')}
       </span>
     </div>
   );
@@ -404,6 +408,7 @@ function SearchReplaceBar({
   const [search, setSearch] = useState('');
   const [replace, setReplace] = useState('');
   const [showReplace, setShowReplace] = useState(false);
+  const { t } = useT();
 
   if (!isOpen) return null;
 
@@ -423,7 +428,7 @@ function SearchReplaceBar({
             setSearch(e.target.value);
             if (e.target.value) onSearch(e.target.value);
           }}
-          placeholder="Find..."
+          placeholder={t('emailTemplates.find')}
           className="h-7 flex-1 border-0 bg-transparent text-xs shadow-none focus-visible:ring-0"
           autoFocus
         />
@@ -438,7 +443,7 @@ function SearchReplaceBar({
               <Replace className="h-3 w-3" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Toggle Replace</TooltipContent>
+          <TooltipContent>{t('emailTemplates.toggleReplace')}</TooltipContent>
         </Tooltip>
         <Button
           variant="ghost"
@@ -462,7 +467,7 @@ function SearchReplaceBar({
               <Input
                 value={replace}
                 onChange={(e) => setReplace(e.target.value)}
-                placeholder="Replace with..."
+                placeholder={t('emailTemplates.replaceWith')}
                 className="h-7 flex-1 border-0 bg-transparent text-xs shadow-none focus-visible:ring-0"
               />
               <Button
@@ -474,7 +479,7 @@ function SearchReplaceBar({
                 }}
                 disabled={!search}
               >
-                Replace
+                {t('emailTemplates.replace')}
               </Button>
               <Button
                 variant="outline"
@@ -485,7 +490,7 @@ function SearchReplaceBar({
                 }}
                 disabled={!search}
               >
-                All
+                {t('emailTemplates.all')}
               </Button>
             </div>
           </motion.div>
@@ -508,6 +513,7 @@ function VariableChip({
 }) {
   const [copied, setCopied] = useState(false);
   const tag = `{{${variable.key}}}`;
+  const { t } = useT();
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -541,7 +547,7 @@ function VariableChip({
         </button>
       </TooltipTrigger>
       <TooltipContent side="left" className="max-w-xs">
-        {variable.description}
+        {t(variable.descriptionKey)}
       </TooltipContent>
     </Tooltip>
   );
@@ -555,6 +561,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
   const isPlatform = scope === 'platform';
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
+  const { t } = useT();
 
   // -------------------- State --------------------
 
@@ -629,12 +636,12 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
         queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
         queryClient.invalidateQueries({ queryKey: ['email-templates', 'category-counts', 'client'] });
       }
-      toast.success('Template created successfully');
+      toast.success(t('emailTemplates.created'));
       onCreated?.(created.id);
     },
     onError: (err: Error) => {
       setSaveState('idle');
-      toast.error(err.message || 'Failed to create template');
+      toast.error(err.message || t('emailTemplates.createFailed'));
     },
   });
 
@@ -696,11 +703,11 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
       setTimeout(() => {
         setSaveState((prev) => (prev === 'saved' ? 'idle' : prev));
       }, 2000);
-      toast.success('Template saved');
+      toast.success(t('emailTemplates.saved'));
     },
     onError: (err: Error) => {
       setSaveState('idle');
-      toast.error(err.message || 'Failed to save template');
+      toast.error(err.message || t('emailTemplates.saveFailed'));
     },
   });
 
@@ -709,7 +716,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
   const performSave = useCallback(() => {
     if (!isDirty || saveMutation.isPending) return;
     if (!templateName.trim()) {
-      toast.error('Template name is required');
+      toast.error(t('emailTemplates.nameRequired'));
       return;
     }
     setSaveState('saving');
@@ -720,7 +727,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
       category: settings.category,
       status: settings.status,
     });
-  }, [isDirty, saveMutation, templateName, subject, htmlBody, settings]);
+  }, [isDirty, saveMutation, templateName, subject, htmlBody, settings, t]);
 
   useEffect(() => {
     if (isNew || !isDirty) {
@@ -750,9 +757,9 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
         const newPos = start + tag.length;
         textarea.setSelectionRange(newPos, newPos);
       });
-      toast.success(`Inserted {{${key}}}`);
+      toast.success(`${t('emailTemplates.insertedPrefix')} {{${key}}}`);
     },
-    [htmlBody],
+    [htmlBody, t],
   );
 
   // -------------------- Search/Replace --------------------
@@ -802,9 +809,9 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
     (query: string, replacement: string) => {
       const regex = new RegExp(escapeRegex(query), 'g');
       setHtmlBody(htmlBody.replace(regex, replacement));
-      toast.success(`Replaced all occurrences`);
+      toast.success(t('emailTemplates.replacedAllOccurrences'));
     },
-    [htmlBody],
+    [htmlBody, t],
   );
 
   // -------------------- Editor scroll sync --------------------
@@ -845,7 +852,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
 
   const handleCreate = useCallback(() => {
     if (!templateName.trim()) {
-      toast.error('Template name is required');
+      toast.error(t('emailTemplates.nameRequired'));
       return;
     }
     if (createMutation.isPending) return;
@@ -857,7 +864,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
       category: settings.category,
       status: settings.status,
     });
-  }, [templateName, subject, htmlBody, settings, createMutation]);
+  }, [templateName, subject, htmlBody, settings, createMutation, t]);
 
   // -------------------- Keyboard Shortcuts --------------------
 
@@ -908,13 +915,13 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
       {/* ---- Template Name Field (shown in both create and edit mode) ---- */}
       <div className="space-y-1.5">
         <Label htmlFor="template-name" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Template Name <span className="text-red-500">*</span>
+          {t('emailTemplates.templateName')} <span className="text-red-500">*</span>
         </Label>
         <Input
           id="template-name"
           value={templateName}
           onChange={(e) => setTemplateName(e.target.value)}
-          placeholder="e.g. Weekly SEO Newsletter"
+          placeholder={t('emailTemplates.templateNamePlaceholder')}
           className="h-10 text-sm"
           autoFocus={isNew}
         />
@@ -923,21 +930,21 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
       {/* ---- Subject Field ---- */}
       <div className="space-y-1.5">
         <Label htmlFor="template-subject" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Subject <span className="text-red-500">*</span>
+          {t('emailTemplates.subjectLabel')} <span className="text-red-500">*</span>
         </Label>
         <Input
           id="template-subject"
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
-          placeholder="Email subject line..."
+          placeholder={t('emailTemplates.subjectPlaceholder')}
           className="h-10 text-sm"
         />
         {subject && (
           <p className="text-xs text-muted-foreground truncate">
-            Preview: {subject.replace(/\{\{[^}]+\}\}/g, (match) => {
+            {t('emailTemplates.previewPrefix')} {subject.replace(/\{\{[^}]+\}\}/g, (match) => {
               const key = match.replace(/\{\{|\}\}/g, '');
               const found = getVariableGroups(scope).flatMap((g) => g.variables).find((v) => v.key === key);
-              return found ? `[${found.description}]` : match;
+              return found ? `[${t(found.descriptionKey)}]` : match;
             })}
           </p>
         )}
@@ -947,7 +954,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Template Category <span className="text-red-500">*</span>
+            {t('emailTemplates.templateCategory')} <span className="text-red-500">*</span>
           </Label>
           <Select
             value={settings.category}
@@ -959,7 +966,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
             <SelectContent>
               {CATEGORY_OPTIONS.map((c) => (
                 <SelectItem key={c.value} value={c.value}>
-                  {c.label}
+                  {t(c.labelKey)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -968,7 +975,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
 
         <div className="space-y-1.5">
           <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Status
+            {t('common.status')}
           </Label>
           <Select
             value={settings.status}
@@ -980,7 +987,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
             <SelectContent>
               {STATUS_OPTIONS.map((s) => (
                 <SelectItem key={s.value} value={s.value}>
-                  {s.label}
+                  {t(s.labelKey)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -1006,7 +1013,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
                 <Undo2 className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Undo</TooltipContent>
+            <TooltipContent>{t('emailTemplates.undo')}</TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -1023,7 +1030,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
                 <Redo2 className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Redo</TooltipContent>
+            <TooltipContent>{t('emailTemplates.redo')}</TooltipContent>
           </Tooltip>
 
           <Separator orientation="vertical" className="mx-1 h-5" />
@@ -1039,7 +1046,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
                 <Search className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Search &amp; Replace (Ctrl+F)</TooltipContent>
+            <TooltipContent>{t('emailTemplates.searchReplace')}</TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -1055,12 +1062,12 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
                 <Variable className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Insert Variable</TooltipContent>
+            <TooltipContent>{t('emailTemplates.insertVariable')}</TooltipContent>
           </Tooltip>
 
           <div className="ml-auto flex items-center gap-1">
             <span className="mr-2 text-[11px] tabular-nums text-muted-foreground">
-              {lineCount} lines
+              {lineCount} {t('emailTemplates.lines')}
             </span>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1077,7 +1084,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
                   )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</TooltipContent>
+              <TooltipContent>{isFullscreen ? t('emailTemplates.exitFullscreen') : t('emailTemplates.fullscreen')}</TooltipContent>
             </Tooltip>
           </div>
         </div>
@@ -1125,17 +1132,17 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
         <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent">
           <div className="flex items-center gap-2">
             <Variable className="h-4 w-4 text-muted-foreground" />
-            Dynamic Variables
+            {t('emailTemplates.dynamicVariables')}
           </div>
           <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]>&]:rotate-0 [[data-state=closed]>&]:-rotate-90" />
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="max-h-72 overflow-y-auto px-1 pb-2">
             {getVariableGroups(scope).map((group) => (
-              <div key={group.label} className="mb-3">
+              <div key={group.labelKey} className="mb-3">
                 <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   {group.icon}
-                  {group.label}
+                  {t(group.labelKey)}
                 </div>
                 <div className="space-y-0.5">
                   {group.variables.map((v) => (
@@ -1166,11 +1173,11 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
             className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors shrink-0"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span className="hidden sm:inline">{isPlatform ? 'Platform Email Templates' : 'Email Templates'}</span>
+            <span className="hidden sm:inline">{isPlatform ? t('emailTemplates.platformEmailTemplates') : t('title.emailTemplates')}</span>
           </button>
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <span className="truncate font-medium max-w-[200px] lg:max-w-[400px]">
-            {isNew ? 'Create Template' : (template?.name ?? 'Loading...')}
+            {isNew ? t('emailTemplates.createTemplate') : (template?.name ?? t('common.loading'))}
           </span>
         </nav>
 
@@ -1188,7 +1195,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
             onClick={onBack}
           >
             <X className="h-4 w-4" />
-            <span className="ml-1.5 hidden sm:inline">Cancel</span>
+            <span className="ml-1.5 hidden sm:inline">{t('common.cancel')}</span>
           </Button>
 
           {/* Save / Create */}
@@ -1206,7 +1213,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
             ) : (
               <Save className="h-4 w-4" />
             )}
-            <span className="ml-1.5">{isNew ? 'Create Template' : 'Save'}</span>
+            <span className="ml-1.5">{isNew ? t('emailTemplates.createTemplate') : t('common.save')}</span>
           </Button>
 
           {/* Toggle Sidebar (mobile) */}
@@ -1279,10 +1286,10 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
               <div className="flex items-center gap-2">
                 <Code2 className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">
-                  {isNew ? 'New Template' : `${template?.name} — HTML Editor`}
+                  {isNew ? t('emailTemplates.newTemplate') : `${template?.name} — ${t('emailTemplates.htmlEditor')}`}
                 </span>
                 <Badge variant="outline" className="text-[10px]">
-                  {lineCount} lines
+                  {lineCount} {t('emailTemplates.lines')}
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
@@ -1293,7 +1300,7 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
                   onClick={() => setIsFullscreen(false)}
                 >
                   <Minimize2 className="h-4 w-4 mr-1.5" />
-                  Exit Fullscreen
+                  {t('emailTemplates.exitFullscreen')}
                 </Button>
               </div>
             </div>

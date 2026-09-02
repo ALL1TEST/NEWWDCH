@@ -145,6 +145,7 @@ export const coreFr: Record<string, string> = {
   'title.newsletters': 'Newsletters',
   'title.categories': 'Catégories',
   'title.tags': 'Tags',
+  'title.analytics': 'Analytique',
   'title.jobs': 'Tâches',
   'title.seo': 'SEO',
   'title.ai': 'IA',

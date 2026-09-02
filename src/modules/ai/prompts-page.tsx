@@ -35,6 +35,7 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
   Plus, Search, MoreHorizontal, Pencil, Trash2, Star, Copy, LayoutGrid, List, History, ChevronLeft, ChevronRight, Loader2, MessageSquare, Heart,
 } from 'lucide-react';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -102,18 +103,8 @@ const PROMPT_CATEGORIES: PromptCategoryNew[] = [
   'SUMMARIZATION', 'MARKETING', 'SOCIAL_MEDIA', 'EMAIL', 'CODING', 'ANALYSIS',
 ];
 
-const CATEGORY_LABELS: Record<PromptCategoryNew, string> = {
-  CONTENT_GENERATION: 'Content Generation',
-  IMAGE_GENERATION: 'Image Generation',
-  SEO: 'SEO',
-  TRANSLATION: 'Translation',
-  SUMMARIZATION: 'Summarization',
-  MARKETING: 'Marketing',
-  SOCIAL_MEDIA: 'Social Media',
-  EMAIL: 'Email',
-  CODING: 'Coding',
-  ANALYSIS: 'Analysis',
-};
+// CATEGORY_LABELS is defined inside the PromptsPage component so the labels
+// resolve through t() for the active locale.
 
 const CATEGORY_COLORS: Record<PromptCategoryNew, string> = {
   CONTENT_GENERATION: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
@@ -149,6 +140,21 @@ type FavFilter = 'all' | 'favorites';
 // -------------------- Component --------------------
 
 export function PromptsPage() {
+  const { t } = useT();
+
+  const CATEGORY_LABELS: Record<PromptCategoryNew, string> = {
+    CONTENT_GENERATION: t('ai.categoryContentGeneration'),
+    IMAGE_GENERATION: t('ai.categoryImageGeneration'),
+    SEO: t('ai.categorySEO'),
+    TRANSLATION: t('ai.categoryTranslation'),
+    SUMMARIZATION: t('ai.categorySummarization'),
+    MARKETING: t('ai.categoryMarketing'),
+    SOCIAL_MEDIA: t('ai.categorySocialMedia'),
+    EMAIL: t('ai.categoryEmail'),
+    CODING: t('ai.categoryCoding'),
+    ANALYSIS: t('ai.categoryAnalysis'),
+  };
+
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
@@ -214,7 +220,7 @@ export function PromptsPage() {
         try {
           parsedVariables = JSON.parse(trimmed);
         } catch {
-          throw new Error('Variables must be valid JSON');
+          throw new Error(t('ai.variablesValidJson'));
         }
       }
       const payload = {
@@ -231,10 +237,10 @@ export function PromptsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
-      toast.success(editingPrompt ? 'Prompt updated' : 'Prompt created');
+      toast.success(editingPrompt ? t('ai.promptUpdated') : t('ai.promptCreated'));
       handleCloseDialog();
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to save prompt'),
+    onError: (err: Error) => toast.error(err.message || t('ai.failedToSavePrompt')),
   });
 
   // Delete mutation
@@ -242,11 +248,11 @@ export function PromptsPage() {
     mutationFn: (id: string) => deleteApi(`/api/ai/prompts/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
-      toast.success('Prompt deleted');
+      toast.success(t('ai.promptDeleted'));
       setDeleteDialogOpen(false);
       setDeletingPrompt(null);
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to delete prompt'),
+    onError: (err: Error) => toast.error(err.message || t('ai.failedToDeletePrompt')),
   });
 
   // Favorite toggle
@@ -255,7 +261,7 @@ export function PromptsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to toggle favorite'),
+    onError: (err: Error) => toast.error(err.message || t('ai.failedToToggleFavorite')),
   });
 
   // Duplicate mutation
@@ -263,9 +269,9 @@ export function PromptsPage() {
     mutationFn: (id: string) => postApi(`/api/ai/prompts/${id}/duplicate`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
-      toast.success('Prompt duplicated');
+      toast.success(t('ai.promptDuplicated'));
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to duplicate'),
+    onError: (err: Error) => toast.error(err.message || t('ai.failedToDuplicate')),
   });
 
   const handleOpenCreate = () => {
@@ -301,7 +307,7 @@ export function PromptsPage() {
 
   const handleSave = () => {
     if (!formData.name.trim()) {
-      toast.error('Name is required');
+      toast.error(t('ai.nameRequired'));
       return;
     }
     // Validate variables JSON before sending to the API
@@ -309,11 +315,11 @@ export function PromptsPage() {
       try {
         const parsed = JSON.parse(formData.variables);
         if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-          toast.error('Variables must be a JSON object (e.g. {"topic": ""})');
+          toast.error(t('ai.variablesJsonObject'));
           return;
         }
       } catch {
-        toast.error('Variables must be valid JSON');
+        toast.error(t('ai.variablesValidJson'));
         return;
       }
     }
@@ -326,7 +332,7 @@ export function PromptsPage() {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold">Prompt Library</h2>
+            <h2 className="text-lg font-semibold">{t('ai.promptLibrary')}</h2>
             <div className="flex items-center gap-2">
               <div className="flex border rounded-md">
                 <Button
@@ -346,7 +352,7 @@ export function PromptsPage() {
               </div>
               <Button onClick={handleOpenCreate} size="sm">
                 <Plus className="h-4 w-4 mr-2" />
-                Add Prompt
+                {t('ai.addPrompt')}
               </Button>
             </div>
           </div>
@@ -354,7 +360,7 @@ export function PromptsPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
               <Input
-                placeholder="Search prompts..."
+                placeholder={t('ai.searchPrompts')}
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 className="pl-9"
@@ -362,10 +368,10 @@ export function PromptsPage() {
             </div>
             <Select value={categoryFilter} onValueChange={(v) => { setCategoryFilter(v); setPage(1); }}>
               <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue placeholder="Category" />
+                <SelectValue placeholder={t('ai.category')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
+                <SelectItem value="all">{t('ai.allCategories')}</SelectItem>
                 {PROMPT_CATEGORIES.map((c) => (
                   <SelectItem key={c} value={c}>{CATEGORY_LABELS[c]}</SelectItem>
                 ))}
@@ -376,8 +382,8 @@ export function PromptsPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="favorites">Favorites</SelectItem>
+                <SelectItem value="all">{t('ai.all')}</SelectItem>
+                <SelectItem value="favorites">{t('ai.favorites')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -392,14 +398,14 @@ export function PromptsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="hidden md:table-cell">Tags</TableHead>
-                    <TableHead className="hidden lg:table-cell">Vars</TableHead>
-                    <TableHead className="hidden lg:table-cell">Usage</TableHead>
-                    <TableHead>Fav</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>{t('common.name')}</TableHead>
+                    <TableHead>{t('ai.category')}</TableHead>
+                    <TableHead className="hidden md:table-cell">{t('ai.tags')}</TableHead>
+                    <TableHead className="hidden lg:table-cell">{t('ai.vars')}</TableHead>
+                    <TableHead className="hidden lg:table-cell">{t('ai.usage')}</TableHead>
+                    <TableHead>{t('ai.fav')}</TableHead>
+                    <TableHead>{t('common.status')}</TableHead>
+                    <TableHead className="text-right">{t('common.actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -410,11 +416,11 @@ export function PromptsPage() {
                       ))}</TableRow>
                     ))
                   ) : isError ? (
-                    <TableRow><TableCell colSpan={8} className="text-center py-8 text-zinc-500">Failed to load prompts</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="text-center py-8 text-zinc-500">{t('ai.failedToLoadPrompts')}</TableCell></TableRow>
                   ) : prompts.length === 0 ? (
                     <TableRow><TableCell colSpan={8} className="text-center py-8 text-zinc-500">
                       <MessageSquare className="h-8 w-8 mx-auto mb-2 text-zinc-300" />
-                      No prompts found. Create your first prompt to get started.
+                      {t('ai.noPromptsHint')}
                     </TableCell></TableRow>
                   ) : prompts.map((prompt) => (
                     <TableRow key={prompt.id}>
@@ -445,7 +451,7 @@ export function PromptsPage() {
                       </TableCell>
                       <TableCell>
                         <Badge variant={prompt.isActive ? 'default' : 'secondary'} className={prompt.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : ''}>
-                          {prompt.isActive ? 'Active' : 'Inactive'}
+                          {prompt.isActive ? t('common.active') : t('common.inactive')}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -454,11 +460,11 @@ export function PromptsPage() {
                             <Button variant="ghost" size="sm"><MoreHorizontal className="h-4 w-4" /></Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleOpenEdit(prompt)}><Pencil className="h-4 w-4 mr-2" />Edit</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => duplicateMutation.mutate(prompt.id)}><Copy className="h-4 w-4 mr-2" />Duplicate</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { setVersionsPrompt(prompt); setVersionsDialogOpen(true); }}><History className="h-4 w-4 mr-2" />Version History</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleOpenEdit(prompt)}><Pencil className="h-4 w-4 mr-2" />{t('common.edit')}</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => duplicateMutation.mutate(prompt.id)}><Copy className="h-4 w-4 mr-2" />{t('ai.duplicate')}</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setVersionsPrompt(prompt); setVersionsDialogOpen(true); }}><History className="h-4 w-4 mr-2" />{t('ai.versionHistory')}</DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-red-600" onClick={() => { setDeletingPrompt(prompt); setDeleteDialogOpen(true); }}><Trash2 className="h-4 w-4 mr-2" />Delete</DropdownMenuItem>
+                            <DropdownMenuItem className="text-red-600" onClick={() => { setDeletingPrompt(prompt); setDeleteDialogOpen(true); }}><Trash2 className="h-4 w-4 mr-2" />{t('common.delete')}</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -472,7 +478,7 @@ export function PromptsPage() {
             {pagination && pagination.totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t">
                 <p className="text-sm text-zinc-500">
-                  {(pagination.page - 1) * pagination.pageSize + 1}–{Math.min(pagination.page * pagination.pageSize, pagination.total)} of {pagination.total}
+                  {(pagination.page - 1) * pagination.pageSize + 1}–{Math.min(pagination.page * pagination.pageSize, pagination.total)} {t('common.of')} {pagination.total}
                 </p>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" disabled={pagination.page <= 1} onClick={() => setPage((p) => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
@@ -495,7 +501,7 @@ export function PromptsPage() {
           ) : prompts.length === 0 ? (
             <div className="col-span-full text-center py-12 text-zinc-500">
               <MessageSquare className="h-10 w-10 mx-auto mb-3 text-zinc-300" />
-              No prompts found. Create your first prompt.
+              {t('ai.noPromptsGrid')}
             </div>
           ) : prompts.map((prompt) => (
             <Card key={prompt.id} className="hover:shadow-md transition-shadow">
@@ -518,13 +524,13 @@ export function PromptsPage() {
                   ))}
                 </div>
                 <div className="flex items-center justify-between text-xs text-zinc-500">
-                  <span>{prompt.usageCount} uses</span>
+                  <span>{prompt.usageCount} {t('ai.usesSuffix')}</span>
                   <Badge variant={prompt.isActive ? 'default' : 'secondary'} className={prompt.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : ''}>
-                    {prompt.isActive ? 'Active' : 'Inactive'}
+                    {prompt.isActive ? t('common.active') : t('common.inactive')}
                   </Badge>
                 </div>
                 <div className="flex gap-2 pt-1">
-                  <Button variant="outline" size="sm" className="flex-1" onClick={() => handleOpenEdit(prompt)}><Pencil className="h-3.5 w-3.5 mr-1" />Edit</Button>
+                  <Button variant="outline" size="sm" className="flex-1" onClick={() => handleOpenEdit(prompt)}><Pencil className="h-3.5 w-3.5 mr-1" />{t('common.edit')}</Button>
                   <Button variant="outline" size="sm" onClick={() => duplicateMutation.mutate(prompt.id)}><Copy className="h-3.5 w-3.5" /></Button>
                   <Button variant="outline" size="sm" className="text-red-600" onClick={() => { setDeletingPrompt(prompt); setDeleteDialogOpen(true); }}><Trash2 className="h-3.5 w-3.5" /></Button>
                 </div>
@@ -538,7 +544,7 @@ export function PromptsPage() {
       {viewMode === 'grid' && pagination && pagination.totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
           <Button variant="outline" size="sm" disabled={pagination.page <= 1} onClick={() => setPage((p) => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
-          <span className="text-sm">Page {pagination.page} of {pagination.totalPages}</span>
+          <span className="text-sm">{t('ai.pageLabel')} {pagination.page} {t('common.of')} {pagination.totalPages}</span>
           <Button variant="outline" size="sm" disabled={pagination.page >= pagination.totalPages} onClick={() => setPage((p) => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
         </div>
       )}
@@ -547,16 +553,16 @@ export function PromptsPage() {
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) handleCloseDialog(); }}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingPrompt ? 'Edit Prompt' : 'Create Prompt'}</DialogTitle>
+            <DialogTitle>{editingPrompt ? t('ai.editPrompt') : t('ai.createPrompt')}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="prompt-name">Name</Label>
-              <Input id="prompt-name" placeholder="e.g. Blog Post Writer" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
+              <Label htmlFor="prompt-name">{t('common.name')}</Label>
+              <Input id="prompt-name" placeholder={t('ai.promptNamePlaceholder')} value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label>Category</Label>
+                <Label>{t('ai.category')}</Label>
                 <Select value={formData.category} onValueChange={(v) => setFormData((p) => ({ ...p, category: v as PromptCategoryNew }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -567,33 +573,33 @@ export function PromptsPage() {
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="prompt-tags">Tags (comma-separated)</Label>
-                <Input id="prompt-tags" placeholder="blog, seo, content" value={formData.tags} onChange={(e) => setFormData((p) => ({ ...p, tags: e.target.value }))} />
+                <Label htmlFor="prompt-tags">{t('ai.tagsLabel')}</Label>
+                <Input id="prompt-tags" placeholder={t('ai.tagsPlaceholder')} value={formData.tags} onChange={(e) => setFormData((p) => ({ ...p, tags: e.target.value }))} />
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="prompt-desc">Description</Label>
-              <Input id="prompt-desc" placeholder="Brief description..." value={formData.description} onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))} />
+              <Label htmlFor="prompt-desc">{t('ai.description')}</Label>
+              <Input id="prompt-desc" placeholder={t('ai.descriptionPlaceholder')} value={formData.description} onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))} />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="prompt-vars">Variables (JSON)</Label>
+              <Label htmlFor="prompt-vars">{t('ai.variablesLabel')}</Label>
               <Textarea id="prompt-vars" rows={3} placeholder='{"topic": "", "tone": "", "length": 500}' value={formData.variables} onChange={(e) => setFormData((p) => ({ ...p, variables: e.target.value }))} />
-              <p className="text-xs text-zinc-400">Define variables as JSON. Use {"{{variable_name}}"} in prompts.</p>
+              <p className="text-xs text-zinc-400">{t('ai.variablesHint')}</p>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="prompt-system">System Prompt</Label>
-              <Textarea id="prompt-system" rows={4} placeholder="You are a helpful assistant..." value={formData.systemPrompt} onChange={(e) => setFormData((p) => ({ ...p, systemPrompt: e.target.value }))} />
+              <Label htmlFor="prompt-system">{t('ai.systemPrompt')}</Label>
+              <Textarea id="prompt-system" rows={4} placeholder={t('ai.systemPromptPlaceholder')} value={formData.systemPrompt} onChange={(e) => setFormData((p) => ({ ...p, systemPrompt: e.target.value }))} />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="prompt-user">User Prompt</Label>
-              <Textarea id="prompt-user" rows={4} placeholder="Write a {{topic}} article in a {{tone}} tone..." value={formData.userPrompt} onChange={(e) => setFormData((p) => ({ ...p, userPrompt: e.target.value }))} />
-              <p className="text-xs text-zinc-400">Use {"{{variable_name}}"} syntax for dynamic content.</p>
+              <Label htmlFor="prompt-user">{t('ai.userPrompt')}</Label>
+              <Textarea id="prompt-user" rows={4} placeholder={t('ai.userPromptPlaceholder')} value={formData.userPrompt} onChange={(e) => setFormData((p) => ({ ...p, userPrompt: e.target.value }))} />
+              <p className="text-xs text-zinc-400">{t('ai.userPromptHint')}</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label>Provider</Label>
+                <Label>{t('ai.provider')}</Label>
                 <Select value={formData.providerId} onValueChange={(v) => setFormData((p) => ({ ...p, providerId: v, modelId: '' }))}>
-                  <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t('ai.selectProvider')} /></SelectTrigger>
                   <SelectContent>
                     {activeProviders.map((p) => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -602,14 +608,14 @@ export function PromptsPage() {
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label>Model</Label>
+                <Label>{t('ai.model')}</Label>
                 <Select
                   value={formData.modelId}
                   onValueChange={(v) => setFormData((p) => ({ ...p, modelId: v }))}
                   disabled={!formData.providerId}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={formData.providerId ? 'Select model' : 'Select provider first'} />
+                    <SelectValue placeholder={formData.providerId ? t('ai.selectModel') : t('ai.selectProviderFirst')} />
                   </SelectTrigger>
                   <SelectContent>
                     {models.map((m) => (
@@ -618,30 +624,30 @@ export function PromptsPage() {
                   </SelectContent>
                 </Select>
                 {formData.providerId && models.length === 0 && (
-                  <p className="text-xs text-muted-foreground">No active models for this provider. Add models in the Models tab.</p>
+                  <p className="text-xs text-muted-foreground">{t('ai.noActiveModelsForProvider')}</p>
                 )}
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label>Temperature: {formData.temperature.toFixed(1)}</Label>
+                <Label>{t('ai.temperature')}: {formData.temperature.toFixed(1)}</Label>
                 <Slider min={0} max={2} step={0.1} value={[formData.temperature]} onValueChange={([v]) => setFormData((p) => ({ ...p, temperature: v }))} />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="prompt-tokens">Max Tokens</Label>
+                <Label htmlFor="prompt-tokens">{t('ai.maxTokens')}</Label>
                 <Input id="prompt-tokens" type="number" min={1} max={128000} value={formData.maxTokens} onChange={(e) => setFormData((p) => ({ ...p, maxTokens: parseInt(e.target.value) || 2048 }))} />
               </div>
             </div>
             <div className="flex items-center justify-between">
-              <Label htmlFor="prompt-active">Active</Label>
+              <Label htmlFor="prompt-active">{t('common.active')}</Label>
               <Switch id="prompt-active" checked={formData.isActive} onCheckedChange={(checked) => setFormData((p) => ({ ...p, isActive: checked }))} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={handleCloseDialog}>Cancel</Button>
+            <Button variant="outline" onClick={handleCloseDialog}>{t('common.cancel')}</Button>
             <Button onClick={handleSave} disabled={saveMutation.isPending}>
               {saveMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editingPrompt ? 'Update' : 'Create'}
+              {editingPrompt ? t('ai.update') : t('common.create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -651,7 +657,7 @@ export function PromptsPage() {
       <Dialog open={versionsDialogOpen} onOpenChange={setVersionsDialogOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[70vh]">
           <DialogHeader>
-            <DialogTitle>Version History — {versionsPrompt?.name}</DialogTitle>
+            <DialogTitle>{t('ai.versionHistory')} — {versionsPrompt?.name}</DialogTitle>
           </DialogHeader>
           <ScrollArea className="max-h-[500px]">
             {versionsLoading ? (
@@ -659,10 +665,10 @@ export function PromptsPage() {
                 {Array.from({ length: 2 }).map((_, i) => (
                   <Skeleton key={i} className="h-24 w-full" />
                 ))}
-                <p className="text-center text-sm text-zinc-500">Loading versions...</p>
+                <p className="text-center text-sm text-zinc-500">{t('ai.loadingVersions')}</p>
               </div>
             ) : versions.length === 0 ? (
-              <p className="text-center py-8 text-zinc-500">No versions found.</p>
+              <p className="text-center py-8 text-zinc-500">{t('ai.noVersions')}</p>
             ) : (
               <div className="space-y-4 p-1">
                 {versions.map((v) => (
@@ -674,13 +680,13 @@ export function PromptsPage() {
                       </div>
                       {v.systemPrompt && (
                         <div>
-                          <p className="text-xs font-medium text-zinc-500">System:</p>
+                          <p className="text-xs font-medium text-zinc-500">{t('ai.systemLabel')}</p>
                           <p className="text-sm text-zinc-700 dark:text-zinc-300 line-clamp-2">{v.systemPrompt}</p>
                         </div>
                       )}
                       {v.userPrompt && (
                         <div>
-                          <p className="text-xs font-medium text-zinc-500">User:</p>
+                          <p className="text-xs font-medium text-zinc-500">{t('ai.userLabel')}</p>
                           <p className="text-sm text-zinc-700 dark:text-zinc-300 line-clamp-2">{v.userPrompt}</p>
                         </div>
                       )}
@@ -697,13 +703,13 @@ export function PromptsPage() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Prompt</AlertDialogTitle>
-            <AlertDialogDescription>Are you sure you want to delete &quot;{deletingPrompt?.name}&quot;?</AlertDialogDescription>
+            <AlertDialogTitle>{t('ai.deletePrompt')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('ai.deleteConfirmPrefix')}{deletingPrompt?.name}{t('ai.deleteConfirmShortSuffix')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => deletingPrompt && deleteMutation.mutate(deletingPrompt.id)} disabled={deleteMutation.isPending}>
-              {deleteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Delete
+              {deleteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}{t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

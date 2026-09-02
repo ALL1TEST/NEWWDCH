@@ -117,25 +117,6 @@ export function isPlatformPage(pageKey: string): boolean {
   return pageKey.startsWith('platform-');
 }
 
-// -------------------- Internal Account Pages --------------------
-// The dedicated INTERNAL-role account (the platform team's internal SaaS
-// account) sees its OWN dashboard experience — not the client CMS and
-// not the Platform Admin pages. 'profile' is the shared account-settings
-// page (email/password/2FA self-service), 'billing' shows the account's
-// Internal billing status, and 'notifications' backs the shell's
-// notification bell "view all" action.
-
-export const INTERNAL_PAGES = [
-  'internal-dashboard',
-  'profile',
-  'billing',
-  'notifications',
-] as const;
-
-export function isInternalAccountRole(role: string | null | undefined): boolean {
-  return role === 'INTERNAL';
-}
-
 // -------------------- Settings Sub-pages --------------------
 
 export const SETTINGS_SUBPAGES = [
@@ -144,6 +125,38 @@ export const SETTINGS_SUBPAGES = [
   { key: 'notifications', label: 'Notifications', parent: 'settings' },
   { key: 'backups', label: 'Backups', parent: 'settings' },
 ] as const;
+
+// -------------------- Internal Account Pages --------------------
+// The dedicated INTERNAL-role account (the SaaS owner's internal
+// account) has FULL PLATFORM ACCESS: the complete CMS/Admin
+// dashboard — every client module (Articles, Calendar, Media, Users,
+// Comments, Newsletter, SEO, AI, Automation, Analytics, Settings +
+// sub-pages), plus its own dedicated Internal Account dashboard,
+// profile, billing and notifications. It is NOT a customer account
+// with a subscription plan: NO plan/feature restrictions apply (see
+// hasBillingBypass — billingMode INTERNAL grants every feature
+// server-side, and the client route/sidebar/palette gates bypass
+// plan entitlements for this role). The ONLY pages it cannot reach are
+// the Platform Admin management pages (platform-*) — those belong to
+// the separate Platform Admin account type.
+
+export const INTERNAL_PAGES = [
+  'internal-dashboard',
+  ...BUILTIN_PAGES.map((p) => p.key),
+  ...SETTINGS_SUBPAGES.map((s) => s.key),
+  'analytics',
+  'categories',
+  'tags',
+  'jobs',
+  'audit',
+  'billing',
+  'profile',
+  'notifications',
+] as const;
+
+export function isInternalAccountRole(role: string | null | undefined): boolean {
+  return role === 'INTERNAL';
+}
 
 // -------------------- Custom Permission key helper --------------------
 
@@ -164,6 +177,9 @@ export function customPermissionKeyFromName(name: string): string {
  *
  * OWNER:          full access to platform-* AND client CMS pages (billing bypass).
  * PLATFORM_ADMIN: platform-* pages only.
+ * INTERNAL:       FULL access to every client CMS page (plan restrictions never
+ *                 apply — internal SaaS account with full platform access); NEVER
+ *                 platform-* pages (those belong to the Platform Admin account).
  * CLIENT/ADMIN:   full access to all built-in CMS + settings pages; NOT platform-*.
  * EDITOR:         only pages in their pagePermissions array.
  */
@@ -183,12 +199,17 @@ export function canAccessPage(
     return isPlatformPage(pageKey) || pageKey === 'profile';
   }
 
-  // INTERNAL — the dedicated Internal Account. Own dashboard + the
-  // shared self-service account pages only. NEVER the Platform Admin
-  // pages, never the client CMS pages (that is a separate account type
-  // from both Platform Admin and Admin User).
+  // INTERNAL — the SaaS owner's internal account: FULL access to every
+  // CMS page and feature (the complete Admin-User-grade module set,
+  // including plan-gated modules — the Internal Account is not a
+  // customer subscription, plan restrictions never apply to it). The
+  // ONLY exception: Platform Admin management pages (platform-*) stay
+  // exclusive to the Platform Admin account type. The client 'dashboard'
+  // hash is technically allowed (no Access-Denied flash) but the app
+  // shell routes the Internal Account to its own dedicated
+  // #internal-dashboard instead (see admin-app.tsx).
   if (role === 'INTERNAL') {
-    return (INTERNAL_PAGES as readonly string[]).includes(pageKey);
+    return !isPlatformPage(pageKey);
   }
 
   // Client roles must never reach platform pages.
@@ -229,6 +250,8 @@ export function getAccessiblePages(
     return PLATFORM_PAGES.map((p) => p.key);
   }
   if (role === 'INTERNAL') {
+    // Full CMS module set (the sidebar mirrors this list) — see
+    // INTERNAL_PAGES above for the rationale.
     return [...INTERNAL_PAGES];
   }
   if (role === 'CLIENT' || role === 'ADMIN') {
@@ -311,8 +334,9 @@ export function getVisibleNavItems(
     }));
   }
 
-  // INTERNAL (the dedicated Internal Account) sees the internal nav the
-  // sidebar passes in — its own dashboard, not the client CMS.
+  // INTERNAL (the SaaS owner's internal account) sees the full client CMS
+  // nav the sidebar passes in (complete module set — no plan filtering),
+  // with the Internal Account dashboard as its home entry.
   if (userRole === 'INTERNAL') {
     return allItems.map((item) => ({
       ...item,

@@ -26,6 +26,7 @@ import { truncate } from '@/lib/utils';
 import type { PaginatedResponse, IndexingStatusType } from '@/shared/types';
 import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
 import { toast } from 'sonner';
+import { useT } from '@/lib/i18n';
 
 // ==================== Types ====================
 
@@ -43,23 +44,27 @@ interface IndexingRow {
 
 // ==================== Status Colors ====================
 
-const INDEXING_STATUS_MAP: Record<IndexingStatusType, { label: string; colorClass: string }> = {
-  INDEXED: { label: 'Indexed', colorClass: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
-  PENDING: { label: 'Pending', colorClass: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
-  EXCLUDED: { label: 'Excluded', colorClass: 'bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400' },
-  DISCOVERED: { label: 'Discovered', colorClass: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
-  ERROR: { label: 'Error', colorClass: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+// labelKey values are resolved via t() at render time (display-only fields;
+// the raw status value still flows from the API untouched).
+const INDEXING_STATUS_MAP: Record<IndexingStatusType, { labelKey: string; colorClass: string }> = {
+  INDEXED: { labelKey: 'seo.statusIndexed', colorClass: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+  PENDING: { labelKey: 'seo.statusPending', colorClass: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  EXCLUDED: { labelKey: 'seo.statusExcluded', colorClass: 'bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400' },
+  DISCOVERED: { labelKey: 'seo.statusDiscovered', colorClass: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
+  ERROR: { labelKey: 'seo.statusError', colorClass: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
 };
 
 // ==================== Filter Options ====================
 
-const STATUS_FILTERS: { label: string; value: string }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Errors', value: 'ERROR' },
-  { label: 'Pending', value: 'PENDING' },
-  { label: 'Indexed', value: 'INDEXED' },
-  { label: 'Not Indexed', value: 'EXCLUDED' },
-  { label: 'Discovered', value: 'DISCOVERED' },
+// labelKey values are resolved via t() at render time (display-only fields;
+// filtering still compares the raw value).
+const STATUS_FILTERS: { labelKey: string; value: string }[] = [
+  { labelKey: 'seo.all', value: 'all' },
+  { labelKey: 'seo.errors', value: 'ERROR' },
+  { labelKey: 'seo.statusPending', value: 'PENDING' },
+  { labelKey: 'seo.statusIndexed', value: 'INDEXED' },
+  { labelKey: 'seo.notIndexed', value: 'EXCLUDED' },
+  { labelKey: 'seo.statusDiscovered', value: 'DISCOVERED' },
 ];
 
 // ==================== Helper ====================
@@ -70,6 +75,7 @@ function formatDate(date: string | null): string {
 }
 
 function IndexingStatusBadge({ status }: { status: IndexingStatusType }) {
+  const { t } = useT();
   const mapping = INDEXING_STATUS_MAP[status];
   return (
     <Badge
@@ -79,7 +85,7 @@ function IndexingStatusBadge({ status }: { status: IndexingStatusType }) {
         (mapping?.colorClass ?? 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300')
       }
     >
-      {mapping?.label ?? status}
+      {mapping ? t(mapping.labelKey) : status}
     </Badge>
   );
 }
@@ -87,6 +93,7 @@ function IndexingStatusBadge({ status }: { status: IndexingStatusType }) {
 // ==================== Main Page ====================
 
 export function SeoIndexingPage() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('all');
 
@@ -123,10 +130,10 @@ export function SeoIndexingPage() {
     mutationFn: (id: string) => patchApi(`/api/seo/indexing/${id}`, null, { params: { action: 'request-indexing' } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoIndexing.all });
-      toast.success('Indexing request submitted');
+      toast.success(t('seo.indexingSubmitted'));
     },
     onError: () => {
-      toast.error('Failed to request indexing');
+      toast.error(t('seo.indexingRequestFailed'));
     },
   });
 
@@ -134,10 +141,10 @@ export function SeoIndexingPage() {
     mutationFn: (id: string) => patchApi(`/api/seo/indexing/${id}`, null, { params: { action: 'refresh' } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoIndexing.all });
-      toast.success('Status refreshed');
+      toast.success(t('seo.statusRefreshed'));
     },
     onError: () => {
-      toast.error('Failed to refresh status');
+      toast.error(t('seo.statusRefreshFailed'));
     },
   });
 
@@ -145,10 +152,10 @@ export function SeoIndexingPage() {
     mutationFn: () => postApi('/api/seo/indexing', null, { params: { action: 'scan' } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoIndexing.all });
-      toast.success('Content scan initiated');
+      toast.success(t('seo.scanInitiated'));
     },
     onError: () => {
-      toast.error('Failed to start content scan');
+      toast.error(t('seo.scanFailed'));
     },
   });
 
@@ -159,10 +166,10 @@ export function SeoIndexingPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoIndexing.all });
       table.clearSelection();
-      toast.success(`Indexing requested for ${table.selectedIds.length} URLs`);
+      toast.success(`${t('seo.indexingRequestedFor')} ${table.selectedIds.length} ${t('seo.urlsSuffix')}`);
     },
     onError: () => {
-      toast.error('Bulk indexing request failed');
+      toast.error(t('seo.bulkIndexingFailed'));
     },
   });
 
@@ -171,20 +178,20 @@ export function SeoIndexingPage() {
     () => [
       ColumnDefHelper.textColumn<IndexingRow>({
         id: 'title',
-        header: 'Title',
+        header: t('seo.title'),
         accessorKey: 'title',
         truncate: 50,
       }),
       ColumnDefHelper.textColumn<IndexingRow>({
         id: 'url',
-        header: 'URL',
+        header: t('seo.url'),
         accessorKey: 'url',
         className: 'font-mono text-xs',
         truncate: 60,
       }),
       {
         id: 'status',
-        header: 'Status',
+        header: t('common.status'),
         accessorKey: 'status',
         enableSorting: true,
         cell: ({ row }) => <IndexingStatusBadge status={row.original.status} />,
@@ -196,7 +203,7 @@ export function SeoIndexingPage() {
             className="flex items-center gap-1 hover:text-foreground transition-colors"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
           >
-            <span className="font-medium">Last Crawl</span>
+            <span className="font-medium">{t('seo.lastCrawl')}</span>
           </button>
         ),
         accessorKey: 'lastCrawl',
@@ -214,7 +221,7 @@ export function SeoIndexingPage() {
             className="flex items-center gap-1 hover:text-foreground transition-colors"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
           >
-            <span className="font-medium">Last Indexed</span>
+            <span className="font-medium">{t('seo.lastIndexed')}</span>
           </button>
         ),
         accessorKey: 'lastIndexed',
@@ -227,7 +234,7 @@ export function SeoIndexingPage() {
       },
       {
         id: 'coverageError',
-        header: 'Coverage Error',
+        header: t('seo.coverageError'),
         accessorKey: 'coverageError',
         enableSorting: false,
         cell: ({ row }) => {
@@ -259,7 +266,7 @@ export function SeoIndexingPage() {
               {requestIndexingMutation.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
               ) : null}
-              Request
+              {t('seo.request')}
             </Button>
             <Button
               variant="ghost"
@@ -270,10 +277,10 @@ export function SeoIndexingPage() {
                 refreshStatusMutation.mutate(row.original.id);
               }}
               disabled={refreshStatusMutation.isPending}
-              title="Refresh Status"
+              title={t('seo.refreshStatus')}
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              <span className="sr-only">Refresh Status</span>
+              <span className="sr-only">{t('seo.refreshStatus')}</span>
             </Button>
             <Button
               variant="ghost"
@@ -283,16 +290,16 @@ export function SeoIndexingPage() {
                 e.stopPropagation();
                 window.open(`https://www.google.com/search?q=site:${encodeURIComponent(row.original.url)}`, '_blank');
               }}
-              title="Open in Google"
+              title={t('seo.openInGoogle')}
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              <span className="sr-only">Open in Google</span>
+              <span className="sr-only">{t('seo.openInGoogle')}</span>
             </Button>
           </div>
         ),
       },
     ],
-    [requestIndexingMutation, refreshStatusMutation],
+    [requestIndexingMutation, refreshStatusMutation, t],
   );
 
   // Filter content
@@ -313,7 +320,7 @@ export function SeoIndexingPage() {
                 : 'text-muted-foreground hover:text-foreground')
             }
           >
-            {f.label}
+            {t(f.labelKey)}
           </button>
         ))}
       </div>
@@ -323,8 +330,8 @@ export function SeoIndexingPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Indexing"
-        description="Monitor and manage your content's indexing status"
+        title={t('seo.indexingTitle')}
+        description={t('seo.indexingDescription')}
         breadcrumbs={false}
         action={
           <Button
@@ -337,7 +344,7 @@ export function SeoIndexingPage() {
             ) : (
               <ScanSearch className="h-4 w-4 mr-2" />
             )}
-            Scan Content
+            {t('seo.scanContent')}
           </Button>
         }
       />
@@ -346,7 +353,7 @@ export function SeoIndexingPage() {
         <CardContent className="p-3 flex items-center gap-2">
           <Info className="h-4 w-4 text-sky-600 dark:text-sky-400 shrink-0" />
           <p className="text-xs text-sky-700 dark:text-sky-300">
-            Indexing status is based on local content data. Connect Google Search Console for real indexing data.
+            {t('seo.indexingInfoBanner')}
           </p>
         </CardContent>
       </Card>
@@ -362,20 +369,20 @@ export function SeoIndexingPage() {
         onSortChange={(field, order) => table.setSortField(field, order)}
         sortField={table.sortField}
         sortOrder={table.sortOrder}
-        searchPlaceholder="Search by title or URL..."
+        searchPlaceholder={t('seo.searchByTitleOrUrl')}
         searchValue={table.searchValue}
         onSearch={(v) => {
           table.setSearchValue(v);
           table.setCurrentPage(1);
         }}
         getRowId={(row) => row.id}
-        emptyMessage="No indexing records found. Run a scan to discover your content."
+        emptyMessage={t('seo.noIndexingRecords')}
         filterContent={filterContent}
         selectedIds={table.selectedIds}
         onSelectionChange={table.setSelectedIds}
         bulkActions={[
           {
-            label: 'Request Indexing',
+            label: t('seo.requestIndexing'),
             onClick: (ids) => bulkRequestMutation.mutate(ids),
             icon: <Globe className="h-3.5 w-3.5 mr-1.5" />,
             disabled: bulkRequestMutation.isPending,

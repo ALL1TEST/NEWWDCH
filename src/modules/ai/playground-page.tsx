@@ -23,6 +23,7 @@ import {
 import {
   Send, Trash2, Copy, Loader2, Play, Settings2, Bot, User, Zap,
 } from 'lucide-react';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -59,6 +60,7 @@ interface PlaygroundResponse {
 // -------------------- Component --------------------
 
 export function PlaygroundPage() {
+  const { t } = useT();
   const [userProviderId, setUserProviderId] = useState('');
   const [userModelId, setUserModelId] = useState('');
   const [temperature, setTemperature] = useState(0.7);
@@ -136,14 +138,14 @@ export function PlaygroundPage() {
     onError: (err: Error) => {
       // Remove the user's failed message so the chat stays clean.
       setMessages((prev) => prev.slice(0, -1));
-      toast.error(err.message || 'Failed to get response');
+      toast.error(err.message || t('ai.failedToGetResponse'));
       setIsSending(false);
     },
   });
 
   const handleSend = () => {
     if (!inputValue.trim() || isSending || !providerId || !modelId) {
-      if (!providerId || !modelId) toast.error('Select a provider and model first');
+      if (!providerId || !modelId) toast.error(t('ai.selectProviderAndModelFirst'));
       return;
     }
     const userMsg: PlaygroundMessage = { role: 'user', content: inputValue };
@@ -173,7 +175,7 @@ export function PlaygroundPage() {
     const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
     if (lastAssistant) {
       navigator.clipboard.writeText(lastAssistant.content);
-      toast.success('Response copied');
+      toast.success(t('ai.responseCopied'));
     }
   };
 
@@ -184,15 +186,15 @@ export function PlaygroundPage() {
         <CardHeader className="p-4 pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <Settings2 className="h-4 w-4" />
-            Configuration
+            {t('ai.configuration')}
           </CardTitle>
         </CardHeader>
         <ScrollArea className="flex-1 px-4">
           <div className="space-y-4 pb-4">
             <div className="grid gap-2">
-              <Label className="text-xs">Provider</Label>
+              <Label className="text-xs">{t('ai.provider')}</Label>
               <Select value={providerId} onValueChange={handleProviderChange}>
-                <SelectTrigger className="text-sm"><SelectValue placeholder="Select provider" /></SelectTrigger>
+                <SelectTrigger className="text-sm"><SelectValue placeholder={t('ai.selectProvider')} /></SelectTrigger>
                 <SelectContent>
                   {activeProviders.map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -201,9 +203,9 @@ export function PlaygroundPage() {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label className="text-xs">Model</Label>
+              <Label className="text-xs">{t('ai.model')}</Label>
               <Select value={modelId} onValueChange={setUserModelId} disabled={!providerId}>
-                <SelectTrigger className="text-sm"><SelectValue placeholder={providerId ? 'Select model' : 'Select provider first'} /></SelectTrigger>
+                <SelectTrigger className="text-sm"><SelectValue placeholder={providerId ? t('ai.selectModel') : t('ai.selectProviderFirst')} /></SelectTrigger>
                 <SelectContent>
                   {textModels.map((m) => (
                     <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
@@ -216,35 +218,35 @@ export function PlaygroundPage() {
 
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
-                <Label className="text-xs">Parameters</Label>
+                <Label className="text-xs">{t('ai.parameters')}</Label>
                 <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setShowParams(!showParams)}>
-                  {showParams ? 'Collapse' : 'Expand'}
+                  {showParams ? t('ai.collapse') : t('ai.expand')}
                 </Button>
               </div>
               {showParams && (
                 <div className="space-y-3">
                   <div className="grid gap-1">
-                    <div className="flex justify-between text-xs"><span>Temperature</span><span className="text-zinc-500">{temperature}</span></div>
+                    <div className="flex justify-between text-xs"><span>{t('ai.temperature')}</span><span className="text-zinc-500">{temperature}</span></div>
                     <Slider min={0} max={2} step={0.1} value={[temperature]} onValueChange={([v]) => setTemperature(v)} />
                   </div>
                   <div className="grid gap-1">
-                    <Label className="text-xs" htmlFor="pg-max-tokens">Max Tokens</Label>
+                    <Label className="text-xs" htmlFor="pg-max-tokens">{t('ai.maxTokens')}</Label>
                     <Input id="pg-max-tokens" type="number" className="text-sm h-8" value={maxTokens} onChange={(e) => setMaxTokens(parseInt(e.target.value) || 2048)} />
                   </div>
                   <div className="grid gap-1">
-                    <div className="flex justify-between text-xs"><span>Top P</span><span className="text-zinc-500">{topP}</span></div>
+                    <div className="flex justify-between text-xs"><span>{t('ai.topP')}</span><span className="text-zinc-500">{topP}</span></div>
                     <Slider min={0} max={1} step={0.05} value={[topP]} onValueChange={([v]) => setTopP(v)} />
                   </div>
                   <div className="grid gap-1">
-                    <div className="flex justify-between text-xs"><span>Frequency Penalty</span><span className="text-zinc-500">{frequencyPenalty}</span></div>
+                    <div className="flex justify-between text-xs"><span>{t('ai.frequencyPenalty')}</span><span className="text-zinc-500">{frequencyPenalty}</span></div>
                     <Slider min={0} max={2} step={0.1} value={[frequencyPenalty]} onValueChange={([v]) => setFrequencyPenalty(v)} />
                   </div>
                   <div className="grid gap-1">
-                    <div className="flex justify-between text-xs"><span>Presence Penalty</span><span className="text-zinc-500">{presencePenalty}</span></div>
+                    <div className="flex justify-between text-xs"><span>{t('ai.presencePenalty')}</span><span className="text-zinc-500">{presencePenalty}</span></div>
                     <Slider min={0} max={2} step={0.1} value={[presencePenalty]} onValueChange={([v]) => setPresencePenalty(v)} />
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs">JSON Mode</Label>
+                    <Label className="text-xs">{t('ai.jsonMode')}</Label>
                     <Switch checked={jsonMode} onCheckedChange={setJsonMode} />
                   </div>
                 </div>
@@ -258,14 +260,14 @@ export function PlaygroundPage() {
       <Card className="flex flex-col overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Play className="h-4 w-4" /> Playground
+            <Play className="h-4 w-4" /> {t('ai.playground')}
           </h3>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleCopyResponse} disabled={!messages.some((m) => m.role === 'assistant')}>
-              <Copy className="h-3.5 w-3.5 mr-1" /> Copy
+              <Copy className="h-3.5 w-3.5 mr-1" /> {t('common.copy')}
             </Button>
             <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleClear} disabled={messages.length === 0}>
-              <Trash2 className="h-3.5 w-3.5 mr-1" /> Clear
+              <Trash2 className="h-3.5 w-3.5 mr-1" /> {t('ai.clear')}
             </Button>
           </div>
         </div>
@@ -274,8 +276,8 @@ export function PlaygroundPage() {
           {messages.length === 0 && !isSending ? (
             <div className="flex flex-col items-center justify-center h-full text-zinc-400">
               <Bot className="h-12 w-12 mb-3 text-zinc-300" />
-              <p className="text-sm">Send a message to start a conversation</p>
-              <p className="text-xs mt-1">Select a provider and model from the left panel</p>
+              <p className="text-sm">{t('ai.sendFirstMessage')}</p>
+              <p className="text-xs mt-1">{t('ai.selectProviderModelHint')}</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -315,7 +317,7 @@ export function PlaygroundPage() {
         <div className="p-4 border-t">
           <div className="flex gap-2">
             <Textarea
-              placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
+              placeholder={t('ai.messagePlaceholder')}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -340,24 +342,24 @@ export function PlaygroundPage() {
         <CardHeader className="p-4 pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <Zap className="h-4 w-4" />
-            Response Info
+            {t('ai.responseInfo')}
           </CardTitle>
         </CardHeader>
         <div className="flex-1 p-4 pt-2 space-y-4">
           {responseInfo ? (
             <>
-              <InfoItem label="Input Tokens" value={responseInfo.inputTokens.toLocaleString()} />
-              <InfoItem label="Output Tokens" value={responseInfo.outputTokens.toLocaleString()} />
+              <InfoItem label={t('ai.inputTokens')} value={responseInfo.inputTokens.toLocaleString()} />
+              <InfoItem label={t('ai.outputTokens')} value={responseInfo.outputTokens.toLocaleString()} />
               <Separator />
-              <InfoItem label="Total Tokens" value={responseInfo.totalTokens.toLocaleString()} />
-              <InfoItem label="Cost" value={`$${responseInfo.costUsd.toFixed(6)}`} />
-              <InfoItem label="Response Time" value={`${responseInfo.durationMs}ms`} />
-              <InfoItem label="Provider" value={responseInfo.providerName} />
+              <InfoItem label={t('ai.totalTokens')} value={responseInfo.totalTokens.toLocaleString()} />
+              <InfoItem label={t('ai.cost')} value={`$${responseInfo.costUsd.toFixed(6)}`} />
+              <InfoItem label={t('ai.responseTime')} value={`${responseInfo.durationMs}ms`} />
+              <InfoItem label={t('ai.provider')} value={responseInfo.providerName} />
             </>
           ) : (
             <div className="text-center text-zinc-400 text-sm mt-8">
               <Zap className="h-8 w-8 mx-auto mb-2 text-zinc-300" />
-              <p>No response yet</p>
+              <p>{t('ai.noResponseYet')}</p>
             </div>
           )}
         </div>

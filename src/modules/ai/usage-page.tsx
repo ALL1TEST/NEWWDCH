@@ -21,6 +21,7 @@ import {
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend,
 } from 'recharts';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -50,6 +51,7 @@ const CHART_COLORS = [
 export function UsagePage() {
   // Shared theme-aware chart palette (see lib/chart-theme.ts).
   const chart = useChartTheme();
+  const { t } = useT();
   const activeSiteId = useSiteStore((s) => s.activeSiteId);
   const [period, setPeriod] = useState<'day' | 'week' | 'month'>('month');
 
@@ -64,22 +66,22 @@ export function UsagePage() {
   const summary = data;
 
   const kpiCards = [
-    { label: 'Total Requests', value: summary?.totalRequests?.toLocaleString() ?? '0', icon: Zap, color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' },
-    { label: 'Total Tokens', value: summary ? (((summary.totalInputTokens ?? 0) + (summary.totalOutputTokens ?? 0)) / 1000).toFixed(1) + 'K' : '0', icon: Activity, color: 'bg-sky-100 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400' },
-    { label: 'Total Cost', value: summary ? `$${(summary.totalCost ?? 0).toFixed(2)}` : '$0.00', icon: DollarSign, color: 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' },
-    { label: 'Avg Response Time', value: summary ? `${(summary.avgResponseTimeMs ?? 0).toFixed(0)}ms` : '0ms', icon: Clock, color: 'bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400' },
-    { label: 'Error Rate', value: summary ? `${((summary.errorRate ?? 0) * 100).toFixed(1)}%` : '0%', icon: AlertTriangle, color: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' },
+    { label: t('ai.totalRequests'), value: summary?.totalRequests?.toLocaleString() ?? '0', icon: Zap, color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' },
+    { label: t('ai.totalTokens'), value: summary ? (((summary.totalInputTokens ?? 0) + (summary.totalOutputTokens ?? 0)) / 1000).toFixed(1) + 'K' : '0', icon: Activity, color: 'bg-sky-100 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400' },
+    { label: t('ai.totalCost'), value: summary ? `$${(summary.totalCost ?? 0).toFixed(2)}` : '$0.00', icon: DollarSign, color: 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' },
+    { label: t('ai.avgResponseTime'), value: summary ? `${(summary.avgResponseTimeMs ?? 0).toFixed(0)}ms` : '0ms', icon: Clock, color: 'bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400' },
+    { label: t('ai.errorRate'), value: summary ? `${((summary.errorRate ?? 0) * 100).toFixed(1)}%` : '0%', icon: AlertTriangle, color: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' },
   ];
 
   return (
     <div className="space-y-6">
       {/* Period Selector */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold flex items-center gap-2"><BarChart3 className="h-5 w-5" /> Usage Analytics</h2>
+        <h2 className="text-lg font-semibold flex items-center gap-2"><BarChart3 className="h-5 w-5" /> {t('ai.usageAnalytics')}</h2>
         <ToggleGroup type="single" value={period} onValueChange={(v) => v && setPeriod(v as 'day' | 'week' | 'month')}>
-          <ToggleGroupItem value="day" className="text-xs">Day</ToggleGroupItem>
-          <ToggleGroupItem value="week" className="text-xs">Week</ToggleGroupItem>
-          <ToggleGroupItem value="month" className="text-xs">Month</ToggleGroupItem>
+          <ToggleGroupItem value="day" className="text-xs">{t('ai.day')}</ToggleGroupItem>
+          <ToggleGroupItem value="week" className="text-xs">{t('ai.week')}</ToggleGroupItem>
+          <ToggleGroupItem value="month" className="text-xs">{t('ai.month')}</ToggleGroupItem>
         </ToggleGroup>
       </div>
 
@@ -106,9 +108,9 @@ export function UsagePage() {
           {[1, 2].map((i) => <Card key={i}><CardContent className="p-6"><Skeleton className="h-[300px] w-full" /></CardContent></Card>)}
         </div>
       ) : isError ? (
-        <Card><CardContent className="p-8 text-center text-muted-foreground">Failed to load usage data.</CardContent></Card>
+        <Card><CardContent className="p-8 text-center text-muted-foreground">{t('ai.failedToLoadUsage')}</CardContent></Card>
       ) : !summary ? (
-        <Card><CardContent className="p-8 text-center text-muted-foreground">No usage data available.</CardContent></Card>
+        <Card><CardContent className="p-8 text-center text-muted-foreground">{t('ai.noUsageData')}</CardContent></Card>
       ) : (
         <>
           {/* Budget Progress */}
@@ -116,11 +118,11 @@ export function UsagePage() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-medium">Monthly Budget</p>
+                  <p className="text-sm font-medium">{t('ai.monthlyBudget')}</p>
                   <p className="text-sm text-muted-foreground">${summary.budget.spent.toFixed(2)} / ${summary.budget.monthlyBudget.toFixed(2)}</p>
                 </div>
                 <Progress value={summary.budget.monthlyBudget > 0 ? (summary.budget.spent / summary.budget.monthlyBudget) * 100 : 0} />
-                <p className="text-xs text-muted-foreground mt-1">Warning at {summary.budget.warningThreshold}%</p>
+                <p className="text-xs text-muted-foreground mt-1">{t('ai.warningAtPrefix')} {summary.budget.warningThreshold}%</p>
               </CardContent>
             </Card>
           )}
@@ -129,7 +131,7 @@ export function UsagePage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Daily Usage Line Chart */}
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Daily Usage (Requests)</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">{t('ai.dailyUsage')}</CardTitle></CardHeader>
               <CardContent className="p-4">
                 {summary.dailyUsage?.length > 0 ? (
                   <ResponsiveContainer width="100%" height={250}>
@@ -146,14 +148,14 @@ export function UsagePage() {
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm">No daily data</div>
+                  <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm">{t('ai.noDailyData')}</div>
                 )}
               </CardContent>
             </Card>
 
             {/* Cost by Provider Bar Chart */}
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Cost by Provider</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">{t('ai.costByProvider')}</CardTitle></CardHeader>
               <CardContent className="p-4">
                 {summary.costByProvider?.length > 0 ? (
                   <ResponsiveContainer width="100%" height={250}>
@@ -171,7 +173,7 @@ export function UsagePage() {
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm">No cost data</div>
+                  <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm">{t('ai.noCostData')}</div>
                 )}
               </CardContent>
             </Card>
@@ -181,14 +183,14 @@ export function UsagePage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Token Usage Pie */}
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Token Usage</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">{t('ai.tokenUsage')}</CardTitle></CardHeader>
               <CardContent className="p-4">
                 <ResponsiveContainer width="100%" height={200}>
                   <PieChart>
                     <Pie
                       data={[
-                        { name: 'Input Tokens', value: summary.totalInputTokens },
-                        { name: 'Output Tokens', value: summary.totalOutputTokens },
+                        { name: t('ai.inputTokens'), value: summary.totalInputTokens },
+                        { name: t('ai.outputTokens'), value: summary.totalOutputTokens },
                       ]}
                       dataKey="value"
                       nameKey="name"
@@ -213,14 +215,14 @@ export function UsagePage() {
 
             {/* Top Providers Table */}
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Top Providers</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">{t('ai.topProviders')}</CardTitle></CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="max-h-[240px]">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Provider</TableHead><TableHead className="text-right">Requests</TableHead><TableHead className="text-right">Cost</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>{t('ai.provider')}</TableHead><TableHead className="text-right">{t('ai.requests')}</TableHead><TableHead className="text-right">{t('ai.cost')}</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {(summary.topProviders ?? []).length === 0 ? (
-                        <TableRow><TableCell colSpan={3} className="text-center py-4 text-muted-foreground text-sm">No data</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={3} className="text-center py-4 text-muted-foreground text-sm">{t('common.noData')}</TableCell></TableRow>
                       ) : (summary.topProviders ?? []).map((p, i) => (
                         <TableRow key={p.provider || i}>
                           <TableCell className="text-sm font-medium">{p.provider}</TableCell>
@@ -237,14 +239,14 @@ export function UsagePage() {
 
             {/* Top Models Table */}
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Top Models</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">{t('ai.topModels')}</CardTitle></CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="max-h-[240px]">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Model</TableHead><TableHead className="text-right">Requests</TableHead><TableHead className="text-right">Cost</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>{t('ai.model')}</TableHead><TableHead className="text-right">{t('ai.requests')}</TableHead><TableHead className="text-right">{t('ai.cost')}</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {(summary.topModels ?? []).length === 0 ? (
-                        <TableRow><TableCell colSpan={3} className="text-center py-4 text-muted-foreground text-sm">No data</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={3} className="text-center py-4 text-muted-foreground text-sm">{t('common.noData')}</TableCell></TableRow>
                       ) : (summary.topModels ?? []).map((m, i) => (
                         <TableRow key={m.model || i}>
                           <TableCell className="text-sm font-medium max-w-[120px] truncate">{m.model}</TableCell>

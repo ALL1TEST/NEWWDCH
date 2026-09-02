@@ -26,6 +26,7 @@ import {
 } from '@/components/patterns';
 import { getApi, postApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
+import { useT } from '@/lib/i18n';
 import { cn, formatDate, formatRelativeTime, truncate } from '@/lib/utils';
 import type { PaginatedResponse, JobStatus, JobPriority } from '@/shared/types';
 import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
@@ -57,13 +58,16 @@ interface JobStats {
 
 // -------------------- Status Tabs --------------------
 
-const STATUS_TABS: { label: string; value: string }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Waiting', value: 'WAITING' },
-  { label: 'Active', value: 'ACTIVE' },
-  { label: 'Completed', value: 'COMPLETED' },
-  { label: 'Failed', value: 'FAILED' },
-  { label: 'Retrying', value: 'RETRYING' },
+// i18n: labelKey resolves through t() at render time (STATUS_TABS
+// map in the component below) so the tab labels follow the
+// selected language while the filter values stay the API enum.
+const STATUS_TABS: { labelKey: string; value: string }[] = [
+  { labelKey: 'jobs.tabAll', value: 'all' },
+  { labelKey: 'jobs.tabWaiting', value: 'WAITING' },
+  { labelKey: 'jobs.tabActive', value: 'ACTIVE' },
+  { labelKey: 'jobs.tabCompleted', value: 'COMPLETED' },
+  { labelKey: 'jobs.tabFailed', value: 'FAILED' },
+  { labelKey: 'jobs.tabRetrying', value: 'RETRYING' },
 ];
 
 // -------------------- Priority Badge --------------------
@@ -86,6 +90,7 @@ function PriorityBadge({ priority }: { priority: JobPriority }) {
 // -------------------- Main Component --------------------
 
 export function JobsPage() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('all');
 
@@ -137,23 +142,23 @@ export function JobsPage() {
   });
 
   const columns: ColumnDef<JobRow>[] = [
-    ColumnDefHelper.textColumn<JobRow>({ id: 'type', header: 'Type', accessorKey: 'type', className: 'font-medium font-mono text-sm' }),
+    ColumnDefHelper.textColumn<JobRow>({ id: 'type', header: t('jobs.type'), accessorKey: 'type', className: 'font-medium font-mono text-sm' }),
     {
       id: 'priority',
-      header: 'Priority',
+      header: t('jobs.priority'),
       accessorKey: 'priority',
       enableSorting: false,
       cell: ({ getValue }) => <PriorityBadge priority={getValue() as JobPriority} />,
     },
     {
       id: 'status',
-      header: 'Status',
+      header: t('common.status'),
       accessorKey: 'status',
       cell: ({ getValue }) => <StatusBadge status={getValue() as string} size="sm" />,
     },
     {
       id: 'attempts',
-      header: 'Attempts',
+      header: t('jobs.attempts'),
       enableSorting: false,
       size: 90,
       cell: ({ row }) => {
@@ -168,10 +173,10 @@ export function JobsPage() {
         );
       },
     },
-    ColumnDefHelper.dateColumn<JobRow>({ id: 'createdAt', header: 'Created', accessorKey: 'createdAt', format: (d) => formatRelativeTime(d) }),
-    ColumnDefHelper.dateColumn<JobRow>({ id: 'startedAt', header: 'Started', accessorKey: 'startedAt', format: (d) => formatRelativeTime(d) }),
-    ColumnDefHelper.dateColumn<JobRow>({ id: 'completedAt', header: 'Completed', accessorKey: 'completedAt', format: (d) => formatRelativeTime(d) }),
-    ColumnDefHelper.textColumn<JobRow>({ id: 'error', header: 'Error', accessorKey: 'error', truncate: 40, enableSorting: false, className: 'text-red-500 text-xs' }),
+    ColumnDefHelper.dateColumn<JobRow>({ id: 'createdAt', header: t('jobs.created'), accessorKey: 'createdAt', format: (d) => formatRelativeTime(d) }),
+    ColumnDefHelper.dateColumn<JobRow>({ id: 'startedAt', header: t('jobs.started'), accessorKey: 'startedAt', format: (d) => formatRelativeTime(d) }),
+    ColumnDefHelper.dateColumn<JobRow>({ id: 'completedAt', header: t('jobs.completed'), accessorKey: 'completedAt', format: (d) => formatRelativeTime(d) }),
+    ColumnDefHelper.textColumn<JobRow>({ id: 'error', header: t('jobs.error'), accessorKey: 'error', truncate: 40, enableSorting: false, className: 'text-red-500 text-xs' }),
     ColumnDefHelper.actionColumn<JobRow>({
       id: 'actions',
       render: (row) => (
@@ -184,12 +189,12 @@ export function JobsPage() {
           <DropdownMenuContent align="end">
             {row.status === 'FAILED' && (
               <DropdownMenuItem onClick={() => retryMutation.mutate(row.id)}>
-                <RotateCcw className="h-4 w-4 mr-2" />Retry
+                <RotateCcw className="h-4 w-4 mr-2" />{t('common.retry')}
               </DropdownMenuItem>
             )}
             {(row.status === 'WAITING' || row.status === 'ACTIVE') && (
               <DropdownMenuItem variant="destructive" onClick={() => cancelMutation.mutate(row.id)}>
-                <XCircle className="h-4 w-4 mr-2" />Cancel
+                <XCircle className="h-4 w-4 mr-2" />{t('common.cancel')}
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>
@@ -200,16 +205,18 @@ export function JobsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Background Jobs" description="Monitor and manage queued background jobs" />
+      <PageHeader title={t('jobs.title')} description={t('jobs.pageDescription')} />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <Card>
           <CardContent className="p-3 text-center">
             <p className="text-2xl font-bold tabular-nums">{stats.total}</p>
-            <p className="text-xs text-muted-foreground">Total</p>
+            <p className="text-xs text-muted-foreground">{t('jobs.total')}</p>
           </CardContent>
         </Card>
+        {/* NOTE (i18n): the card label renders the JobStatus enum value
+            (s.replace(/_/g, ' ')) — API data, intentionally untranslated. */}
         {(['WAITING', 'ACTIVE', 'COMPLETED', 'FAILED', 'RETRYING'] as const).map((s) => (
           <Card
             key={s}
@@ -236,7 +243,7 @@ export function JobsPage() {
             size="sm"
             onClick={() => { setStatusFilter(tab.value); table.setCurrentPage(1); }}
           >
-            {tab.label}
+            {t(tab.labelKey)}
           </Button>
         ))}
       </div>
@@ -252,11 +259,11 @@ export function JobsPage() {
         onSortChange={(f, o) => table.setSortField(f, o)}
         sortField={table.sortField}
         sortOrder={table.sortOrder}
-        searchPlaceholder="Search jobs..."
+        searchPlaceholder={t('jobs.searchPlaceholder')}
         searchValue={table.searchValue}
         onSearch={(v) => { table.setSearchValue(v); table.setCurrentPage(1); }}
         getRowId={(row) => row.id}
-        emptyMessage="No jobs found."
+        emptyMessage={t('jobs.noJobsFound')}
       />
     </div>
   );

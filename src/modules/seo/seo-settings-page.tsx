@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FileText, Shield, GitBranch } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 import { getApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { SeoSitemapPage } from './seo-sitemap-page';
@@ -17,16 +18,18 @@ import { SeoRedirectsPage } from './seo-redirects-page';
 
 type SettingsTab = 'sitemap' | 'robots' | 'redirects';
 
-const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ElementType }[] = [
-  { key: 'sitemap', label: 'Sitemap', icon: FileText },
-  { key: 'robots', label: 'Robots.txt', icon: Shield },
-  { key: 'redirects', label: 'Redirects', icon: GitBranch },
+// labelKey/titleKey/descKey values are resolved via t() at render time
+// (display-only fields; tab switching stays driven by `key`).
+const SETTINGS_TABS: { key: SettingsTab; labelKey: string; icon: React.ElementType }[] = [
+  { key: 'sitemap', labelKey: 'seo.sitemap', icon: FileText },
+  { key: 'robots', labelKey: 'seo.robotsTxt', icon: Shield },
+  { key: 'redirects', labelKey: 'seo.redirects', icon: GitBranch },
 ];
 
-const TAB_META: Record<SettingsTab, { title: string; description: string }> = {
-  sitemap: { title: 'Sitemap', description: 'Generate and manage your XML sitemap for search engines' },
-  robots: { title: 'Robots.txt', description: 'Control how search engine crawlers access your site' },
-  redirects: { title: 'Redirects', description: 'Manage URL redirect rules for your site' },
+const TAB_META: Record<SettingsTab, { titleKey: string; descriptionKey: string }> = {
+  sitemap: { titleKey: 'seo.sitemap', descriptionKey: 'seo.sitemapDescription' },
+  robots: { titleKey: 'seo.robotsTxt', descriptionKey: 'seo.robotsDescription' },
+  redirects: { titleKey: 'seo.redirects', descriptionKey: 'seo.redirectsDescription' },
 };
 
 interface RedirectCountResponse {
@@ -35,6 +38,7 @@ interface RedirectCountResponse {
 
 export function SeoSettingsPage({ initialTab = 'sitemap' }: { initialTab?: SettingsTab }) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
+  const { t } = useT();
   const meta = TAB_META[activeTab];
 
   // Lightweight redirect count for the Redirects tab badge. Shares the
@@ -55,8 +59,8 @@ export function SeoSettingsPage({ initialTab = 'sitemap' }: { initialTab?: Setti
     <div className="space-y-6">
       {/* Single dynamic page title — no duplicate "SEO Settings" heading */}
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-foreground">{meta.title}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{meta.description}</p>
+        <h1 className="text-xl font-bold tracking-tight text-foreground">{t(meta.titleKey)}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t(meta.descriptionKey)}</p>
       </div>
 
       {/* Single tab bar */}
@@ -76,7 +80,7 @@ export function SeoSettingsPage({ initialTab = 'sitemap' }: { initialTab?: Setti
               )}
             >
               <Icon className="h-4 w-4" />
-              {tab.label}
+              {t(tab.labelKey)}
               {tab.key === 'redirects' && !isRedirectCountLoading && redirectCount !== undefined && (
                 <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground tabular-nums">
                   {redirectCount.toLocaleString()}

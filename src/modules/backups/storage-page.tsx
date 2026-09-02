@@ -69,6 +69,7 @@ import {
   type ProviderCategory,
 } from '@/lib/backup/provider-registry';
 import { PlatformPageHeader } from '@/modules/platform/shared';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -121,20 +122,22 @@ const initialForm: StorageForm = {
 
 // -------------------- Section label mapping --------------------
 
+// Values are i18n keys resolved via t() at the render site.
 const SECTION_LABEL: Record<FieldGroup, string> = {
-  connection: 'Connection',
-  credentials: 'Credentials',
-  destination: 'Destination',
+  connection: 'backups.sectionConnection',
+  credentials: 'backups.sectionCredentials',
+  destination: 'backups.sectionDestination',
 };
 
 // -------------------- Connection status badge --------------------
 
 function ConnectionStatus({ state, message }: { state: ConnectionState; message: string }) {
+  const { t } = useT();
   if (state === 'idle' || state === 'testing') {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         {state === 'testing' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-        <span>{state === 'testing' ? 'Testing connection…' : 'Not tested yet.'}</span>
+        <span>{state === 'testing' ? t('backups.testingConnection') : t('backups.notTestedYet')}</span>
       </div>
     );
   }
@@ -142,7 +145,7 @@ function ConnectionStatus({ state, message }: { state: ConnectionState; message:
     return (
       <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 px-2.5 py-1.5 text-xs">
         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        <span className="font-medium text-emerald-700 dark:text-emerald-300">Connected</span>
+        <span className="font-medium text-emerald-700 dark:text-emerald-300">{t('backups.connected')}</span>
         {message && <span className="text-emerald-600/80 dark:text-emerald-400/80 truncate">— {message}</span>}
       </div>
     );
@@ -152,9 +155,9 @@ function ConnectionStatus({ state, message }: { state: ConnectionState; message:
     <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 px-2.5 py-1.5 text-xs">
       <AlertCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
       <div className="min-w-0">
-        <p className="font-medium text-red-700 dark:text-red-300">Connection failed</p>
+        <p className="font-medium text-red-700 dark:text-red-300">{t('backups.connectionFailed')}</p>
         {message && <p className="text-red-600/80 dark:text-red-400/80 break-words">{message}</p>}
-        <p className="text-red-600/60 dark:text-red-400/60 mt-0.5">Invalid credentials or unreachable storage.</p>
+        <p className="text-red-600/60 dark:text-red-400/60 mt-0.5">{t('backups.connectionFailedHint')}</p>
       </div>
     </div>
   );
@@ -238,6 +241,7 @@ function ProviderDropdown({
   const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const { t } = useT();
 
   // Refs to the latest values so the open-effect (which attaches window
   // listeners) does NOT re-run on every value/onChange/activeIndex change.
@@ -460,7 +464,7 @@ function ProviderDropdown({
         className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-[color,box-shadow] hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span className="truncate text-left text-foreground">
-          {selected?.name ?? 'Select provider'}
+          {selected?.name ?? t('backups.selectProvider')}
         </span>
         <ChevronDown
           className={cn(
@@ -545,13 +549,14 @@ function ProviderDropdown({
 // -------------------- Search Empty State (inline) --------------------
 
 function NoStorageSearchEmpty({ onClear }: { onClear: () => void }) {
+  const { t } = useT();
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
       <HardDrive className="h-10 w-10 text-muted-foreground/40 mb-3" strokeWidth={1.5} />
-      <p className="text-sm font-medium text-foreground">No storage found</p>
-      <p className="text-xs text-muted-foreground mt-1">No storage destinations match your search.</p>
+      <p className="text-sm font-medium text-foreground">{t('backups.noStorageFound')}</p>
+      <p className="text-xs text-muted-foreground mt-1">{t('backups.noStorageMatch')}</p>
       <Button variant="outline" size="sm" className="mt-4" onClick={onClear}>
-        Clear search
+        {t('backups.clearSearch')}
       </Button>
     </div>
   );
@@ -589,6 +594,7 @@ function fieldError(
   form: StorageForm,
   field: { key: string; label: string; required: boolean; type: string },
   submitAttempted: boolean,
+  t: (key: string) => string,
 ): string {
   if (!field.required) return '';
   if (field.type === 'switch') return '';
@@ -597,7 +603,7 @@ function fieldError(
   if (!isEmpty) return '';
   const wasTouched = form.touched[field.key] === true;
   if (!wasTouched && !submitAttempted) return '';
-  return `${field.label} is required`;
+  return `${field.label} ${t('backups.isRequired')}`;
 }
 
 /** Signature for the connection/credential-group fields of the current
@@ -677,6 +683,7 @@ function buildConfigObject(form: StorageForm): Record<string, unknown> {
 export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform' } = {}) {
   const queryClient = useQueryClient();
   const isPlatform = scope === 'platform';
+  const { t } = useT();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<StorageForm>(initialForm);
@@ -730,10 +737,10 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
       postApi('/api/backups/storage', isPlatform ? { ...body, scope: 'platform' } : body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all });
-      toast.success('Storage configuration created');
+      toast.success(t('backups.storageCreated'));
       closeDialog();
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to create storage configuration'),
+    onError: (err: Error) => toast.error(err.message || t('backups.storageCreateFailed')),
   });
 
   const updateMutation = useMutation({
@@ -743,10 +750,10 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
       patchApi(`/api/backups/storage/${id}`, isPlatform ? { ...body, scope: 'platform' } : body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all });
-      toast.success('Storage configuration updated');
+      toast.success(t('backups.storageUpdated'));
       closeDialog();
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to update storage configuration'),
+    onError: (err: Error) => toast.error(err.message || t('backups.storageUpdateFailed')),
   });
 
   const deleteMutation = useMutation({
@@ -756,11 +763,11 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all });
       setDeleteTarget(null);
-      toast.success('Storage configuration deleted');
+      toast.success(t('backups.storageDeleted'));
     },
     onError: (err: Error) => {
       setDeleteTarget(null);
-      toast.error(err.message || 'Failed to delete storage configuration');
+      toast.error(err.message || t('backups.storageDeleteFailed'));
     },
   });
 
@@ -771,9 +778,9 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.detail(id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all });
-      toast.success('Connection test passed');
+      toast.success(t('backups.connectionTestPassed'));
     },
-    onError: (err: Error) => toast.error(err.message || 'Connection test failed'),
+    onError: (err: Error) => toast.error(err.message || t('backups.connectionTestFailed')),
   });
 
   // Create-flow validation: tests the connection against the form's current
@@ -864,7 +871,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
         } else {
           // OAuth — credentials present implies a prior successful Connect.
           initialConnection = 'connected';
-          initialMessage = 'Credentials configured';
+          initialMessage = t('backups.credentialsConfigured');
         }
       }
     }
@@ -1007,7 +1014,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
     }
     const masked = maskedSecretFields(form);
     if (masked.length > 0) {
-      toast.error(`Re-enter the masked credentials (${masked.join(', ')}) to re-test.`);
+      toast.error(`${t('backups.reenterMaskedPrefix')}${masked.join(', ')}${t('backups.reenterMaskedSuffix')}`);
       return;
     }
     setForm((prev) => ({ ...prev, connection: 'testing', connectionMessage: '' }));
@@ -1023,12 +1030,12 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
       }));
       setValidatedSignature(connectionSignature(form));
       if (success) {
-        toast.success(def.connectionType === 'oauth' ? `${def.name} connected` : 'Connection test passed');
+        toast.success(def.connectionType === 'oauth' ? `${def.name} ${t('backups.connectedSuffix')}` : t('backups.connectionTestPassed'));
       } else {
-        toast.error(message || 'Connection test failed');
+        toast.error(message || t('backups.connectionTestFailed'));
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Connection test failed';
+      const message = err instanceof Error ? err.message : t('backups.connectionTestFailed');
       setForm((prev) => ({ ...prev, connection: 'failed', connectionMessage: message }));
       toast.error(message);
     }
@@ -1058,13 +1065,13 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
   const columns: ColumnDef<StorageRow>[] = [
     ColumnDefHelper.textColumn<StorageRow>({
       id: 'name',
-      header: 'Name',
+      header: t('common.name'),
       accessorKey: 'name',
       className: 'font-medium',
     }),
     {
       id: 'provider',
-      header: 'Provider',
+      header: t('backups.provider'),
       accessorKey: 'provider',
       enableSorting: false,
       size: 160,
@@ -1072,7 +1079,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
     },
     {
       id: 'isActive',
-      header: 'Status',
+      header: t('common.status'),
       accessorKey: 'isActive',
       enableSorting: false,
       size: 100,
@@ -1086,13 +1093,13 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
               : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
           )}
         >
-          {getValue() ? 'Active' : 'Inactive'}
+          {getValue() ? t('common.active') : t('common.inactive')}
         </Badge>
       ),
     },
     {
       id: 'lastTestAt',
-      header: 'Last Test',
+      header: t('backups.lastTest'),
       accessorKey: 'lastTestAt',
       size: 140,
       cell: ({ getValue }) => {
@@ -1106,7 +1113,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
     },
     {
       id: 'lastTestResult',
-      header: 'Test Result',
+      header: t('backups.testResult'),
       accessorKey: 'lastTestResult',
       enableSorting: false,
       size: 120,
@@ -1123,7 +1130,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
             title={message}
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Passed
+            {t('backups.passed')}
           </span>
         ) : (
           <span
@@ -1131,7 +1138,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
             title={message ?? result}
           >
             <XCircle className="h-3.5 w-3.5" />
-            Failed
+            {t('backups.failed')}
           </span>
         );
       },
@@ -1149,7 +1156,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => openEdit(row)}>
               <Pencil className="h-4 w-4 mr-2" />
-              Edit
+              {t('common.edit')}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => testRowMutation.mutate(row.id)}
@@ -1160,12 +1167,12 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
               ) : (
                 <Plug className="h-4 w-4 mr-2" />
               )}
-              Test Connection
+              {t('backups.testConnection')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(row)}>
               <Trash2 className="h-4 w-4 mr-2" />
-              Delete
+              {t('common.delete')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -1208,10 +1215,10 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
           ) {
             return (
               <div key={group} className="space-y-2">
-                <SectionLabel label={SECTION_LABEL[group]} />
+                <SectionLabel label={t(SECTION_LABEL[group])} />
                 <div className="flex items-center gap-2 rounded-md border border-dashed border-border bg-background/50 px-3 py-2 text-xs text-muted-foreground">
                   <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-                  <span>Connect the account first to choose a destination folder.</span>
+                  <span>{t('backups.connectFirstHint')}</span>
                 </div>
               </div>
             );
@@ -1230,7 +1237,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
             return (
               <div key={group} className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <SectionLabel label={SECTION_LABEL[group]} />
+                  <SectionLabel label={t(SECTION_LABEL[group])} />
                   <Button
                     type="button"
                     variant="ghost"
@@ -1238,7 +1245,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
                     className="h-7 text-xs"
                     onClick={handleDisconnect}
                   >
-                    Disconnect
+                    {t('backups.disconnect')}
                   </Button>
                 </div>
                 <div className="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 px-3 py-2.5">
@@ -1247,10 +1254,10 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                      {currentDef.name} connected
+                      {currentDef.name} {t('backups.connectedSuffix')}
                     </p>
                     <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80 truncate">
-                      {form.connectionMessage || 'Credentials configured'}
+                      {form.connectionMessage || t('backups.credentialsConfigured')}
                     </p>
                   </div>
                 </div>
@@ -1260,7 +1267,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
 
           return (
             <div key={group} className="space-y-2">
-              <SectionLabel label={SECTION_LABEL[group]} />
+              <SectionLabel label={t(SECTION_LABEL[group])} />
               <div className="space-y-3">
                 {fields.map((f) => (
                   <ConfigField
@@ -1269,7 +1276,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
                     value={form.config[f.key] ?? ''}
                     onChange={(v) => updateConfigField(f.key, v)}
                     onBlur={() => markFieldTouched(f.key)}
-                    error={fieldError(form, f, submitAttempted)}
+                    error={fieldError(form, f, submitAttempted, t)}
                     disabled={isTesting}
                   />
                 ))}
@@ -1292,7 +1299,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
           )}
         {connectionStale && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
-            Credentials changed — re-test the connection.
+            {t('backups.credentialsChanged')}
           </p>
         )}
       </div>
@@ -1303,24 +1310,24 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
     <div className="space-y-4">
       {isPlatform ? (
         <PlatformPageHeader
-          title="Storage"
-          subtitle="Platform-wide backup storage destinations across all customers and sites."
+          title={t('backups.storage')}
+          subtitle={t('backups.storagePlatformSubtitle')}
           actions={
             <Button size="sm" onClick={openCreate}>
               <Plus className="h-4 w-4 mr-2" />
-              Add Storage
+              {t('backups.addStorage')}
             </Button>
           }
         />
       ) : (
         <PageHeader
           breadcrumbs={false}
-          title="Storage"
-          description="Configure backup storage destinations"
+          title={t('backups.storage')}
+          description={t('backups.storageDescription')}
           action={
             <Button size="sm" onClick={openCreate}>
               <Plus className="h-4 w-4 mr-2" />
-              Add Storage
+              {t('backups.addStorage')}
             </Button>
           }
         />
@@ -1329,9 +1336,9 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
       {isInitialEmpty ? (
         <EmptyState
           icon={HardDrive}
-          title="No storage configured"
-          description="Add a storage destination to save your backups."
-          action={{ label: 'Add Storage', onClick: openCreate }}
+          title={t('backups.noStorageConfiguredTitle')}
+          description={t('backups.addStorageFirst')}
+          action={{ label: t('backups.addStorage'), onClick: openCreate }}
         />
       ) : (
         <DataTable
@@ -1345,14 +1352,14 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
           onSortChange={(f, o) => table.setSortField(f, o)}
           sortField={table.sortField}
           sortOrder={table.sortOrder}
-          searchPlaceholder="Search storage..."
+          searchPlaceholder={t('backups.searchStoragePlaceholder')}
           searchValue={table.searchValue}
           onSearch={(v) => {
             table.setSearchValue(v);
             table.setCurrentPage(1);
           }}
           getRowId={(row) => row.id}
-          emptyMessage="No storage configurations found."
+          emptyMessage={t('backups.noStorageFoundMessage')}
           emptyState={
             isSearchEmpty ? (
               <NoStorageSearchEmpty
@@ -1383,10 +1390,10 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
           {/* Header (fixed) */}
           <DialogHeader className="px-5 pt-5 pb-3 border-b border-border shrink-0">
             <DialogTitle className="text-base">
-              {editingId ? 'Edit Storage' : 'Add Storage'}
+              {editingId ? t('backups.editStorage') : t('backups.addStorage')}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              {editingId ? 'Update storage destination configuration.' : 'Configure a backup storage destination.'}
+              {editingId ? t('backups.editStorageDesc') : t('backups.addStorageDesc')}
             </DialogDescription>
           </DialogHeader>
 
@@ -1397,24 +1404,24 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
             {/* Name */}
             <div className="space-y-1.5">
               <Label htmlFor="storage-name" className="text-xs">
-                Name<span className="text-destructive ml-0.5">*</span>
+                {t('common.name')}<span className="text-destructive ml-0.5">*</span>
               </Label>
               <Input
                 id="storage-name"
-                placeholder="e.g., Production R2 Bucket"
+                placeholder={t('backups.storageNamePlaceholder')}
                 value={form.name}
                 onChange={(e) => updateForm('name', e.target.value)}
                 onBlur={() => markFieldTouched('name')}
                 aria-invalid={!form.name.trim() && (form.touched.name || submitAttempted)}
               />
               {!form.name.trim() && (form.touched.name || submitAttempted) && (
-                <p className="text-xs text-destructive">Name is required</p>
+                <p className="text-xs text-destructive">{t('backups.nameRequired')}</p>
               )}
             </div>
 
             {/* Provider */}
             <div className="space-y-1.5">
-              <Label className="text-xs">Provider</Label>
+              <Label className="text-xs">{t('backups.provider')}</Label>
               <ProviderDropdown
                 value={form.provider}
                 onChange={handleProviderChange}
@@ -1463,7 +1470,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
             {/* Right: Cancel + Create */}
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={closeDialog}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button
                 size="sm"
@@ -1471,7 +1478,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
                 disabled={isSaving || !isFormValid(form)}
               >
                 {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {editingId ? 'Update' : 'Create'}
+                {editingId ? t('backups.update') : t('common.create')}
               </Button>
             </div>
           </DialogFooter>
@@ -1482,13 +1489,13 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
-        title="Delete Storage Configuration"
+        title={t('backups.deleteStorageTitle')}
         description={
           deleteTarget
-            ? `Are you sure you want to delete "${deleteTarget.name}"? Existing backups stored via this configuration will not be affected.`
+            ? `${t('backups.deleteStorageConfirmPrefix')}${deleteTarget.name}${t('backups.deleteStorageConfirmSuffix')}`
             : undefined
         }
-        confirmLabel="Delete"
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => {
           if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
@@ -1533,6 +1540,7 @@ function ConfigField({
 }) {
   const inputId = `storage-config-${field.key}`;
   const showError = !!error;
+  const { t } = useT();
   return (
     <div className="space-y-1.5">
       <Label htmlFor={inputId} className="text-xs">
@@ -1548,7 +1556,7 @@ function ConfigField({
             disabled={disabled}
           />
           <span className="text-xs text-muted-foreground">
-            {value === 'true' ? 'Enabled' : 'Disabled'}
+            {value === 'true' ? t('backups.switchEnabled') : t('backups.switchDisabled')}
           </span>
         </div>
       ) : field.type === 'password' && field.multiline ? (

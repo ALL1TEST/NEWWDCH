@@ -40,6 +40,7 @@ import type { ApiResponse, BackupScope, BackupStatus } from '@/shared/types';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { PlatformPageHeader } from '@/modules/platform/shared';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -77,6 +78,7 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
   const queryClient = useQueryClient();
   const currentUserId = useAuthStore((s) => s.user?.id ?? null);
   const isPlatform = scope === 'platform';
+  const { t } = useT();
   const [step, setStep] = useState<1 | 2>(1);
   const [selectedBackupId, setSelectedBackupId] = useState<string>('');
   const [confirmed, setConfirmed] = useState(false);
@@ -123,13 +125,13 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
       queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.backupStats.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.backupLogs.all });
-      toast.success('Restore initiated successfully. The system will be restored from this backup.');
+      toast.success(t('backups.restoreInitiatedFull'));
       setStep(1);
       setSelectedBackupId('');
       setConfirmed(false);
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to initiate restore');
+      toast.error(err.message || t('backups.restoreInitiateFailed'));
     },
   });
 
@@ -155,14 +157,14 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
     <div className="space-y-6">
       {isPlatform ? (
         <PlatformPageHeader
-          title="Restore"
-          subtitle="Restore the platform database from a previous platform-wide backup across all customers and sites."
+          title={t('backups.restore')}
+          subtitle={t('backups.restorePlatformSubtitle')}
         />
       ) : (
         <PageHeader
           breadcrumbs={false}
-          title="Restore"
-          description="Restore your system from a previous backup"
+          title={t('backups.restore')}
+          description={t('backups.restoreDescription')}
         />
       )}
 
@@ -180,7 +182,7 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
           <span className="h-5 w-5 rounded-full border-2 border-current flex items-center justify-center text-xs">
             1
           </span>
-          Select Backup
+          {t('backups.selectBackup')}
         </button>
         <ChevronRight className="h-4 w-4 text-muted-foreground" />
         <button
@@ -195,7 +197,7 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
           <span className="h-5 w-5 rounded-full border-2 border-current flex items-center justify-center text-xs">
             2
           </span>
-          Confirm & Restore
+          {t('backups.confirmRestore')}
         </button>
       </div>
 
@@ -211,25 +213,25 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
         >
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Select a Backup</CardTitle>
+              <CardTitle className="text-base">{t('backups.selectBackupTitle')}</CardTitle>
               <CardDescription>
-                Choose a completed backup to restore from. Only verified and completed backups are recommended.
+                {t('backups.selectBackupDesc')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Backup</label>
+                <label className="text-sm font-medium">{t('backups.backupLabel')}</label>
                 {isLoading ? (
                   <div className="h-10 animate-pulse bg-muted rounded-md" />
                 ) : backups.length === 0 ? (
                   <div className="rounded-md border border-dashed p-8 text-center text-muted-foreground text-sm">
                     <DatabaseBackup className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                    No completed backups available to restore from.
+                    {t('backups.noCompletedBackups')}
                   </div>
                 ) : (
                   <Select value={selectedBackupId} onValueChange={setSelectedBackupId}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a backup..." />
+                      <SelectValue placeholder={t('backups.selectBackupPlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
                       {backups.map((backup) => (
@@ -250,14 +252,14 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
               {/* Preview of selected backup */}
               {selectedBackup && (
                 <div className="rounded-md border bg-muted/30 p-4">
-                  <h4 className="text-sm font-medium mb-3">Backup Preview</h4>
+                  <h4 className="text-sm font-medium mb-3">{t('backups.backupPreview')}</h4>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div>
-                      <p className="text-xs text-muted-foreground">Name</p>
+                      <p className="text-xs text-muted-foreground">{t('common.name')}</p>
                       <p className="text-sm font-medium">{selectedBackup.name}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Scope</p>
+                      <p className="text-xs text-muted-foreground">{t('backups.scope')}</p>
                       <p className="text-sm">
                         <Badge variant="outline" className="border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-medium">
                           {labelize(selectedBackup.scope)}
@@ -265,19 +267,19 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Size</p>
+                      <p className="text-xs text-muted-foreground">{t('backups.size')}</p>
                       <p className="text-sm font-medium">{formatFileSize(selectedBackup.size)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Created</p>
+                      <p className="text-xs text-muted-foreground">{t('backups.created')}</p>
                       <p className="text-sm">{formatRelativeTime(selectedBackup.createdAt)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Status</p>
+                      <p className="text-xs text-muted-foreground">{t('common.status')}</p>
                       <StatusBadge status={selectedBackup.status} size="sm" />
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Verification</p>
+                      <p className="text-xs text-muted-foreground">{t('backups.verification')}</p>
                       {selectedBackup.verificationStatus ? (
                         <StatusBadge status={selectedBackup.verificationStatus} size="sm" />
                       ) : (
@@ -290,7 +292,7 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
 
               <div className="flex justify-end">
                 <Button onClick={handleProceed} disabled={!selectedBackupId}>
-                  Continue
+                  {t('backups.continue')}
                   <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               </div>
@@ -313,8 +315,8 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
             {/* Backup Details Card */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Backup Details</CardTitle>
-                <CardDescription>Review the backup you are about to restore</CardDescription>
+                <CardTitle className="text-base">{t('backups.backupDetails')}</CardTitle>
+                <CardDescription>{t('backups.backupDetailsDesc')}</CardDescription>
               </CardHeader>
               <CardContent>
                 {isLoadingDetail || !backupDetail ? (
@@ -329,36 +331,36 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Name</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{t('common.name')}</p>
                       <p className="text-sm font-semibold">{backupDetail.name}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Scope</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{t('backups.scope')}</p>
                       <Badge variant="outline" className="border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-medium">
                         {labelize(backupDetail.scope)}
                       </Badge>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Size</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{t('backups.size')}</p>
                       <p className="text-sm font-semibold flex items-center gap-1">
                         <HardDrive className="h-3.5 w-3.5 text-muted-foreground" />
                         {formatFileSize(backupDetail.size)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Created</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{t('backups.created')}</p>
                       <p className="text-sm">{formatRelativeTime(backupDetail.createdAt)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Storage</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{t('backups.storage')}</p>
                       <p className="text-sm">{labelize(backupDetail.storageProvider)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Status</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{t('common.status')}</p>
                       <StatusBadge status={backupDetail.status} size="sm" />
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Verification</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{t('backups.verification')}</p>
                       {backupDetail.verificationStatus ? (
                         <StatusBadge status={backupDetail.verificationStatus} size="sm" />
                       ) : (
@@ -366,14 +368,14 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
                       )}
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Encryption</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{t('backups.encryption')}</p>
                       <span className={cn(
                         'text-sm font-medium',
                         backupDetail.encryptionStatus === 'ENCRYPTED'
                           ? 'text-green-600 dark:text-green-400'
                           : 'text-muted-foreground'
                       )}>
-                        {backupDetail.encryptionStatus === 'ENCRYPTED' ? 'Encrypted' : 'None'}
+                        {backupDetail.encryptionStatus === 'ENCRYPTED' ? t('backups.encrypted') : t('backups.none')}
                       </span>
                     </div>
                   </div>
@@ -387,8 +389,7 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
                 <Alert className="border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-900/10">
                   <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                   <AlertDescription className="text-amber-800 dark:text-amber-200">
-                    <strong>Warning:</strong> Restoring a backup will overwrite your current database with the backup data.
-                    This action cannot be undone. Make sure you have a recent backup of your current state before proceeding.
+                    <strong>{t('backups.warningLabel')}</strong>{t('backups.warningText')}
                   </AlertDescription>
                 </Alert>
 
@@ -400,13 +401,13 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
                     className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                   />
                   <span className="text-sm text-muted-foreground">
-                    I understand that restoring this backup will overwrite current data and this action cannot be undone.
+                    {t('backups.understandText')}
                   </span>
                 </label>
 
                 <div className="flex justify-between">
                   <Button variant="outline" onClick={handleBack}>
-                    Back
+                    {t('common.back')}
                   </Button>
                   <Button
                     variant="destructive"
@@ -416,12 +417,12 @@ export function RestorePage({ scope = 'client' }: { scope?: 'client' | 'platform
                     {restoreMutation.isPending ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Restoring...
+                        {t('backups.restoring')}
                       </>
                     ) : (
                       <>
                         <RotateCcw className="h-4 w-4 mr-2" />
-                        Restore Backup
+                        {t('backups.restoreBackup')}
                       </>
                     )}
                   </Button>

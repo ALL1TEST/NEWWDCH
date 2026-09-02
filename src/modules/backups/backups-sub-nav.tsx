@@ -3,6 +3,7 @@
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { Database, Clock, RotateCcw, HardDrive, ScrollText, LayoutDashboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Backups Internal Navigation --------------------
 // Rendered IN THE PAGE content (above the active sub-page) by
@@ -18,20 +19,21 @@ import { cn } from '@/lib/utils';
 // content edge, horizontal scroll when the row overflows).
 
 const BACKUPS_TABS = [
-  { key: null, label: 'Overview', icon: LayoutDashboard },
-  { key: 'backups', label: 'Backups', icon: Database },
-  { key: 'schedules', label: 'Schedules', icon: Clock },
-  { key: 'restore', label: 'Restore', icon: RotateCcw },
-  { key: 'storage', label: 'Storage', icon: HardDrive },
-  { key: 'logs', label: 'Logs', icon: ScrollText },
+  { key: null, labelKey: 'nav.overview', icon: LayoutDashboard },
+  { key: 'backups', labelKey: 'nav.backups', icon: Database },
+  { key: 'schedules', labelKey: 'backups.schedules', icon: Clock },
+  { key: 'restore', labelKey: 'backups.restore', icon: RotateCcw },
+  { key: 'storage', labelKey: 'backups.storage', icon: HardDrive },
+  { key: 'logs', labelKey: 'backups.logs', icon: ScrollText },
 ] as const;
 
 export function BackupsSubNav({ module = 'backups' }: { module?: 'backups' | 'platform-backups' } = {}) {
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
+  const { t } = useT();
 
   return (
-    <nav aria-label="Backups sections" className="mb-6 -mx-1 px-1 pb-1 overflow-x-auto">
+    <nav aria-label={t('backups.sectionsAria')} className="mb-6 -mx-1 px-1 pb-1 overflow-x-auto">
       <div className="flex items-center gap-1 min-w-max">
         {BACKUPS_TABS.map((tab) => {
           const isActive = tab.key === null
@@ -50,7 +52,7 @@ export function BackupsSubNav({ module = 'backups' }: { module?: 'backups' | 'pl
               )}
             >
               <Icon className="h-3.5 w-3.5" />
-              {tab.label}
+              {t(tab.labelKey)}
             </button>
           );
         })}

@@ -49,6 +49,7 @@ import { PageHeader } from '@/components/patterns';
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useChartTheme } from '@/lib/chart-theme';
+import { useT } from '@/lib/i18n';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -138,8 +139,8 @@ function formatPosition(n: number | null | undefined): string {
   return (n ?? 0).toFixed(1);
 }
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return 'Never';
+function formatDate(dateStr: string | null, t: (key: string) => string): string {
+  if (!dateStr) return t('seo.never');
   try {
     return new Date(dateStr).toLocaleString(undefined, {
       month: 'short',
@@ -149,7 +150,7 @@ function formatDate(dateStr: string | null): string {
       minute: '2-digit',
     });
   } catch {
-    return 'Unknown';
+    return t('seo.unknown');
   }
 }
 
@@ -167,26 +168,27 @@ function formatShortDate(dateStr: string): string {
 // ==================== Connection Badge ====================
 
 function ConnectionBadge({ status }: { status: string }) {
+  const { t } = useT();
   switch (status) {
     case 'CONNECTED':
       return (
         <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-transparent font-medium gap-1">
           <CheckCircle2 className="h-3 w-3" />
-          Connected
+          {t('seo.connected')}
         </Badge>
       );
     case 'EXPIRED':
       return (
         <Badge variant="destructive" className="font-medium gap-1">
           <XCircle className="h-3 w-3" />
-          Expired
+          {t('seo.expired')}
         </Badge>
       );
     default:
       return (
         <Badge variant="secondary" className="font-medium gap-1">
           <XCircle className="h-3 w-3" />
-          Disconnected
+          {t('seo.disconnected')}
         </Badge>
       );
   }
@@ -247,6 +249,7 @@ function ChartTooltip({
   active?: boolean;
   payload?: Array<{ payload: DailyStat }>;
 }) {
+  const { t } = useT();
   if (!active || !payload || payload.length === 0) return null;
   const point = payload[0].payload;
   let dateLabel = point.date;
@@ -264,25 +267,25 @@ function ChartTooltip({
       <div className="font-medium mb-1.5">{dateLabel}</div>
       <div className="flex items-center justify-between gap-3">
         <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-sm bg-primary" /> Clicks
+          <span className="h-2 w-2 rounded-sm bg-primary" /> {t('seo.clicks')}
         </span>
         <span className="font-medium tabular-nums">{point.clicks.toLocaleString()}</span>
       </div>
       <div className="flex items-center justify-between gap-3 mt-0.5">
         <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-sm bg-primary/30" /> Impressions
+          <span className="h-2 w-2 rounded-sm bg-primary/30" /> {t('seo.impressions')}
         </span>
         <span className="font-medium tabular-nums">{point.impressions.toLocaleString()}</span>
       </div>
       {point.ctr != null && (
         <div className="flex items-center justify-between gap-3 mt-0.5 text-muted-foreground">
-          <span>CTR</span>
+          <span>{t('seo.ctr')}</span>
           <span className="tabular-nums">{(point.ctr * 100).toFixed(2)}%</span>
         </div>
       )}
       {point.position != null && (
         <div className="flex items-center justify-between gap-3 mt-0.5 text-muted-foreground">
-          <span>Avg Position</span>
+          <span>{t('seo.avgPosition')}</span>
           <span className="tabular-nums">{point.position.toFixed(1)}</span>
         </div>
       )}
@@ -291,8 +294,10 @@ function ChartTooltip({
 }
 
 function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceChartProps) {
-  // Shared theme-aware chart palette (see lib/chart-theme.ts).
-  const t = useChartTheme();
+  const { t } = useT();
+  // Shared theme-aware chart palette (see lib/chart-theme.ts). Named `chart`
+  // (like usage-page.tsx) so the i18n `t` stays available in this component.
+  const chart = useChartTheme();
 
   if (isLoading) {
     return (
@@ -308,10 +313,10 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <BarChart3 className="h-12 w-12 text-muted-foreground/30 mb-3" strokeWidth={1.5} />
         <p className="text-sm font-medium text-muted-foreground">
-          No Search Console data available for this period.
+          {t('seo.scNoData')}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Try a different range or sync with Search Console to see chart data.
+          {t('seo.scNoDataHint')}
         </p>
         {onSync && (
           <Button
@@ -326,7 +331,7 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
             ) : (
               <RefreshCw className="h-3.5 w-3.5 mr-2" />
             )}
-            Sync Now
+            {t('seo.syncNow')}
           </Button>
         )}
       </div>
@@ -348,18 +353,18 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
   // Theme-aware axis tick style — NEVER `hsl(var(--token))`: the design
   // tokens hold plain oklch values and re-wrapping them is invalid CSS
   // that silently falls back to black in recharts.
-  const axisTick = t.axisTick(10);
+  const axisTick = chart.axisTick(10);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm bg-primary" />
-          Clicks
+          {t('seo.clicks')}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm bg-primary/30" />
-          Impressions
+          {t('seo.impressions')}
         </span>
       </div>
 
@@ -375,18 +380,18 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
           <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="scImpGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={t.primary} stopOpacity={0.3} />
-                <stop offset="100%" stopColor={t.primary} stopOpacity={0.04} />
+                <stop offset="0%" stopColor={chart.primary} stopOpacity={0.3} />
+                <stop offset="100%" stopColor={chart.primary} stopOpacity={0.04} />
               </linearGradient>
               <linearGradient id="scClkGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={t.primary} stopOpacity={0.9} />
-                <stop offset="100%" stopColor={t.primary} stopOpacity={0.45} />
+                <stop offset="0%" stopColor={chart.primary} stopOpacity={0.9} />
+                <stop offset="100%" stopColor={chart.primary} stopOpacity={0.45} />
               </linearGradient>
             </defs>
             <CartesianGrid
               strokeDasharray="3 3"
               vertical={false}
-              stroke={t.grid}
+              stroke={chart.grid}
               strokeOpacity={0.6}
             />
             <XAxis
@@ -395,7 +400,7 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
               minTickGap={20}
               tick={axisTick}
               tickLine={false}
-              axisLine={{ stroke: t.border }}
+              axisLine={{ stroke: chart.border }}
             />
             <YAxis
               yAxisId="impressions"
@@ -416,14 +421,14 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
             />
             <RechartsTooltip
               content={<ChartTooltip />}
-              cursor={{ stroke: t.border, strokeDasharray: '3 3' }}
+              cursor={{ stroke: chart.border, strokeDasharray: '3 3' }}
             />
             <Area
               yAxisId="impressions"
               type="monotone"
               dataKey="impressions"
               name="Impressions"
-              stroke={t.primary}
+              stroke={chart.primary}
               strokeOpacity={0.55}
               strokeWidth={1.5}
               fill="url(#scImpGrad)"
@@ -435,7 +440,7 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
               type="monotone"
               dataKey="clicks"
               name="Clicks"
-              stroke={t.primary}
+              stroke={chart.primary}
               strokeWidth={2}
               fill="url(#scClkGrad)"
               fillOpacity={1}
@@ -451,6 +456,7 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
 // ==================== Queries Table ====================
 
 function QueriesTable({ queries, isLoading }: { queries: QueryItem[]; isLoading: boolean }) {
+  const { t } = useT();
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -465,9 +471,9 @@ function QueriesTable({ queries, isLoading }: { queries: QueryItem[]; isLoading:
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <Search className="h-10 w-10 text-muted-foreground/30 mb-3" strokeWidth={1.5} />
-        <p className="text-sm text-muted-foreground">No query data available</p>
+        <p className="text-sm text-muted-foreground">{t('seo.noQueryData')}</p>
         <p className="text-xs text-muted-foreground mt-1">
-          Sync with Search Console to see search queries
+          {t('seo.syncToSeeQueries')}
         </p>
       </div>
     );
@@ -478,11 +484,11 @@ function QueriesTable({ queries, isLoading }: { queries: QueryItem[]; isLoading:
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Query</TableHead>
-            <TableHead className="text-right">Clicks</TableHead>
-            <TableHead className="text-right hidden sm:table-cell">Impressions</TableHead>
-            <TableHead className="text-right hidden md:table-cell">CTR</TableHead>
-            <TableHead className="text-right hidden lg:table-cell">Position</TableHead>
+            <TableHead>{t('seo.query')}</TableHead>
+            <TableHead className="text-right">{t('seo.clicks')}</TableHead>
+            <TableHead className="text-right hidden sm:table-cell">{t('seo.impressions')}</TableHead>
+            <TableHead className="text-right hidden md:table-cell">{t('seo.ctr')}</TableHead>
+            <TableHead className="text-right hidden lg:table-cell">{t('seo.position')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -512,6 +518,7 @@ function QueriesTable({ queries, isLoading }: { queries: QueryItem[]; isLoading:
 // ==================== Pages Table ====================
 
 function PagesTable({ pages, isLoading }: { pages: PageItem[]; isLoading: boolean }) {
+  const { t } = useT();
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -526,9 +533,9 @@ function PagesTable({ pages, isLoading }: { pages: PageItem[]; isLoading: boolea
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <Link2 className="h-10 w-10 text-muted-foreground/30 mb-3" strokeWidth={1.5} />
-        <p className="text-sm text-muted-foreground">No page data available</p>
+        <p className="text-sm text-muted-foreground">{t('seo.noPageData')}</p>
         <p className="text-xs text-muted-foreground mt-1">
-          Sync with Search Console to see page data
+          {t('seo.syncToSeePages')}
         </p>
       </div>
     );
@@ -539,11 +546,11 @@ function PagesTable({ pages, isLoading }: { pages: PageItem[]; isLoading: boolea
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Page URL</TableHead>
-            <TableHead className="text-right">Clicks</TableHead>
-            <TableHead className="text-right hidden sm:table-cell">Impressions</TableHead>
-            <TableHead className="text-right hidden md:table-cell">CTR</TableHead>
-            <TableHead className="text-right hidden lg:table-cell">Position</TableHead>
+            <TableHead>{t('seo.pageUrl')}</TableHead>
+            <TableHead className="text-right">{t('seo.clicks')}</TableHead>
+            <TableHead className="text-right hidden sm:table-cell">{t('seo.impressions')}</TableHead>
+            <TableHead className="text-right hidden md:table-cell">{t('seo.ctr')}</TableHead>
+            <TableHead className="text-right hidden lg:table-cell">{t('seo.position')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -636,6 +643,7 @@ export function SeoSearchConsolePage() {
 }
 
 function SeoSearchConsolePageInner() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [connectUrl, setConnectUrl] = useState('');
   // Performance Chart date range. `rangePreset` is one of the preset day
@@ -728,10 +736,10 @@ function SeoSearchConsolePageInner() {
     onSuccess: () => {
       setConnectUrl('');
       queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsole.all });
-      toast.success('Search Console connected successfully');
+      toast.success(t('seo.scConnected'));
     },
     onError: () => {
-      toast.error('Failed to connect Search Console');
+      toast.error(t('seo.scConnectFailed'));
     },
   });
 
@@ -740,10 +748,10 @@ function SeoSearchConsolePageInner() {
     mutationFn: () => deleteApi('/api/seo/search-console'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsole.all });
-      toast.success('Search Console disconnected');
+      toast.success(t('seo.scDisconnected'));
     },
     onError: () => {
-      toast.error('Failed to disconnect Search Console');
+      toast.error(t('seo.scDisconnectFailed'));
     },
   });
 
@@ -755,18 +763,18 @@ function SeoSearchConsolePageInner() {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsoleStats.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsoleQueries.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsolePages.all });
-      toast.success('Search Console data synced successfully');
+      toast.success(t('seo.scSynced'));
     },
     onError: () => {
-      toast.error('Failed to sync Search Console data');
+      toast.error(t('seo.scSyncFailed'));
     },
   });
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Search Console"
-        description="Monitor your site's performance in Google Search"
+        title={t('seo.searchConsole')}
+        description={t('seo.scDescription')}
         breadcrumbs={false}
       />
 
@@ -776,7 +784,7 @@ function SeoSearchConsolePageInner() {
           <CardContent className="p-4 flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
             <p className="text-sm text-red-700 dark:text-red-400">
-              Failed to load Search Console data. Please try again later.
+              {t('seo.scLoadFailed')}
             </p>
           </CardContent>
         </Card>
@@ -805,7 +813,7 @@ function SeoSearchConsolePageInner() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-sm">Connection Status</h3>
+                    <h3 className="font-semibold text-sm">{t('seo.connectionStatus')}</h3>
                     <ConnectionBadge status={connection?.status ?? 'DISCONNECTED'} />
                   </div>
                   {connection?.siteUrl && isConnected && (
@@ -814,7 +822,7 @@ function SeoSearchConsolePageInner() {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-xs text-muted-foreground mt-0.5 font-mono hover:text-foreground hover:underline underline-offset-2 transition-colors max-w-full"
-                      title={`Open ${connection.siteUrl} in a new tab`}
+                      title={`${t('seo.openInNewTabPrefix')} ${connection.siteUrl} ${t('seo.openInNewTabSuffix')}`}
                     >
                       <span className="truncate max-w-[280px]">{connection.siteUrl}</span>
                       <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
@@ -824,7 +832,7 @@ function SeoSearchConsolePageInner() {
                     <div className="flex items-center gap-1.5 mt-1">
                       <Clock className="h-3 w-3 text-muted-foreground" />
                       <span className="text-xs text-muted-foreground">
-                        Last synced: {formatDate(connection.lastSyncAt)}
+                        {t('seo.lastSynced')} {formatDate(connection.lastSyncAt, t)}
                       </span>
                     </div>
                   )}
@@ -843,7 +851,7 @@ function SeoSearchConsolePageInner() {
                       ) : (
                         <RefreshCw className="h-4 w-4 mr-2" />
                       )}
-                      Sync Now
+                      {t('seo.syncNow')}
                     </Button>
                     <Button
                       variant="outline"
@@ -855,7 +863,7 @@ function SeoSearchConsolePageInner() {
                       ) : (
                         <Unplug className="h-4 w-4 mr-2" />
                       )}
-                      Disconnect
+                      {t('seo.disconnect')}
                     </Button>
                   </>
                 ) : (
@@ -880,7 +888,7 @@ function SeoSearchConsolePageInner() {
                       ) : (
                         <Plug className="h-4 w-4 mr-2" />
                       )}
-                      Connect
+                      {t('seo.connect')}
                     </Button>
                   </div>
                 )}
@@ -895,7 +903,7 @@ function SeoSearchConsolePageInner() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <KpiCard
                   icon={MousePointerClick}
-                  label="Total Clicks"
+                  label={t('seo.totalClicks')}
                   value={formatNumber(rangeSummary.totalClicks)}
                   iconColor="text-green-600 dark:text-green-400"
                   iconBg="bg-green-100 dark:bg-green-900/30"
@@ -903,7 +911,7 @@ function SeoSearchConsolePageInner() {
                 />
                 <KpiCard
                   icon={Eye}
-                  label="Total Impressions"
+                  label={t('seo.totalImpressions')}
                   value={formatNumber(rangeSummary.totalImpressions)}
                   iconColor="text-emerald-600 dark:text-emerald-400"
                   iconBg="bg-emerald-100 dark:bg-emerald-900/30"
@@ -911,7 +919,7 @@ function SeoSearchConsolePageInner() {
                 />
                 <KpiCard
                   icon={TrendingUp}
-                  label="Average CTR"
+                  label={t('seo.averageCtr')}
                   value={formatPercent(rangeSummary.averageCtr)}
                   iconColor="text-amber-600 dark:text-amber-400"
                   iconBg="bg-amber-100 dark:bg-amber-900/30"
@@ -919,7 +927,7 @@ function SeoSearchConsolePageInner() {
                 />
                 <KpiCard
                   icon={Target}
-                  label="Average Position"
+                  label={t('seo.averagePosition')}
                   value={formatPosition(rangeSummary.averagePosition)}
                   iconColor="text-sky-600 dark:text-sky-400"
                   iconBg="bg-sky-100 dark:bg-sky-900/30"
@@ -936,9 +944,9 @@ function SeoSearchConsolePageInner() {
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 mb-4">
                   <Search className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
                 </div>
-                <h3 className="text-lg font-semibold">Connect Google Search Console</h3>
+                <h3 className="text-lg font-semibold">{t('seo.connectGoogleSc')}</h3>
                 <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                  Connect Google Search Console to view search performance.
+                  {t('seo.connectPrompt')}
                 </p>
                 <Button
                   className="mt-5"
@@ -950,10 +958,10 @@ function SeoSearchConsolePageInner() {
                   ) : (
                     <Plug className="h-4 w-4 mr-2" />
                   )}
-                  Connect Search Console
+                  {t('seo.connectSearchConsole')}
                 </Button>
                 <p className="text-xs text-muted-foreground mt-3">
-                  Enter your site URL above and click Connect to get started.
+                  {t('seo.enterSiteUrlHint')}
                 </p>
               </CardContent>
             </Card>
@@ -964,20 +972,20 @@ function SeoSearchConsolePageInner() {
             <Card>
               <CardHeader className="pb-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <CardTitle className="text-base font-semibold">Performance Chart</CardTitle>
+                  <CardTitle className="text-base font-semibold">{t('seo.performanceChart')}</CardTitle>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-muted-foreground hidden sm:inline">Range</span>
+                    <span className="text-xs text-muted-foreground hidden sm:inline">{t('seo.range')}</span>
                     <Select value={rangePreset} onValueChange={handleRangeChange}>
                       <SelectTrigger className="h-8 w-[140px] text-xs">
-                        <SelectValue placeholder="Select range" />
+                        <SelectValue placeholder={t('seo.selectRange')} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="7">Last 7 days</SelectItem>
-                        <SelectItem value="14">Last 14 days</SelectItem>
-                        <SelectItem value="28">Last 28 days</SelectItem>
-                        <SelectItem value="90">Last 3 months</SelectItem>
-                        <SelectItem value="180">Last 6 months</SelectItem>
-                        <SelectItem value="custom">Custom range</SelectItem>
+                        <SelectItem value="7">{t('seo.last7Days')}</SelectItem>
+                        <SelectItem value="14">{t('seo.last14Days')}</SelectItem>
+                        <SelectItem value="28">{t('seo.last28Days')}</SelectItem>
+                        <SelectItem value="90">{t('seo.last3Months')}</SelectItem>
+                        <SelectItem value="180">{t('seo.last6Months')}</SelectItem>
+                        <SelectItem value="custom">{t('seo.customRange')}</SelectItem>
                       </SelectContent>
                     </Select>
                     {rangePreset === 'custom' && (
@@ -987,7 +995,7 @@ function SeoSearchConsolePageInner() {
                           value={customFrom}
                           onChange={(e) => setCustomFrom(e.target.value)}
                           className="h-8 w-[150px] text-xs"
-                          aria-label="Custom range start date"
+                          aria-label={t('seo.customRangeStart')}
                         />
                         <span className="text-xs text-muted-foreground">→</span>
                         <Input
@@ -995,7 +1003,7 @@ function SeoSearchConsolePageInner() {
                           value={customTo}
                           onChange={(e) => setCustomTo(e.target.value)}
                           className="h-8 w-[150px] text-xs"
-                          aria-label="Custom range end date"
+                          aria-label={t('seo.customRangeEnd')}
                         />
                       </div>
                     )}
@@ -1018,9 +1026,9 @@ function SeoSearchConsolePageInner() {
             <Card>
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-semibold">Top Search Queries</CardTitle>
+                  <CardTitle className="text-base font-semibold">{t('seo.topSearchQueries')}</CardTitle>
                   <Badge variant="outline" className="text-[10px] font-normal">
-                    Top {queriesData?.data?.length ?? 10}
+                    {t('seo.top')} {queriesData?.data?.length ?? 10}
                   </Badge>
                 </div>
               </CardHeader>
@@ -1038,9 +1046,9 @@ function SeoSearchConsolePageInner() {
             <Card>
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-semibold">Top Pages</CardTitle>
+                  <CardTitle className="text-base font-semibold">{t('seo.topPages')}</CardTitle>
                   <Badge variant="outline" className="text-[10px] font-normal">
-                    Top {pagesData?.data?.length ?? 10}
+                    {t('seo.top')} {pagesData?.data?.length ?? 10}
                   </Badge>
                 </div>
               </CardHeader>
@@ -1060,9 +1068,9 @@ function SeoSearchConsolePageInner() {
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mb-4">
               <Globe className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
             </div>
-            <h3 className="text-lg font-semibold">No Search Console data</h3>
+            <h3 className="text-lg font-semibold">{t('seo.noScData')}</h3>
             <p className="text-sm text-muted-foreground mt-1 max-w-md">
-              We couldn&apos;t load your Search Console data. Please try again.
+              {t('seo.scRetryHint')}
             </p>
             <Button
               variant="outline"
@@ -1070,7 +1078,7 @@ function SeoSearchConsolePageInner() {
               onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsole.all })}
             >
               <RefreshCw className="h-4 w-4 mr-2" />
-              Retry
+              {t('common.retry')}
             </Button>
           </CardContent>
         </Card>

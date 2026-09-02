@@ -58,15 +58,39 @@ import { coreHe } from './core/he';
 import { coreId } from './core/id';
 import { coreMs } from './core/ms';
 
-// Fragments (deep page-level strings — en + fr only)
+// Fragments (deep page-level strings)
+//   • en + fr  — curated/translated fragment families (below).
+//   • 38 other locales — a MERGED per-locale client dictionary is
+//     generated at fragments/<locale>/client.ts (machine-assisted
+//     translation of the full client key set) and merged with the
+//     core dictionary in the assembly below. The t() fallback chain
+//     (dict[locale][key] ?? dict.en[key] ?? key) stays the final
+//     safety net, so a locale with a missing/failed translation
+//     simply renders the English string — never a raw key.
 import { clientContentEn } from './fragments/en/client-content';
 import { clientPeopleEn } from './fragments/en/client-people';
 import { clientAccountEn } from './fragments/en/client-account';
+import { clientAiEn } from './fragments/en/client-ai';
+import { clientBackupsEn } from './fragments/en/client-backups';
+import { clientEmailTemplatesEn } from './fragments/en/client-email-templates';
+import { clientAnalyticsEn } from './fragments/en/client-analytics';
+import { clientAuditEn } from './fragments/en/client-audit';
+import { clientJobsEn } from './fragments/en/client-jobs';
+import { clientTaxonomyEn } from './fragments/en/client-taxonomy';
+import { clientSeoEn } from './fragments/en/client-seo';
 import { platformAEn } from './fragments/en/platform-a';
 import { platformBEn } from './fragments/en/platform-b';
 import { clientContentFr } from './fragments/fr/client-content';
 import { clientPeopleFr } from './fragments/fr/client-people';
 import { clientAccountFr } from './fragments/fr/client-account';
+import { clientAiFr } from './fragments/fr/client-ai';
+import { clientBackupsFr } from './fragments/fr/client-backups';
+import { clientEmailTemplatesFr } from './fragments/fr/client-email-templates';
+import { clientAnalyticsFr } from './fragments/fr/client-analytics';
+import { clientAuditFr } from './fragments/fr/client-audit';
+import { clientJobsFr } from './fragments/fr/client-jobs';
+import { clientTaxonomyFr } from './fragments/fr/client-taxonomy';
+import { clientSeoFr } from './fragments/fr/client-seo';
 import { platformAFr } from './fragments/fr/platform-a';
 import { platformBFr } from './fragments/fr/platform-b';
 
@@ -77,6 +101,14 @@ const en: Record<string, string> = {
   ...clientContentEn,
   ...clientPeopleEn,
   ...clientAccountEn,
+  ...clientAiEn,
+  ...clientBackupsEn,
+  ...clientEmailTemplatesEn,
+  ...clientAnalyticsEn,
+  ...clientAuditEn,
+  ...clientJobsEn,
+  ...clientTaxonomyEn,
+  ...clientSeoEn,
   ...platformAEn,
   ...platformBEn,
 };
@@ -86,6 +118,14 @@ const fr: Record<string, string> = {
   ...clientContentFr,
   ...clientPeopleFr,
   ...clientAccountFr,
+  ...clientAiFr,
+  ...clientBackupsFr,
+  ...clientEmailTemplatesFr,
+  ...clientAnalyticsFr,
+  ...clientAuditFr,
+  ...clientJobsFr,
+  ...clientTaxonomyFr,
+  ...clientSeoFr,
   ...platformAFr,
   ...platformBFr,
 };

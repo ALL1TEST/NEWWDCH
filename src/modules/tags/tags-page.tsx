@@ -59,6 +59,7 @@ import { Separator } from '@/components/ui/separator';
 import { ConfirmDialog } from '@/components/patterns';
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
+import { useT } from '@/lib/i18n';
 import { cn, slugify } from '@/lib/utils';
 import type { PaginatedResponse } from '@/shared/types';
 import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
@@ -94,6 +95,10 @@ type SortOption =
 
 // -------------------- AI Suggested Tags (Mock) --------------------
 
+// NOTE (i18n): the suggestion names below are (mock) DATA — the
+// same values are created as real tags via handleAddAiTag — so
+// they intentionally stay untranslated; only the surrounding UI
+// copy (card title, sr-only label, add aria-label) is translated.
 const AI_SUGGESTED_TAGS = [
   { name: 'Machine Learning', confidence: 95 },
   { name: 'Cloud Computing', confidence: 89 },
@@ -111,6 +116,8 @@ interface TagFormProps {
 }
 
 function TagForm({ data, onChange, autoFocus }: TagFormProps) {
+  const { t } = useT();
+
   const handleNameChange = useCallback(
     (name: string) => {
       onChange({ ...data, name, slug: slugify(name) });
@@ -121,26 +128,26 @@ function TagForm({ data, onChange, autoFocus }: TagFormProps) {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="tag-name">Name</Label>
+        <Label htmlFor="tag-name">{t('common.name')}</Label>
         <Input
           id="tag-name"
           value={data.name}
           onChange={(e) => handleNameChange(e.target.value)}
-          placeholder="Tag name"
+          placeholder={t('tags.namePlaceholder')}
           autoFocus={autoFocus}
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="tag-slug">Slug</Label>
+        <Label htmlFor="tag-slug">{t('tags.slug')}</Label>
         <Input
           id="tag-slug"
           value={data.slug}
           onChange={(e) => onChange({ ...data, slug: e.target.value })}
-          placeholder="tag-slug"
+          placeholder={t('tags.slugPlaceholder')}
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="tag-color">Color</Label>
+        <Label htmlFor="tag-color">{t('tags.color')}</Label>
         <div className="flex items-center gap-3">
           {data.color && (
             <div
@@ -165,23 +172,23 @@ function TagForm({ data, onChange, autoFocus }: TagFormProps) {
                   className="h-6 w-6 rounded-full border border-border hover:scale-110 transition-transform"
                   style={{ backgroundColor: preset }}
                   onClick={() => onChange({ ...data, color: preset })}
-                  aria-label={`Set color to ${preset}`}
+                  aria-label={`${t('tags.setColorAriaPrefix')}${preset}`}
                 />
               ),
             )}
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Enter a hex color code or click a preset
+          {t('tags.colorHint')}
         </p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="tag-description">Description</Label>
+        <Label htmlFor="tag-description">{t('tags.description')}</Label>
         <Textarea
           id="tag-description"
           value={data.description}
           onChange={(e) => onChange({ ...data, description: e.target.value })}
-          placeholder="Optional description"
+          placeholder={t('tags.descriptionPlaceholder')}
           rows={3}
         />
       </div>
@@ -198,16 +205,20 @@ const emptyForm: TagFormData = {
   description: '',
 };
 
-const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: 'name_asc', label: 'Name A-Z' },
-  { value: 'name_desc', label: 'Name Z-A' },
-  { value: 'contentCount_desc', label: 'Most Used' },
-  { value: 'contentCount_asc', label: 'Least Used' },
-  { value: 'createdAt_desc', label: 'Newest' },
-  { value: 'createdAt_asc', label: 'Oldest' },
+// i18n: labelKey resolves through t() at render time (SORT_OPTIONS
+// map in the component below) so the option labels follow the
+// selected language while the sort values stay stable.
+const SORT_OPTIONS: { value: SortOption; labelKey: string }[] = [
+  { value: 'name_asc', labelKey: 'tags.sortNameAsc' },
+  { value: 'name_desc', labelKey: 'tags.sortNameDesc' },
+  { value: 'contentCount_desc', labelKey: 'tags.sortMostUsed' },
+  { value: 'contentCount_asc', labelKey: 'tags.sortLeastUsed' },
+  { value: 'createdAt_desc', labelKey: 'tags.sortNewest' },
+  { value: 'createdAt_asc', labelKey: 'tags.sortOldest' },
 ];
 
 export function TagsPage() {
+  const { t } = useT();
   const queryClient = useQueryClient();
 
   // State
@@ -405,14 +416,14 @@ export function TagsPage() {
       {/* Page Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground">Tags</h1>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">{t('title.tags')}</h1>
           <p className="text-muted-foreground text-sm">
-            Manage tags for content organization and discovery
+            {t('tags.pageDescription')}
           </p>
         </div>
         <Button onClick={handleOpenCreate} size="sm">
           <Plus className="h-4 w-4 mr-2" />
-          Create Tag
+          {t('tags.createTag')}
         </Button>
       </div>
 
@@ -423,7 +434,7 @@ export function TagsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <TrendingUp className="h-4 w-4 text-emerald-500" />
-              Popular Tags
+              {t('tags.popularTags')}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -434,7 +445,7 @@ export function TagsPage() {
                 ))}
               </div>
             ) : popularTags.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No tags yet</p>
+              <p className="text-sm text-muted-foreground">{t('tags.noTagsYet')}</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {popularTags.map((tag) => {
@@ -491,7 +502,7 @@ export function TagsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Sparkles className="h-4 w-4 text-amber-500" />
-              AI Suggested Tags
+              {t('tags.aiSuggestedTags')}
             </CardTitle>
             <CardAction>
               <Button
@@ -507,7 +518,7 @@ export function TagsPage() {
                     aiRefreshing && 'animate-spin',
                   )}
                 />
-                <span className="sr-only">Refresh suggestions</span>
+                <span className="sr-only">{t('tags.refreshSuggestions')}</span>
               </Button>
             </CardAction>
           </CardHeader>
@@ -526,7 +537,7 @@ export function TagsPage() {
                     type="button"
                     className="ml-0.5 inline-flex items-center justify-center h-4 w-4 rounded-full bg-amber-200/60 hover:bg-amber-300 dark:bg-amber-800/60 dark:hover:bg-amber-700 transition-colors"
                     onClick={() => handleAddAiTag(suggestion.name)}
-                    aria-label={`Add tag ${suggestion.name}`}
+                    aria-label={`${t('tags.addTagAriaPrefix')}${suggestion.name}`}
                     disabled={createMutation.isPending}
                   >
                     <Plus className="h-3 w-3" />
@@ -543,7 +554,7 @@ export function TagsPage() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search tags..."
+            placeholder={t('tags.searchPlaceholder')}
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             className="pl-9 h-9"
@@ -557,7 +568,7 @@ export function TagsPage() {
             <SelectContent>
               {SORT_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
+                  {t(opt.labelKey)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -568,7 +579,7 @@ export function TagsPage() {
               size="icon"
               className="h-9 w-9 rounded-r-none"
               onClick={() => setViewMode('grid')}
-              aria-label="Grid view"
+              aria-label={t('tags.gridView')}
             >
               <LayoutGrid className="h-4 w-4" />
             </Button>
@@ -577,7 +588,7 @@ export function TagsPage() {
               size="icon"
               className="h-9 w-9 rounded-l-none"
               onClick={() => setViewMode('list')}
-              aria-label="List view"
+              aria-label={t('tags.listView')}
             >
               <List className="h-4 w-4" />
             </Button>
@@ -608,7 +619,7 @@ export function TagsPage() {
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <Tag className="h-10 w-10 text-muted-foreground/50 mb-3" />
               <p className="text-sm font-medium text-muted-foreground">
-                {search ? 'No tags match your search' : 'No tags found'}
+                {search ? t('tags.emptySearch') : t('tags.emptyNotFound')}
               </p>
               {!search && (
                 <Button
@@ -618,7 +629,7 @@ export function TagsPage() {
                   onClick={handleOpenCreate}
                 >
                   <Plus className="h-4 w-4 mr-1.5" />
-                  Create your first tag
+                  {t('tags.createFirstTag')}
                 </Button>
               )}
             </div>
@@ -647,7 +658,7 @@ export function TagsPage() {
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={() => toggleSelect(tag.id)}
-                        aria-label={`Select ${tag.name}`}
+                        aria-label={`${t('tags.selectAriaPrefix')}${tag.name}`}
                       />
                     </div>
                     {/* Actions */}
@@ -659,7 +670,7 @@ export function TagsPage() {
                         onClick={() => handleOpenEdit(tag)}
                       >
                         <Pencil className="h-3.5 w-3.5" />
-                        <span className="sr-only">Edit</span>
+                        <span className="sr-only">{t('common.edit')}</span>
                       </Button>
                       <Button
                         variant="ghost"
@@ -668,7 +679,7 @@ export function TagsPage() {
                         onClick={() => setDeleteTarget(tag)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                        <span className="sr-only">Delete</span>
+                        <span className="sr-only">{t('common.delete')}</span>
                       </Button>
                     </div>
                     {/* Content */}
@@ -719,13 +730,13 @@ export function TagsPage() {
                       selectedTagIds.size === tags.length
                     }
                     onCheckedChange={toggleSelectAll}
-                    aria-label="Select all"
+                    aria-label={t('tags.selectAll')}
                   />
                 </div>
-                <span>Name</span>
-                <span>Slug</span>
-                <span className="text-right">Articles</span>
-                <span className="text-right">Actions</span>
+                <span>{t('common.name')}</span>
+                <span>{t('tags.slug')}</span>
+                <span className="text-right">{t('tags.articles')}</span>
+                <span className="text-right">{t('common.actions')}</span>
               </div>
               {/* List rows */}
               {tags.map((tag) => {
@@ -742,7 +753,7 @@ export function TagsPage() {
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={() => toggleSelect(tag.id)}
-                        aria-label={`Select ${tag.name}`}
+                        aria-label={`${t('tags.selectAriaPrefix')}${tag.name}`}
                       />
                     </div>
                     <div className="flex items-center gap-2 min-w-0">
@@ -773,7 +784,7 @@ export function TagsPage() {
                         onClick={() => handleOpenEdit(tag)}
                       >
                         <Pencil className="h-3.5 w-3.5" />
-                        <span className="sr-only">Edit</span>
+                        <span className="sr-only">{t('common.edit')}</span>
                       </Button>
                       <Button
                         variant="ghost"
@@ -782,7 +793,7 @@ export function TagsPage() {
                         onClick={() => setDeleteTarget(tag)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                        <span className="sr-only">Delete</span>
+                        <span className="sr-only">{t('common.delete')}</span>
                       </Button>
                     </div>
                   </div>
@@ -795,13 +806,13 @@ export function TagsPage() {
           {totalItems > 0 && (
             <div className="flex items-center justify-between mt-4 px-1">
               <p className="text-sm text-muted-foreground">
-                Showing{' '}
+                {t('common.showing')}{' '}
                 <span className="font-medium text-foreground">{startItem}</span>{' '}
-                to{' '}
+                {t('tags.paginationTo')}{' '}
                 <span className="font-medium text-foreground">{endItem}</span>{' '}
-                of{' '}
+                {t('common.of')}{' '}
                 <span className="font-medium text-foreground">{totalItems}</span>{' '}
-                tags
+                {t('tags.paginationUnit')}
               </p>
               <div className="flex items-center gap-1">
                 <Button
@@ -812,7 +823,7 @@ export function TagsPage() {
                   onClick={() => setCurrentPage((p) => p - 1)}
                 >
                   <ChevronLeft className="h-4 w-4" />
-                  <span className="sr-only">Previous page</span>
+                  <span className="sr-only">{t('tags.previousPage')}</span>
                 </Button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
                   .filter(
@@ -856,7 +867,7 @@ export function TagsPage() {
                   onClick={() => setCurrentPage((p) => p + 1)}
                 >
                   <ChevronRight className="h-4 w-4" />
-                  <span className="sr-only">Next page</span>
+                  <span className="sr-only">{t('tags.nextPage')}</span>
                 </Button>
               </div>
             </div>
@@ -869,7 +880,7 @@ export function TagsPage() {
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                Tag Analytics
+                {t('tags.tagAnalytics')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -882,7 +893,7 @@ export function TagsPage() {
                       analytics.total
                     )}
                   </p>
-                  <p className="text-xs text-muted-foreground">Total tags</p>
+                  <p className="text-xs text-muted-foreground">{t('tags.totalTags')}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-2xl font-bold tabular-nums">
@@ -892,7 +903,7 @@ export function TagsPage() {
                       analytics.avgArticles
                     )}
                   </p>
-                  <p className="text-xs text-muted-foreground">Avg articles/tag</p>
+                  <p className="text-xs text-muted-foreground">{t('tags.avgArticlesPerTag')}</p>
                 </div>
               </div>
 
@@ -901,7 +912,7 @@ export function TagsPage() {
               {/* Most Used */}
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1.5">
-                  Most Used
+                  {t('tags.mostUsed')}
                 </p>
                 {isLoadingAll ? (
                   <Skeleton className="h-5 w-full" />
@@ -930,7 +941,7 @@ export function TagsPage() {
               {/* No Content */}
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1.5">
-                  Tags with no content
+                  {t('tags.tagsWithNoContent')}
                 </p>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">
@@ -949,7 +960,7 @@ export function TagsPage() {
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
                   <Clock className="h-3 w-3" />
-                  Recently Used
+                  {t('tags.recentlyUsed')}
                 </p>
                 <div className="space-y-2">
                   {isLoadingAll
@@ -986,7 +997,7 @@ export function TagsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base text-muted-foreground">
-                Tag Relationships
+                {t('tags.tagRelationships')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -994,9 +1005,9 @@ export function TagsPage() {
                 <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center mb-2">
                   <Merge className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <p className="text-sm text-muted-foreground">Coming soon</p>
+                <p className="text-sm text-muted-foreground">{t('tags.comingSoon')}</p>
                 <p className="text-xs text-muted-foreground/70 mt-0.5">
-                  Visualize and manage related tags
+                  {t('tags.tagRelationshipsDescription')}
                 </p>
               </div>
             </CardContent>
@@ -1008,7 +1019,7 @@ export function TagsPage() {
       {selectedTagIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-xl border bg-background/95 backdrop-blur-sm shadow-lg px-4 py-3">
           <span className="text-sm font-medium">
-            <span className="tabular-nums">{selectedTagIds.size}</span> selected
+            <span className="tabular-nums">{selectedTagIds.size}</span> {t('tags.selectedCount')}
           </span>
           <Separator orientation="vertical" className="h-6" />
           <Button
@@ -1016,7 +1027,7 @@ export function TagsPage() {
             size="sm"
             onClick={toggleSelectAll}
           >
-            Clear
+            {t('tags.clear')}
           </Button>
           <Button
             variant="outline"
@@ -1029,7 +1040,7 @@ export function TagsPage() {
               <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
             )}
             <Trash2 className="h-4 w-4 mr-1.5" />
-            Delete Selected
+            {t('tags.deleteSelected')}
           </Button>
         </div>
       )}
@@ -1038,9 +1049,9 @@ export function TagsPage() {
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create Tag</DialogTitle>
+            <DialogTitle>{t('tags.createTag')}</DialogTitle>
             <DialogDescription>
-              Add a new tag to your content tagging system
+              {t('tags.createDescription')}
             </DialogDescription>
           </DialogHeader>
           <TagForm
@@ -1054,7 +1065,7 @@ export function TagsPage() {
               onClick={() => setIsCreateOpen(false)}
               disabled={createMutation.isPending}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={() => createMutation.mutate(createForm)}
@@ -1063,7 +1074,7 @@ export function TagsPage() {
               {createMutation.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
-              Create Tag
+              {t('tags.createTag')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1076,9 +1087,9 @@ export function TagsPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Tag</DialogTitle>
+            <DialogTitle>{t('tags.editTag')}</DialogTitle>
             <DialogDescription>
-              Update tag details for &ldquo;{editTarget?.name}&rdquo;
+              {`${t('tags.editDescriptionPrefix')}${editTarget?.name ?? ''}${t('tags.editDescriptionSuffix')}`}
             </DialogDescription>
           </DialogHeader>
           <TagForm
@@ -1092,7 +1103,7 @@ export function TagsPage() {
               onClick={() => setEditTarget(null)}
               disabled={updateMutation.isPending}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={() => {
@@ -1107,7 +1118,7 @@ export function TagsPage() {
               {updateMutation.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
-              Save Changes
+              {t('common.saveChanges')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1117,13 +1128,13 @@ export function TagsPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Tag"
+        title={t('tags.deleteTag')}
         description={
           deleteTarget
-            ? `Are you sure you want to delete the tag "${deleteTarget.name}"? This will remove the tag from all associated content items.`
+            ? `${t('tags.deleteConfirmPrefix')}${deleteTarget.name}${t('tags.deleteConfirmSuffix')}`
             : undefined
         }
-        confirmLabel="Delete"
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => {
           if (deleteTarget) deleteMutation.mutate(deleteTarget.id);

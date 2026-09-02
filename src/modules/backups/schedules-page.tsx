@@ -54,6 +54,7 @@ import type { ApiResponse, BackupScope, BackupStorageProvider, BackupScheduleFre
 import { toast } from 'sonner';
 import type { ColumnDef } from '@tanstack/react-table';
 import { PlatformPageHeader } from '@/modules/platform/shared';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -91,13 +92,13 @@ interface ScheduleForm {
 
 // -------------------- Constants --------------------
 
-const FREQUENCIES: { value: BackupScheduleFrequency; label: string }[] = [
-  { value: 'HOURLY', label: 'Hourly' },
-  { value: 'EVERY_6_HOURS', label: 'Every 6 Hours' },
-  { value: 'DAILY', label: 'Daily' },
-  { value: 'WEEKLY', label: 'Weekly' },
-  { value: 'MONTHLY', label: 'Monthly' },
-  { value: 'CUSTOM_CRON', label: 'Custom Cron' },
+const FREQUENCIES: { value: BackupScheduleFrequency; labelKey: string }[] = [
+  { value: 'HOURLY', labelKey: 'backups.freqHourly' },
+  { value: 'EVERY_6_HOURS', labelKey: 'backups.freqEvery6Hours' },
+  { value: 'DAILY', labelKey: 'backups.freqDaily' },
+  { value: 'WEEKLY', labelKey: 'backups.freqWeekly' },
+  { value: 'MONTHLY', labelKey: 'backups.freqMonthly' },
+  { value: 'CUSTOM_CRON', labelKey: 'backups.freqCustomCron' },
 ];
 
 const initialForm: ScheduleForm = {
@@ -122,13 +123,14 @@ const initialForm: ScheduleForm = {
  * see/search/clear within the same structure. Mirrors the Backups table's
  * `NoSearchResultsEmpty` component for consistency. */
 function NoSchedulesSearchResultsEmpty({ onClear }: { onClear: () => void }) {
+  const { t } = useT();
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
       <CalendarClock className="h-10 w-10 text-muted-foreground/40 mb-3" strokeWidth={1.5} />
-      <p className="text-sm font-medium text-foreground">No schedules found</p>
-      <p className="text-xs text-muted-foreground mt-1">No schedules match your search.</p>
+      <p className="text-sm font-medium text-foreground">{t('backups.noSchedulesFound')}</p>
+      <p className="text-xs text-muted-foreground mt-1">{t('backups.noSchedulesMatch')}</p>
       <Button variant="outline" size="sm" className="mt-4" onClick={onClear}>
-        Clear search
+        {t('backups.clearSearch')}
       </Button>
     </div>
   );
@@ -139,6 +141,7 @@ function NoSchedulesSearchResultsEmpty({ onClear }: { onClear: () => void }) {
 export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platform' } = {}) {
   const queryClient = useQueryClient();
   const isPlatform = scope === 'platform';
+  const { t } = useT();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ScheduleForm>(initialForm);
@@ -206,10 +209,10 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
     ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupSchedules.all });
-      toast.success('Schedule created');
+      toast.success(t('backups.scheduleCreated'));
       closeDialog();
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to create schedule'),
+    onError: (err: Error) => toast.error(err.message || t('backups.scheduleCreateFailed')),
   });
 
   const updateMutation = useMutation({
@@ -223,10 +226,10 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupSchedules.all });
-      toast.success('Schedule updated');
+      toast.success(t('backups.scheduleUpdated'));
       closeDialog();
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to update schedule'),
+    onError: (err: Error) => toast.error(err.message || t('backups.scheduleUpdateFailed')),
   });
 
   const deleteMutation = useMutation({
@@ -236,11 +239,11 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.backupSchedules.all });
       setDeleteTarget(null);
-      toast.success('Schedule deleted');
+      toast.success(t('backups.scheduleDeleted'));
     },
     onError: (err: Error) => {
       setDeleteTarget(null);
-      toast.error(err.message || 'Failed to delete schedule');
+      toast.error(err.message || t('backups.scheduleDeleteFailed'));
     },
   });
 
@@ -312,7 +315,7 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
   const columns: ColumnDef<ScheduleRow>[] = [
       {
         id: 'name',
-        header: 'Name',
+        header: t('common.name'),
         accessorKey: 'name',
         size: 220,
         // No `truncate`/`overflow-hidden` — full schedule name always visible.
@@ -326,7 +329,7 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
       },
       {
         id: 'frequency',
-        header: 'Frequency',
+        header: t('backups.frequency'),
         accessorKey: 'frequency',
         enableSorting: false,
         size: 110,
@@ -345,7 +348,7 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
       },
       {
         id: 'scope',
-        header: 'Scope',
+        header: t('backups.scope'),
         accessorKey: 'scope',
         enableSorting: false,
         size: 130,
@@ -357,7 +360,7 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
       },
       {
         id: 'storage',
-        header: 'Storage',
+        header: t('backups.storage'),
         accessorKey: 'storageProvider',
         enableSorting: false,
         size: 130,
@@ -371,7 +374,7 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
       },
       {
         id: 'encryptionEnabled',
-        header: 'Encrypt',
+        header: t('backups.encrypt'),
         accessorKey: 'encryptionEnabled',
         enableSorting: false,
         size: 90,
@@ -380,13 +383,13 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
             'text-xs font-medium',
             getValue() ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'
           )}>
-            {getValue() ? 'Yes' : 'No'}
+            {getValue() ? t('common.yes') : t('common.no')}
           </span>
         ),
       },
       {
         id: 'verificationEnabled',
-        header: 'Verify',
+        header: t('backups.verify'),
         accessorKey: 'verificationEnabled',
         enableSorting: false,
         size: 90,
@@ -395,23 +398,23 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
             'text-xs font-medium',
             getValue() ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'
           )}>
-            {getValue() ? 'Yes' : 'No'}
+            {getValue() ? t('common.yes') : t('common.no')}
           </span>
         ),
       },
       {
         id: 'retentionCount',
-        header: 'Retention',
+        header: t('backups.retention'),
         accessorKey: 'retentionCount',
         enableSorting: false,
         size: 110,
         cell: ({ getValue }) => (
-          <span className="tabular-nums text-sm">{getValue() as number} days</span>
+          <span className="tabular-nums text-sm">{getValue() as number} {t('backups.days')}</span>
         ),
       },
       {
         id: 'isActive',
-        header: 'Active',
+        header: t('common.active'),
         accessorKey: 'isActive',
         enableSorting: false,
         size: 80,
@@ -426,7 +429,7 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
       },
       {
         id: 'nextRunAt',
-        header: 'Next Run',
+        header: t('backups.nextRun'),
         accessorKey: 'nextRunAt',
         size: 150,
         // Full relative timestamp visible (e.g. "Tomorrow at 2:00 AM"); never
@@ -443,7 +446,7 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
       },
       {
         id: 'lastRunAt',
-        header: 'Last Run',
+        header: t('backups.lastRun'),
         accessorKey: 'lastRunAt',
         size: 150,
         cell: ({ getValue }) => {
@@ -468,12 +471,12 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => openEdit(row)}>
                 <Pencil className="h-4 w-4 mr-2" />
-                Edit
+                {t('common.edit')}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(row)}>
                 <Trash2 className="h-4 w-4 mr-2" />
-                Delete
+                {t('common.delete')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -485,24 +488,24 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
     <div className="space-y-4">
       {isPlatform ? (
         <PlatformPageHeader
-          title="Backup Schedules"
-          subtitle="Platform-wide automated backup schedules across all customers and sites."
+          title={t('backups.schedulesTitle')}
+          subtitle={t('backups.schedulesPlatformSubtitle')}
           actions={
             <Button size="sm" onClick={openCreate}>
               <Plus className="h-4 w-4 mr-2" />
-              Create Schedule
+              {t('backups.createSchedule')}
             </Button>
           }
         />
       ) : (
         <PageHeader
           breadcrumbs={false}
-          title="Backup Schedules"
-          description="Configure automated backup schedules"
+          title={t('backups.schedulesTitle')}
+          description={t('backups.schedulesDescription')}
           action={
             <Button size="sm" onClick={openCreate}>
               <Plus className="h-4 w-4 mr-2" />
-              Create Schedule
+              {t('backups.createSchedule')}
             </Button>
           }
         />
@@ -511,9 +514,9 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
       {isInitialEmpty ? (
         <EmptyState
           icon={CalendarClock}
-          title="No schedules configured"
-          description="Create a schedule to automate your backups."
-          action={{ label: 'Create Schedule', onClick: openCreate }}
+          title={t('backups.noSchedules')}
+          description={t('backups.createScheduleFirst')}
+          action={{ label: t('backups.createSchedule'), onClick: openCreate }}
         />
       ) : (
         <DataTable
@@ -527,7 +530,7 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
           onSortChange={(f, o) => table.setSortField(f, o)}
           sortField={table.sortField}
           sortOrder={table.sortOrder}
-          searchPlaceholder="Search schedules..."
+          searchPlaceholder={t('backups.searchSchedulesPlaceholder')}
           searchValue={table.searchValue}
           onSearch={(v) => {
             table.setSearchValue(v);
@@ -546,7 +549,7 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
           // aligns with the card edges. Same reusable pattern as the Backups
           // table for consistency.
           tableMinWidth={1320}
-          emptyMessage="No schedules found."
+          emptyMessage={t('backups.noSchedulesFoundMessage')}
           emptyState={
             isSearchEmpty ? (
               <NoSchedulesSearchResultsEmpty
@@ -564,35 +567,35 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
       <Dialog open={dialogOpen} onOpenChange={(v) => !v && closeDialog()}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>{editingId ? 'Edit Schedule' : 'Create Schedule'}</DialogTitle>
+            <DialogTitle>{editingId ? t('backups.editSchedule') : t('backups.createSchedule')}</DialogTitle>
             <DialogDescription>
               {editingId
-                ? 'Update backup schedule configuration.'
-                : 'Configure a new automated backup schedule.'}
+                ? t('backups.editScheduleDesc')
+                : t('backups.createScheduleDesc')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto pr-1">
             <div className="space-y-2">
-              <Label htmlFor="sched-name">Name</Label>
+              <Label htmlFor="sched-name">{t('common.name')}</Label>
               <Input
                 id="sched-name"
-                placeholder="e.g., Daily Database Backup"
+                placeholder={t('backups.scheduleNamePlaceholder')}
                 value={form.name}
                 onChange={(e) => updateForm('name', e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="sched-desc">Description</Label>
+              <Label htmlFor="sched-desc">{t('backups.description')}</Label>
               <Textarea
                 id="sched-desc"
-                placeholder="Optional description..."
+                placeholder={t('backups.optionalDescription')}
                 value={form.description}
                 onChange={(e) => updateForm('description', e.target.value)}
                 rows={2}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="sched-freq">Frequency</Label>
+              <Label htmlFor="sched-freq">{t('backups.frequency')}</Label>
               <Select
                 value={form.frequency}
                 onValueChange={(v) => updateForm('frequency', v as BackupScheduleFrequency)}
@@ -603,7 +606,7 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
                 <SelectContent>
                   {FREQUENCIES.map((f) => (
                     <SelectItem key={f.value} value={f.value}>
-                      {f.label}
+                      {t(f.labelKey)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -611,7 +614,7 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
             </div>
             {form.frequency === 'CUSTOM_CRON' && (
               <div className="space-y-2">
-                <Label htmlFor="sched-cron">Custom Cron Expression</Label>
+                <Label htmlFor="sched-cron">{t('backups.customCronLabel')}</Label>
                 <Input
                   id="sched-cron"
                   placeholder="0 2 * * *"
@@ -620,13 +623,13 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
                   className="font-mono"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Use standard 5-field cron format (minute hour day month weekday)
+                  {t('backups.cronHint')}
                 </p>
               </div>
             )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="sched-scope">Scope</Label>
+                <Label htmlFor="sched-scope">{t('backups.scope')}</Label>
                 <Select
                   value={form.scope}
                   onValueChange={(v) => updateForm('scope', v as BackupScope)}
@@ -642,7 +645,7 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="sched-storage">Storage Destination</Label>
+                <Label htmlFor="sched-storage">{t('backups.storageDestination')}</Label>
                 <Select
                   value={form.storageId}
                   onValueChange={(v) => {
@@ -652,7 +655,7 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
                   }}
                 >
                   <SelectTrigger id="sched-storage">
-                    <SelectValue placeholder="Select a storage destination" />
+                    <SelectValue placeholder={t('backups.selectStorage')} />
                   </SelectTrigger>
                   <SelectContent>
                     {storageDestinations.map((s) => (
@@ -666,12 +669,12 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
                   </SelectContent>
                 </Select>
                 {storageDestinations.length === 0 && (
-                  <p className="text-xs text-amber-600">No storage destinations configured. Add one in Storage first.</p>
+                  <p className="text-xs text-amber-600">{t('backups.noStorageConfigured')}</p>
                 )}
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="sched-retention">Retention Count</Label>
+              <Label htmlFor="sched-retention">{t('backups.retentionCount')}</Label>
               <Input
                 id="sched-retention"
                 type="number"
@@ -680,12 +683,12 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
                 value={form.retentionCount}
                 onChange={(e) => updateForm('retentionCount', Number(e.target.value))}
               />
-              <p className="text-xs text-muted-foreground">Number of backups to keep</p>
+              <p className="text-xs text-muted-foreground">{t('backups.retentionHint')}</p>
             </div>
             <div className="flex items-center justify-between">
               <div>
-                <Label htmlFor="sched-encrypt">Encryption</Label>
-                <p className="text-xs text-muted-foreground">Encrypt scheduled backups</p>
+                <Label htmlFor="sched-encrypt">{t('backups.encryption')}</Label>
+                <p className="text-xs text-muted-foreground">{t('backups.encryptScheduledHint')}</p>
               </div>
               <Switch
                 id="sched-encrypt"
@@ -695,8 +698,8 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
             </div>
             <div className="flex items-center justify-between">
               <div>
-                <Label htmlFor="sched-verify">Verification</Label>
-                <p className="text-xs text-muted-foreground">Verify backups after creation</p>
+                <Label htmlFor="sched-verify">{t('backups.verification')}</Label>
+                <p className="text-xs text-muted-foreground">{t('backups.verifyAfterCreationHint')}</p>
               </div>
               <Switch
                 id="sched-verify"
@@ -707,14 +710,14 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={handleSubmit}
               disabled={isSaving || !form.name.trim()}
             >
               {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editingId ? 'Update' : 'Create'}
+              {editingId ? t('backups.update') : t('common.create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -724,13 +727,13 @@ export function SchedulesPage({ scope = 'client' }: { scope?: 'client' | 'platfo
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
-        title="Delete Schedule"
+        title={t('backups.deleteScheduleTitle')}
         description={
           deleteTarget
-            ? `Are you sure you want to delete "${deleteTarget.name}"? Automated backups associated with this schedule will no longer run.`
+            ? `${t('backups.deleteScheduleConfirmPrefix')}${deleteTarget.name}${t('backups.deleteScheduleConfirmSuffix')}`
             : undefined
         }
-        confirmLabel="Delete"
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => {
           if (deleteTarget) deleteMutation.mutate(deleteTarget.id);

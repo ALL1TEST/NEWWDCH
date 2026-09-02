@@ -59,3 +59,6 @@ server.log
 *.sqlite3
 db/*.db
 prisma/*.db
+
+# transient tool output (never commit)
+/tool-results/

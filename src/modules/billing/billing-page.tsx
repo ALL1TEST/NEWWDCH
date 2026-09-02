@@ -148,8 +148,16 @@ function derivePlanFeatures(plan: {
   };
 }, t: (key: string) => string): PlanFeatureItem[] {
   if (plan.features.length > 0) {
-    // Legacy marketing copy — plain items, no sub-lines.
-    return plan.features.map((f) => ({ label: f }));
+    // Legacy marketing copy — plain items, no sub-lines. The internal
+    // plan's four marketing strings have dictionary keys so they follow
+    // the selected locale; any other legacy value renders as-is.
+    const legacyKeys: Record<string, string> = {
+      'Full platform access': 'billing.internalFeatureFullAccess',
+      'All features enabled': 'billing.internalFeatureAllEnabled',
+      'Billing bypass': 'billing.internalFeatureBypass',
+      'Not counted in MRR': 'billing.internalFeatureNoMrr',
+    };
+    return plan.features.map((f) => ({ label: legacyKeys[f] ? t(legacyKeys[f]) : f }));
   }
   const items: PlanFeatureItem[] = [];
   items.push(

@@ -19,6 +19,7 @@ import { cn, formatFileSize, formatRelativeTime, truncate } from '@/lib/utils';
 import { formatDurationMs } from '@/lib/backup-constants';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { PlatformPageHeader } from '@/modules/platform/shared';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -100,6 +101,7 @@ function StatCardSkeleton() {
 export function DashboardPage({ scope = 'client' }: { scope?: 'client' | 'platform' } = {}) {
   const navigate = useNavigationStore((s) => s.navigate);
   const isPlatform = scope === 'platform';
+  const { t } = useT();
   // Shared theme-aware chart palette — keeps ALL chart text readable in
   // dark mode without page-specific overrides.
   const chart = useChartTheme();
@@ -162,15 +164,15 @@ export function DashboardPage({ scope = 'client' }: { scope?: 'client' | 'platfo
   }
 
   const successSecondary = stats.totalBackups > 0
-    ? `${stats.completedBackups ?? 0} of ${stats.totalBackups} successful`
-    : 'No backups yet';
+    ? `${stats.completedBackups ?? 0} ${t('common.of')} ${stats.totalBackups} ${t('backups.successful')}`
+    : t('backups.noBackupsYet');
 
   const lastBackupValue = stats.lastBackup
     ? new Date(stats.lastBackup.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    : 'Never';
+    : t('backups.never');
   const lastBackupSecondary = stats.lastBackup
     ? new Date(stats.lastBackup.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-    : 'No backups yet';
+    : t('backups.noBackupsYet');
 
   return (
     <div className="space-y-8">
@@ -179,24 +181,24 @@ export function DashboardPage({ scope = 'client' }: { scope?: 'client' | 'platfo
             scope. Same `title`, different subtitle. */}
         {isPlatform ? (
           <PlatformPageHeader
-            title="Backups"
-            subtitle="Platform-wide backup health, storage usage, and recent activity across all customers and sites."
+            title={t('title.backups')}
+            subtitle={t('backups.dashboardPlatformSubtitle')}
             actions={
               <Button onClick={goToBackups} className="gap-2">
                 <Plus className="h-4 w-4" />
-                Create Backup
+                {t('backups.createBackup')}
               </Button>
             }
           />
         ) : (
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-foreground">Backups</h1>
-              <p className="mt-1 text-sm text-muted-foreground">Monitor and manage your system backups.</p>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">{t('title.backups')}</h1>
+              <p className="mt-1 text-sm text-muted-foreground">{t('backups.dashboardDescription')}</p>
             </div>
             <Button onClick={goToBackups} className="gap-2">
               <Plus className="h-4 w-4" />
-              Create Backup
+              {t('backups.createBackup')}
             </Button>
           </div>
         )}
@@ -205,9 +207,9 @@ export function DashboardPage({ scope = 'client' }: { scope?: 'client' | 'platfo
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         <div className="relative">
           <StatCard
-            label="Total Backups"
+            label={t('backups.totalBackups')}
             value={stats.totalBackups}
-            secondary="All backups"
+            secondary={t('backups.allBackups')}
             icon={<DatabaseBackup className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
             iconColor="bg-emerald-50 dark:bg-emerald-900/20"
             delay={0}
@@ -216,9 +218,9 @@ export function DashboardPage({ scope = 'client' }: { scope?: 'client' | 'platfo
         </div>
         <div className="relative">
           <StatCard
-            label="Total Storage"
+            label={t('backups.totalStorage')}
             value={stats.totalStorageFormatted ?? formatFileSize(stats.totalStorageBytes ?? 0)}
-            secondary="Across all backups"
+            secondary={t('backups.acrossAllBackups')}
             icon={<HardDrive className="h-4 w-4 text-amber-600 dark:text-amber-400" />}
             iconColor="bg-amber-50 dark:bg-amber-900/20"
             delay={1}
@@ -227,7 +229,7 @@ export function DashboardPage({ scope = 'client' }: { scope?: 'client' | 'platfo
         </div>
         <div className="relative">
           <StatCard
-            label="Success Rate"
+            label={t('backups.successRate')}
             value={`${(stats.successRate ?? 0).toFixed(0)}%`}
             secondary={successSecondary}
             icon={<CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />}
@@ -237,9 +239,9 @@ export function DashboardPage({ scope = 'client' }: { scope?: 'client' | 'platfo
         </div>
         <div className="relative">
           <StatCard
-            label="Avg Duration"
+            label={t('backups.avgDuration')}
             value={stats.avgDurationFormatted ?? formatDurationMs(stats.avgDurationMs ?? null)}
-            secondary="Per backup"
+            secondary={t('backups.perBackup')}
             icon={<Clock className="h-4 w-4 text-sky-600 dark:text-sky-400" />}
             iconColor="bg-sky-50 dark:bg-sky-900/20"
             delay={3}
@@ -247,7 +249,7 @@ export function DashboardPage({ scope = 'client' }: { scope?: 'client' | 'platfo
         </div>
         <div className="relative">
           <StatCard
-            label="Last Backup"
+            label={t('backups.lastBackup')}
             value={lastBackupValue}
             secondary={lastBackupSecondary}
             icon={<DatabaseBackup className="h-4 w-4 text-violet-600 dark:text-violet-400" />}
@@ -257,9 +259,9 @@ export function DashboardPage({ scope = 'client' }: { scope?: 'client' | 'platfo
         </div>
         <div className="relative">
           <StatCard
-            label="Failed"
+            label={t('backups.failed')}
             value={stats.failedBackups}
-            secondary={stats.failedBackups === 0 ? 'All healthy' : 'Requires attention'}
+            secondary={stats.failedBackups === 0 ? t('backups.allHealthy') : t('backups.requiresAttention')}
             icon={<XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />}
             iconColor="bg-red-50 dark:bg-red-900/20"
             delay={5}
@@ -275,9 +277,9 @@ export function DashboardPage({ scope = 'client' }: { scope?: 'client' | 'platfo
           <CardHeader className="pb-4">
             <div className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-semibold">Backup Activity</CardTitle>
+              <CardTitle className="text-sm font-semibold">{t('backups.backupActivity')}</CardTitle>
             </div>
-            <p className="text-xs text-muted-foreground">Backup count over the last 7 days</p>
+            <p className="text-xs text-muted-foreground">{t('backups.backupActivityDesc')}</p>
           </CardHeader>
           <CardContent className="flex-1">
             {trendData.length > 0 ? (
@@ -300,8 +302,8 @@ export function DashboardPage({ scope = 'client' }: { scope?: 'client' | 'platfo
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
                   <BarChart3 className="h-6 w-6 text-muted-foreground/50" />
                 </div>
-                <p className="text-sm font-medium text-foreground">No backup activity yet</p>
-                <p className="text-xs text-muted-foreground mt-1">Create your first backup to start tracking activity.</p>
+                <p className="text-sm font-medium text-foreground">{t('backups.noBackupActivity')}</p>
+                <p className="text-xs text-muted-foreground mt-1">{t('backups.createFirstToTrack')}</p>
               </div>
             )}
           </CardContent>
@@ -312,9 +314,9 @@ export function DashboardPage({ scope = 'client' }: { scope?: 'client' | 'platfo
           <CardHeader className="pb-4">
             <div className="flex items-center gap-2">
               <ActivityIcon className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-semibold">Recent Activity</CardTitle>
+              <CardTitle className="text-sm font-semibold">{t('backups.recentActivity')}</CardTitle>
             </div>
-            <p className="text-xs text-muted-foreground">Latest backup operations</p>
+            <p className="text-xs text-muted-foreground">{t('backups.recentActivityDesc')}</p>
           </CardHeader>
           <CardContent className="flex-1 p-0">
             {stats.recentLogs && stats.recentLogs.length > 0 ? (
@@ -356,8 +358,8 @@ export function DashboardPage({ scope = 'client' }: { scope?: 'client' | 'platfo
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
                   <ActivityIcon className="h-6 w-6 text-muted-foreground/50" />
                 </div>
-                <p className="text-sm font-medium text-foreground">No activity yet</p>
-                <p className="text-xs text-muted-foreground mt-1">Backup operations will appear here.</p>
+                <p className="text-sm font-medium text-foreground">{t('backups.noActivityYet')}</p>
+                <p className="text-xs text-muted-foreground mt-1">{t('backups.operationsWillAppear')}</p>
               </div>
             )}
           </CardContent>

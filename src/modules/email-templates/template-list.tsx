@@ -74,6 +74,7 @@ import type {
 } from '@/shared/types';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZES, STATUS_COLORS } from '@/shared/constants';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -105,34 +106,36 @@ export interface TemplateListProps {
 
 // -------------------- Category Tabs --------------------
 
-const CATEGORIES: { value: EmailTemplateCategory | 'ALL'; label: string }[] = [
-  { value: 'ALL', label: 'All' },
-  { value: 'CUSTOMER_EMAILS', label: 'Customer Emails' },
-  { value: 'AUTHENTICATION', label: 'Authentication' },
-  { value: 'NEWSLETTER', label: 'Newsletter' },
-  { value: 'MARKETING', label: 'Marketing' },
-  { value: 'TRANSACTIONAL', label: 'Transactional' },
-  { value: 'NOTIFICATIONS', label: 'Notifications' },
-  { value: 'BILLING', label: 'Billing' },
-  { value: 'SYSTEM', label: 'System' },
+// Labels resolve via t() at render time (labelKey pattern); the `value`
+// strings are the raw API category enum values and must stay untouched.
+const CATEGORIES: { value: EmailTemplateCategory | 'ALL'; labelKey: string }[] = [
+  { value: 'ALL', labelKey: 'emailTemplates.catAll' },
+  { value: 'CUSTOMER_EMAILS', labelKey: 'emailTemplates.catCustomerEmails' },
+  { value: 'AUTHENTICATION', labelKey: 'emailTemplates.catAuthentication' },
+  { value: 'NEWSLETTER', labelKey: 'emailTemplates.catNewsletter' },
+  { value: 'MARKETING', labelKey: 'emailTemplates.catMarketing' },
+  { value: 'TRANSACTIONAL', labelKey: 'emailTemplates.catTransactional' },
+  { value: 'NOTIFICATIONS', labelKey: 'emailTemplates.catNotifications' },
+  { value: 'BILLING', labelKey: 'emailTemplates.catBilling' },
+  { value: 'SYSTEM', labelKey: 'emailTemplates.catSystem' },
 ];
 
 // -------------------- Status Options --------------------
 
 const STATUS_OPTIONS = [
-  { value: 'ALL', label: 'All Statuses' },
-  { value: 'ENABLED', label: 'Enabled' },
-  { value: 'DISABLED', label: 'Disabled' },
-  { value: 'DRAFT', label: 'Draft' },
+  { value: 'ALL', labelKey: 'emailTemplates.statusAll' },
+  { value: 'ENABLED', labelKey: 'emailTemplates.statusEnabled' },
+  { value: 'DISABLED', labelKey: 'emailTemplates.statusDisabled' },
+  { value: 'DRAFT', labelKey: 'emailTemplates.statusDraft' },
 ] as const;
 
 // -------------------- Sort Options --------------------
 
 const SORT_OPTIONS = [
-  { value: 'createdAt:desc', label: 'Newest' },
-  { value: 'createdAt:asc', label: 'Oldest' },
-  { value: 'name:asc', label: 'A-Z' },
-  { value: 'name:desc', label: 'Z-A' },
+  { value: 'createdAt:desc', labelKey: 'emailTemplates.sortNewest' },
+  { value: 'createdAt:asc', labelKey: 'emailTemplates.sortOldest' },
+  { value: 'name:asc', labelKey: 'emailTemplates.sortAZ' },
+  { value: 'name:desc', labelKey: 'emailTemplates.sortZA' },
 ] as const;
 
 // -------------------- Provider Options --------------------
@@ -159,8 +162,10 @@ function getStatusColor(status: EmailTemplateStatus): string {
   return STATUS_COLORS[STATUS_KEY_MAP[status] ?? status] ?? '';
 }
 
-function getStatusLabel(status: EmailTemplateStatus): string {
-  if (status === 'DRAFT') return 'Draft';
+function getStatusLabel(status: EmailTemplateStatus, t: (key: string) => string): string {
+  if (status === 'DRAFT') return t('emailTemplates.statusDraft');
+  if (status === 'ENABLED') return t('emailTemplates.statusEnabled');
+  if (status === 'DISABLED') return t('emailTemplates.statusDisabled');
   return labelize(status);
 }
 
@@ -190,16 +195,17 @@ function SendTestDialog({
 }) {
   const [email, setEmail] = useState('');
   const [provider, setProvider] = useState<EmailProvider>('SMTP');
+  const { t } = useT();
 
   const sendTestMutation = useMutation({
     mutationFn: () =>
       postApi(`/api/email-templates/${templateId}/send-test`, { email, provider }),
     onSuccess: () => {
-      toast.success('Test email sent successfully');
+      toast.success(t('emailTemplates.testEmailSent'));
       onOpenChange(false);
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to send test email');
+      toast.error(err.message || t('emailTemplates.sendTestFailed'));
     },
   });
 
@@ -218,14 +224,14 @@ function SendTestDialog({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Send Test Email</DialogTitle>
+          <DialogTitle>{t('emailTemplates.sendTestEmailTitle')}</DialogTitle>
           <DialogDescription>
-            Send a test email to verify how this template renders.
+            {t('emailTemplates.sendTestDesc')}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="test-email">Recipient Email</Label>
+            <Label htmlFor="test-email">{t('emailTemplates.recipientEmail')}</Label>
             <Input
               id="test-email"
               type="email"
@@ -235,13 +241,13 @@ function SendTestDialog({
             />
           </div>
           <div className="grid gap-2">
-            <Label>Provider</Label>
+            <Label>{t('emailTemplates.provider')}</Label>
             <Select
               value={provider}
               onValueChange={(v) => setProvider(v as EmailProvider)}
             >
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select provider" />
+                <SelectValue placeholder={t('emailTemplates.selectProvider')} />
               </SelectTrigger>
               <SelectContent>
                 {SEND_TEST_PROVIDERS.map((p) => (
@@ -259,7 +265,7 @@ function SendTestDialog({
             onClick={() => handleClose(false)}
             disabled={sendTestMutation.isPending}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={() => sendTestMutation.mutate()}
@@ -268,7 +274,7 @@ function SendTestDialog({
             {sendTestMutation.isPending && (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             )}
-            Send Test
+            {t('emailTemplates.sendTest')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -323,6 +329,7 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
   const moduleName = isPlatform ? 'platform-email-templates' : 'email-templates';
   const queryClient = useQueryClient();
   const navigate = useNavigationStore((s) => s.navigate);
+  const { t } = useT();
 
   // -------------------- Filter State --------------------
   const [category, setCategory] = useState<EmailTemplateCategory | 'ALL'>('ALL');
@@ -433,11 +440,11 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
   const duplicateMutation = useMutation({
     mutationFn: (id: string) => postApi(`/api/email-templates/${id}/duplicate`),
     onSuccess: () => {
-      toast.success('Template duplicated successfully');
+      toast.success(t('emailTemplates.duplicated'));
       invalidateAll();
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to duplicate template');
+      toast.error(err.message || t('emailTemplates.duplicateFailed'));
     },
   });
 
@@ -448,31 +455,31 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
       invalidateAll();
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to update template status');
+      toast.error(err.message || t('emailTemplates.statusUpdateFailed'));
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteApi(`/api/email-templates/${id}`),
     onSuccess: () => {
-      toast.success('Template deleted');
+      toast.success(t('emailTemplates.templateDeleted'));
       invalidateAll();
       setDeleteTarget(null);
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to delete template');
+      toast.error(err.message || t('emailTemplates.deleteFailed'));
     },
   });
 
   const revertMutation = useMutation({
     mutationFn: (id: string) => postApi(`/api/email-templates/${id}/revert`),
     onSuccess: () => {
-      toast.success('Template reverted to default');
+      toast.success(t('emailTemplates.reverted'));
       invalidateAll();
       setRevertTarget(null);
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to revert template');
+      toast.error(err.message || t('emailTemplates.revertFailed'));
     },
   });
 
@@ -487,16 +494,16 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
       const { seeded, skipped } = data;
       invalidateAll();
       if (seeded > 0) {
-        toast.success(`${seeded} default template${seeded > 1 ? 's' : ''} created${skipped > 0 ? `, ${skipped} already existed` : ''}`);
+        toast.success(`${seeded} ${seeded > 1 ? t('emailTemplates.defaultTemplatePlural') : t('emailTemplates.defaultTemplateSingular')} ${t('emailTemplates.createdWord')}${skipped > 0 ? `, ${skipped} ${t('emailTemplates.alreadyExisted')}` : ''}`);
       } else if (skipped > 0) {
-        toast.info('All default email templates are already available.');
+        toast.info(t('emailTemplates.allDefaultsAvailable'));
       } else {
-        toast.info('No default templates to seed.');
+        toast.info(t('emailTemplates.noDefaultsToSeed'));
       }
       setSeedDialogOpen(false);
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to seed templates');
+      toast.error(err.message || t('emailTemplates.seedFailed'));
     },
   });
 
@@ -521,7 +528,7 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
     <div className="flex flex-col items-end gap-2">
       <Button size="sm" onClick={handleCreate}>
         <Plus className="h-4 w-4 mr-2" />
-        Create Template
+        {t('emailTemplates.createTemplate')}
       </Button>
       {!isPlatform && (
         <Button
@@ -536,7 +543,7 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
           ) : (
             <Cpu className="h-3.5 w-3.5 mr-1.5" />
           )}
-          Seed Defaults
+          {t('emailTemplates.seedDefaults')}
         </Button>
       )}
     </div>
@@ -547,14 +554,14 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
       {/* Page Header */}
       {isPlatform ? (
         <PlatformPageHeader
-          title="Email Templates"
-          subtitle="Platform-wide system email templates: welcome, payment, subscription, trial, invoice, and account lifecycle. Visible to all customers and sites."
+          title={t('title.emailTemplates')}
+          subtitle={t('emailTemplates.listPlatformSubtitle')}
           actions={headerAction}
         />
       ) : (
         <PageHeader
-          title="Email Templates"
-          description="Manage email templates for all system notifications, newsletters, and transactional emails."
+          title={t('title.emailTemplates')}
+          description={t('emailTemplates.listDescription')}
           action={headerAction}
         />
       )}
@@ -581,7 +588,7 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
                       : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
                   )}
                 >
-                  {cat.label}
+                  {t(cat.labelKey)}
                   <span
                     className={cn(
                       'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-medium leading-none',
@@ -604,7 +611,7 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search templates..."
+            placeholder={t('emailTemplates.searchTemplates')}
             value={searchInput}
             onChange={(e) => updateSearch(e.target.value)}
             className="pl-9 h-9"
@@ -613,24 +620,24 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
         <div className="flex items-center gap-2">
           <Select value={statusFilter} onValueChange={handleStatusChange}>
             <SelectTrigger size="sm" className="w-[150px]">
-              <SelectValue placeholder="All Statuses" />
+              <SelectValue placeholder={t('emailTemplates.statusAll')} />
             </SelectTrigger>
             <SelectContent>
               {STATUS_OPTIONS.map((s) => (
                 <SelectItem key={s.value} value={s.value}>
-                  {s.label}
+                  {t(s.labelKey)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           <Select value={sortValue} onValueChange={handleSortChange}>
             <SelectTrigger size="sm" className="w-[130px]">
-              <SelectValue placeholder="Newest" />
+              <SelectValue placeholder={t('emailTemplates.sortNewest')} />
             </SelectTrigger>
             <SelectContent>
               {SORT_OPTIONS.map((s) => (
                 <SelectItem key={s.value} value={s.value}>
-                  {s.label}
+                  {t(s.labelKey)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -656,18 +663,18 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
         ) : templates.length === 0 ? (
           <EmptyState
             icon={Mail}
-            title="No templates found"
+            title={t('emailTemplates.noTemplatesFound')}
             description={
               search || statusFilter !== 'ALL' || category !== 'ALL'
-                ? 'Try adjusting your filters to find what you\'re looking for.'
+                ? t('emailTemplates.adjustFilters')
                 : isPlatform
-                  ? 'Create your first platform template to get started.'
-                  : 'Create your first email template or seed the defaults to get started.'
+                  ? t('emailTemplates.createFirstPlatform')
+                  : t('emailTemplates.createFirstOrSeed')
             }
             action={
               !search && statusFilter === 'ALL' && category === 'ALL' && !isPlatform
                 ? {
-                    label: 'Seed Default Templates',
+                    label: t('emailTemplates.seedDefaultTemplates'),
                     onClick: () => seedMutation.mutate(),
                   }
                 : undefined
@@ -678,11 +685,11 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-4">Template Name</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Provider</TableHead>
-                  <TableHead>Last Updated</TableHead>
+                  <TableHead className="pl-4">{t('emailTemplates.templateName')}</TableHead>
+                  <TableHead>{t('emailTemplates.category')}</TableHead>
+                  <TableHead>{t('common.status')}</TableHead>
+                  <TableHead>{t('emailTemplates.provider')}</TableHead>
+                  <TableHead>{t('emailTemplates.lastUpdated')}</TableHead>
                   <TableHead className="pr-4 w-12"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -704,7 +711,7 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
                             variant="outline"
                             className="shrink-0 px-1.5 py-0 text-[10px] font-medium text-muted-foreground border-dashed"
                           >
-                            System
+                            {t('emailTemplates.systemBadge')}
                           </Badge>
                         )}
                       </div>
@@ -727,7 +734,7 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
                           getStatusColor(template.status),
                         )}
                       >
-                        {getStatusLabel(template.status)}
+                        {getStatusLabel(template.status, t)}
                       </Badge>
                     </TableCell>
 
@@ -765,24 +772,24 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
                         <DropdownMenuContent align="end" className="w-48">
                           <DropdownMenuItem onClick={() => onEdit(template.id)}>
                             <Pencil className="h-4 w-4 mr-2" />
-                            Edit
+                            {t('common.edit')}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => onPreview(template.id)}>
                             <Eye className="h-4 w-4 mr-2" />
-                            Preview
+                            {t('emailTemplates.preview')}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => duplicateMutation.mutate(template.id)}
                             disabled={duplicateMutation.isPending}
                           >
                             <Copy className="h-4 w-4 mr-2" />
-                            Duplicate
+                            {t('emailTemplates.duplicate')}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => setSendTestTarget(template.id)}
                           >
                             <Send className="h-4 w-4 mr-2" />
-                            Send Test
+                            {t('emailTemplates.sendTest')}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -802,14 +809,14 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
                                 <span className="h-4 w-4 mr-2 inline-flex items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-700">
                                   <span className="h-2 w-2 rounded-full" />
                                 </span>
-                                Disable
+                                {t('emailTemplates.disable')}
                               </>
                             ) : (
                               <>
                                 <span className="h-4 w-4 mr-2 inline-flex items-center justify-center rounded-full bg-emerald-200 dark:bg-emerald-800">
                                   <span className="h-2 w-2 rounded-full" />
                                 </span>
-                                Enable
+                                {t('emailTemplates.enable')}
                               </>
                             )}
                           </DropdownMenuItem>
@@ -819,7 +826,7 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
                               className="text-amber-600 dark:text-amber-400"
                             >
                               <RotateCcw className="h-4 w-4 mr-2" />
-                              Revert to Default
+                              {t('emailTemplates.revertToDefault')}
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuSeparator />
@@ -828,7 +835,7 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
                             onClick={() => setDeleteTarget(template)}
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
+                            {t('common.delete')}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -843,10 +850,10 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
               <div className="flex items-center justify-between border-t px-4 py-3">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span>
-                    Page {pagination.page} of {pagination.totalPages}
+                    {t('emailTemplates.page')} {pagination.page} {t('common.of')} {pagination.totalPages}
                   </span>
                   <span className="text-muted-foreground/50">·</span>
-                  <span>{pagination.total} total</span>
+                  <span>{pagination.total} {t('emailTemplates.total')}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <Select
@@ -905,13 +912,13 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
-        title="Delete Template"
+        title={t('emailTemplates.deleteTemplate')}
         description={
           deleteTarget
-            ? `Are you sure you want to delete "${deleteTarget.name}"? This action cannot be undone.`
+            ? `${t('emailTemplates.deleteConfirmPrefix')}${deleteTarget.name}${t('emailTemplates.deleteConfirmSuffix')}`
             : undefined
         }
-        confirmLabel="Delete"
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => {
           if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
@@ -923,13 +930,13 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
       <ConfirmDialog
         open={!!revertTarget}
         onOpenChange={(v) => !v && setRevertTarget(null)}
-        title="Revert to Default"
+        title={t('emailTemplates.revertToDefault')}
         description={
           revertTarget
-            ? `This will reset "${revertTarget.name}" to its original default content. Your current changes will be saved as a version before reverting.`
+            ? `${t('emailTemplates.revertConfirmPrefix')}${revertTarget.name}${t('emailTemplates.revertConfirmSuffix')}`
             : undefined
         }
-        confirmLabel="Revert"
+        confirmLabel={t('emailTemplates.revert')}
         onConfirm={() => {
           if (revertTarget) revertMutation.mutate(revertTarget.id);
         }}
@@ -944,9 +951,9 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
         <ConfirmDialog
           open={seedDialogOpen}
           onOpenChange={setSeedDialogOpen}
-          title="Seed Default Templates"
-          description="This will add any missing default system email templates. Existing templates (including your custom ones) will not be modified."
-          confirmLabel="Seed Defaults"
+          title={t('emailTemplates.seedDefaultTemplates')}
+          description={t('emailTemplates.seedConfirmDesc')}
+          confirmLabel={t('emailTemplates.seedDefaults')}
           onConfirm={() => seedMutation.mutate()}
           isLoading={seedMutation.isPending}
         />

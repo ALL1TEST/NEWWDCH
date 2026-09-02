@@ -1,1 +1,1 @@
-export { DashboardPage } from './dashboard-page';
+export { DashboardPage, DashboardWidgets } from './dashboard-page';

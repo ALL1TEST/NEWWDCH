@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { PaginatedResponse } from '@/shared/types';
 import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -40,6 +41,15 @@ const SEVERITY_STYLES: Record<string, { color: string; bg: string }> = {
   INFO: { color: 'text-sky-700 dark:text-sky-400', bg: 'bg-sky-100 dark:bg-sky-900/30' },
 };
 
+// Filter chip labels (display-only i18n keys; filtering still compares the
+// raw severity value).
+const SEVERITY_FILTER_KEYS: Record<string, string> = {
+  all: 'seo.all',
+  CRITICAL: 'seo.critical',
+  WARNING: 'seo.warning',
+  INFO: 'seo.info',
+};
+
 // -------------------- Expandable Text Component --------------------
 // Uses a ref + scrollWidth measurement to detect overflow reliably,
 // regardless of font size or column width. "Read more" / "Read less"
@@ -52,6 +62,7 @@ function ExpandableText({
   text: string;
   className?: string;
 }) {
+  const { t } = useT();
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
   const textRef = React.useRef<HTMLSpanElement>(null);
@@ -103,7 +114,7 @@ function ExpandableText({
           }}
           className="mt-0.5 text-primary hover:underline text-xs font-medium block"
         >
-          {expanded ? 'Read less' : 'Read more'}
+          {expanded ? t('seo.readLess') : t('seo.readMore')}
         </button>
       )}
     </div>
@@ -135,6 +146,7 @@ function UrlCell({ url }: { url: string }) {
 // -------------------- Main Component --------------------
 
 export function SeoAuditPage() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [showResolved, setShowResolved] = useState(false);
@@ -224,9 +236,9 @@ export function SeoAuditPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoIssues.all });
       queryClient.invalidateQueries({ queryKey: ['seo-issues'] });
       queryClient.invalidateQueries({ queryKey: ['seo-overview'] });
-      toast.success('SEO audit completed');
+      toast.success(t('seo.auditCompleted'));
     },
-    onError: () => toast.error('Audit failed'),
+    onError: () => toast.error(t('seo.auditFailed')),
   });
 
   const resolveMutation = useMutation({
@@ -235,7 +247,7 @@ export function SeoAuditPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoIssues.all });
       queryClient.invalidateQueries({ queryKey: ['seo-issues'] });
       queryClient.invalidateQueries({ queryKey: ['seo-overview'] });
-      toast.success('Issue marked as resolved');
+      toast.success(t('seo.issueResolved'));
     },
   });
 
@@ -245,7 +257,7 @@ export function SeoAuditPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoIssues.all });
       queryClient.invalidateQueries({ queryKey: ['seo-issues'] });
       queryClient.invalidateQueries({ queryKey: ['seo-overview'] });
-      toast.success('Issue reopened');
+      toast.success(t('seo.issueReopened'));
     },
   });
 
@@ -253,7 +265,7 @@ export function SeoAuditPage() {
     () => [
       {
         id: 'severity',
-        header: 'Severity',
+        header: t('seo.severity'),
         accessorKey: 'severity',
         size: 100,
         cell: ({ row }) => {
@@ -265,14 +277,14 @@ export function SeoAuditPage() {
       },
       {
         id: 'pageUrl',
-        header: 'URL',
+        header: t('seo.url'),
         accessorKey: 'pageUrl',
         size: 200,
         cell: ({ row }) => <UrlCell url={row.original.pageUrl} />,
       },
       {
         id: 'problem',
-        header: 'Problem',
+        header: t('seo.problem'),
         accessorKey: 'problem',
         size: 250,
         cell: ({ row }) => (
@@ -281,7 +293,7 @@ export function SeoAuditPage() {
       },
       {
         id: 'recommendation',
-        header: 'Fix',
+        header: t('seo.fix'),
         accessorKey: 'recommendation',
         size: 250,
         cell: ({ row }) => (
@@ -290,7 +302,7 @@ export function SeoAuditPage() {
       },
       {
         id: 'actions',
-        header: 'Actions',
+        header: t('common.actions'),
         size: 110,
         cell: ({ row }) => {
           if (row.original.isResolved) {
@@ -307,7 +319,7 @@ export function SeoAuditPage() {
                 {reopenMutation.isPending
                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   : <RotateCcw className="h-3.5 w-3.5" />}
-                Reopen
+                {t('seo.reopen')}
               </button>
             );
           }
@@ -324,13 +336,13 @@ export function SeoAuditPage() {
               {resolveMutation.isPending
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 : <CheckCircle2 className="h-3.5 w-3.5" />}
-              Resolve
+              {t('seo.resolve')}
             </button>
           );
         },
       },
     ],
-    [resolveMutation, reopenMutation],
+    [resolveMutation, reopenMutation, t],
   );
 
   const severityCounts = useMemo(() => {
@@ -353,7 +365,7 @@ export function SeoAuditPage() {
               severityFilter === f ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            {f === 'all' ? 'All' : f.charAt(0) + f.slice(1).toLowerCase()}
+            {t(SEVERITY_FILTER_KEYS[f] ?? f)}
           </button>
         ))}
       </div>
@@ -381,7 +393,7 @@ export function SeoAuditPage() {
             </svg>
           )}
         </span>
-        Show Resolved Only
+        {t('seo.showResolvedOnly')}
       </button>
       {(showResolved || severityFilter !== 'all' || table.searchValue) && (
         <button
@@ -389,7 +401,7 @@ export function SeoAuditPage() {
           onClick={resetAllFilters}
           className="px-2.5 py-1 text-xs font-medium rounded-md border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
         >
-          Remove All
+          {t('seo.removeAll')}
         </button>
       )}
     </div>
@@ -398,13 +410,13 @@ export function SeoAuditPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="SEO Audit"
-        description="Run a comprehensive technical SEO audit of your content"
+        title={t('seo.auditTitle')}
+        description={t('seo.auditDescription')}
         breadcrumbs={false}
         action={(
           <Button size="sm" onClick={() => auditMutation.mutate()} disabled={auditMutation.isPending}>
             {auditMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ClipboardCheck className="h-4 w-4 mr-2" />}
-            Run SEO Audit
+            {t('seo.runAudit')}
           </Button>
         )}
       />
@@ -414,21 +426,21 @@ export function SeoAuditPage() {
           className={cn('p-3 cursor-pointer transition-colors hover:bg-muted/50', severityFilter === 'CRITICAL' && 'ring-2 ring-red-300 dark:ring-red-700')}
           onClick={() => { setSeverityFilter(severityFilter === 'CRITICAL' ? 'all' : 'CRITICAL'); table.setCurrentPage(1); }}
         >
-          <p className="text-xs text-red-600 dark:text-red-400">Critical</p>
+          <p className="text-xs text-red-600 dark:text-red-400">{t('seo.critical')}</p>
           <p className="text-lg font-bold tabular-nums text-red-600 dark:text-red-400">{severityCounts.CRITICAL}</p>
         </Card>
         <Card
           className={cn('p-3 cursor-pointer transition-colors hover:bg-muted/50', severityFilter === 'WARNING' && 'ring-2 ring-amber-300 dark:ring-amber-700')}
           onClick={() => { setSeverityFilter(severityFilter === 'WARNING' ? 'all' : 'WARNING'); table.setCurrentPage(1); }}
         >
-          <p className="text-xs text-amber-600 dark:text-amber-400">Warnings</p>
+          <p className="text-xs text-amber-600 dark:text-amber-400">{t('seo.warnings')}</p>
           <p className="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">{severityCounts.WARNING}</p>
         </Card>
         <Card
           className={cn('p-3 cursor-pointer transition-colors hover:bg-muted/50', severityFilter === 'INFO' && 'ring-2 ring-sky-300 dark:ring-sky-700')}
           onClick={() => { setSeverityFilter(severityFilter === 'INFO' ? 'all' : 'INFO'); table.setCurrentPage(1); }}
         >
-          <p className="text-xs text-sky-600 dark:text-sky-400">Info</p>
+          <p className="text-xs text-sky-600 dark:text-sky-400">{t('seo.info')}</p>
           <p className="text-lg font-bold tabular-nums text-sky-600 dark:text-sky-400">{severityCounts.INFO}</p>
         </Card>
       </div>
@@ -444,11 +456,11 @@ export function SeoAuditPage() {
         onSortChange={(f, o) => table.setSortField(f, o)}
         sortField={table.sortField}
         sortOrder={table.sortOrder}
-        searchPlaceholder="Search issues..."
+        searchPlaceholder={t('seo.searchIssues')}
         searchValue={table.searchValue}
         onSearch={(v) => { table.setSearchValue(v); table.setCurrentPage(1); }}
         getRowId={(row) => row.id}
-        emptyMessage="No SEO issues found. Run an audit to scan your content."
+        emptyMessage={t('seo.auditEmpty')}
         filterContent={filterContent}
       />
     </div>

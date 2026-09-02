@@ -18,6 +18,7 @@ import {
   CheckCircle2, XCircle, ArrowUpDown,
 } from 'lucide-react';
 import { PageHeader } from '@/components/patterns';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -72,27 +73,30 @@ type DetailType =
   | 'canonical-issues';
 
 interface DetailMeta {
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
   icon: React.ElementType;
 }
 
+// titleKey/descriptionKey are resolved via t() at render time (display-only
+// fields; routing stays driven by `type`).
 const DETAIL_META: Record<DetailType, DetailMeta> = {
-  'indexed': { title: 'Indexed Pages', description: 'Pages that are indexed by search engines', icon: CheckCircle2 },
-  'not-indexed': { title: 'Not Indexed', description: 'Pages that are not indexed or have indexing issues', icon: XCircle },
-  'missing-meta-title': { title: 'Missing Meta Titles', description: 'Published pages without a meta title', icon: FileText },
-  'missing-meta-description': { title: 'Missing Meta Descriptions', description: 'Published pages without a meta description', icon: FileText },
-  'missing-h1': { title: 'Missing H1 Headings', description: 'Published pages without an H1 heading', icon: AlertCircle },
-  'duplicate-titles': { title: 'Duplicate Titles', description: 'Pages with duplicate meta titles', icon: Copy },
-  'duplicate-descriptions': { title: 'Duplicate Descriptions', description: 'Pages with duplicate meta descriptions', icon: Copy },
-  'broken-links': { title: 'Broken Links', description: 'Broken internal and external links detected on your site', icon: Unlink },
-  'missing-canonicals': { title: 'Missing Canonicals', description: 'Published pages without a canonical URL', icon: Link2 },
-  'canonical-issues': { title: 'Canonical Issues', description: 'Pages with canonical URL problems', icon: Link2 },
+  'indexed': { titleKey: 'seo.indexedPages', descriptionKey: 'seo.detailIndexedDesc', icon: CheckCircle2 },
+  'not-indexed': { titleKey: 'seo.notIndexed', descriptionKey: 'seo.detailNotIndexedDesc', icon: XCircle },
+  'missing-meta-title': { titleKey: 'seo.missingMetaTitles', descriptionKey: 'seo.detailMissingMetaTitleDesc', icon: FileText },
+  'missing-meta-description': { titleKey: 'seo.missingMetaDescriptionsFull', descriptionKey: 'seo.detailMissingMetaDescDesc', icon: FileText },
+  'missing-h1': { titleKey: 'seo.missingH1Headings', descriptionKey: 'seo.detailMissingH1Desc', icon: AlertCircle },
+  'duplicate-titles': { titleKey: 'seo.duplicateTitles', descriptionKey: 'seo.detailDuplicateTitlesDesc', icon: Copy },
+  'duplicate-descriptions': { titleKey: 'seo.duplicateDescriptionsFull', descriptionKey: 'seo.detailDuplicateDescDesc', icon: Copy },
+  'broken-links': { titleKey: 'seo.brokenLinks', descriptionKey: 'seo.detailBrokenLinksDesc', icon: Unlink },
+  'missing-canonicals': { titleKey: 'seo.missingCanonicals', descriptionKey: 'seo.detailMissingCanonicalsDesc', icon: Link2 },
+  'canonical-issues': { titleKey: 'seo.canonicalIssues', descriptionKey: 'seo.detailCanonicalIssuesDesc', icon: Link2 },
 };
 
 // -------------------- Component --------------------
 
 export function SeoDetailPage({ type }: { type: DetailType }) {
+  const { t } = useT();
   const navigate = useNavigationStore((s) => s.navigate);
   const meta = DETAIL_META[type];
   const Icon = meta.icon;
@@ -107,13 +111,13 @@ export function SeoDetailPage({ type }: { type: DetailType }) {
           className="text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4 mr-1" />
-          Back to Overview
+          {t('seo.backToOverview')}
         </Button>
       </div>
 
       <PageHeader
-        title={meta.title}
-        description={meta.description}
+        title={t(meta.titleKey)}
+        description={t(meta.descriptionKey)}
         breadcrumbs={false}
       />
 
@@ -149,6 +153,7 @@ function DetailTable({ type }: { type: DetailType }) {
 // -------------------- Content Detail Table (missing meta, duplicates, canonicals) --------------------
 
 function ContentDetailTable({ type }: { type: DetailType }) {
+  const { t } = useT();
   const { data, isLoading, isError } = useQuery({
     queryKey: ['seo-detail', 'content', type],
     queryFn: () => getApi<{ items: ContentItem[]; configs: SeoConfig[] }>('/api/seo/overview/detail', { type }),
@@ -165,15 +170,15 @@ function ContentDetailTable({ type }: { type: DetailType }) {
       case 'missing-meta-title':
         return items
           .filter((i) => !i.seoTitle || i.seoTitle.trim() === '')
-          .map((i) => ({ id: i.id, title: i.title, url: `/articles/${i.slug}`, detail: 'No meta title set', recommendation: 'Add a unique meta title (50-60 characters)' }));
+          .map((i) => ({ id: i.id, title: i.title, url: `/articles/${i.slug}`, detail: t('seo.detailNoMetaTitle'), recommendation: t('seo.detailAddMetaTitle') }));
       case 'missing-meta-description':
         return items
           .filter((i) => !i.seoDescription || i.seoDescription.trim() === '')
-          .map((i) => ({ id: i.id, title: i.title, url: `/articles/${i.slug}`, detail: 'No meta description set', recommendation: 'Add a meta description (150-160 characters)' }));
+          .map((i) => ({ id: i.id, title: i.title, url: `/articles/${i.slug}`, detail: t('seo.detailNoMetaDesc'), recommendation: t('seo.detailAddMetaDesc') }));
       case 'missing-h1':
         return items
           .filter((i) => !i.content || !/<h1/i.test(i.content))
-          .map((i) => ({ id: i.id, title: i.title, url: `/articles/${i.slug}`, detail: 'No H1 heading found', recommendation: 'Add an H1 heading that includes your target keyword' }));
+          .map((i) => ({ id: i.id, title: i.title, url: `/articles/${i.slug}`, detail: t('seo.detailNoH1'), recommendation: t('seo.detailAddH1') }));
       case 'duplicate-titles': {
         const groups = new Map<string, ContentItem[]>();
         for (const i of items) {
@@ -186,7 +191,7 @@ function ContentDetailTable({ type }: { type: DetailType }) {
         for (const [title, group] of groups) {
           if (group.length > 1) {
             for (const i of group) {
-              result.push({ id: i.id, title: i.title, url: `/articles/${i.slug}`, detail: `Duplicate: "${title}" (${group.length} pages)`, recommendation: 'Make each page title unique' });
+              result.push({ id: i.id, title: i.title, url: `/articles/${i.slug}`, detail: `${t('seo.detailDuplicateTitlePrefix')}${title}${t('seo.detailPagesSuffix')} (${group.length}${t('seo.detailPagesClose')}`, recommendation: t('seo.detailUniqueTitles') });
             }
           }
         }
@@ -204,7 +209,7 @@ function ContentDetailTable({ type }: { type: DetailType }) {
         for (const [desc, group] of groups) {
           if (group.length > 1) {
             for (const i of group) {
-              result.push({ id: i.id, title: i.title, url: `/articles/${i.slug}`, detail: `Duplicate description (${group.length} pages)`, recommendation: 'Write a unique description for each page' });
+              result.push({ id: i.id, title: i.title, url: `/articles/${i.slug}`, detail: `${t('seo.detailDuplicateDescPrefix')}${group.length}${t('seo.detailPagesClose')}`, recommendation: t('seo.detailUniqueDesc') });
             }
           }
         }
@@ -216,7 +221,7 @@ function ContentDetailTable({ type }: { type: DetailType }) {
             const config = configMap.get(i.id);
             return !config || !config.canonicalUrl || config.canonicalUrl.trim() === '';
           })
-          .map((i) => ({ id: i.id, title: i.title, url: `/articles/${i.slug}`, detail: 'No canonical URL set', recommendation: 'Add a canonical URL to prevent duplicate content issues' }));
+          .map((i) => ({ id: i.id, title: i.title, url: `/articles/${i.slug}`, detail: t('seo.detailNoCanonical'), recommendation: t('seo.detailAddCanonical') }));
       case 'canonical-issues':
         return items
           .filter((i) => {
@@ -231,22 +236,22 @@ function ContentDetailTable({ type }: { type: DetailType }) {
           })
           .map((i) => {
             const config = configMap.get(i.id);
-            return { id: i.id, title: i.title, url: `/articles/${i.slug}`, detail: `Canonical: ${config?.canonicalUrl}`, recommendation: 'Ensure canonical URL points to the correct domain' };
+            return { id: i.id, title: i.title, url: `/articles/${i.slug}`, detail: `${t('seo.detailCanonicalPrefix')} ${config?.canonicalUrl}`, recommendation: t('seo.detailCanonicalDomain') };
           });
       default:
         return [];
     }
-  }, [items, configs, configMap, type]);
+  }, [items, configs, configMap, type, t]);
 
   if (isLoading) {
     return (
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Page Title</TableHead>
-            <TableHead>URL</TableHead>
-            <TableHead>Issue</TableHead>
-            <TableHead className="hidden md:table-cell">Recommendation</TableHead>
+            <TableHead>{t('seo.pageTitle')}</TableHead>
+            <TableHead>{t('seo.url')}</TableHead>
+            <TableHead>{t('seo.issue')}</TableHead>
+            <TableHead className="hidden md:table-cell">{t('seo.recommendation')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -266,7 +271,7 @@ function ContentDetailTable({ type }: { type: DetailType }) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <AlertCircle className="h-8 w-8 mb-2 text-red-400" />
-        <p className="text-sm text-muted-foreground">Failed to load data. Please try again.</p>
+        <p className="text-sm text-muted-foreground">{t('seo.detailLoadFailed')}</p>
       </div>
     );
   }
@@ -275,8 +280,8 @@ function ContentDetailTable({ type }: { type: DetailType }) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <CheckCircle2 className="h-8 w-8 mb-2 text-green-500" />
-        <p className="text-sm font-medium">No issues found</p>
-        <p className="text-xs text-muted-foreground mt-1">All pages pass this check.</p>
+        <p className="text-sm font-medium">{t('seo.noIssuesFound')}</p>
+        <p className="text-xs text-muted-foreground mt-1">{t('seo.allPagesPass')}</p>
       </div>
     );
   }
@@ -285,10 +290,10 @@ function ContentDetailTable({ type }: { type: DetailType }) {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Page Title</TableHead>
-          <TableHead>URL</TableHead>
-          <TableHead>Issue</TableHead>
-          <TableHead className="hidden md:table-cell">Recommendation</TableHead>
+          <TableHead>{t('seo.pageTitle')}</TableHead>
+          <TableHead>{t('seo.url')}</TableHead>
+          <TableHead>{t('seo.issue')}</TableHead>
+          <TableHead className="hidden md:table-cell">{t('seo.recommendation')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -310,6 +315,7 @@ function ContentDetailTable({ type }: { type: DetailType }) {
 // -------------------- Indexing Table (indexed / not-indexed) --------------------
 
 function IndexingTable({ type }: { type: 'indexed' | 'not-indexed' }) {
+  const { t } = useT();
   const { data, isLoading, isError } = useQuery({
     queryKey: ['seo-detail', 'indexing', type],
     queryFn: () => getApi<{ data: IndexingRecord[]; pagination: { total: number } }>('/api/seo/indexing', {
@@ -331,11 +337,11 @@ function IndexingTable({ type }: { type: 'indexed' | 'not-indexed' }) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Page</TableHead>
-            <TableHead>URL</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="hidden md:table-cell">Last Crawled</TableHead>
-            <TableHead className="hidden lg:table-cell">Issue</TableHead>
+            <TableHead>{t('seo.page')}</TableHead>
+            <TableHead>{t('seo.url')}</TableHead>
+            <TableHead>{t('common.status')}</TableHead>
+            <TableHead className="hidden md:table-cell">{t('seo.lastCrawled')}</TableHead>
+            <TableHead className="hidden lg:table-cell">{t('seo.issue')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -355,7 +361,7 @@ function IndexingTable({ type }: { type: 'indexed' | 'not-indexed' }) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <AlertCircle className="h-8 w-8 mb-2 text-red-400" />
-        <p className="text-sm text-muted-foreground">Failed to load indexing data.</p>
+        <p className="text-sm text-muted-foreground">{t('seo.indexingLoadFailed')}</p>
       </div>
     );
   }
@@ -364,9 +370,9 @@ function IndexingTable({ type }: { type: 'indexed' | 'not-indexed' }) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <CheckCircle2 className="h-8 w-8 mb-2 text-green-500" />
-        <p className="text-sm font-medium">No pages in this category</p>
+        <p className="text-sm font-medium">{t('seo.noPagesInCategory')}</p>
         <p className="text-xs text-muted-foreground mt-1">
-          {type === 'indexed' ? 'No indexed pages found.' : 'All pages are indexed.'}
+          {type === 'indexed' ? t('seo.noIndexedPages') : t('seo.allIndexed')}
         </p>
       </div>
     );
@@ -376,11 +382,11 @@ function IndexingTable({ type }: { type: 'indexed' | 'not-indexed' }) {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Page</TableHead>
-          <TableHead>URL</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="hidden md:table-cell">Last Crawled</TableHead>
-          <TableHead className="hidden lg:table-cell">Issue</TableHead>
+          <TableHead>{t('seo.page')}</TableHead>
+          <TableHead>{t('seo.url')}</TableHead>
+          <TableHead>{t('common.status')}</TableHead>
+          <TableHead className="hidden md:table-cell">{t('seo.lastCrawled')}</TableHead>
+          <TableHead className="hidden lg:table-cell">{t('seo.issue')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -417,6 +423,7 @@ function IndexingTable({ type }: { type: 'indexed' | 'not-indexed' }) {
 // -------------------- Broken Links Table --------------------
 
 function BrokenLinksTable() {
+  const { t } = useT();
   const { data, isLoading, isError } = useQuery({
     queryKey: ['seo-detail', 'broken-links'],
     queryFn: () => getApi<{ data: BrokenLink[]; pagination: { total: number } }>('/api/seo/broken-links', { pageSize: 100 }),
@@ -430,11 +437,11 @@ function BrokenLinksTable() {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Source Page</TableHead>
-            <TableHead>Broken URL</TableHead>
-            <TableHead>Link Text</TableHead>
-            <TableHead>Status Code</TableHead>
-            <TableHead className="hidden md:table-cell">Type</TableHead>
+            <TableHead>{t('seo.sourcePage')}</TableHead>
+            <TableHead>{t('seo.brokenUrl')}</TableHead>
+            <TableHead>{t('seo.linkText')}</TableHead>
+            <TableHead>{t('seo.statusCode')}</TableHead>
+            <TableHead className="hidden md:table-cell">{t('seo.type')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -454,7 +461,7 @@ function BrokenLinksTable() {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <AlertCircle className="h-8 w-8 mb-2 text-red-400" />
-        <p className="text-sm text-muted-foreground">Failed to load broken links.</p>
+        <p className="text-sm text-muted-foreground">{t('seo.brokenLinksLoadFailed')}</p>
       </div>
     );
   }
@@ -463,8 +470,8 @@ function BrokenLinksTable() {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <CheckCircle2 className="h-8 w-8 mb-2 text-green-500" />
-        <p className="text-sm font-medium">No broken links found</p>
-        <p className="text-xs text-muted-foreground mt-1">All links on your site are working correctly.</p>
+        <p className="text-sm font-medium">{t('seo.noBrokenLinks')}</p>
+        <p className="text-xs text-muted-foreground mt-1">{t('seo.allLinksWorking')}</p>
       </div>
     );
   }
@@ -473,11 +480,11 @@ function BrokenLinksTable() {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Source Page</TableHead>
-          <TableHead>Broken URL</TableHead>
-          <TableHead>Link Text</TableHead>
-          <TableHead>Status Code</TableHead>
-          <TableHead className="hidden md:table-cell">Type</TableHead>
+          <TableHead>{t('seo.sourcePage')}</TableHead>
+          <TableHead>{t('seo.brokenUrl')}</TableHead>
+          <TableHead>{t('seo.linkText')}</TableHead>
+          <TableHead>{t('seo.statusCode')}</TableHead>
+          <TableHead className="hidden md:table-cell">{t('seo.type')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

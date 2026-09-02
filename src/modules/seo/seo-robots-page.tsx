@@ -27,6 +27,7 @@ import {
 import { getApi, putApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useSiteStore } from '@/lib/stores/site-store';
+import { useT } from '@/lib/i18n';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -43,16 +44,19 @@ interface ValidationWarning {
   type: 'warning' | 'error';
   message: string;
   line?: number;
+  /** Stable locale-independent marker for the "Disallow: /" wildcard rule —
+   *  used instead of matching on the (translated) message text. */
+  isBlockAll?: boolean;
 }
 
 // ==================== Validation ====================
 
-function validateRobots(content: string): ValidationWarning[] {
+function validateRobots(content: string, t: (key: string) => string): ValidationWarning[] {
   const warnings: ValidationWarning[] = [];
   const lines = content.split('\n');
 
   if (!content.trim()) {
-    warnings.push({ type: 'error', message: 'Robots.txt content is empty', line: 1 });
+    warnings.push({ type: 'error', message: t('seo.validationEmpty'), line: 1 });
     return warnings;
   }
 
@@ -60,7 +64,7 @@ function validateRobots(content: string): ValidationWarning[] {
     line.toLowerCase().trimStart().startsWith('user-agent:'),
   );
   if (!hasUserAgent) {
-    warnings.push({ type: 'error', message: 'No "User-agent:" directive found — crawlers may ignore your rules' });
+    warnings.push({ type: 'error', message: t('seo.validationNoUserAgent') });
   }
 
   // Check Sitemap URL validity
@@ -68,7 +72,7 @@ function validateRobots(content: string): ValidationWarning[] {
     if (line.toLowerCase().trimStart().startsWith('sitemap:')) {
       const url = line.slice(line.indexOf(':') + 1).trim();
       if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
-        warnings.push({ type: 'warning', message: `Sitemap URL should start with http:// or https://: "${url}"`, line: idx + 1 });
+        warnings.push({ type: 'warning', message: `${t('seo.validationSitemapPrefix')}${url}${t('seo.validationQuote')}`, line: idx + 1 });
       }
     }
   });
@@ -96,8 +100,9 @@ function validateRobots(content: string): ValidationWarning[] {
       if (directive === 'disallow' && value === '/' && inWildcardGroup) {
         warnings.push({
           type: 'error',
-          message: 'This rule blocks ALL crawlers from accessing the entire website. Search engines will not crawl or index any pages.',
+          message: t('seo.validationBlockAll'),
           line: idx + 1,
+          isBlockAll: true,
         });
       }
     }
@@ -137,7 +142,7 @@ function validateRobots(content: string): ValidationWarning[] {
   for (const group of groups) {
     const conflicts = group.allowPaths.filter((p) => group.disallowPaths.includes(p));
     if (conflicts.length > 0) {
-      warnings.push({ type: 'warning', message: `Conflicting Allow/Disallow for paths: ${conflicts.join(', ')} (User-agent: ${group.agents.join(', ')})` });
+      warnings.push({ type: 'warning', message: `${t('seo.validationConflictPrefix')}${conflicts.join(', ')}${t('seo.validationConflictMid')}${group.agents.join(', ')}${t('seo.validationConflictSuffix')}` });
     }
   }
 
@@ -145,7 +150,7 @@ function validateRobots(content: string): ValidationWarning[] {
   const agentCounts = new Map<string, number>();
   for (const group of groups) for (const a of group.agents) agentCounts.set(a, (agentCounts.get(a) || 0) + 1);
   for (const [agent, count] of agentCounts) {
-    if (count > 1) warnings.push({ type: 'warning', message: `Duplicate User-agent "${agent}" — rules may conflict` });
+    if (count > 1) warnings.push({ type: 'warning', message: `${t('seo.validationDuplicatePrefix')}${agent}${t('seo.validationDuplicateSuffix')}` });
   }
 
   // Invalid directives
@@ -155,11 +160,11 @@ function validateRobots(content: string): ValidationWarning[] {
     if (!trimmed || trimmed.startsWith('#')) return;
     const colonIdx = trimmed.indexOf(':');
     if (colonIdx === -1) {
-      warnings.push({ type: 'warning', message: `Invalid syntax (missing colon): "${trimmed.slice(0, 50)}"`, line: idx + 1 });
+      warnings.push({ type: 'warning', message: `${t('seo.validationInvalidSyntaxPrefix')}${trimmed.slice(0, 50)}${t('seo.validationQuote')}`, line: idx + 1 });
     } else {
       const directive = trimmed.slice(0, colonIdx).trim().toLowerCase();
       if (!validDirectives.has(directive)) {
-        warnings.push({ type: 'warning', message: `Unrecognized directive: "${directive}"`, line: idx + 1 });
+        warnings.push({ type: 'warning', message: `${t('seo.validationUnrecognizedPrefix')}${directive}${t('seo.validationQuote')}`, line: idx + 1 });
       }
     }
   });
@@ -184,6 +189,7 @@ function CodeEditor({
   onChange: (val: string) => void;
   warningLines: Set<number>;
 }) {
+  const { t } = useT();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
   const lines = content.split('\n');
@@ -222,7 +228,7 @@ function CodeEditor({
         {/* Textarea */}
         <textarea
           ref={textareaRef}
-          aria-label="Robots.txt content"
+          aria-label={t('seo.robotsContentAria')}
           className="flex-1 min-h-[440px] bg-transparent px-4 py-3 font-mono text-sm leading-6 resize-y border-0 focus-visible:outline-none text-foreground placeholder:text-muted-foreground/40"
           value={content}
           onChange={(e) => onChange(e.target.value)}
@@ -238,6 +244,7 @@ function CodeEditor({
 // ==================== Main Page ====================
 
 export function SeoRobotsPage() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [content, setContent] = useState('');
   const [isDirty, setIsDirty] = useState(false);
@@ -271,10 +278,10 @@ export function SeoRobotsPage() {
     onSuccess: () => {
       setIsDirty(false);
       queryClient.invalidateQueries({ queryKey: queryKeys.seoRobots.all });
-      toast.success('Robots.txt saved successfully');
+      toast.success(t('seo.robotsSaved'));
     },
     onError: () => {
-      toast.error('Failed to save robots.txt');
+      toast.error(t('seo.robotsSaveFailed'));
     },
   });
 
@@ -283,8 +290,8 @@ export function SeoRobotsPage() {
     setContent(defaultContent);
     setIsDirty(true);
     setRestoreConfirmOpen(false);
-    toast.info('Restored to default robots.txt template');
-  }, [domain]);
+    toast.info(t('seo.robotsRestored'));
+  }, [domain, t]);
 
   // IMPORTANT: never validate while the server content is still loading — an
   // editor that is empty only because the GET /api/seo/robots response has not
@@ -293,8 +300,8 @@ export function SeoRobotsPage() {
   // Robots.txt screen before the real content appeared. While loading we render
   // the page skeleton instead (see editor card below).
   const warnings = useMemo(
-    () => (isLoading ? [] : validateRobots(content)),
-    [isLoading, content],
+    () => (isLoading ? [] : validateRobots(content, t)),
+    [isLoading, content, t],
   );
   const warningLines = useMemo(() => {
     const s = new Set<number>();
@@ -302,7 +309,7 @@ export function SeoRobotsPage() {
     return s;
   }, [warnings]);
 
-  const hasBlockAllError = warnings.some((w) => w.message.includes('blocks ALL crawlers'));
+  const hasBlockAllError = warnings.some((w) => w.isBlockAll);
 
   const handleSaveClick = useCallback(() => {
     if (hasBlockAllError) {
@@ -322,7 +329,7 @@ export function SeoRobotsPage() {
           <CardContent className="p-4 flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
             <p className="text-sm text-red-700 dark:text-red-400">
-              Failed to load robots.txt. You can still edit and save.
+              {t('seo.robotsLoadFailed')}
             </p>
           </CardContent>
         </Card>
@@ -346,7 +353,7 @@ export function SeoRobotsPage() {
               {warnings.some((w) => w.type === 'error')
                 ? <XCircle className="h-4 w-4 shrink-0" />
                 : <AlertTriangle className="h-4 w-4 shrink-0" />}
-              {warnings.some((w) => w.type === 'error') ? 'Validation Errors' : 'Validation Warnings'}
+              {warnings.some((w) => w.type === 'error') ? t('seo.validationErrors') : t('seo.validationWarnings')}
             </div>
             {warnings.map((w, i) => (
               <div
@@ -359,7 +366,7 @@ export function SeoRobotsPage() {
                 )}
               >
                 <span>
-                  {w.line && <span className="text-muted-foreground/60">Line {w.line}: </span>}
+                  {w.line && <span className="text-muted-foreground/60">{t('seo.line')} {w.line}: </span>}
                   {w.message}
                 </span>
               </div>
@@ -382,7 +389,7 @@ export function SeoRobotsPage() {
             <div className="flex flex-col gap-3 border-b border-border bg-muted/30 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <FileCode className="h-4 w-4 text-muted-foreground" />
-                <h3 className="font-semibold text-sm">Editor</h3>
+                <h3 className="font-semibold text-sm">{t('seo.editor')}</h3>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -395,11 +402,11 @@ export function SeoRobotsPage() {
                   ) : (
                     <Save className="h-4 w-4 mr-2" />
                   )}
-                  Save
+                  {t('common.save')}
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => setRestoreConfirmOpen(true)}>
                   <RotateCcw className="h-4 w-4 mr-2" />
-                  Restore Default
+                  {t('seo.restoreDefault')}
                 </Button>
               </div>
             </div>
@@ -415,12 +422,12 @@ export function SeoRobotsPage() {
               {/* Footer bar */}
               <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
                 <span className="font-mono tabular-nums">
-                  {lineCount} lines · {content.length.toLocaleString()} characters
+                  {lineCount} {t('seo.lines')} · {content.length.toLocaleString()} {t('seo.characters')}
                 </span>
                 {isDirty && (
                   <div className="flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                    Modified
+                    {t('seo.modified')}
                   </div>
                 )}
               </div>
@@ -433,15 +440,15 @@ export function SeoRobotsPage() {
       <AlertDialog open={restoreConfirmOpen} onOpenChange={setRestoreConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Restore Default Robots.txt?</AlertDialogTitle>
+            <AlertDialogTitle>{t('seo.restoreDefaultTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will replace the current content with the recommended default robots.txt configuration. Your current changes will be lost.
+              {t('seo.restoreDefaultDesc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleRestore}>
-              Restore Default
+              {t('seo.restoreDefault')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -453,22 +460,22 @@ export function SeoRobotsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-red-500" />
-              Warning: This Blocks All Crawlers
+              {t('seo.blockAllTitle')}
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <span className="block">
-                Your robots.txt contains <code className="font-mono text-red-600 dark:text-red-400 font-medium">Disallow: /</code> for <code className="font-mono font-medium">User-agent: *</code>.
+                {t('seo.blockAllContains')} <code className="font-mono text-red-600 dark:text-red-400 font-medium">Disallow: /</code> {t('seo.blockAllFor')} <code className="font-mono font-medium">User-agent: *</code>.
               </span>
               <span className="block">
-                This will prevent search engines from crawling and indexing your entire website. This can severely harm your SEO.
+                {t('seo.blockAllDescription')}
               </span>
               <span className="block font-medium">
-                Are you sure you want to save this configuration?
+                {t('seo.blockAllConfirm')}
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700"
               onClick={() => {
@@ -476,7 +483,7 @@ export function SeoRobotsPage() {
                 saveMutation.mutate(content);
               }}
             >
-              Yes, Save Anyway
+              {t('seo.saveAnyway')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

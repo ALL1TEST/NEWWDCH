@@ -30,15 +30,22 @@ export default function AdminApp() {
     if (isPlatformStaff && !isPlatformPage(currentModule) && currentModule !== 'profile') {
       navigate('platform-overview');
     }
-    // INTERNAL — the dedicated Internal Account. It lands on its OWN
-    // Internal Account dashboard (never the Platform Admin dashboard,
-    // never the Admin User client dashboard). 'profile' / 'billing' /
-    // 'notifications' are its shared self-service account pages and are
-    // excluded from the redirect; anything else (including platform-
-    // * pages and client CMS pages the account cannot access) routes
-    // back to the internal dashboard.
+    // INTERNAL — the SaaS owner's internal account with FULL platform
+    // access. It lands on its OWN Internal Account dashboard (never the
+    // Platform Admin dashboard, never the plain client '#dashboard' hash)
+    // and can open EVERY client CMS module from there (Articles, Media,
+    // SEO, AI, Automation, Analytics, Settings, … — no plan gating).
+    // Only two things route it back to its own dashboard: Platform Admin
+    // management pages (platform-* — those belong to the separate
+    // Platform Admin account type) and the client 'dashboard' hash /
+    // unknown module ids (its home is #internal-dashboard).
     const isInternalAccount = user?.role === 'INTERNAL';
-    if (isInternalAccount && !(currentModule === 'internal-dashboard' || currentModule === 'profile' || currentModule === 'billing' || currentModule === 'notifications')) {
+    if (
+      isInternalAccount &&
+      (isPlatformPage(currentModule) ||
+        currentModule === 'dashboard' ||
+        !(currentModule in moduleRegistry))
+    ) {
       navigate('internal-dashboard');
     }
     // No other account type may land on the Internal Account dashboard —
@@ -58,7 +65,9 @@ export default function AdminApp() {
     // direct-URL path, so a client role manually entering #analytics is
     // redirected to their dashboard and can never reach the module.
     // Platform staff were already redirected to platform pages by the
-    // rule above — the Platform Admin dashboard is unaffected.
+    // rule above — the Platform Admin dashboard is unaffected. The
+    // Internal Account (full platform access) is EXEMPT: it legitimately
+    // uses the Analytics module.
     if (user && !isPlatformStaff && !isInternalAccount && currentModule === 'analytics') {
       navigate('dashboard');
     }
@@ -90,6 +99,12 @@ export default function AdminApp() {
   // so no data leaks.
   const { data: planEntitlements } = usePlanEntitlements();
   const isStaff = user?.role === 'PLATFORM_ADMIN' || user?.role === 'OWNER';
+  // INTERNAL — the SaaS owner's internal account — bypasses plan feature
+  // gating exactly like platform staff (it is NOT a customer subscription;
+  // Free/Plus/Pro restrictions never apply). The server side enforces the
+  // same rule through the INTERNAL billing bypass (hasBillingBypass →
+  // every requireFeature/requireAnyFeatureAllowStaff gate passes).
+  const bypassPlanGate = isStaff || user?.role === 'INTERNAL';
 
   // SUBSCRIPTION SYNC — mirrors the user's ACTIVE server-side plan
   // (the same /api/platform/billing/me data Billing & Subscription
@@ -101,7 +116,7 @@ export default function AdminApp() {
   // first sync lands (never a default/stale value).
   useSubscriptionServerSync();
 
-  const featureAllowed = isStaff || (pageKey === 'settings'
+  const featureAllowed = bypassPlanGate || (pageKey === 'settings'
     ? isSmtpSettingsAllowedByPlan(planEntitlements)
     : isModuleAllowedByPlan(pageKey, planEntitlements));
 

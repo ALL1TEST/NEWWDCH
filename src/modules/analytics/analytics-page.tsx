@@ -18,6 +18,7 @@ import { PageHeader } from '@/components/patterns';
 import { getApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useChartTheme } from '@/lib/chart-theme';
+import { useT } from '@/lib/i18n';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import type { PostStatus, ChartDataPoint } from '@/shared/types';
 import {
@@ -60,12 +61,15 @@ interface ActivityEvent {
 
 // -------------------- Date Range Presets --------------------
 
+// i18n: labelKey resolves through t() at render time (see
+// DATE_PRESETS.map in the component below) so the labels follow
+// the selected language while the query values stay stable.
 const DATE_PRESETS = [
-  { label: 'Today', value: 'today' },
-  { label: 'Last 7 Days', value: '7d' },
-  { label: 'Last 30 Days', value: '30d' },
-  { label: 'Last 90 Days', value: '90d' },
-  { label: 'Custom', value: 'custom' },
+  { labelKey: 'analytics.presetToday', value: 'today' },
+  { labelKey: 'analytics.preset7d', value: '7d' },
+  { labelKey: 'analytics.preset30d', value: '30d' },
+  { labelKey: 'analytics.preset90d', value: '90d' },
+  { labelKey: 'analytics.presetCustom', value: 'custom' },
 ] as const;
 
 type DatePreset = (typeof DATE_PRESETS)[number]['value'];
@@ -115,6 +119,7 @@ function StatCard({
 // -------------------- Main Component --------------------
 
 export function AnalyticsPage() {
+  const { t } = useT();
   // Shared theme-aware chart palette (see lib/chart-theme.ts).
   const chart = useChartTheme();
   const [preset, setPreset] = useState<DatePreset>('30d');
@@ -175,7 +180,7 @@ export function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Analytics" description="Track content performance and visitor engagement" />
+      <PageHeader title={t('analytics.title')} description={t('analytics.pageDescription')} />
 
       {/* Date Range Selector */}
       <div className="flex flex-wrap gap-2">
@@ -186,7 +191,7 @@ export function AnalyticsPage() {
             size="sm"
             onClick={() => setPreset(p.value)}
           >
-            {p.label}
+            {t(p.labelKey)}
           </Button>
         ))}
       </div>
@@ -194,22 +199,22 @@ export function AnalyticsPage() {
       {/* Summary Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Total Page Views"
+          title={t('analytics.totalPageViews')}
           value={safeSummary.totalPageViews}
           icon={Eye}
         />
         <StatCard
-          title="Unique Visitors"
+          title={t('analytics.uniqueVisitors')}
           value={safeSummary.uniqueVisitors}
           icon={Users}
         />
         <StatCard
-          title="Avg Time on Page"
+          title={t('analytics.avgTimeOnPage')}
           value={`${Math.round(safeSummary.avgTimeOnPage)}s`}
           icon={Clock}
         />
         <StatCard
-          title="Bounce Rate"
+          title={t('analytics.bounceRate')}
           value={`${safeSummary.bounceRate.toFixed(1)}`}
           suffix="%"
           icon={TrendingUp}
@@ -222,14 +227,14 @@ export function AnalyticsPage() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />Content Performance
+              <BarChart3 className="h-4 w-4" />{t('analytics.contentPerformance')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {contentLoading ? (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground text-sm">Loading...</div>
+              <div className="h-[300px] flex items-center justify-center text-muted-foreground text-sm">{t('common.loading')}</div>
             ) : barChartData.length === 0 ? (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground text-sm">No content data available.</div>
+              <div className="h-[300px] flex items-center justify-center text-muted-foreground text-sm">{t('analytics.noContentData')}</div>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={barChartData} layout="vertical" margin={{ left: 10, right: 20 }}>
@@ -253,12 +258,12 @@ export function AnalyticsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <PieChartIcon className="h-4 w-4" />Content Status
+              <PieChartIcon className="h-4 w-4" />{t('analytics.contentStatus')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {pieChartData.length === 0 ? (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground text-sm">No data available.</div>
+              <div className="h-[300px] flex items-center justify-center text-muted-foreground text-sm">{t('analytics.noDataAvailable')}</div>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
@@ -301,14 +306,14 @@ export function AnalyticsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />Traffic Sources
+              <TrendingUp className="h-4 w-4" />{t('analytics.trafficSources')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[250px] flex flex-col items-center justify-center text-muted-foreground text-sm gap-2">
               <Activity className="h-8 w-8 opacity-30" />
-              <p>Traffic source data requires integration with an external analytics service.</p>
-              <p className="text-xs">Connect Google Analytics or Plausible for detailed traffic data.</p>
+              <p>{t('analytics.trafficSourcesDescription')}</p>
+              <p className="text-xs">{t('analytics.trafficSourcesHint')}</p>
             </div>
           </CardContent>
         </Card>
@@ -316,13 +321,13 @@ export function AnalyticsPage() {
         {/* Recent Activity Timeline */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Recent Activity</CardTitle>
+            <CardTitle className="text-base">{t('analytics.recentActivity')}</CardTitle>
           </CardHeader>
           <CardContent>
             {activityLoading ? (
-              <div className="text-sm text-muted-foreground">Loading...</div>
+              <div className="text-sm text-muted-foreground">{t('common.loading')}</div>
             ) : !activityEvents || activityEvents.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No recent activity.</div>
+              <div className="text-sm text-muted-foreground">{t('analytics.noRecentActivity')}</div>
             ) : (
               <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
                 {activityEvents.map((event, i) => (
@@ -346,7 +351,7 @@ export function AnalyticsPage() {
                         </span>
                       </div>
                       <p className="text-sm mt-0.5 truncate">{event.description}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">by {event.user?.name ?? 'System'}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{t('analytics.byPrefix')}{event.user?.name ?? t('analytics.systemUser')}</p>
                     </div>
                   </div>
                 ))}

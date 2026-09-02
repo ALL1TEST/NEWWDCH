@@ -26,6 +26,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   Search, ChevronLeft, ChevronRight, Loader2, Clock, CheckCircle2, XCircle, RefreshCw, X as XIcon, Eye, Zap,
 } from 'lucide-react';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -58,15 +59,6 @@ const JOB_STATUS_CONFIG: Record<AiJobStatus, { color: string; icon: React.Elemen
   CANCELLED: { color: 'bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400', icon: XIcon },
 };
 
-const JOB_TYPE_LABELS: Record<AiJobType, string> = {
-  GENERATE_ARTICLE: 'Generate Article',
-  REWRITE_CONTENT: 'Rewrite Content',
-  SEO_OPTIMIZATION: 'SEO Optimization',
-  GENERATE_IMAGES: 'Generate Images',
-  TRANSLATE_ARTICLE: 'Translate Article',
-  CUSTOM: 'Custom',
-};
-
 const JOB_TYPE_COLORS: Record<AiJobType, string> = {
   GENERATE_ARTICLE: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
   REWRITE_CONTENT: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
@@ -76,19 +68,32 @@ const JOB_TYPE_COLORS: Record<AiJobType, string> = {
   CUSTOM: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
 };
 
-const STATUS_FILTERS: Array<{ value: string; label: string }> = [
-  { value: 'all', label: 'All' },
-  { value: 'PENDING', label: 'Pending' },
-  { value: 'RUNNING', label: 'Running' },
-  { value: 'COMPLETED', label: 'Completed' },
-  { value: 'FAILED', label: 'Failed' },
-  { value: 'RETRYING', label: 'Retrying' },
-  { value: 'CANCELLED', label: 'Cancelled' },
-];
-
 // -------------------- Component --------------------
 
 export function JobsPage() {
+  const { t } = useT();
+
+  // Job type labels + status filter labels — inside the component so the
+  // labels resolve through t() for the active locale.
+  const JOB_TYPE_LABELS: Record<AiJobType, string> = {
+    GENERATE_ARTICLE: t('ai.jobTypeGenerateArticle'),
+    REWRITE_CONTENT: t('ai.jobTypeRewriteContent'),
+    SEO_OPTIMIZATION: t('ai.jobTypeSeoOptimization'),
+    GENERATE_IMAGES: t('ai.jobTypeGenerateImages'),
+    TRANSLATE_ARTICLE: t('ai.jobTypeTranslateArticle'),
+    CUSTOM: t('ai.custom'),
+  };
+
+  const STATUS_FILTERS: Array<{ value: string; label: string }> = [
+    { value: 'all', label: t('ai.all') },
+    { value: 'PENDING', label: t('ai.statusPending') },
+    { value: 'RUNNING', label: t('ai.statusRunning') },
+    { value: 'COMPLETED', label: t('ai.statusCompleted') },
+    { value: 'FAILED', label: t('ai.statusFailed') },
+    { value: 'RETRYING', label: t('ai.statusRetrying') },
+    { value: 'CANCELLED', label: t('ai.statusCancelled') },
+  ];
+
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
@@ -131,10 +136,10 @@ export function JobsPage() {
     mutationFn: (id: string) => patchApi(`/api/ai/jobs/${id}`, { status: 'CANCELLED' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiJobs.all });
-      toast.success('Job cancelled');
+      toast.success(t('ai.jobCancelled'));
       setDetailJob(null);
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to cancel'),
+    onError: (err: Error) => toast.error(err.message || t('ai.failedToCancel')),
   });
 
   // Retry mutation
@@ -142,10 +147,10 @@ export function JobsPage() {
     mutationFn: (id: string) => postApi(`/api/ai/jobs/${id}/retry`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.aiJobs.all });
-      toast.success('Job retried');
+      toast.success(t('ai.jobRetried'));
       setDetailJob(null);
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to retry'),
+    onError: (err: Error) => toast.error(err.message || t('ai.failedToRetry')),
   });
 
   // KPI calculations
@@ -172,7 +177,7 @@ export function JobsPage() {
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800"><Clock className="h-4 w-4 text-zinc-600 dark:text-zinc-400" /></div>
             <div>
-              <p className="text-xs text-zinc-500">Total Jobs</p>
+              <p className="text-xs text-zinc-500">{t('ai.totalJobs')}</p>
               <p className="text-xl font-bold">{isLoading ? <Skeleton className="h-6 w-10 inline-block" /> : totalCount}</p>
             </div>
           </CardContent>
@@ -181,7 +186,7 @@ export function JobsPage() {
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-sky-100"><Loader2 className="h-4 w-4 text-sky-600" /></div>
             <div>
-              <p className="text-xs text-zinc-500">Running</p>
+              <p className="text-xs text-zinc-500">{t('ai.statusRunning')}</p>
               <p className="text-xl font-bold">{isLoading ? <Skeleton className="h-6 w-10 inline-block" /> : runningCount}</p>
             </div>
           </CardContent>
@@ -190,7 +195,7 @@ export function JobsPage() {
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-red-100"><XCircle className="h-4 w-4 text-red-600" /></div>
             <div>
-              <p className="text-xs text-zinc-500">Failed</p>
+              <p className="text-xs text-zinc-500">{t('ai.statusFailed')}</p>
               <p className="text-xl font-bold">{isLoading ? <Skeleton className="h-6 w-10 inline-block" /> : failedCount}</p>
             </div>
           </CardContent>
@@ -199,7 +204,7 @@ export function JobsPage() {
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-green-100"><CheckCircle2 className="h-4 w-4 text-green-600" /></div>
             <div>
-              <p className="text-xs text-zinc-500">Completed Today</p>
+              <p className="text-xs text-zinc-500">{t('ai.completedToday')}</p>
               <p className="text-xl font-bold">{isLoading ? <Skeleton className="h-6 w-10 inline-block" /> : completedToday}</p>
             </div>
           </CardContent>
@@ -212,10 +217,10 @@ export function JobsPage() {
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-              <Input placeholder="Search jobs..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-9" />
+              <Input placeholder={t('ai.searchJobs')} value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-9" />
             </div>
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-              <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder={t('common.status')} /></SelectTrigger>
               <SelectContent>
                 {STATUS_FILTERS.map((s) => (
                   <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
@@ -223,9 +228,9 @@ export function JobsPage() {
               </SelectContent>
             </Select>
             <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setPage(1); }}>
-              <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Type" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder={t('ai.type')} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="all">{t('ai.allTypes')}</SelectItem>
                 {Object.entries(JOB_TYPE_LABELS).map(([k, v]) => (
                   <SelectItem key={k} value={k}>{v}</SelectItem>
                 ))}
@@ -242,15 +247,15 @@ export function JobsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="hidden md:table-cell">Provider</TableHead>
-                  <TableHead className="hidden lg:table-cell">Model</TableHead>
-                  <TableHead className="hidden md:table-cell">Duration</TableHead>
-                  <TableHead className="hidden lg:table-cell">Cost</TableHead>
-                  <TableHead className="hidden xl:table-cell">Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t('ai.title')}</TableHead>
+                  <TableHead>{t('ai.type')}</TableHead>
+                  <TableHead>{t('common.status')}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t('ai.provider')}</TableHead>
+                  <TableHead className="hidden lg:table-cell">{t('ai.model')}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t('ai.duration')}</TableHead>
+                  <TableHead className="hidden lg:table-cell">{t('ai.cost')}</TableHead>
+                  <TableHead className="hidden xl:table-cell">{t('ai.created')}</TableHead>
+                  <TableHead className="text-right">{t('common.actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -261,11 +266,11 @@ export function JobsPage() {
                     ))}</TableRow>
                   ))
                 ) : isError ? (
-                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-zinc-500">Failed to load jobs</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-zinc-500">{t('ai.failedToLoadJobs')}</TableCell></TableRow>
                 ) : jobs.length === 0 ? (
                   <TableRow><TableCell colSpan={9} className="text-center py-8 text-zinc-500">
                     <Zap className="h-8 w-8 mx-auto mb-2 text-zinc-300" />
-                    No jobs found.
+                    {t('ai.noJobs')}
                   </TableCell></TableRow>
                 ) : jobs.map((job) => {
                   const statusConf = JOB_STATUS_CONFIG[job.status];
@@ -310,7 +315,7 @@ export function JobsPage() {
 
           {pagination && pagination.totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-3 border-t">
-              <p className="text-sm text-zinc-500">{(pagination.page - 1) * pagination.pageSize + 1}–{Math.min(pagination.page * pagination.pageSize, pagination.total)} of {pagination.total}</p>
+              <p className="text-sm text-zinc-500">{(pagination.page - 1) * pagination.pageSize + 1}–{Math.min(pagination.page * pagination.pageSize, pagination.total)} {t('common.of')} {pagination.total}</p>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" disabled={pagination.page <= 1} onClick={() => setPage((p) => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
                 <span className="text-sm">{pagination.page} / {pagination.totalPages}</span>
@@ -325,7 +330,7 @@ export function JobsPage() {
       <Dialog open={!!detailJob} onOpenChange={(open) => { if (!open) setDetailJob(null); }}>
         <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Job Details{jobDetail ? ` — ${jobDetail.title}` : ''}</DialogTitle>
+            <DialogTitle>{t('ai.jobDetails')}{jobDetail ? ` — ${jobDetail.title}` : ''}</DialogTitle>
           </DialogHeader>
           {detailLoading ? (
             <div className="space-y-4">
@@ -337,36 +342,36 @@ export function JobsPage() {
                   </div>
                 ))}
               </div>
-              <p className="text-center text-sm text-zinc-500">Loading...</p>
+              <p className="text-center text-sm text-zinc-500">{t('common.loading')}</p>
             </div>
           ) : jobDetail && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <div><p className="text-xs text-zinc-500">Status</p><Badge variant="secondary" className={JOB_STATUS_CONFIG[jobDetail.status].color}>{jobDetail.status}</Badge></div>
-                <div><p className="text-xs text-zinc-500">Type</p><Badge variant="secondary" className={JOB_TYPE_COLORS[jobDetail.type]}>{JOB_TYPE_LABELS[jobDetail.type]}</Badge></div>
-                <div><p className="text-xs text-zinc-500">Duration</p><p className="text-sm font-medium">{formatDuration(jobDetail.durationMs)}</p></div>
-                <div><p className="text-xs text-zinc-500">Cost</p><p className="text-sm font-medium">{jobDetail.cost != null ? `$${jobDetail.cost.toFixed(4)}` : '—'}</p></div>
-                <div><p className="text-xs text-zinc-500">Provider</p><p className="text-sm font-medium">{jobDetail.provider?.name ?? '—'}</p></div>
-                <div><p className="text-xs text-zinc-500">Model</p><p className="text-sm font-medium">{jobDetail.model?.name ?? '—'}</p></div>
+                <div><p className="text-xs text-zinc-500">{t('common.status')}</p><Badge variant="secondary" className={JOB_STATUS_CONFIG[jobDetail.status].color}>{jobDetail.status}</Badge></div>
+                <div><p className="text-xs text-zinc-500">{t('ai.type')}</p><Badge variant="secondary" className={JOB_TYPE_COLORS[jobDetail.type]}>{JOB_TYPE_LABELS[jobDetail.type]}</Badge></div>
+                <div><p className="text-xs text-zinc-500">{t('ai.duration')}</p><p className="text-sm font-medium">{formatDuration(jobDetail.durationMs)}</p></div>
+                <div><p className="text-xs text-zinc-500">{t('ai.cost')}</p><p className="text-sm font-medium">{jobDetail.cost != null ? `$${jobDetail.cost.toFixed(4)}` : '—'}</p></div>
+                <div><p className="text-xs text-zinc-500">{t('ai.provider')}</p><p className="text-sm font-medium">{jobDetail.provider?.name ?? '—'}</p></div>
+                <div><p className="text-xs text-zinc-500">{t('ai.model')}</p><p className="text-sm font-medium">{jobDetail.model?.name ?? '—'}</p></div>
               </div>
 
               {jobDetail.error && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-xs font-medium text-red-600 mb-1">Error</p>
+                  <p className="text-xs font-medium text-red-600 mb-1">{t('ai.error')}</p>
                   <p className="text-sm text-red-700">{jobDetail.error}</p>
                 </div>
               )}
 
               {jobDetail.input && (
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 mb-1">Input</p>
+                  <p className="text-xs font-medium text-zinc-500 mb-1">{t('ai.input')}</p>
                   <pre className="bg-zinc-50 rounded-lg p-3 text-xs overflow-auto max-h-[200px]">{JSON.stringify(jobDetail.input, null, 2)}</pre>
                 </div>
               )}
 
               {jobDetail.output && (
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 mb-1">Output</p>
+                  <p className="text-xs font-medium text-zinc-500 mb-1">{t('ai.output')}</p>
                   <pre className="bg-zinc-50 rounded-lg p-3 text-xs overflow-auto max-h-[200px]">{JSON.stringify(jobDetail.output, null, 2)}</pre>
                 </div>
               )}
@@ -377,7 +382,7 @@ export function JobsPage() {
                 {jobDetail.status === 'FAILED' && (
                   <Button variant="outline" onClick={() => retryMutation.mutate(jobDetail.id)} disabled={retryMutation.isPending}>
                     {retryMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    <RefreshCw className="h-4 w-4 mr-2" /> Retry
+                    <RefreshCw className="h-4 w-4 mr-2" /> {t('common.retry')}
                   </Button>
                 )}
                 {(jobDetail.status === 'PENDING' || jobDetail.status === 'RUNNING') && (
@@ -387,7 +392,7 @@ export function JobsPage() {
                     onClick={() => cancelMutation.mutate(jobDetail.id)}
                     disabled={cancelMutation.isPending && cancelMutation.variables === jobDetail?.id}
                   >
-                    <XIcon className="h-4 w-4 mr-2" /> Cancel
+                    <XIcon className="h-4 w-4 mr-2" /> {t('common.cancel')}
                   </Button>
                 )}
               </div>
