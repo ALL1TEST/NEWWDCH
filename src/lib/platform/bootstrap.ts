@@ -136,6 +136,51 @@ async function ensureInternalAccount() {
   console.log(`  ✓ created ${email} (INTERNAL account, password: ${password})`);
 }
 
+// CMS Admin (client) demo account — the "Admin" Quick Sign-in button on
+// the login screen fills in admin@example.com / admin123. This is a
+// normal client CMS user (ADMIN role, EXTERNAL billing mode — a paying
+// customer governed by the subscription/plan system, unlike the
+// INTERNAL/OWNER accounts above). Without this seeder the login screen
+// advertises a demo account that does not exist, so the "Admin" quick
+// sign-in button (and any manual admin@example.com / admin123 login
+// attempt) fails with "Invalid email or password". Idempotent — re-runs
+// upsert the role/status/password so the demo always works.
+async function ensureCmsAdmin() {
+  const email = 'admin@example.com';
+  const password = 'admin123';
+  const existing = await db.user.findUnique({ where: { email } });
+  if (existing) {
+    if (
+      existing.role !== 'ADMIN' ||
+      existing.billingMode !== 'EXTERNAL' ||
+      existing.password !== password ||
+      existing.status !== 'ACTIVE'
+    ) {
+      await db.user.update({
+        where: { email },
+        data: { role: 'ADMIN', billingMode: 'EXTERNAL', status: 'ACTIVE', password },
+      });
+      console.log(`  ✓ upgraded existing ${email} → ADMIN / EXTERNAL (password reset to ${password})`);
+    } else {
+      console.log(`  ✓ ${email} already ADMIN / EXTERNAL`);
+    }
+    return;
+  }
+  await db.user.create({
+    data: {
+      email,
+      name: 'Admin User',
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      billingMode: 'EXTERNAL',
+      // Demo-only plain-text password (matches existing login convention).
+      password,
+      emailVerified: true,
+    },
+  });
+  console.log(`  ✓ created ${email} (ADMIN / EXTERNAL, password: ${password})`);
+}
+
 // Seed realistic demo coupons so the Platform Admin Coupons page is
 // populated on first run. Idempotent — only inserts when the table is
 // empty, so re-running the bootstrap never duplicates coupons.
@@ -291,6 +336,7 @@ async function main() {
   await ensureOwner();
   await ensurePlatformOwnerAlias();
   await ensureInternalAccount();
+  await ensureCmsAdmin();
   await ensurePlans();
   console.log(`  ✓ plan configs seeded (${(await db.planConfig.count())} rows)`);
   await listFeatureFlags();

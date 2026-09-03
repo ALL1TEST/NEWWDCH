@@ -10148,3 +10148,24 @@ Stage Summary:
 - Regression: Owner (Platform Admin) sidebar still shows Plans & Pricing; #platform-plans renders the platform billing/plan-management UI — Platform Admin behavior UNCHANGED.
 - Dev.log clean: 145 × HTTP 200 + 46 × HTTP 401 (all expected); zero 500/502/503, zero hydration mismatches, zero unhandled exceptions.
 - Artifacts left for review: /home/z/my-project/.verify-internal/verify-internal.mjs (main script), /home/z/my-project/.verify-internal/probe-sidebar.mjs, /home/z/my-project/.verify-internal/probe-settings-children.mjs, /home/z/my-project/.verify-internal/results.json, /home/z/my-project/.verify-internal/shots/ (12 PNGs). Can be deleted; not part of repo source.
+
+---
+Task ID: 10
+Agent: main (fix admin@example.com login failure)
+Task: Fix the "Invalid email or password" error shown on the login screen when trying to sign in with admin@example.com / admin123 (the "Admin" Quick Sign-in demo account button)
+
+Work Log:
+- User uploaded a screenshot (upload/pasted_image_1788437085306.png) showing the login screen with an "Invalid email or password" error after submitting admin@example.com / admin123. OCR (tesseract) confirmed the exact error text and the demo credentials in the form.
+- Root cause: the login screen (src/components/layout/login-screen.tsx) advertises a "Quick Sign-in (Demo Accounts) → Admin" button that fills admin@example.com / admin123, and the bootstrap's main() final console.log even prints "CMS Admin (client): admin@example.com / admin123" — but the bootstrap NEVER actually seeded that user. Only owner@example.com, platform@example.com and internal@example.com were created by ensureOwner / ensurePlatformOwnerAlias / ensureInternalAccount. The admin@example.com login therefore hit the "user not found" branch in /api/auth/login (→ 401 INVALID_CREDENTIALS).
+- Fix (1 file): src/lib/platform/bootstrap.ts
+  - Added ensureCmsAdmin() — idempotent upsert that creates admin@example.com with role=ADMIN, billingMode=EXTERNAL (a normal paying-customer client CMS user, NOT internal), status=ACTIVE, password=admin123, emailVerified=true, name="Admin User". Mirrors the exact pattern of ensureOwner/ensureInternalAccount (findUnique → update if drift, create if missing).
+  - Wired it into main() right after ensureInternalAccount().
+- Ran `bun run src/lib/platform/bootstrap.ts` → "✓ created admin@example.com (ADMIN / EXTERNAL, password: admin123)".
+- Verified the login API directly: POST /api/auth/login {email: admin@example.com, password: admin123} → HTTP 200 with user {role: ADMIN, status: ACTIVE, billingMode: EXTERNAL}.
+- Browser E2E (Playwright headless): filled the login form with admin@example.com / admin123, clicked submit → navigated to the Admin User Executive Dashboard (h1="Executive Dashboard", body shows "CMS Admin / Admin User / Executive Dashboard / Monitor all sites..."), NO "Invalid email or password" error. The only console errors were the expected pre-auth 401s on /api/auth/me + /api/entitlements before the session cookie was set.
+- bunx eslint on bootstrap.ts → EXIT 0 (clean).
+
+Stage Summary:
+- 1 file edited (src/lib/platform/bootstrap.ts): added ensureCmsAdmin() + wired into main().
+- The login screen's "Admin" Quick Sign-in button (and manual admin@example.com / admin123 login) now works — user lands on the Admin User Executive Dashboard.
+- All 4 demo accounts now functional: owner@example.com/owner123 (OWNER), platform@example.com/platform123 (OWNER alias), internal@example.com/internal123 (INTERNAL), admin@example.com/admin123 (ADMIN client).
