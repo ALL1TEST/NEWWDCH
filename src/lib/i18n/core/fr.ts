@@ -133,6 +133,10 @@ export const coreFr: Record<string, string> = {
   'app.accessDeniedDescription':
     'Vous n\'avez pas la permission de consulter cette page. Contactez un administrateur si vous pensez qu\'il s\'agit d\'une erreur.',
   'app.search': 'Rechercher',
+  'app.searchPlaceholder': 'Rechercher...',
+  'app.searching': 'Recherche…',
+  'app.noResults': 'Aucun résultat trouvé.',
+  'app.noSearchMatch': 'Aucun client, paiement, forfait, coupon ou notification correspondant.',
 
   // ---- Titres des modules / pages ----
   'title.dashboard': 'Tableau de bord',

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -50,14 +51,22 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   variant = 'default',
   onConfirm,
   isLoading = false,
   overlayClassName,
   contentClassName,
 }: ConfirmDialogProps) {
+  // Default the button labels through t() so a confirm dialog whose
+  // caller did not pass explicit labels still renders in the active
+  // language (common.confirm / common.cancel exist in every locale's
+  // core dictionary). Callers that pass their own t('...') value
+  // override these defaults as before.
+  const { t } = useT();
+  const resolvedConfirm = confirmLabel ?? t('common.confirm');
+  const resolvedCancel = cancelLabel ?? t('common.cancel');
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent
@@ -72,7 +81,7 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>
-            {cancelLabel}
+            {resolvedCancel}
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
@@ -86,7 +95,7 @@ export function ConfirmDialog({
             )}
           >
             {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-            {confirmLabel}
+            {resolvedConfirm}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -148,6 +148,29 @@ export function getPlatformLocales(): SupportedLocale[] {
   );
 }
 
+// -------------------- RTL support --------------------
+
+/**
+ * Locales written right-to-left. Selecting one of these flips the
+ * entire document direction (dir="rtl") so the layout mirrors for
+ * Arabic / Persian / Hebrew. All other locales are LTR. This is the
+ * SINGLE source of truth for document direction — applied whenever
+ * the active locale changes (see setLocale + the init block below).
+ */
+const RTL_LOCALES: ReadonlySet<string> = new Set(['ar', 'fa', 'he']);
+
+/** Is the given locale code a right-to-left language? */
+export function isRTLLocale(locale: string): boolean {
+  return RTL_LOCALES.has(locale);
+}
+
+/** Apply both `lang` and `dir` to <html> for the active locale. */
+function applyLocaleToDocument(locale: string): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.lang = locale;
+  document.documentElement.dir = isRTLLocale(locale) ? 'rtl' : 'ltr';
+}
+
 // -------------------- Store --------------------
 
 interface I18nState {
@@ -171,7 +194,10 @@ export const useLocaleStore = create<I18nState>((set) => ({
     // Ignore unsupported values — the registry is the source of truth.
     if (!isSupportedLocale(locale)) return;
     localStorage.setItem(STORAGE_KEY, locale);
-    document.documentElement.lang = locale;
+    // Apply BOTH lang + dir so RTL languages (ar/fa/he) flip the layout
+    // and LTR languages reset it — the whole dashboard mirrors with
+    // the language, not just the text.
+    applyLocaleToDocument(locale);
     set({ locale });
   },
 }));
@@ -180,7 +206,9 @@ export const useLocaleStore = create<I18nState>((set) => ({
 if (typeof window !== 'undefined') {
   const initial = getInitialLocale();
   useLocaleStore.setState({ locale: initial });
-  document.documentElement.lang = initial;
+  // Apply lang + dir on load so a stored RTL locale (ar/fa/he) mirrors
+  // the layout immediately on first paint, not only after a switch.
+  applyLocaleToDocument(initial);
 }
 
 // -------------------- Translation helpers --------------------

@@ -80,8 +80,12 @@ import { clientAuditEn } from '../src/lib/i18n/fragments/en/client-audit';
 import { clientJobsEn } from '../src/lib/i18n/fragments/en/client-jobs';
 import { clientTaxonomyEn } from '../src/lib/i18n/fragments/en/client-taxonomy';
 import { clientSeoEn } from '../src/lib/i18n/fragments/en/client-seo';
+import { platformAEn } from '../src/lib/i18n/fragments/en/platform-a';
+import { platformBEn } from '../src/lib/i18n/fragments/en/platform-b';
 
 // Full client key set in SOURCE ORDER (stable across runs).
+// Includes the Platform Admin families (platform-a + platform-b) so the
+// Platform Admin dashboard is translated too — not just the client CMS.
 const clientKeyOrder: string[] = [
   ...Object.keys(clientContentEn),
   ...Object.keys(clientPeopleEn),
@@ -94,6 +98,8 @@ const clientKeyOrder: string[] = [
   ...Object.keys(clientJobsEn),
   ...Object.keys(clientTaxonomyEn),
   ...Object.keys(clientSeoEn),
+  ...Object.keys(platformAEn),
+  ...Object.keys(platformBEn),
 ];
 const clientKeySet = new Set(clientKeyOrder);
 
@@ -101,6 +107,7 @@ const englishClient: Record<string, string> = {
   ...clientContentEn, ...clientPeopleEn, ...clientAccountEn, ...clientAiEn,
   ...clientBackupsEn, ...clientEmailTemplatesEn, ...clientAnalyticsEn,
   ...clientAuditEn, ...clientJobsEn, ...clientTaxonomyEn, ...clientSeoEn,
+  ...platformAEn, ...platformBEn,
 };
 
 const frFamilies: { file: string; exportName: string; keys: string[]; source: Record<string, string> }[] = [
@@ -220,11 +227,28 @@ function main() {
   const localesPath = path.join(PROJECT, 'src/lib/i18n/locales.ts');
   let content = fs.readFileSync(localesPath, 'utf8');
 
-  // Remove any previous generated import block + merges (idempotent).
+  // Remove any previous generated import block (idempotent). The block
+  // spans from the "// ---- Generated per-locale client dictionaries"
+  // marker through the last per-locale client import line (clientMs).
+  // Also normalize any stale per-locale merge lines back to `code: coreX,`
+  // so the re-merge below produces a single clean `{ ...coreX, ...clientX }`
+  // entry per locale (never duplicates).
   content = content.replace(
-    /\n\/\/ ---- Generated per-locale client dictionaries[\s\S]*?\nimport \{ clientMs \} from '\.\/fragments\/ms\/client';\n/,
+    /\n\/\/ ---- Generated per-locale client dictionaries[\s\S]*?(?=\n\/\/ ---- Fully-translated locales)/,
     '\n',
   );
+  for (const { code } of LOCALES) {
+    const fc = fileCode(code);
+    const name = pascal(fc);
+    const codeLiteral = code.includes('-') ? `'${code}'` : code;
+    const escapedLiteral = codeLiteral.replace(/'/g, "\\'");
+    // Collapse any existing `{ ...coreX, ...clientX }` merge back to `coreX,`
+    // so the fresh merge step writes it exactly once.
+    content = content.replace(
+      new RegExp(`^(\\s*)${escapedLiteral}: \\{ \\.\\.\\.core${name}, \\.\\.\\.client${name} \\},$`, 'm'),
+      `$1${codeLiteral}: core${name},`,
+    );
+  }
 
   const importLines = stats
     .map(({ code }) => {

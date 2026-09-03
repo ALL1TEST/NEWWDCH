@@ -93,6 +93,48 @@ import { clientTaxonomyFr } from './fragments/fr/client-taxonomy';
 import { clientSeoFr } from './fragments/fr/client-seo';
 import { platformAFr } from './fragments/fr/platform-a';
 import { platformBFr } from './fragments/fr/platform-b';
+// ---- Generated per-locale client dictionaries (machine-assisted
+//      translations of the full client key set; see
+//      .zscripts/translate-locales.ts + assemble-locales.ts) ----
+import { clientDe } from './fragments/de/client';
+import { clientEs } from './fragments/es/client';
+import { clientIt } from './fragments/it/client';
+import { clientPtBr } from './fragments/pt-br/client';
+import { clientPtPt } from './fragments/pt-pt/client';
+import { clientNl } from './fragments/nl/client';
+import { clientRu } from './fragments/ru/client';
+import { clientJa } from './fragments/ja/client';
+import { clientKo } from './fragments/ko/client';
+import { clientZh } from './fragments/zh/client';
+import { clientAr } from './fragments/ar/client';
+import { clientHi } from './fragments/hi/client';
+import { clientBn } from './fragments/bn/client';
+import { clientGu } from './fragments/gu/client';
+import { clientFa } from './fragments/fa/client';
+import { clientPa } from './fragments/pa/client';
+import { clientMr } from './fragments/mr/client';
+import { clientTa } from './fragments/ta/client';
+import { clientTe } from './fragments/te/client';
+import { clientKn } from './fragments/kn/client';
+import { clientMl } from './fragments/ml/client';
+import { clientTh } from './fragments/th/client';
+import { clientVi } from './fragments/vi/client';
+import { clientTr } from './fragments/tr/client';
+import { clientPl } from './fragments/pl/client';
+import { clientCs } from './fragments/cs/client';
+import { clientDa } from './fragments/da/client';
+import { clientFi } from './fragments/fi/client';
+import { clientSv } from './fragments/sv/client';
+import { clientNb } from './fragments/nb/client';
+import { clientUk } from './fragments/uk/client';
+import { clientRo } from './fragments/ro/client';
+import { clientHu } from './fragments/hu/client';
+import { clientBg } from './fragments/bg/client';
+import { clientEl } from './fragments/el/client';
+import { clientHe } from './fragments/he/client';
+import { clientId } from './fragments/id/client';
+import { clientMs } from './fragments/ms/client';
+
 
 // ---- Fully-translated locales: core + every fragment ----
 
@@ -136,42 +178,42 @@ const fr: Record<string, string> = {
 export const dictionaries: Record<string, Record<string, string>> = {
   en,
   fr,
-  de: coreDe,
-  es: coreEs,
-  it: coreIt,
-  'pt-BR': corePtBr,
-  'pt-PT': corePtPt,
-  nl: coreNl,
-  ru: coreRu,
-  ja: coreJa,
-  ko: coreKo,
-  zh: coreZh,
-  ar: coreAr,
-  hi: coreHi,
-  bn: coreBn,
-  gu: coreGu,
-  fa: coreFa,
-  pa: corePa,
-  mr: coreMr,
-  ta: coreTa,
-  te: coreTe,
-  kn: coreKn,
-  ml: coreMl,
-  th: coreTh,
-  vi: coreVi,
-  tr: coreTr,
-  pl: corePl,
-  cs: coreCs,
-  da: coreDa,
-  fi: coreFi,
-  sv: coreSv,
-  nb: coreNb,
-  uk: coreUk,
-  ro: coreRo,
-  hu: coreHu,
-  bg: coreBg,
-  el: coreEl,
-  he: coreHe,
-  id: coreId,
-  ms: coreMs,
+  de: { ...coreDe, ...clientDe },
+  es: { ...coreEs, ...clientEs },
+  it: { ...coreIt, ...clientIt },
+  'pt-BR': { ...corePtBr, ...clientPtBr },
+  'pt-PT': { ...corePtPt, ...clientPtPt },
+  nl: { ...coreNl, ...clientNl },
+  ru: { ...coreRu, ...clientRu },
+  ja: { ...coreJa, ...clientJa },
+  ko: { ...coreKo, ...clientKo },
+  zh: { ...coreZh, ...clientZh },
+  ar: { ...coreAr, ...clientAr },
+  hi: { ...coreHi, ...clientHi },
+  bn: { ...coreBn, ...clientBn },
+  gu: { ...coreGu, ...clientGu },
+  fa: { ...coreFa, ...clientFa },
+  pa: { ...corePa, ...clientPa },
+  mr: { ...coreMr, ...clientMr },
+  ta: { ...coreTa, ...clientTa },
+  te: { ...coreTe, ...clientTe },
+  kn: { ...coreKn, ...clientKn },
+  ml: { ...coreMl, ...clientMl },
+  th: { ...coreTh, ...clientTh },
+  vi: { ...coreVi, ...clientVi },
+  tr: { ...coreTr, ...clientTr },
+  pl: { ...corePl, ...clientPl },
+  cs: { ...coreCs, ...clientCs },
+  da: { ...coreDa, ...clientDa },
+  fi: { ...coreFi, ...clientFi },
+  sv: { ...coreSv, ...clientSv },
+  nb: { ...coreNb, ...clientNb },
+  uk: { ...coreUk, ...clientUk },
+  ro: { ...coreRo, ...clientRo },
+  hu: { ...coreHu, ...clientHu },
+  bg: { ...coreBg, ...clientBg },
+  el: { ...coreEl, ...clientEl },
+  he: { ...coreHe, ...clientHe },
+  id: { ...coreId, ...clientId },
+  ms: { ...coreMs, ...clientMs },
 };

@@ -43,6 +43,7 @@ import {
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useT } from '@/lib/i18n';
 import { usePlanEntitlements, isModuleAllowedByPlan, isSmtpSettingsAllowedByPlan } from '@/hooks/use-entitlements';
 import { getApi } from '@/lib/api-client';
 import { formatRelativeTime } from '@/lib/utils';
@@ -292,6 +293,7 @@ export function CommandPalette() {
   const close = useCommandPaletteStore((s) => s.close);
   const navigate = useNavigationStore((s) => s.navigate);
   const user = useAuthStore((s) => s.user);
+  const { t } = useT();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
 
@@ -584,7 +586,7 @@ export function CommandPalette() {
                 <div className="relative">
                   <CommandInput
                     ref={inputRef}
-                    placeholder="Search..."
+                    placeholder={t('app.searchPlaceholder')}
                     className="h-12 text-sm"
                     autoFocus
                     value={query}
@@ -597,8 +599,8 @@ export function CommandPalette() {
                 <CommandList className="max-h-[380px]">
                   <CommandEmpty>
                     {shouldSearch
-                      ? (isSearching ? 'Searching…' : 'No matching customers, payments, plans, coupons or notifications.')
-                      : 'No results found.'}
+                      ? (isSearching ? t('app.searching') : t('app.noSearchMatch'))
+                      : t('app.noResults')}
                   </CommandEmpty>
                   {groups.map((group, groupIdx) => (
                     <React.Fragment key={group.heading}>

@@ -79,6 +79,8 @@ import { clientAuditEn } from '../src/lib/i18n/fragments/en/client-audit';
 import { clientJobsEn } from '../src/lib/i18n/fragments/en/client-jobs';
 import { clientTaxonomyEn } from '../src/lib/i18n/fragments/en/client-taxonomy';
 import { clientSeoEn } from '../src/lib/i18n/fragments/en/client-seo';
+import { platformAEn } from '../src/lib/i18n/fragments/en/platform-a';
+import { platformBEn } from '../src/lib/i18n/fragments/en/platform-b';
 
 // The FULL client key set (11 families) every locale receives.
 const clientKeys: Record<string, string> = {
@@ -93,6 +95,13 @@ const clientKeys: Record<string, string> = {
   ...clientJobsEn,
   ...clientTaxonomyEn,
   ...clientSeoEn,
+  // Platform Admin UI (overview, customers, payments, plans, coupons,
+  // stripe, notifications, email-templates, smtp, ai, backups) — the
+  // platform-a + platform-b fragment families. Without these the
+  // Platform Admin dashboard renders translated nav but English cards/
+  // tables/empty states (the exact "partial translation" bug).
+  ...platformAEn,
+  ...platformBEn,
 };
 
 // The 8 NEW families (French already has curated translations for the
@@ -113,7 +122,7 @@ const newFamilyKeys: Record<string, string> = {
 const BATCH_SIZE = 150;
 const CONCURRENCY = 2;
 const REQUEST_TIMEOUT_MS = 150_000;
-const MIN_REQUEST_GAP_MS = 3_000;
+const MIN_REQUEST_GAP_MS = 1_500; // probed safe at concurrency 2
 const RATE_COOLDOWN_MS = 60_000;
 
 // -------------------- Pacing / cooldown --------------------
@@ -384,7 +393,16 @@ async function main() {
     console.log(`fr: ${frKeys.length} new-family keys`);
   }
 
-  const pending = tasks.filter((t) => !fs.existsSync(progressPath(t)));
+  // Round-robin by batch index: sort pending tasks so EVERY locale gets
+  // its batch 0 before any locale gets batch 1, batch 1 before batch 2,
+  // etc. This guarantees broad partial coverage across ALL locales fast
+  // (every language gets its first ~150 translated keys ASAP) instead of
+  // fully completing a few locales while 25 others stay at zero. The
+  // (batchIndex, locale) sort key achieves this; locale is the tiebreaker
+  // so the order is deterministic and stable across restarts.
+  const pending = tasks
+    .filter((t) => !fs.existsSync(progressPath(t)))
+    .sort((a, b) => a.batchIndex - b.batchIndex || a.locale.localeCompare(b.locale));
   console.log(`TOTAL tasks: ${tasks.length}, pending: ${pending.length}, concurrency: ${CONCURRENCY}`);
 
   let idx = 0;
