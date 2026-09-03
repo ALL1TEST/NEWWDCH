@@ -306,4 +306,5 @@ export const clientAiFr: Record<string, string> = {
   "ai.installationFailed": "Échec de l'installation",
   "ai.installConfirmPrefix": "Cela créera ",
   "ai.installConfirmMid": " invites de \"",
+  "ai.installConfirmSuffix": "\" dans votre Bibliothèque de prompts. Continuer ?",
 };

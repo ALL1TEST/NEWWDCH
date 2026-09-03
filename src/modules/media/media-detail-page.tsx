@@ -20,6 +20,7 @@ import { AvatarWithFallback } from '@/components/shared';
 import { getApi, deleteApi, patchApi, postApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { useT } from '@/lib/i18n';
 import { cn, formatFileSize, formatDate, labelize } from '@/lib/utils';
 import { STATUS_COLORS } from '@/shared/constants';
 import type { MediaProcessingStatus } from '@/shared/types';
@@ -110,6 +111,7 @@ function parseKeywords(raw: string | null | undefined): string[] {
 export function MediaDetailPage({ mediaId }: { mediaId: string }) {
   const navigate = useNavigationStore((s) => s.navigate);
   const queryClient = useQueryClient();
+  const { t } = useT();
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [keywordInput, setKeywordInput] = useState('');
@@ -195,21 +197,21 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.media.detail(mediaId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.media.all });
-      toast.success('SEO metadata saved');
+      toast.success(t('media.seoSavedToast'));
       setIsSavingSeo(false);
       setSeoEdits(null);
     },
-    onError: (err: Error) => { toast.error(err.message || 'Failed to save'); setIsSavingSeo(false); },
+    onError: (err: Error) => { toast.error(err.message || t('media.saveFailedToast')); setIsSavingSeo(false); },
   });
 
   const saveFolderMutation = useMutation({
     mutationFn: (data: { folderId: string }) => patchApi(`/api/media/${mediaId}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.media.detail(mediaId) });
-      toast.success('Folder updated');
+      toast.success(t('media.folderUpdatedToast'));
       setFolderEdits(null);
     },
-    onError: (err: Error) => { toast.error(err.message || 'Failed to update'); },
+    onError: (err: Error) => { toast.error(err.message || t('media.updateFailed')); },
   });
 
   const generateSeoMutation = useMutation({
@@ -224,9 +226,9 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
         imageDescription: data.imageDescription || '',
       });
       setIsGeneratingSeo(false);
-      toast.success('SEO metadata generated');
+      toast.success(t('media.seoGeneratedToast'));
     },
-    onError: (err: Error) => { toast.error(err.message || 'Failed to generate SEO'); setIsGeneratingSeo(false); },
+    onError: (err: Error) => { toast.error(err.message || t('media.generateSeoFailedToast')); setIsGeneratingSeo(false); },
   });
 
   const deleteMutation = useMutation({
@@ -234,10 +236,10 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.media.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.mediaFolders.all });
-      toast.success('Media deleted');
+      toast.success(t('media.deletedToast'));
       navigate('media');
     },
-    onError: (err: Error) => { toast.error(err.message || 'Failed to delete media'); },
+    onError: (err: Error) => { toast.error(err.message || t('media.deleteFailed')); },
   });
 
   // ---- Handlers ----
@@ -262,8 +264,8 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
   const handleCopyUrl = () => {
     if (!media) return;
     navigator.clipboard.writeText(media.url).then(
-      () => toast.success('URL copied to clipboard'),
-      () => toast.error('Failed to copy URL'),
+      () => toast.success(t('media.urlCopiedToast')),
+      () => toast.error(t('media.copyFailedToast')),
     );
   };
 
@@ -271,7 +273,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <Button variant="ghost" size="sm" disabled><ArrowLeft className="h-4 w-4 mr-2" />Back to Media Library</Button>
+        <Button variant="ghost" size="sm" disabled><ArrowLeft className="h-4 w-4 mr-2" />{t('media.backToMediaLibrary')}</Button>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2"><Skeleton className="aspect-video w-full rounded-lg" /></div>
           <div className="space-y-4"><Skeleton className="h-6 w-1/2" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /></div>
@@ -283,8 +285,8 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
   if (!media) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-lg font-medium">Media not found</p>
-        <Button variant="outline" className="mt-4" onClick={() => navigate('media')}><ArrowLeft className="h-4 w-4 mr-2" />Back to Media Library</Button>
+        <p className="text-lg font-medium">{t('media.notFound')}</p>
+        <Button variant="outline" className="mt-4" onClick={() => navigate('media')}><ArrowLeft className="h-4 w-4 mr-2" />{t('media.backToMediaLibrary')}</Button>
       </div>
     );
   }
@@ -293,19 +295,19 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
   const statusColor = STATUS_COLORS[media.processingStatus] || 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300';
 
   const metadataRows = [
-    { label: 'Filename', value: media.originalName },
-    { label: 'Type', value: `${getMimeCategory(media.mimeType)} (${media.mimeType})` },
-    { label: 'Size', value: formatFileSize(media.size) },
-    { label: 'Dimensions', value: media.width && media.height ? `${media.width} x ${media.height} px` : 'N/A' },
-    { label: 'Uploaded By', value: media.uploadedBy?.name || 'Unknown', avatar: media.uploadedBy?.avatar, avatarName: media.uploadedBy?.name },
-    { label: 'Upload Date', value: formatDate(media.createdAt) },
-    { label: 'Status', value: labelize(media.processingStatus), isBadge: true, badgeVariant: statusColor },
+    { label: t('media.filename'), value: media.originalName },
+    { label: t('media.type'), value: `${getMimeCategory(media.mimeType)} (${media.mimeType})` },
+    { label: t('media.size'), value: formatFileSize(media.size) },
+    { label: t('media.dimensions'), value: media.width && media.height ? `${media.width} x ${media.height} px` : t('media.notApplicable') },
+    { label: t('media.uploadedBy'), value: media.uploadedBy?.name || t('media.unknown'), avatar: media.uploadedBy?.avatar, avatarName: media.uploadedBy?.name },
+    { label: t('media.uploadDate'), value: formatDate(media.createdAt) },
+    { label: t('common.status'), value: labelize(media.processingStatus), isBadge: true, badgeVariant: statusColor },
   ];
 
   return (
     <div className="space-y-6">
       <Button variant="ghost" size="sm" onClick={() => navigate('media')}>
-        <ArrowLeft className="h-4 w-4 mr-2" />Back to Media Library
+        <ArrowLeft className="h-4 w-4 mr-2" />{t('media.backToMediaLibrary')}
       </Button>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -324,15 +326,15 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
                   <p className="text-sm text-muted-foreground mt-1">{getMimeCategory(media.mimeType)} - {formatFileSize(media.size)}</p>
                 </div>
                 <Button variant="outline" size="sm" asChild>
-                  <a href={media.url} download={media.originalName}><Download className="h-4 w-4 mr-2" />Download File</a>
+                  <a href={media.url} download={media.originalName}><Download className="h-4 w-4 mr-2" />{t('media.downloadFile')}</a>
                 </Button>
               </div>
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" asChild><a href={media.url} download={media.originalName}><Download className="h-4 w-4 mr-2" />Download</a></Button>
-            <Button variant="outline" size="sm" onClick={handleCopyUrl}><Copy className="h-4 w-4 mr-2" />Copy URL</Button>
-            <Button variant="outline" size="sm" asChild><a href={media.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 mr-2" />Open in New Tab</a></Button>
+            <Button variant="outline" size="sm" asChild><a href={media.url} download={media.originalName}><Download className="h-4 w-4 mr-2" />{t('media.download')}</a></Button>
+            <Button variant="outline" size="sm" onClick={handleCopyUrl}><Copy className="h-4 w-4 mr-2" />{t('media.copyUrl')}</Button>
+            <Button variant="outline" size="sm" asChild><a href={media.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 mr-2" />{t('media.openInNewTab')}</a></Button>
           </div>
         </div>
 
@@ -340,7 +342,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
         <div className="space-y-6">
           {/* Metadata Panel */}
           <div className="rounded-lg border bg-card p-4 space-y-3">
-            <h3 className="text-sm font-semibold">Details</h3>
+            <h3 className="text-sm font-semibold">{t('media.details')}</h3>
             <Separator />
             <div className="space-y-3">
               {metadataRows.map((row) => (
@@ -367,7 +369,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
           {showImage && (
             <div className="rounded-lg border bg-card p-4 space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Image SEO</h3>
+                <h3 className="text-sm font-semibold">{t('media.imageSeo')}</h3>
                 <Button
                   size="sm"
                   className="gap-1.5 bg-amber-400 text-black hover:bg-amber-500 font-semibold h-7 text-xs px-3"
@@ -375,7 +377,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
                   disabled={isGeneratingSeo}
                 >
                   {isGeneratingSeo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  Generate SEO
+                  {t('media.generateSeo')}
                 </Button>
               </div>
               <Separator />
@@ -383,11 +385,11 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
               <div className="space-y-4">
                 {/* SEO Title */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="seo-title" className="text-xs">SEO Title</Label>
+                  <Label htmlFor="seo-title" className="text-xs">{t('media.seoTitle')}</Label>
                   <Input
                     id="seo-title" value={seo.seoTitle}
                     onChange={(e) => updateSeoField('seoTitle', e.target.value)}
-                    placeholder="A descriptive title for this image (50-60 chars)"
+                    placeholder={t('media.seoTitlePlaceholder')}
                     className="h-9 text-sm"
                   />
                   {seo.seoTitle && (
@@ -397,11 +399,11 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
 
                 {/* Meta Description */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="meta-desc" className="text-xs">Meta Description</Label>
+                  <Label htmlFor="meta-desc" className="text-xs">{t('media.metaDescription')}</Label>
                   <Textarea
                     id="meta-desc" value={seo.metaDescription}
                     onChange={(e) => updateSeoField('metaDescription', e.target.value)}
-                    placeholder="A natural description (150-160 chars)"
+                    placeholder={t('media.metaDescPlaceholder')}
                     rows={2} className="resize-none text-sm"
                   />
                   {seo.metaDescription && (
@@ -411,35 +413,35 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
 
                 {/* Alt Text */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="alt-text" className="text-xs">Alt Text</Label>
+                  <Label htmlFor="alt-text" className="text-xs">{t('media.altText')}</Label>
                   <Input
                     id="alt-text" value={seo.alt}
                     onChange={(e) => updateSeoField('alt', e.target.value)}
-                    placeholder="Describe what is visually present"
+                    placeholder={t('media.altTextPlaceholder')}
                     className="h-9 text-sm"
                   />
                 </div>
 
                 {/* Caption */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="caption" className="text-xs">Caption</Label>
+                  <Label htmlFor="caption" className="text-xs">{t('media.caption')}</Label>
                   <Input
                     id="caption" value={seo.caption}
                     onChange={(e) => updateSeoField('caption', e.target.value)}
-                    placeholder="A short, engaging caption"
+                    placeholder={t('media.captionPlaceholder')}
                     className="h-9 text-sm"
                   />
                 </div>
 
                 {/* Focus Keywords */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Focus Keywords</Label>
+                  <Label className="text-xs">{t('media.focusKeywords')}</Label>
                   <div className="flex gap-1.5">
                     <Input
                       value={keywordInput}
                       onChange={(e) => setKeywordInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddKeyword(); } }}
-                      placeholder="Add keyword..."
+                      placeholder={t('media.addKeywordPlaceholder')}
                       className="h-8 text-sm flex-1"
                     />
                     <Button variant="outline" size="sm" className="h-8 px-2" onClick={handleAddKeyword}>
@@ -462,11 +464,11 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
 
                 {/* Image Description */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="img-desc" className="text-xs">Image Description</Label>
+                  <Label htmlFor="img-desc" className="text-xs">{t('media.imageDescription')}</Label>
                   <Textarea
                     id="img-desc" value={seo.imageDescription}
                     onChange={(e) => updateSeoField('imageDescription', e.target.value)}
-                    placeholder="Detailed description for SEO, accessibility, and internal use"
+                    placeholder={t('media.imageDescPlaceholder')}
                     rows={3} className="resize-none text-sm"
                   />
                 </div>
@@ -479,7 +481,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
                     disabled={isSavingSeo}
                   >
                     {isSavingSeo && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    Save SEO Metadata
+                    {t('media.saveSeoMetadata')}
                   </Button>
                 )}
               </div>
@@ -488,15 +490,15 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
 
           {/* Folder Panel */}
           <div className="rounded-lg border bg-card p-4 space-y-4">
-            <h3 className="text-sm font-semibold">Folder</h3>
+            <h3 className="text-sm font-semibold">{t('media.folder')}</h3>
             <Separator />
             <Select
               value={folderId || 'root'}
               onValueChange={(v) => setFolderEdits({ folderId: v === 'root' ? '' : v })}
             >
-              <SelectTrigger><SelectValue placeholder="No folder" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t('media.noFolder')} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="root">No folder</SelectItem>
+                <SelectItem value="root">{t('media.noFolder')}</SelectItem>
                 {allFolders.map((f) => (
                   <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                 ))}
@@ -505,32 +507,32 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
             {folderHasChanges && (
               <Button className="w-full" size="sm" onClick={() => saveFolderMutation.mutate({ folderId: folderEdits!.folderId })} disabled={saveFolderMutation.isPending}>
                 {saveFolderMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Save Folder
+                {t('media.saveFolder')}
               </Button>
             )}
           </div>
 
           {/* URL Panel */}
           <div className="rounded-lg border bg-card p-4 space-y-3">
-            <h3 className="text-sm font-semibold">File URL</h3>
+            <h3 className="text-sm font-semibold">{t('media.fileUrl')}</h3>
             <Separator />
             <div className="flex items-center gap-2">
               <code className="flex-1 text-xs bg-muted rounded-md px-3 py-2 overflow-hidden whitespace-nowrap text-ellipsis block" title={media.url}>
                 {truncateUrl(media.url)}
               </code>
-              <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handleCopyUrl} title="Copy full URL">
-                <Copy className="h-3.5 w-3.5" /><span className="sr-only">Copy URL</span>
+              <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handleCopyUrl} title={t('media.copyFullUrl')}>
+                <Copy className="h-3.5 w-3.5" /><span className="sr-only">{t('media.copyUrlSr')}</span>
               </Button>
             </div>
           </div>
 
           {/* Danger Zone */}
           <div className="rounded-lg border border-destructive/50 bg-card p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-destructive">Danger Zone</h3>
+            <h3 className="text-sm font-semibold text-destructive">{t('media.dangerZone')}</h3>
             <Separator />
-            <p className="text-xs text-muted-foreground">Permanently delete this media file. This action cannot be undone.</p>
+            <p className="text-xs text-muted-foreground">{t('media.deleteWarning')}</p>
             <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
-              <Trash2 className="h-4 w-4 mr-2" />Delete Media
+              <Trash2 className="h-4 w-4 mr-2" />{t('media.deleteMedia')}
             </Button>
           </div>
         </div>
@@ -539,9 +541,9 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
       <ConfirmDialog
         open={showDeleteDialog}
         onOpenChange={setShowDeleteDialog}
-        title="Delete Media"
-        description={`Are you sure you want to delete "${media.originalName}"? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title={t('media.deleteMediaTitle')}
+        description={t('media.deleteMediaConfirm').replace('{name}', media.originalName)}
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => deleteMutation.mutate()}
         isLoading={deleteMutation.isPending}

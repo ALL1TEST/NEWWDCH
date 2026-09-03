@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SidebarMenuButton, useSidebar } from '@/components/ui/sidebar';
 import { toast } from 'sonner';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Site Colors ----------------
 
@@ -59,13 +60,13 @@ function getSiteColor(slug: string): string {
 // Slug must be lowercase letters / numbers / hyphens, no leading/trailing hyphen.
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
-function validateSiteFields(name: string, slug: string): { name?: string; slug?: string } {
+function validateSiteFields(name: string, slug: string, t: (key: string) => string): { name?: string; slug?: string } {
   const errors: { name?: string; slug?: string } = {};
-  if (!name.trim()) errors.name = 'Site name is required';
+  if (!name.trim()) errors.name = t('siteSelector.siteNameRequired');
   if (!slug.trim()) {
-    errors.slug = 'Slug is required';
+    errors.slug = t('siteSelector.slugRequired');
   } else if (!SLUG_PATTERN.test(slug.trim())) {
-    errors.slug = 'Slug must be lowercase letters, numbers, and hyphens only';
+    errors.slug = t('siteSelector.slugInvalid');
   }
   return errors;
 }
@@ -73,6 +74,7 @@ function validateSiteFields(name: string, slug: string): { name?: string; slug?:
 // -------------------- Create Site Dialog --------------------
 
 function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
+  const { t } = useT();
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [domain, setDomain] = useState('');
@@ -83,7 +85,7 @@ function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
   const [open, setOpen] = useState(true);
   const createSite = useSiteStore((s) => s.createSite);
 
-  const fieldErrors = validateSiteFields(name, slug);
+  const fieldErrors = validateSiteFields(name, slug, t);
   const nameError = submitAttempted ? fieldErrors.name : undefined;
   const slugError = submitAttempted ? fieldErrors.slug : undefined;
 
@@ -101,7 +103,7 @@ function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
   };
 
   const handleSubmit = async () => {
-    const errors = validateSiteFields(name, slug);
+    const errors = validateSiteFields(name, slug, t);
     if (errors.name || errors.slug) {
       setSubmitAttempted(true);
       return;
@@ -119,7 +121,7 @@ function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
       setOpen(false);
       onClose(site);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create site');
+      setError(err instanceof Error ? err.message : t('siteSelector.createFailed'));
     } finally {
       setIsCreating(false);
     }
@@ -129,17 +131,17 @@ function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create New Site</DialogTitle>
+          <DialogTitle>{t('siteSelector.createTitle')}</DialogTitle>
           <DialogDescription>
-            Add a new website to your multi-site dashboard.
+            {t('siteSelector.createDescription')}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="site-name">Site Name</Label>
+            <Label htmlFor="site-name">{t('siteSelector.siteNameLabel')}</Label>
             <Input
               id="site-name"
-              placeholder="My New Blog"
+              placeholder={t('siteSelector.siteNamePlaceholder')}
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
               autoFocus
@@ -150,10 +152,10 @@ function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
             )}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="site-slug">Slug</Label>
+            <Label htmlFor="site-slug">{t('siteSelector.slugLabel')}</Label>
             <Input
               id="site-slug"
-              placeholder="my-new-blog"
+              placeholder={t('siteSelector.slugPlaceholder')}
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
               aria-invalid={!!slugError}
@@ -163,19 +165,19 @@ function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
             )}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="site-domain">Domain (optional)</Label>
+            <Label htmlFor="site-domain">{t('siteSelector.domainOptionalLabel')}</Label>
             <Input
               id="site-domain"
-              placeholder="www.example.com"
+              placeholder={t('siteSelector.domainPlaceholder')}
               value={domain}
               onChange={(e) => setDomain(e.target.value)}
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="site-desc">Description (optional)</Label>
+            <Label htmlFor="site-desc">{t('siteSelector.descriptionOptionalLabel')}</Label>
             <Input
               id="site-desc"
-              placeholder="A brief description"
+              placeholder={t('siteSelector.descriptionPlaceholder')}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
@@ -186,10 +188,10 @@ function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleSubmit} disabled={isCreating}>
-            {isCreating ? 'Creating...' : 'Create Site'}
+            {isCreating ? t('siteSelector.creating') : t('siteSelector.createButton')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -200,6 +202,7 @@ function CreateSiteDialog({ onClose }: { onClose: (site: Site) => void }) {
 // -------------------- Edit Site Dialog --------------------
 
 function EditSiteDialog({ site, onClose }: { site: Site; onClose: () => void }) {
+  const { t } = useT();
   const [name, setName] = useState(site.name);
   const [slug, setSlug] = useState(site.slug);
   const [domain, setDomain] = useState(site.domain || '');
@@ -212,12 +215,12 @@ function EditSiteDialog({ site, onClose }: { site: Site; onClose: () => void }) 
   const updateSite = useSiteStore((s) => s.updateSite);
   const deleteSite = useSiteStore((s) => s.deleteSite);
 
-  const fieldErrors = validateSiteFields(name, slug);
+  const fieldErrors = validateSiteFields(name, slug, t);
   const nameError = submitAttempted ? fieldErrors.name : undefined;
   const slugError = submitAttempted ? fieldErrors.slug : undefined;
 
   const handleSave = async () => {
-    const errors = validateSiteFields(name, slug);
+    const errors = validateSiteFields(name, slug, t);
     if (errors.name || errors.slug) {
       setSubmitAttempted(true);
       return;
@@ -232,11 +235,11 @@ function EditSiteDialog({ site, onClose }: { site: Site; onClose: () => void }) 
         domain: domain.trim() || undefined,
         description: description.trim() || undefined,
       });
-      toast.success('Site updated successfully');
+      toast.success(t('siteSelector.siteUpdated'));
       setOpen(false);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update site');
+      setError(err instanceof Error ? err.message : t('siteSelector.updateFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -247,11 +250,11 @@ function EditSiteDialog({ site, onClose }: { site: Site; onClose: () => void }) 
     setIsDeleting(true);
     try {
       await deleteSite(site.id);
-      toast.success('Site deleted');
+      toast.success(t('siteSelector.siteDeleted'));
       setOpen(false);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete site');
+      setError(err instanceof Error ? err.message : t('siteSelector.deleteFailed'));
     } finally {
       setIsDeleting(false);
     }
@@ -261,14 +264,14 @@ function EditSiteDialog({ site, onClose }: { site: Site; onClose: () => void }) 
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit Site</DialogTitle>
+          <DialogTitle>{t('siteSelector.editSiteTitle')}</DialogTitle>
           <DialogDescription>
-            Update site details for {site.name}.
+            {t('siteSelector.editSiteDescriptionPrefix')} {site.name}.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="edit-site-name">Site Name</Label>
+            <Label htmlFor="edit-site-name">{t('siteSelector.siteNameLabel')}</Label>
             <Input
               id="edit-site-name"
               value={name}
@@ -281,7 +284,7 @@ function EditSiteDialog({ site, onClose }: { site: Site; onClose: () => void }) 
             )}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="edit-site-slug">Site URL / Slug</Label>
+            <Label htmlFor="edit-site-slug">{t('siteSelector.editSiteSlugLabel')}</Label>
             <Input
               id="edit-site-slug"
               value={slug}
@@ -293,16 +296,16 @@ function EditSiteDialog({ site, onClose }: { site: Site; onClose: () => void }) 
             )}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="edit-site-domain">Domain</Label>
+            <Label htmlFor="edit-site-domain">{t('siteSelector.domainLabel')}</Label>
             <Input
               id="edit-site-domain"
-              placeholder="www.example.com"
+              placeholder={t('siteSelector.domainPlaceholder')}
               value={domain}
               onChange={(e) => setDomain(e.target.value)}
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="edit-site-desc">Description</Label>
+            <Label htmlFor="edit-site-desc">{t('siteSelector.descriptionLabel')}</Label>
             <Input
               id="edit-site-desc"
               value={description}
@@ -322,14 +325,14 @@ function EditSiteDialog({ site, onClose }: { site: Site; onClose: () => void }) 
             className="mr-auto"
           >
             {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            Delete Site
+            {t('siteSelector.deleteSiteButton')}
           </Button>
           <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleSave} disabled={isSaving}>
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            Update Site
+            {t('siteSelector.updateSiteButton')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -362,6 +365,7 @@ function EditSiteDialog({ site, onClose }: { site: Site; onClose: () => void }) 
 // auto-closes/unmounts — reliable in BOTH sidebar states (see task 28).
 
 export function SiteSelector() {
+  const { t } = useT();
   const sites = useSiteStore((s) => s.sites);
   const activeSite = useSiteStore((s) => s.getActiveSite());
   const isAllSites = useSiteStore((s) => s.isAllSites());
@@ -388,13 +392,13 @@ export function SiteSelector() {
             align: 'center',
             sideOffset: 8,
             collisionPadding: 12,
-            children: 'Switch Site',
+            children: t('siteSelector.switchSite'),
           }}
           className="h-9 border border-sidebar-border bg-background/60 shadow-sm hover:bg-sidebar-accent hover:border-sidebar-accent-foreground/20 hover:shadow-md data-[state=open]:bg-sidebar-accent data-[state=open]:border-sidebar-accent-foreground/20 data-[active=true]:bg-sidebar-accent/60 transition-all duration-150"
           aria-label={
             activeSite
-              ? `Switch site — current: ${activeSite.name}`
-              : 'Switch site — All Sites'
+              ? `${t('siteSelector.switchSiteCurrentPrefix')} ${activeSite.name}`
+              : t('siteSelector.switchSiteAll')
           }
         >
           {isCollapsed ? (
@@ -410,7 +414,7 @@ export function SiteSelector() {
           {!isCollapsed && (
             <>
               <span className="flex-1 truncate text-sm font-medium">
-                {activeSite ? activeSite.name : 'All Sites'}
+                {activeSite ? activeSite.name : t('siteSelector.allSites')}
               </span>
               <ChevronDown
                 className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 group-data-[state=open]:rotate-180"
@@ -428,7 +432,7 @@ export function SiteSelector() {
         className="w-64"
       >
         <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
-          Switch Site
+          {t('siteSelector.switchSite')}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {/* All Sites option */}
@@ -437,7 +441,7 @@ export function SiteSelector() {
           onClick={() => setAllSites()}
         >
           <LayoutGrid className="mr-2 h-4 w-4" />
-          <span className="flex-1">All Sites</span>
+          <span className="flex-1">{t('siteSelector.allSites')}</span>
           {isAllSites && <Check className="h-4 w-4 text-primary" />}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -470,7 +474,7 @@ export function SiteSelector() {
                 e.stopPropagation();
                 setEditSite(s);
               }}
-              title="Edit site"
+              title={t('siteSelector.editSiteButton')}
             >
               <Settings className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
@@ -478,7 +482,7 @@ export function SiteSelector() {
         ))}
         {sites.length === 0 && (
           <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-            No sites yet
+            {t('siteSelector.noSitesYet')}
           </div>
         )}
         <DropdownMenuSeparator />
@@ -487,7 +491,7 @@ export function SiteSelector() {
             auto-closes/unmounts. Reliable in BOTH sidebar states. */}
         <DropdownMenuItem onSelect={() => setShowCreate(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          Create New Site
+          {t('siteSelector.createTitle')}
         </DropdownMenuItem>
       </DropdownMenuContent>
 

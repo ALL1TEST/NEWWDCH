@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { PAGE_SIZES, DEFAULT_PAGE_SIZE } from '@/shared/constants';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -519,6 +520,7 @@ function DataTablePagination({
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
 }) {
+  const { t } = useT();
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const rangeStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const rangeEnd = Math.min(currentPage * pageSize, totalItems);
@@ -526,11 +528,11 @@ function DataTablePagination({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-t">
       <div className="text-xs text-muted-foreground">
-        Showing {rangeStart}–{rangeEnd} of {totalItems} items
+        {t('app.showingRange')} {rangeStart}–{rangeEnd} {t('app.showingRangeOf')} {totalItems} {t('app.showingRangeItems')}
       </div>
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground whitespace-nowrap">Rows</span>
+          <span className="text-xs text-muted-foreground whitespace-nowrap">{t('app.rows')}</span>
           <Select
             value={String(pageSize)}
             onValueChange={(v) => onPageSizeChange(Number(v))}
@@ -556,7 +558,7 @@ function DataTablePagination({
             disabled={currentPage <= 1}
           >
             <ChevronsLeft className="h-4 w-4" />
-            <span className="sr-only">First page</span>
+            <span className="sr-only">{t('app.firstPage')}</span>
           </Button>
           <Button
             variant="outline"
@@ -566,7 +568,7 @@ function DataTablePagination({
             disabled={currentPage <= 1}
           >
             <ChevronLeft className="h-4 w-4" />
-            <span className="sr-only">Previous page</span>
+            <span className="sr-only">{t('app.previousPage')}</span>
           </Button>
           <span className="text-xs text-muted-foreground min-w-[60px] text-center">
             {currentPage} / {totalPages}
@@ -579,7 +581,7 @@ function DataTablePagination({
             disabled={currentPage >= totalPages}
           >
             <ChevronRight className="h-4 w-4" />
-            <span className="sr-only">Next page</span>
+            <span className="sr-only">{t('app.nextPage')}</span>
           </Button>
           <Button
             variant="outline"
@@ -589,7 +591,7 @@ function DataTablePagination({
             disabled={currentPage >= totalPages}
           >
             <ChevronsRight className="h-4 w-4" />
-            <span className="sr-only">Last page</span>
+            <span className="sr-only">{t('app.lastPage')}</span>
           </Button>
         </div>
       </div>
@@ -618,6 +620,7 @@ function TableToolbar<TData, TValue>({
   onSelectionChange?: (ids: string[]) => void;
   filterContent?: React.ReactNode;
 }) {
+  const { t } = useT();
   const hasSelection = selectedIds && selectedIds.length > 0;
 
   return (
@@ -627,7 +630,7 @@ function TableToolbar<TData, TValue>({
           <div className="relative max-w-sm w-full">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder={searchPlaceholder ?? 'Search...'}
+              placeholder={searchPlaceholder ?? t('common.search')}
               value={searchValue ?? ''}
               onChange={(e) => onSearch?.(e.target.value)}
               className="pl-9 h-9"
@@ -639,13 +642,13 @@ function TableToolbar<TData, TValue>({
       {hasSelection && bulkActions && bulkActions.length > 0 && (
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">
-            {selectedIds.length} selected
+            {selectedIds.length} {t('app.selected')}
           </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
                 <MoreHorizontal className="h-4 w-4 mr-1" />
-                Bulk Actions
+                {t('app.bulkActions')}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -667,7 +670,7 @@ function TableToolbar<TData, TValue>({
             size="sm"
             onClick={() => onSelectionChange?.([])}
           >
-            Clear
+            {t('app.clear')}
           </Button>
         </div>
       )}
@@ -693,7 +696,7 @@ export function DataTable<TData, TValue>({
   onSelectionChange,
   onBulkAction,
   bulkActions,
-  emptyMessage = 'No data found.',
+  emptyMessage,
   emptyIcon,
   emptyState,
   searchPlaceholder,
@@ -705,12 +708,13 @@ export function DataTable<TData, TValue>({
   tableFixed = false,
   tableMinWidth,
 }: DataTableProps<TData, TValue>) {
+  const { t } = useT();
+  const resolvedEmptyMessage = emptyMessage ?? t('app.noData');
   const hasRowSelection = !!onSelectionChange;
   const columnCount = columns.length + (hasRowSelection ? 1 : 0);
 
   const enhancedColumns = useMemo<ColumnDef<TData, TValue>[]>(() => {
     if (!hasRowSelection) return columns;
-
     const selectColumn: ColumnDef<TData, TValue> = {
       id: '__select__',
       size: 40,
@@ -740,7 +744,7 @@ export function DataTable<TData, TValue>({
                 );
               }
             }}
-            aria-label="Select all rows"
+            aria-label={t('app.selectAllRows')}
           />
         );
       },
@@ -759,14 +763,14 @@ export function DataTable<TData, TValue>({
               }
             }}
             onClick={(e) => e.stopPropagation()}
-            aria-label={`Select row ${rowId}`}
+            aria-label={`${t('app.selectRowPrefix')} ${rowId}`}
           />
         );
       },
     };
 
     return [selectColumn, ...columns];
-  }, [columns, hasRowSelection, selectedIds, onSelectionChange, data, getRowId]);
+  }, [columns, hasRowSelection, selectedIds, onSelectionChange, data, getRowId, t]);
 
   const sorting: ColumnSort[] = useMemo(() => {
     if (!sortField) return [];
@@ -854,7 +858,7 @@ export function DataTable<TData, TValue>({
           {isLoading ? (
             <SkeletonRows columnCount={columnCount} />
           ) : data.length === 0 ? (
-            <DataTableEmpty icon={emptyIcon} message={emptyMessage} state={emptyState} />
+            <DataTableEmpty icon={emptyIcon} message={resolvedEmptyMessage} state={emptyState} />
           ) : (
             table.getRowModel().rows.map((row) => (
               <TableRow

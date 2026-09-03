@@ -59,6 +59,7 @@ import { getApi, postApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useAiWorkspace } from '@/hooks/use-ai-workspace';
+import { useT } from '@/lib/i18n';
 import { slugify, cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -86,8 +87,18 @@ const contentFormSchema = z.object({
 
 type ContentFormValues = z.infer<typeof contentFormSchema>;
 
-const AI_NORMAL_ACTIONS = ['Make it shorter', 'Fix grammar', 'More professional', 'Add a conclusion'];
-const AI_SELECTED_ACTIONS = ['Make it shorter', 'Fix grammar', 'More professional', 'Rewrite this'];
+const AI_NORMAL_ACTIONS = [
+  { id: 'Make it shorter', key: 'articles.aiAction.makeShorter' },
+  { id: 'Fix grammar', key: 'articles.aiAction.fixGrammar' },
+  { id: 'More professional', key: 'articles.aiAction.moreProfessional' },
+  { id: 'Add a conclusion', key: 'articles.aiAction.addConclusion' },
+];
+const AI_SELECTED_ACTIONS = [
+  { id: 'Make it shorter', key: 'articles.aiAction.makeShorter' },
+  { id: 'Fix grammar', key: 'articles.aiAction.fixGrammar' },
+  { id: 'More professional', key: 'articles.aiAction.moreProfessional' },
+  { id: 'Rewrite this', key: 'articles.aiAction.rewriteThis' },
+];
 
 // -------------------- Preview Component ----------------
 
@@ -110,6 +121,7 @@ function PreviewPanel({
   tags: string[];
   onClose: () => void;
 }) {
+  const { t } = useT();
   const wordCount = content ? content.replace(/<[^>]*>/g, '').split(/\s+/).filter(Boolean).length : 0;
   const readingTime = Math.max(1, Math.ceil(wordCount / 200));
   const publishDate = new Date().toLocaleDateString('en-US', {
@@ -122,7 +134,7 @@ function PreviewPanel({
       <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-amber-400 px-4 py-2 text-zinc-900">
         <div className="flex items-center gap-2">
           <Eye className="h-4 w-4" />
-          <span className="text-sm font-semibold">Preview Mode</span>
+          <span className="text-sm font-semibold">{t('articles.previewMode')}</span>
         </div>
         <Button
           variant="outline"
@@ -131,7 +143,7 @@ function PreviewPanel({
           onClick={onClose}
         >
           <ArrowLeft className="h-3 w-3 mr-1" />
-          Back to Editor
+          {t('articles.backToEditor')}
         </Button>
       </div>
 
@@ -145,7 +157,7 @@ function PreviewPanel({
         )}
 
         {/* Title */}
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{title || 'Untitled Article'}</h1>
+        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{title || t('articles.untitledArticle')}</h1>
 
         {/* Metadata */}
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
@@ -155,11 +167,11 @@ function PreviewPanel({
           </div>
           <div className="flex items-center gap-1.5">
             <BookOpen className="h-3.5 w-3.5" />
-            <span>{readingTime} min read</span>
+            <span>{readingTime} {t('articles.minRead')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <FileText className="h-3.5 w-3.5" />
-            <span>{wordCount} words</span>
+            <span>{wordCount} {t('articles.words')}</span>
           </div>
         </div>
 
@@ -182,7 +194,7 @@ function PreviewPanel({
         {/* Content */}
         <div
           className="prose prose-gray dark:prose-invert max-w-none prose-headings:font-bold prose-h2:text-2xl prose-h3:text-xl prose-p:leading-relaxed prose-a:text-primary"
-          dangerouslySetInnerHTML={{ __html: content || '<p class="text-muted-foreground">No content yet.</p>' }}
+          dangerouslySetInnerHTML={{ __html: content || `<p class="text-muted-foreground">${t('articles.noContentYet')}</p>` }}
         />
 
         {/* SEO Preview */}
@@ -190,16 +202,16 @@ function PreviewPanel({
           <>
             <Separator className="my-8" />
             <div className="rounded-xl border bg-muted/30 p-4">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">SEO Preview</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t('articles.seoPreview')}</p>
               <div className="space-y-1">
                 <p className="text-blue-700 dark:text-blue-400 text-sm font-medium truncate">
-                  {seoTitle || title || 'Page Title'} — My Website
+                  {seoTitle || title || t('articles.pageTitle')} — My Website
                 </p>
                 <p className="text-green-700 dark:text-green-400 text-xs truncate">
                   mywebsite.com/articles/slug
                 </p>
                 <p className="text-sm text-muted-foreground line-clamp-2">
-                  {seoDescription || excerpt || 'Page description will appear here.'}
+                  {seoDescription || excerpt || t('articles.pageDescriptionPlaceholder')}
                 </p>
               </div>
             </div>
@@ -221,6 +233,7 @@ function MediaLibraryDialog({
   onOpenChange: (open: boolean) => void;
   onSelect: (media: MediaItem) => void;
 }) {
+  const { t } = useT();
   const [search, setSearch] = useState('');
 
   const { data, isLoading } = useQuery({
@@ -238,9 +251,9 @@ function MediaLibraryDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FolderOpen className="h-5 w-5" />
-            Media Library
+            {t('articles.mediaLibraryTitle')}
           </DialogTitle>
-          <DialogDescription>Select an image from your media library.</DialogDescription>
+          <DialogDescription>{t('articles.mediaLibraryDescription')}</DialogDescription>
         </DialogHeader>
 
         <div className="relative mb-2">
@@ -248,7 +261,7 @@ function MediaLibraryDialog({
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search media..."
+            placeholder={t('articles.searchMediaPlaceholder')}
             className="pl-9"
           />
         </div>
@@ -263,7 +276,7 @@ function MediaLibraryDialog({
           ) : mediaItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <ImageIcon className="h-10 w-10 text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">No media files found</p>
+              <p className="text-sm text-muted-foreground">{t('articles.noMediaFiles')}</p>
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-2 p-1">
@@ -307,6 +320,7 @@ function ScheduleDialog({
   onSchedule: (date: string, time: string) => void;
   isPending: boolean;
 }) {
+  const { t } = useT();
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const defaultDate = tomorrow.toISOString().split('T')[0];
@@ -319,31 +333,31 @@ function ScheduleDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CalendarClock className="h-5 w-5 text-blue-600" />
-            Schedule Article
+            {t('articles.scheduleArticleTitle')}
           </DialogTitle>
-          <DialogDescription>Choose when to auto-publish this article.</DialogDescription>
+          <DialogDescription>{t('articles.scheduleArticleDescription')}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Date</Label>
+            <Label className="text-xs text-muted-foreground">{t('articles.date')}</Label>
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-10" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Time</Label>
+            <Label className="text-xs text-muted-foreground">{t('articles.time')}</Label>
             <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-10" />
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button
             className="bg-yellow-500 hover:bg-yellow-400 text-black"
             onClick={() => { onSchedule(date, time); onOpenChange(false); }}
             disabled={isPending || !date}
           >
             {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
-            Schedule
+            {t('articles.schedule')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -364,6 +378,7 @@ function AIAssistDialog({
   onGenerate: (prompt: string) => void;
   isPending: boolean;
 }) {
+  const { t } = useT();
   const [prompt, setPrompt] = useState('');
 
   return (
@@ -372,42 +387,42 @@ function AIAssistDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-amber-500" />
-            AI Content Assistant
+            {t('articles.aiAssistantTitle')}
           </DialogTitle>
-          <DialogDescription>Describe what you want the AI to help you write.</DialogDescription>
+          <DialogDescription>{t('articles.aiAssistantDescription')}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
           <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="e.g., Write an introduction about productivity tips for remote workers..."
+            placeholder={t('articles.aiAssistantPromptPlaceholder')}
             rows={4}
             className="text-sm"
           />
           <div className="flex flex-wrap gap-1.5">
             {AI_NORMAL_ACTIONS.map((action) => (
               <button
-                key={action}
+                key={action.id}
                 type="button"
-                onClick={() => setPrompt(action)}
+                onClick={() => setPrompt(action.id)}
                 className="text-[11px] px-2.5 py-1 rounded-full border border-border/50 bg-background hover:bg-muted hover:border-border transition-colors text-muted-foreground"
               >
-                {action}
+                {t(action.key)}
               </button>
             ))}
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button
             className="gap-1.5 bg-amber-400 text-zinc-900 hover:bg-amber-400/90"
             onClick={() => { onGenerate(prompt); onOpenChange(false); }}
             disabled={isPending || !prompt.trim()}
           >
             {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            Generate
+            {t('articles.generate')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -420,6 +435,7 @@ function AIAssistDialog({
 export function ContentCreatePage() {
   const navigate = useNavigationStore((s) => s.navigate);
   const queryClient = useQueryClient();
+  const { t } = useT();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<TiptapEditorRef>(null);
 
@@ -522,10 +538,10 @@ export function ContentCreatePage() {
     },
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
-      toast.success('Content created successfully');
+      toast.success(t('articles.createdToast'));
       navigate('content', created.id);
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to create content'),
+    onError: (err: Error) => toast.error(err.message || t('articles.createFailedToast')),
   });
 
   // Create tag mutation
@@ -537,9 +553,9 @@ export function ContentCreatePage() {
         setValue('tagIds', [...selectedTagIds, newTag.id], { shouldValidate: true });
       }
       setCustomTags((prev) => [...prev, newTag.name]);
-      toast.success(`Tag "${newTag.name}" created`);
+      toast.success(`${t('articles.tagCreatedToast')} ${newTag.name}`);
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to create tag'),
+    onError: (err: Error) => toast.error(err.message || t('articles.tagCreateFailedToast')),
   });
 
   // Upload featured image mutation
@@ -560,16 +576,16 @@ export function ContentCreatePage() {
     },
     onSuccess: (media) => {
       setFeaturedImage(media);
-      toast.success('Image uploaded');
+      toast.success(t('articles.imageUploadedToast'));
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to upload image'),
+    onError: (err: Error) => toast.error(err.message || t('articles.uploadFailedToast')),
   });
 
   // AI content generation mutation (full article — used when no text is selected)
   const aiGenerateMutation = useMutation({
     mutationFn: (prompt: string) =>
       postApi<{ drafts?: Array<{ content: string; wordCount: number }> }>('/api/content/ai-generate', {
-        title: watchedTitle || 'Untitled',
+        title: watchedTitle || t('articles.untitled'),
         brief: prompt,
         writingStyle: 'Professional',
         targetLength: 'Medium (800-1200 words)',
@@ -580,10 +596,10 @@ export function ContentCreatePage() {
       const draft = result?.drafts?.[0];
       if (draft) {
         setEditorContent(draft.content);
-        toast.success('AI content generated!');
+        toast.success(t('articles.aiGeneratedToast'));
       }
     },
-    onError: (err: Error) => toast.error(err.message || 'AI generation failed'),
+    onError: (err: Error) => toast.error(err.message || t('articles.aiGenerationFailedToast')),
   });
 
   // AI edit selected text mutation (used when text is selected)
@@ -595,10 +611,10 @@ export function ContentCreatePage() {
       const editedText = result?.editedText;
       if (editedText) {
         editorRef.current?.replaceSelection(editedText);
-        toast.success('Text updated');
+        toast.success(t('articles.textUpdatedToast'));
       }
     },
-    onError: (err: Error) => toast.error(err.message || 'AI edit failed'),
+    onError: (err: Error) => toast.error(err.message || t('articles.aiEditFailedToast')),
   });
 
   // Selection-aware action handler
@@ -613,9 +629,9 @@ export function ContentCreatePage() {
     if (action === 'Duplicate') {
       if (savedText) {
         editorRef.current?.insertAfterSelection(savedText);
-        toast.success('Text duplicated');
+        toast.success(t('articles.textDuplicatedToast'));
       } else {
-        toast.error('Select text to duplicate');
+        toast.error(t('articles.selectTextToDuplicateToast'));
       }
       return;
     }
@@ -625,7 +641,7 @@ export function ContentCreatePage() {
     } else {
       aiGenerateMutation.mutate(action);
     }
-  }, [aiEditSelectionMutation, aiGenerateMutation]);
+  }, [aiEditSelectionMutation, aiGenerateMutation, t]);
 
   // Called on mousedown of AI action buttons — captures selection BEFORE editor can lose it
   const captureSelectionOnMouseDown = useCallback((e: React.MouseEvent) => {
@@ -685,7 +701,7 @@ export function ContentCreatePage() {
           ...customTags,
         ];
         if (allSelectedNames.some((n) => n?.toLowerCase() === value.toLowerCase())) {
-          toast.error('Tag already added');
+          toast.error(t('articles.tagAlreadyAddedToast'));
           return;
         }
 
@@ -693,7 +709,7 @@ export function ContentCreatePage() {
         createTagMutation.mutate(value);
       }
     },
-    [tagSearch, allTags, selectedTagIds, customTags, addTag, createTagMutation],
+    [tagSearch, allTags, selectedTagIds, customTags, addTag, createTagMutation, t],
   );
 
   const submitWithStatus = useCallback(
@@ -706,7 +722,7 @@ export function ContentCreatePage() {
         setValue('contentTypeId', contentTypeId);
       }
       // Ensure title for publish
-      const title = values.title?.trim() || 'Untitled';
+      const title = values.title?.trim() || t('articles.untitled');
       if (!values.title?.trim()) setValue('title', title);
 
       if (status === 'DRAFT') {
@@ -730,7 +746,7 @@ export function ContentCreatePage() {
         },
       )();
     },
-    [handleSubmit, createMutation, getValues, editorContent, contentTypes, setValue],
+    [handleSubmit, createMutation, getValues, editorContent, contentTypes, setValue, t],
   );
 
   const handleSchedule = useCallback(
@@ -790,7 +806,7 @@ export function ContentCreatePage() {
               <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:bg-white/5" onClick={goBack}>
                 <ArrowLeft className="h-4 w-4" />
               </Button>
-              <h1 className="text-xl font-semibold">New Article</h1>
+              <h1 className="text-xl font-semibold">{t('articles.newArticle')}</h1>
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -801,7 +817,7 @@ export function ContentCreatePage() {
                 disabled={isSubmitting}
               >
                 {isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                Save Draft
+                {t('articles.saveDraft')}
               </Button>
               <Button
                 size="sm"
@@ -810,7 +826,7 @@ export function ContentCreatePage() {
                 disabled={isSubmitting}
               >
                 <CalendarClock className="h-3.5 w-3.5" />
-                Schedule
+                {t('articles.schedule')}
               </Button>
               {/* Preview Button (additional toolbar button beside Publish) */}
               <Button
@@ -820,7 +836,7 @@ export function ContentCreatePage() {
                 onClick={() => setPreviewOpen(true)}
               >
                 <Eye className="h-3.5 w-3.5" />
-                Preview
+                {t('articles.preview')}
               </Button>
               <Button
                 size="sm"
@@ -829,7 +845,7 @@ export function ContentCreatePage() {
                 disabled={isSubmitting}
               >
                 {isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                Publish
+                {t('articles.publish')}
               </Button>
             </div>
           </div>
@@ -874,7 +890,7 @@ export function ContentCreatePage() {
                 <div className="flex items-center gap-2 px-3 pt-2 pb-0">
                   <div className="flex items-center gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 px-2.5 py-1 min-w-0 flex-1">
                     <Sparkles className="h-3 w-3 text-amber-500 shrink-0" />
-                    <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium shrink-0">Selected:</span>
+                    <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium shrink-0">{t('articles.selectedPrefix')}</span>
                     <span className="text-[11px] text-amber-800 dark:text-amber-300 truncate max-w-[280px]">&ldquo;{savedSelectedText}&rdquo;</span>
                   </div>
                   <button
@@ -882,7 +898,7 @@ export function ContentCreatePage() {
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={clearSavedSelection}
                     className="text-[10px] text-muted-foreground hover:text-foreground shrink-0 transition-colors"
-                    title="Clear selection context"
+                    title={t('articles.clearSelectionContext')}
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -910,7 +926,7 @@ export function ContentCreatePage() {
                         }
                       }
                     }}
-                    placeholder={savedSelectedText ? 'Edit selected text...' : 'Ask AI to edit your content...'}
+                    placeholder={savedSelectedText ? t('articles.editSelectedTextPlaceholder') : t('articles.askAiPlaceholder')}
                     rows={1}
                     className="flex-1 resize-none bg-transparent text-sm leading-normal placeholder:text-muted-foreground/50 focus:outline-none w-full"
                   />
@@ -925,7 +941,7 @@ export function ContentCreatePage() {
                     }
                   }}
                   className="size-7 rounded-full flex items-center justify-center shrink-0 transition-all text-muted-foreground hover:text-foreground"
-                  title="Send to AI"
+                  title={t('articles.sendToAi')}
                 >
                   {aiGenerateMutation.isPending || aiEditSelectionMutation.isPending ? (
                     <Loader2 className="size-3.5 animate-spin" />
@@ -938,10 +954,10 @@ export function ContentCreatePage() {
               <div className="flex gap-1.5 px-3 pb-2.5 flex-wrap">
                 {(savedSelectedText ? AI_SELECTED_ACTIONS : AI_NORMAL_ACTIONS).map((action) => (
                   <button
-                    key={action}
+                    key={action.id}
                     type="button"
                     onMouseDown={captureSelectionOnMouseDown}
-                    onClick={() => captureAndHandleQuickAction(action)}
+                    onClick={() => captureAndHandleQuickAction(action.id)}
                     disabled={aiGenerateMutation.isPending || aiEditSelectionMutation.isPending}
                     className={cn(
                       'text-[11px] px-2.5 py-1 rounded-full border transition-colors disabled:opacity-50 disabled:pointer-events-none',
@@ -950,7 +966,7 @@ export function ContentCreatePage() {
                         : 'border-border/50 bg-background hover:bg-muted hover:border-border text-muted-foreground',
                     )}
                   >
-                    {action}
+                    {t(action.key)}
                   </button>
                 ))}
               </div>
@@ -961,7 +977,7 @@ export function ContentCreatePage() {
             <button
               type="button"
               className="absolute -top-12 right-2 size-10 rounded-full flex items-center justify-center shrink-0 transition-all shadow-sm bg-neutral-900 text-white hover:bg-neutral-800 hover:shadow-md dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-              title="Focus mode"
+              title={t('articles.focusMode')}
             >
               <MousePointerClick className="size-4" />
             </button>
@@ -980,14 +996,14 @@ export function ContentCreatePage() {
                   <AccordionTrigger className="py-3 text-sm">
                     <span className="flex items-center gap-2">
                       <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                      Featured Image
+                      {t('articles.section.featuredImage')}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="pb-4 space-y-2.5">
                       {featuredImage ? (
                         <div className="relative aspect-video rounded-md overflow-hidden border">
-                          <img src={featuredImage.url} alt={featuredImage.alt || 'Featured'} className="h-full w-full object-cover" />
+                          <img src={featuredImage.url} alt={featuredImage.alt || t('articles.section.featuredImage')} className="h-full w-full object-cover" />
                           <button
                             type="button"
                             onClick={() => setFeaturedImage(null)}
@@ -998,7 +1014,7 @@ export function ContentCreatePage() {
                         </div>
                       ) : (
                         <div className="relative aspect-video rounded-md overflow-hidden bg-slate-800 border flex items-center justify-center">
-                          <span className="text-slate-400 text-sm">No Image</span>
+                          <span className="text-slate-400 text-sm">{t('articles.noImage')}</span>
                         </div>
                       )}
                       <div className="flex gap-1.5">
@@ -1010,7 +1026,7 @@ export function ContentCreatePage() {
                           disabled={uploadMutation.isPending}
                         >
                           {uploadMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-                          Upload
+                          {t('media.upload')}
                         </Button>
                         <Button
                           variant="outline"
@@ -1019,7 +1035,7 @@ export function ContentCreatePage() {
                           onClick={() => setMediaLibraryOpen(true)}
                         >
                           <ImageIcon className="h-3 w-3" />
-                          Library
+                          {t('articles.library')}
                         </Button>
                         <Button
                           variant="outline"
@@ -1027,7 +1043,7 @@ export function ContentCreatePage() {
                           className="flex-1 h-7 text-xs gap-1.5 border-amber-400/30 text-amber-600 hover:bg-amber-400/10"
                           onClick={() => setAiAssistOpen(true)}
                           disabled={!aiToolsEnabled}
-                          title={aiToolsEnabled ? 'AI Content Assistant' : 'Platform AI is not included in your plan'}
+                          title={aiToolsEnabled ? t('articles.aiAssistantTitle') : t('articles.aiPlatformNotIncluded')}
                         >
                           <Sparkles className="h-3 w-3" />
                           AI
@@ -1042,26 +1058,26 @@ export function ContentCreatePage() {
                   <AccordionTrigger className="py-3 text-sm">
                     <span className="flex items-center gap-2">
                       <Type className="h-3.5 w-3.5 text-muted-foreground" />
-                      Title & Slug
+                      {t('articles.section.titleAndSlug')}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="pb-4 space-y-3">
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Title</Label>
+                        <Label className="text-xs text-muted-foreground">{t('articles.titleLabel')}</Label>
                         <Input
                           {...register('title')}
-                          placeholder="Enter article title..."
+                          placeholder={t('articles.titlePlaceholder')}
                           className="h-9 font-medium"
                         />
                         {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Slug</Label>
+                        <Label className="text-xs text-muted-foreground">{t('articles.slugLabel')}</Label>
                         <Input
                           value={slugValue}
                           onChange={(e) => setSlugValue(e.target.value)}
-                          placeholder="article-url-slug"
+                          placeholder={t('articles.slugPlaceholder')}
                           className="h-8 text-sm font-mono"
                         />
                       </div>
@@ -1074,14 +1090,14 @@ export function ContentCreatePage() {
                   <AccordionTrigger className="py-3 text-sm">
                     <span className="flex items-center gap-2">
                       <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                      Excerpt
+                      {t('articles.section.excerpt')}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="pb-4">
                       <Textarea
                         {...register('excerpt')}
-                        placeholder="Brief description..."
+                        placeholder={t('articles.excerptPlaceholder')}
                         rows={2}
                         className="text-sm resize-none"
                       />
@@ -1092,13 +1108,13 @@ export function ContentCreatePage() {
                 {/* 5. Categories */}
                 <AccordionItem value="categories">
                   <AccordionTrigger className="py-3 text-sm">
-                    Categories
+                    {t('articles.section.categories')}
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="pb-4">
                       <Controller control={control} name="categoryId" render={({ field }) => (
                         <Select value={field.value ?? ''} onValueChange={field.onChange}>
-                          <SelectTrigger className="h-9"><SelectValue placeholder="Select category" /></SelectTrigger>
+                          <SelectTrigger className="h-9"><SelectValue placeholder={t('articles.selectCategoryPlaceholder')} /></SelectTrigger>
                           <SelectContent>
                             {(categories ?? []).map((cat) => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
                           </SelectContent>
@@ -1111,7 +1127,7 @@ export function ContentCreatePage() {
                 {/* 6. Tags */}
                 <AccordionItem value="tags">
                   <AccordionTrigger className="py-3 text-sm">
-                    Tags
+                    {t('articles.section.tags')}
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="pb-4 space-y-3">
@@ -1137,7 +1153,7 @@ export function ContentCreatePage() {
                           value={tagSearch}
                           onChange={(e) => setTagSearch(e.target.value)}
                           onKeyDown={handleTagKeyDown}
-                          placeholder="Search or type to create tag..."
+                          placeholder={t('articles.searchOrCreateTagPlaceholder')}
                           className="pl-8 h-8 text-sm"
                         />
                       </div>
@@ -1157,17 +1173,17 @@ export function ContentCreatePage() {
                 {/* 7. SEO */}
                 <AccordionItem value="seo">
                   <AccordionTrigger className="py-3 text-sm">
-                    SEO
+                    {t('articles.section.seo')}
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="pb-4 space-y-3">
                       <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">Meta Title</Label>
-                        <Input {...register('seoTitle')} placeholder="Meta title for search engines" className="h-9 text-sm" />
+                        <Label className="text-xs text-muted-foreground">{t('articles.metaTitle')}</Label>
+                        <Input {...register('seoTitle')} placeholder={t('articles.metaTitlePlaceholder')} className="h-9 text-sm" />
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">Meta Description</Label>
-                        <Textarea {...register('seoDescription')} placeholder="Meta description for search engines" rows={2} className="text-sm" />
+                        <Label className="text-xs text-muted-foreground">{t('articles.metaDescription')}</Label>
+                        <Textarea {...register('seoDescription')} placeholder={t('articles.metaDescriptionPlaceholder')} rows={2} className="text-sm" />
                       </div>
                     </div>
                   </AccordionContent>
@@ -1176,13 +1192,13 @@ export function ContentCreatePage() {
                 {/* 8. Content Type */}
                 <AccordionItem value="content-type">
                   <AccordionTrigger className="py-3 text-sm">
-                    Content Type
+                    {t('articles.section.contentType')}
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="pb-4">
                       <Controller control={control} name="contentTypeId" render={({ field }) => (
                         <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger className="h-9"><SelectValue placeholder="Select type" /></SelectTrigger>
+                          <SelectTrigger className="h-9"><SelectValue placeholder={t('articles.selectTypePlaceholder')} /></SelectTrigger>
                           <SelectContent>
                             {(contentTypes ?? []).map((ct) => <SelectItem key={ct.id} value={ct.id}>{ct.name}</SelectItem>)}
                           </SelectContent>

@@ -65,6 +65,7 @@ import type {
   UserStatus,
   SelectOption,
 } from '@/shared/types';
+import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
 
@@ -139,11 +140,6 @@ interface EditFormData {
 
 // -------------------- Constants --------------------
 
-const ROLE_OPTIONS: SelectOption<UserRole>[] = [
-  { label: 'Admin', value: 'ADMIN' },
-  { label: 'Editor', value: 'EDITOR' },
-];
-
 const ROLE_COLORS: Record<UserRole, string> = {
   ADMIN:
     'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-orange-200 dark:border-orange-800/50',
@@ -151,18 +147,24 @@ const ROLE_COLORS: Record<UserRole, string> = {
     'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50',
 };
 
-const STATUS_OPTIONS: SelectOption<UserStatus>[] = [
-  { label: 'Active', value: 'ACTIVE' },
-  { label: 'Invited', value: 'INVITED' },
-  { label: 'Suspended', value: 'SUSPENDED' },
-  { label: 'Deactivated', value: 'DEACTIVATED' },
-];
-
 // -------------------- Component --------------------
 
 export function UsersDetailPage({ userId }: { userId: string }) {
+  const { t } = useT();
   const navigate = useNavigationStore((s) => s.navigate);
   const queryClient = useQueryClient();
+
+  // Role/Status options (translated at render time so labels switch with locale)
+  const ROLE_OPTIONS: SelectOption<UserRole>[] = useMemo(() => [
+    { label: t('users.roleAdmin'), value: 'ADMIN' },
+    { label: t('users.roleEditor'), value: 'EDITOR' },
+  ], [t]);
+  const STATUS_OPTIONS: SelectOption<UserStatus>[] = useMemo(() => [
+    { label: t('common.active'), value: 'ACTIVE' },
+    { label: t('users.statusInvited'), value: 'INVITED' },
+    { label: t('users.statusSuspended'), value: 'SUSPENDED' },
+    { label: t('users.statusDeactivated'), value: 'DEACTIVATED' },
+  ], [t]);
 
   // Drawer state
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -249,10 +251,10 @@ export function UsersDetailPage({ userId }: { userId: string }) {
 
   const handleSave = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (!formData.name.trim()) errors.name = 'Name is required';
-    if (!formData.email.trim()) errors.email = 'Email is required';
+    if (!formData.name.trim()) errors.name = t('users.nameRequired');
+    if (!formData.email.trim()) errors.email = t('users.emailRequired');
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
-      errors.email = 'Invalid email address';
+      errors.email = t('users.invalidEmail');
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
       return;
@@ -265,7 +267,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
       bio: formData.bio.trim() || undefined,
       avatar: formData.avatar.trim() || '',
     });
-  }, [formData, updateMutation]);
+  }, [formData, updateMutation, t]);
 
   const auditLogs = auditLogsData?.data ?? [];
   const contentItems = contentData?.data ?? [];
@@ -285,12 +287,12 @@ export function UsersDetailPage({ userId }: { userId: string }) {
   if (!user) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 text-center py-20">
-        <h2 className="text-xl font-semibold">User Not Found</h2>
+        <h2 className="text-xl font-semibold">{t('users.notFound')}</h2>
         <p className="text-sm text-muted-foreground">
-          This user does not exist or has been removed.
+          {t('users.notFoundDescription')}
         </p>
         <Button variant="outline" onClick={() => navigate('users')}>
-          Back to Users
+          {t('users.backToUsers')}
         </Button>
       </div>
     );
@@ -307,15 +309,15 @@ export function UsersDetailPage({ userId }: { userId: string }) {
           onClick={() => navigate('users')}
         >
           <ArrowLeft className="h-4 w-4" />
-          <span className="sr-only">Back to users</span>
+          <span className="sr-only">{t('users.backToUsersSr')}</span>
         </Button>
         <PageHeader
-          title={user.name || 'Unnamed User'}
+          title={user.name || t('users.unnamedUser')}
           description={user.email}
           action={
             <Button size="sm" onClick={openEditDrawer}>
               <Pencil className="h-4 w-4 mr-2" />
-              Edit User
+              {t('users.editUser')}
             </Button>
           }
         />
@@ -334,7 +336,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
             <div className="flex-1 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-lg font-semibold">
-                  {user.name || 'Unnamed User'}
+                  {user.name || t('users.unnamedUser')}
                 </h2>
                 <Badge
                   variant="outline"
@@ -355,19 +357,19 @@ export function UsersDetailPage({ userId }: { userId: string }) {
                 {user.lastLoginAt && (
                   <span className="flex items-center gap-1.5">
                     <Clock className="h-3.5 w-3.5" />
-                    Last login {formatRelativeTime(user.lastLoginAt)}
+                    {t('users.lastLogin')} {formatRelativeTime(user.lastLoginAt)}
                   </span>
                 )}
                 <span className="flex items-center gap-1.5">
                   <CalendarDays className="h-3.5 w-3.5" />
-                  Member since {formatDate(user.createdAt)}
+                  {t('users.memberSince')} {formatDate(user.createdAt)}
                 </span>
               </div>
               {user.emailVerified && (
                 <div className="flex items-center gap-1.5">
                   <Shield className="h-3.5 w-3.5 text-green-500" />
                   <span className="text-xs text-muted-foreground">
-                    Email verified
+                    {t('users.emailVerified')}
                   </span>
                 </div>
               )}
@@ -379,9 +381,9 @@ export function UsersDetailPage({ userId }: { userId: string }) {
       {/* Tabs */}
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="overview">{t('users.tabs.overview')}</TabsTrigger>
           <TabsTrigger value="content">
-            Content
+            {t('users.tabs.content')}
             {contentItems.length > 0 && (
               <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0 h-4">
                 {contentItems.length}
@@ -389,7 +391,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
             )}
           </TabsTrigger>
           <TabsTrigger value="activity">
-            Activity
+            {t('users.tabs.activity')}
             {auditLogs.length > 0 && (
               <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0 h-4">
                 {auditLogs.length}
@@ -405,48 +407,48 @@ export function UsersDetailPage({ userId }: { userId: string }) {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium">
-                  Profile Information
+                  {t('users.profileInformation')}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {user.bio && (
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Bio</p>
+                    <p className="text-xs text-muted-foreground mb-1">{t('users.bio')}</p>
                     <p className="text-sm leading-relaxed">{user.bio}</p>
                   </div>
                 )}
                 {!user.bio && profile?.bio && (
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">
-                      Author Bio
+                      {t('users.authorBio')}
                     </p>
                     <p className="text-sm leading-relaxed">{profile.bio}</p>
                   </div>
                 )}
                 {!user.bio && !profile?.bio && (
                   <p className="text-sm text-muted-foreground italic">
-                    No bio provided.
+                    {t('users.noBio')}
                   </p>
                 )}
                 <Separator />
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <p className="text-xs text-muted-foreground">Role</p>
+                    <p className="text-xs text-muted-foreground">{t('users.role')}</p>
                     <p className="font-medium">{labelize(user.role)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Status</p>
+                    <p className="text-xs text-muted-foreground">{t('common.status')}</p>
                     <StatusBadge status={user.status} size="sm" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">MFA</p>
+                    <p className="text-xs text-muted-foreground">{t('users.mfa')}</p>
                     <p className="font-medium">
-                      {user.mfaEnabled ? 'Enabled' : 'Disabled'}
+                      {user.mfaEnabled ? t('users.enabled') : t('users.disabled')}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">
-                      Author Slug
+                      {t('users.authorSlug')}
                     </p>
                     <p className="font-medium font-mono text-xs">
                       {profile?.slug || '—'}
@@ -460,7 +462,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium">
-                  Social Links
+                  {t('users.socialLinks')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -515,13 +517,13 @@ export function UsersDetailPage({ userId }: { userId: string }) {
                       !profile.github &&
                       !profile.linkedin && (
                         <p className="text-sm text-muted-foreground italic">
-                          No social links configured.
+                          {t('users.noSocialLinks')}
                         </p>
                       )}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground italic">
-                    No author profile configured.
+                    {t('users.noAuthorProfile')}
                   </p>
                 )}
               </CardContent>
@@ -533,7 +535,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Key className="h-4 w-4" />
-                API Keys
+                {t('users.apiKeys')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -560,17 +562,17 @@ export function UsersDetailPage({ userId }: { userId: string }) {
                         </p>
                         {key.lastUsedAt && (
                           <p className="text-xs text-muted-foreground">
-                            Last used {formatRelativeTime(key.lastUsedAt)}
+                            {t('users.lastUsed')} {formatRelativeTime(key.lastUsedAt)}
                           </p>
                         )}
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground">
-                          Created {formatDate(key.createdAt)}
+                          {t('users.created')} {formatDate(key.createdAt)}
                         </p>
                         {key.expiresAt && (
                           <p className="text-xs text-muted-foreground">
-                            Expires {formatDate(key.expiresAt)}
+                            {t('users.expires')} {formatDate(key.expiresAt)}
                           </p>
                         )}
                       </div>
@@ -579,7 +581,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground italic">
-                  No API keys found for this user.
+                  {t('users.noApiKeys')}
                 </p>
               )}
             </CardContent>
@@ -591,7 +593,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium">
-                Content by {user.name || 'this user'}
+                {t('users.contentByPrefix')} {user.name || t('users.contentByDefault')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -599,10 +601,10 @@ export function UsersDetailPage({ userId }: { userId: string }) {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[40%]">Title</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Updated</TableHead>
+                      <TableHead className="w-[40%]">{t('users.titleColumn')}</TableHead>
+                      <TableHead>{t('users.typeColumn')}</TableHead>
+                      <TableHead>{t('common.status')}</TableHead>
+                      <TableHead>{t('users.updatedColumn')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -637,7 +639,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
                 </Table>
               ) : (
                 <p className="text-sm text-muted-foreground italic py-8 text-center">
-                  No content found for this user.
+                  {t('users.noContent')}
                 </p>
               )}
             </CardContent>
@@ -649,7 +651,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium">
-                Recent Activity
+                {t('users.recentActivity')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -675,7 +677,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
                         <p className="text-xs text-muted-foreground">
                           {formatRelativeTime(log.createdAt)}
                           {log.ipAddress && (
-                            <span className="ml-2">from {log.ipAddress}</span>
+                            <span className="ml-2">{t('users.fromIp')} {log.ipAddress}</span>
                           )}
                         </p>
                       </div>
@@ -684,7 +686,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground italic py-8 text-center">
-                  No recent activity for this user.
+                  {t('users.noRecentActivity')}
                 </p>
               )}
             </CardContent>
@@ -699,9 +701,9 @@ export function UsersDetailPage({ userId }: { userId: string }) {
           className="sm:max-w-[640px] w-full overflow-y-auto p-0"
         >
           <SheetHeader className="p-6 pb-4 border-b">
-            <SheetTitle>Edit User</SheetTitle>
+            <SheetTitle>{t('users.editUser')}</SheetTitle>
             <SheetDescription>
-              Update user details, role, and status.
+              {t('users.editUserSheetDescription')}
             </SheetDescription>
           </SheetHeader>
 
@@ -710,12 +712,12 @@ export function UsersDetailPage({ userId }: { userId: string }) {
             <div className="flex items-center gap-4">
               <AvatarWithFallback
                 src={formData.avatar || undefined}
-                name={formData.name || 'User'}
+                name={formData.name || t('users.user')}
                 size="lg"
               />
               <div>
                 <p className="font-medium text-sm">
-                  {formData.name || 'Unnamed'}
+                  {formData.name || t('users.unnamed')}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {formData.email}
@@ -726,7 +728,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
             {/* Name */}
             <div className="space-y-2">
               <Label htmlFor="detail-edit-name">
-                Name <span className="text-destructive">*</span>
+                {t('common.name')} <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="detail-edit-name"
@@ -734,7 +736,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, name: e.target.value }))
                 }
-                placeholder="Full name"
+                placeholder={t('users.fullNamePlaceholder')}
               />
               {formErrors.name && (
                 <p className="text-xs text-destructive">{formErrors.name}</p>
@@ -744,7 +746,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
             {/* Email */}
             <div className="space-y-2">
               <Label htmlFor="detail-edit-email">
-                Email <span className="text-destructive">*</span>
+                {t('common.email')} <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="detail-edit-email"
@@ -753,7 +755,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, email: e.target.value }))
                 }
-                placeholder="email@example.com"
+                placeholder={t('users.emailPlaceholder')}
               />
               {formErrors.email && (
                 <p className="text-xs text-destructive">{formErrors.email}</p>
@@ -762,7 +764,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
 
             {/* Role */}
             <div className="space-y-2">
-              <Label htmlFor="detail-edit-role">Role</Label>
+              <Label htmlFor="detail-edit-role">{t('users.role')}</Label>
               <Select
                 value={formData.role}
                 onValueChange={(v) =>
@@ -787,7 +789,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
 
             {/* Status */}
             <div className="space-y-2">
-              <Label htmlFor="detail-edit-status">Status</Label>
+              <Label htmlFor="detail-edit-status">{t('common.status')}</Label>
               <Select
                 value={formData.status}
                 onValueChange={(v) =>
@@ -812,28 +814,28 @@ export function UsersDetailPage({ userId }: { userId: string }) {
 
             {/* Bio */}
             <div className="space-y-2">
-              <Label htmlFor="detail-edit-bio">Bio</Label>
+              <Label htmlFor="detail-edit-bio">{t('users.bio')}</Label>
               <Textarea
                 id="detail-edit-bio"
                 value={formData.bio}
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, bio: e.target.value }))
                 }
-                placeholder="Short biography..."
+                placeholder={t('users.shortBioPlaceholder')}
                 rows={3}
               />
             </div>
 
             {/* Avatar URL */}
             <div className="space-y-2">
-              <Label htmlFor="detail-edit-avatar">Avatar URL</Label>
+              <Label htmlFor="detail-edit-avatar">{t('users.avatarUrl')}</Label>
               <Input
                 id="detail-edit-avatar"
                 value={formData.avatar}
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, avatar: e.target.value }))
                 }
-                placeholder="https://example.com/avatar.jpg"
+                placeholder={t('users.avatarUrlPlaceholder')}
               />
             </div>
           </div>
@@ -846,7 +848,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
                   size="sm"
                   onClick={() => setDrawerOpen(false)}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
               </SheetClose>
               <Button
@@ -857,7 +859,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
                 {updateMutation.isPending && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
-                Save Changes
+                {t('common.saveChanges')}
               </Button>
             </div>
           </SheetFooter>

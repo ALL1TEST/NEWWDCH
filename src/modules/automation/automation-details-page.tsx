@@ -12,6 +12,7 @@ import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn, formatRelativeTime, formatDateTime } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useT } from '@/lib/i18n';
 
 interface AutomationDetail {
   id: string;
@@ -44,6 +45,7 @@ interface RunRow {
 }
 
 export function AutomationDetailsPage({ automationId }: { automationId: string }) {
+  const { t } = useT();
   const navigate = useNavigationStore((s) => s.navigate);
   const queryClient = useQueryClient();
 
@@ -56,8 +58,8 @@ export function AutomationDetailsPage({ automationId }: { automationId: string }
 
   const runMutation = useMutation({
     mutationFn: () => postApi(`/api/automations/${automationId}/run`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['automation', automationId] }); toast.success('Automation started'); },
-    onError: (err: Error) => toast.error(err.message || 'Failed to start'),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['automation', automationId] }); toast.success(t('automation.details.toastStarted')); },
+    onError: (err: Error) => toast.error(err.message || t('automation.details.toastFailedToStart')),
   });
 
   if (isLoading || !automation) {
@@ -89,21 +91,21 @@ export function AutomationDetailsPage({ automationId }: { automationId: string }
         </div>
         <Button onClick={() => runMutation.mutate()} disabled={runMutation.isPending} className="gap-2">
           {runMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-          Run Now
+          {t('automation.details.runNow')}
         </Button>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Total Runs', value: automation.totalRuns },
-          { label: 'Successful', value: automation.successfulRuns },
-          { label: 'Failed', value: automation.failedRuns },
-          { label: 'Success Rate', value: `${successRate}%` },
-          { label: 'Avg Duration', value: avgDuration !== '—' ? `${avgDuration}s` : '—' },
-          { label: 'Last Run', value: automation.lastRunAt ? formatRelativeTime(automation.lastRunAt) : 'Never' },
-          { label: 'Next Run', value: automation.nextRunAt ? formatRelativeTime(automation.nextRunAt) : '—' },
-          { label: 'Created', value: formatRelativeTime(automation.createdAt) },
+          { label: t('automation.details.totalRuns'), value: automation.totalRuns },
+          { label: t('automation.details.successful'), value: automation.successfulRuns },
+          { label: t('automation.details.failed'), value: automation.failedRuns },
+          { label: t('automation.details.successRate'), value: `${successRate}%` },
+          { label: t('automation.details.avgDuration'), value: avgDuration !== '—' ? `${avgDuration}s` : '—' },
+          { label: t('automation.details.lastRun'), value: automation.lastRunAt ? formatRelativeTime(automation.lastRunAt) : t('automation.details.never') },
+          { label: t('automation.details.nextRun'), value: automation.nextRunAt ? formatRelativeTime(automation.nextRunAt) : '—' },
+          { label: t('automation.details.created'), value: formatRelativeTime(automation.createdAt) },
         ].map((stat) => (
           <Card key={stat.label} className="p-3">
             <p className="text-xs text-muted-foreground">{stat.label}</p>
@@ -114,31 +116,31 @@ export function AutomationDetailsPage({ automationId }: { automationId: string }
 
       {/* Workflow Visualization */}
       <Card>
-        <CardHeader><CardTitle className="text-sm">Workflow</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-sm">{t('automation.details.workflow')}</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-center gap-2 text-sm"><Zap className="h-4 w-4 text-amber-500" /> <span className="font-medium">Trigger:</span> {automation.triggerType === 'SCHEDULED' ? `Every ${schedule.frequency?.toLowerCase() || ''} at ${schedule.time || ''}` : 'Manual'}</div>
+          <div className="flex items-center gap-2 text-sm"><Zap className="h-4 w-4 text-amber-500" /> <span className="font-medium">{t('automation.details.triggerLabel')}</span> {automation.triggerType === 'SCHEDULED' ? `${schedule.frequency?.toLowerCase() || ''} ${schedule.time || ''}` : t('automation.manual')}</div>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          <div className="flex items-center gap-2 text-sm"><FileText className="h-4 w-4 text-sky-500" /> <span className="font-medium">Generate:</span> {workflow.contentGeneration?.topic || 'Untitled'}</div>
+          <div className="flex items-center gap-2 text-sm"><FileText className="h-4 w-4 text-sky-500" /> <span className="font-medium">{t('automation.details.generateLabel')}</span> {workflow.contentGeneration?.topic || t('automation.details.untitled')}</div>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          <div className="flex items-center gap-2 text-sm"><Sparkles className="h-4 w-4 text-violet-500" /> <span className="font-medium">SEO + Media:</span> {[
-            workflow.seoProcessing?.generateSeoTitle && 'SEO Title',
-            workflow.seoProcessing?.generateMetaDescription && 'Meta Description',
-            workflow.media?.generateFeaturedImage && 'Featured Image',
-          ].filter(Boolean).join(', ') || 'None'}</div>
+          <div className="flex items-center gap-2 text-sm"><Sparkles className="h-4 w-4 text-violet-500" /> <span className="font-medium">{t('automation.details.seoMediaLabel')}</span> {[
+            workflow.seoProcessing?.generateSeoTitle && t('automation.details.seoTitle'),
+            workflow.seoProcessing?.generateMetaDescription && t('automation.details.metaDescription'),
+            workflow.media?.generateFeaturedImage && t('automation.details.featuredImage'),
+          ].filter(Boolean).join(', ') || t('automation.builder.previewNone')}</div>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          <div className="flex items-center gap-2 text-sm"><Send className="h-4 w-4 text-emerald-500" /> <span className="font-medium">Action:</span> {workflow.finalAction?.action === 'PUBLISH' ? 'Publish Immediately' : workflow.finalAction?.action === 'REVIEW' ? 'Send to Review' : 'Save as Draft'}</div>
+          <div className="flex items-center gap-2 text-sm"><Send className="h-4 w-4 text-emerald-500" /> <span className="font-medium">{t('automation.details.actionLabel')}</span> {workflow.finalAction?.action === 'PUBLISH' ? t('automation.details.actionPublishImmediately') : workflow.finalAction?.action === 'REVIEW' ? t('automation.details.actionSendToReview') : t('automation.details.actionSaveAsDraft')}</div>
         </CardContent>
       </Card>
 
       {/* Execution History */}
       <Card>
-        <CardHeader><CardTitle className="text-sm">Automation Runs</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-sm">{t('automation.details.automationRuns')}</CardTitle></CardHeader>
         <CardContent className="p-0">
           {automation.runs.length === 0 ? (
             <div className="py-12 text-center">
               <Activity className="h-10 w-10 mx-auto text-muted-foreground/30 mb-2" />
-              <p className="text-sm font-medium">No runs yet</p>
-              <p className="text-xs text-muted-foreground mt-1">Click "Run Now" to execute this automation.</p>
+              <p className="text-sm font-medium">{t('automation.details.noRunsYet')}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t('automation.details.noRunsHint')}</p>
             </div>
           ) : (
             <div className="divide-y">
@@ -153,7 +155,7 @@ export function AutomationDetailsPage({ automationId }: { automationId: string }
                           <Badge variant="outline" className={cn('border-transparent text-[10px]', run.status === 'COMPLETED' ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' : run.status === 'FAILED' ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400' : 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400')}>{run.status}</Badge>
                           {run.generatedArticleName && <span className="text-sm font-medium truncate">{run.generatedArticleName}</span>}
                         </div>
-                        {run.errorMessage && <p className="text-xs text-red-600 dark:text-red-400 truncate mt-0.5">Failed: {run.failedStep} — {run.errorMessage}</p>}
+                        {run.errorMessage && <p className="text-xs text-red-600 dark:text-red-400 truncate mt-0.5">{t('automation.details.failedPrefix')} {run.failedStep} — {run.errorMessage}</p>}
                       </div>
                       <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">{run.startedAt ? formatRelativeTime(run.startedAt) : '—'}</span>
                       {run.durationMs && <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">{(run.durationMs / 1000).toFixed(1)}s</span>}

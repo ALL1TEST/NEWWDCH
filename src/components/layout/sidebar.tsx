@@ -573,6 +573,7 @@ function LogoMark() {
  */
 function CollapsedLogoButton({ hovered }: { hovered: boolean }) {
   const { toggleSidebar } = useSidebar();
+  const { t } = useT();
   return (
     /* Hover-only "Expand" tooltip: instant (provider delayDuration=0),
        appears on mouse-enter, disappears on mouse-leave. Radix closes it
@@ -587,7 +588,7 @@ function CollapsedLogoButton({ hovered }: { hovered: boolean }) {
         <button
           type="button"
           onClick={toggleSidebar}
-          aria-label="Expand sidebar"
+          aria-label={t('app.expandSidebar')}
           className={cn(
             'flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg font-bold text-sm outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring select-none',
             // NORMAL LOGO STATE (at rest): bg-primary black box +
@@ -612,7 +613,7 @@ function CollapsedLogoButton({ hovered }: { hovered: boolean }) {
           ) : (
             <span>C</span>
           )}
-          <span className="sr-only">Expand sidebar</span>
+          <span className="sr-only">{t('app.expandSidebar')}</span>
         </button>
       </TooltipTrigger>
       {/* Collapsed-rail tooltip — uses the SHARED COLLAPSED_TOOLTIP_PROPS
@@ -622,7 +623,7 @@ function CollapsedLogoButton({ hovered }: { hovered: boolean }) {
           CollapsedParentNavItem). Portal-based rendering means the bubble
           floats outside the sidebar DOM at z-50 — never clipped by the
           rail's overflow-hidden. */}
-      <TooltipContent {...COLLAPSED_TOOLTIP_PROPS}>Expand</TooltipContent>
+      <TooltipContent {...COLLAPSED_TOOLTIP_PROPS}>{t('app.expand')}</TooltipContent>
     </Tooltip>
   );
 }
@@ -636,6 +637,7 @@ function CollapsedLogoButton({ hovered }: { hovered: boolean }) {
  */
 function CollapseToggle({ side = 'right' }: { side?: 'left' | 'right' }) {
   const { toggleSidebar } = useSidebar();
+  const { t } = useT();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -644,13 +646,13 @@ function CollapseToggle({ side = 'right' }: { side?: 'left' | 'right' }) {
           size="icon"
           className="h-8 w-8 shrink-0 rounded-md"
           onClick={toggleSidebar}
-          aria-label="Collapse sidebar"
+          aria-label={t('app.collapseSidebar')}
         >
           <PanelLeftClose className="h-4 w-4 text-muted-foreground [dir=rtl]:-scale-x-100" />
-          <span className="sr-only">Toggle sidebar</span>
+          <span className="sr-only">{t('app.toggleSidebar')}</span>
         </Button>
       </TooltipTrigger>
-      <TooltipContent side={side}>Collapse</TooltipContent>
+      <TooltipContent side={side}>{t('app.collapse')}</TooltipContent>
     </Tooltip>
   );
 }
@@ -1190,7 +1192,7 @@ export function AppSidebar() {
         <div className="flex h-8 items-center gap-2 group-data-[collapsible=icon]:hidden">
           <LogoMark />
           <span className="truncate font-semibold text-sm tracking-tight whitespace-nowrap text-text-primary">
-            {isPlatformAdmin ? 'Platform Admin' : 'CMS Admin'}
+            {isPlatformAdmin ? t('app.platformAdmin') : t('app.cmsAdmin')}
           </span>
           <div className="ml-auto flex shrink-0 items-center gap-1">
             <Tooltip>
@@ -1200,13 +1202,13 @@ export function AppSidebar() {
                   size="icon"
                   className="h-8 w-8 shrink-0 rounded-md"
                   onClick={openCommandPalette}
-                  aria-label="Search"
+                  aria-label={t('app.search')}
                 >
                   <Search className="h-4 w-4" />
-                  <span className="sr-only">Search</span>
+                  <span className="sr-only">{t('app.search')}</span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Search</TooltipContent>
+              <TooltipContent side="bottom">{t('app.search')}</TooltipContent>
             </Tooltip>
             <CollapseToggle side="bottom" />
           </div>
@@ -1259,7 +1261,7 @@ export function AppSidebar() {
               type="button"
               variant="ghost"
               className="h-8 w-8 shrink-0 rounded-full"
-              aria-label={`${user.name} — open profile menu`}
+              aria-label={`${user.name} ${t('app.openProfileMenuPrefix')}`}
               aria-haspopup="menu"
             >
               <Avatar className="h-8 w-8">
@@ -1406,7 +1408,7 @@ export function AppSidebar() {
               type="button"
               variant="ghost"
               className="h-8 w-8 shrink-0 rounded-full"
-              aria-label={`${user.name} — open profile menu`}
+              aria-label={`${user.name} ${t('app.openProfileMenuPrefix')}`}
               aria-haspopup="menu"
             >
               <Avatar className="h-8 w-8">
