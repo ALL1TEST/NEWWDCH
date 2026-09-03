@@ -93,7 +93,7 @@ import { cn } from '@/lib/utils';
 import { useCommandPaletteStore } from '@/lib/stores/command-palette-store';
 import { useSubscriptionStore, getPlanBadgeStyle } from '@/lib/stores/subscription-store';
 import { usePlanEntitlements, isModuleAllowedByPlan, isSmtpSettingsAllowedByPlan } from '@/hooks/use-entitlements';
-import { useT } from '@/lib/i18n';
+import { useT, isRTLLocale } from '@/lib/i18n';
 import { SMTP_SETTINGS_ROUTE } from '@/lib/platform/feature-config';
 import { NotificationBell } from '@/components/layout/notification-bell';
 import { UserProfileMenu } from '@/components/layout/user-profile-menu';
@@ -608,7 +608,7 @@ function CollapsedLogoButton({ hovered }: { hovered: boolean }) {
               icon so the collapsed logo reads as a clear "expand"
               affordance when the pointer is over it. */}
           {hovered ? (
-            <PanelLeftOpen className="h-4 w-4" />
+            <PanelLeftOpen className="h-4 w-4 [dir=rtl]:-scale-x-100" />
           ) : (
             <span>C</span>
           )}
@@ -646,7 +646,7 @@ function CollapseToggle({ side = 'right' }: { side?: 'left' | 'right' }) {
           onClick={toggleSidebar}
           aria-label="Collapse sidebar"
         >
-          <PanelLeftClose className="h-4 w-4 text-muted-foreground" />
+          <PanelLeftClose className="h-4 w-4 text-muted-foreground [dir=rtl]:-scale-x-100" />
           <span className="sr-only">Toggle sidebar</span>
         </Button>
       </TooltipTrigger>
@@ -1022,7 +1022,19 @@ function NavGroupSection({
 
 export function AppSidebar() {
   const user = useAuthStore((s) => s.user);
-  const { t } = useT();
+  const { t, locale } = useT();
+  // RTL layout — when the active locale is a right-to-left language
+  // (ar / fa / he), the sidebar physically moves to the RIGHT side of
+  // the viewport (the shadcn <Sidebar> component natively supports
+  // side="right" — borders, rail, offcanvas + mobile Sheet all flip
+  // via group-data-[side=right] variants). LTR locales keep side="left"
+  // (the existing default). This is the SINGLE source of truth for the
+  // sidebar's physical position — driven by the locale, not hardcoded
+  // to Arabic. Toggling the language immediately re-renders the sidebar
+  // on the correct side (the locale store change triggers a re-render
+  // of every useT() consumer).
+  const isRTL = isRTLLocale(locale);
+  const sidebarSide: 'left' | 'right' = isRTL ? 'right' : 'left';
   // Active plan — the footer badge shows the plan NAME, colored with
   // the plan's OWN badge styling (Free → emerald, Plus → amber, Pro →
   // violet, Max → pink — the same id → styling mapping Billing &
@@ -1164,6 +1176,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar
+      side={sidebarSide}
       collapsible="icon"
       onMouseEnter={() => setRailHovered(true)}
       onMouseLeave={() => setRailHovered(false)}

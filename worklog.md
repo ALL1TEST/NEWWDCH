@@ -10260,3 +10260,29 @@ Final Status:
 - Lint: changed files EXIT 0; project-wide at exact 7-problem pre-existing baseline (unrelated files).
 - No functionality broken: auth, 3 dashboards, billing, plans, theme, profile, navigation all intact.
 - Translation continues in background to deepen per-locale coverage.
+
+---
+Task ID: 12
+Agent: main (RTL layout fix)
+Task: Fix RTL layout behavior for Arabic and all RTL languages — the Arabic text was translated correctly but the sidebar/navigation stayed on the LEFT instead of moving to the RIGHT. Make the entire CMS interface switch to proper RTL layout when an RTL locale is selected.
+
+Work Log:
+- ROOT CAUSE FOUND: src/components/layout/sidebar.tsx rendered <Sidebar collapsible="icon"> WITHOUT passing a `side` prop. The shadcn <Sidebar> component (src/components/ui/sidebar.tsx) defaults to side="left" and has FULL native support for side="right" (borders, rail, offcanvas, mobile Sheet all flip via group-data-[side=right] variants + side={side} on the Sheet). The previous Task 11 set dir="rtl" on <html> (so text direction flipped) but never told the sidebar to physically position itself on the right → the sidebar stayed left even in Arabic.
+- Fix (1 file: src/components/layout/sidebar.tsx):
+  1. Imported isRTLLocale from '@/lib/i18n' (the helper added in Task 11).
+  2. In AppSidebar(): read `locale` from useT(), compute `const isRTL = isRTLLocale(locale)` + `const sidebarSide = isRTL ? 'right' : 'left'`.
+  3. Passed `side={sidebarSide}` to <Sidebar> — the SINGLE source of truth for the sidebar's physical position, driven by the active locale (NOT hardcoded to Arabic). Toggling the language re-renders every useT() consumer, so the sidebar immediately re-positions on language switch.
+  4. Mirrored the two directional PanelLeft icons: PanelLeftClose (collapse toggle) + PanelLeftOpen (collapsed-rail expand affordance) now carry [dir=rtl]:-scale-x-100 so the directional arrow points the correct way in RTL. Non-directional icons (settings, calendar, media, users, AI, notifications) are left untouched per the spec.
+
+VERIFICATION (Playwright headless, measured DOM rectangles):
+- English (LTR): sidebar left=0 right=256 → sidebar LEFT; main=256-1440. Logo at left=8. Mobile drawer slides from left (left=0). Across 6 modules (dashboard/content/seo/ai/settings/profile): sidebar LEFT everywhere. ✅
+- Arabic (RTL): sidebar left=1184 right=1440 → sidebar RIGHT; main=0-1184. Logo at left=1400 (right side). Nav items span 1193-1432 (right side). Mobile drawer slides from right (right=390=viewport edge). dir=rtl. Across the SAME 6 modules: sidebar RIGHT everywhere. Page titles translated (لوحة الإدارة التنفيذية / المقالات / إعدادات SMTP). ✅
+- Persian (fa): sidebar RIGHT ✅. Hebrew (he): sidebar RIGHT ✅. French (fr): sidebar LEFT ✅.
+- Switch Arabic → English: sidebar returns to LEFT on all modules ✅ (persistence across navigation confirmed).
+- LTR languages (en/fr/de/es/it/etc.) keep the existing layout (sidebar left) — unchanged.
+
+Stage Summary:
+- 1 file changed (src/components/layout/sidebar.tsx): locale-driven side prop + 2 directional icon flips. No CSS duplication, no Arabic-only checks, no separate RTL layout.
+- Architecture: locale → isRTLLocale(locale) → side='right'|'left' → shadcn <Sidebar> natively flips position/borders/rail/mobile-drawer. The dir="rtl" on <html> (from Task 11) handles text direction + flexbox auto-reversal for topbar/breadcrumbs/dropdowns/forms/tables.
+- All 6 CMS modules tested render correct RTL in Arabic + correct LTR in English. Switching persists across navigation.
+- No existing functionality broken. No new CSS. Lint clean on changed file; project-wide lint at the exact 7-problem pre-existing baseline.
