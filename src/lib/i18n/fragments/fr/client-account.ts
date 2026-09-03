@@ -268,8 +268,13 @@ export const clientAccountFr: Record<string, string> = {
   'billing.ownAiProvider': 'Votre propre fournisseur d’IA — les limites d’utilisation de l’IA de la plateforme ne s’appliquent pas',
 
   // ---- Tableau de bord du compte interne (page dédiée du compte INTERNAL) ----
-  'internal.title': 'Compte interne',
-  'internal.subtitle': 'Compte SaaS interne — espace de travail de l’équipe plateforme.',
+  // L'en-tête du tableau de bord affiche « Vue d'ensemble » (et non
+  // « Compte interne ») — l'identité du compte est déjà présentée dans
+  // le pied de page de la barre latérale + le menu de profil, elle
+  // n'est donc pas dupliquée dans le titre. Le sous-titre est une
+  // description professionnelle claire de l'espace de travail interne.
+  'internal.title': 'Vue d’ensemble',
+  'internal.subtitle': 'Espace de travail interne à accès complet — vue d’ensemble complète du CMS avec tous les modules disponibles.',
   'internal.badge': 'Compte interne',
   'internal.badgeSidebar': 'COMPTE INTERNE',
   'internal.kpiAccountType': 'Type de compte',

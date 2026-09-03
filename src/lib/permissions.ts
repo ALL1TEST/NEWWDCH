@@ -128,28 +128,33 @@ export const SETTINGS_SUBPAGES = [
 
 // -------------------- Internal Account Pages --------------------
 // The dedicated INTERNAL-role account (the SaaS owner's internal
-// account) has FULL PLATFORM ACCESS: the complete CMS/Admin
-// dashboard — every client module (Articles, Calendar, Media, Users,
-// Comments, Newsletter, SEO, AI, Automation, Analytics, Settings +
-// sub-pages), plus its own dedicated Internal Account dashboard,
-// profile, billing and notifications. It is NOT a customer account
-// with a subscription plan: NO plan/feature restrictions apply (see
-// hasBillingBypass — billingMode INTERNAL grants every feature
-// server-side, and the client route/sidebar/palette gates bypass
-// plan entitlements for this role). The ONLY pages it cannot reach are
-// the Platform Admin management pages (platform-*) — those belong to
-// the separate Platform Admin account type.
+// account) has FULL CMS ACCESS: the complete CMS/Admin dashboard —
+// every client module (Articles, Calendar, Media, Users, Comments,
+// Newsletter, SEO, AI, Automation, Settings + sub-pages), plus its
+// own dedicated Internal Account dashboard, profile and
+// notifications. It is NOT a customer account with a subscription
+// plan: NO plan/feature restrictions apply (see hasBillingBypass —
+// billingMode INTERNAL grants every feature server-side, and the
+// client route/sidebar/palette gates bypass plan entitlements for
+// this role).
+//
+// The ONLY pages it cannot reach:
+//   1. Platform Admin management pages (platform-*) — those belong to
+//      the separate Platform Admin account type.
+//   2. ANALYTICS + BILLING — intentionally removed from the Internal
+//      Account experience (Internal = internal platform workspace,
+//      not a customer with subscriptions or a consumer of the
+//      customer-side Analytics module). See canAccessPage() for the
+//      matching access denial.
 
 export const INTERNAL_PAGES = [
   'internal-dashboard',
   ...BUILTIN_PAGES.map((p) => p.key),
   ...SETTINGS_SUBPAGES.map((s) => s.key),
-  'analytics',
   'categories',
   'tags',
   'jobs',
   'audit',
-  'billing',
   'profile',
   'notifications',
 ] as const;
@@ -178,8 +183,10 @@ export function customPermissionKeyFromName(name: string): string {
  * OWNER:          full access to platform-* AND client CMS pages (billing bypass).
  * PLATFORM_ADMIN: platform-* pages only.
  * INTERNAL:       FULL access to every client CMS page (plan restrictions never
- *                 apply — internal SaaS account with full platform access); NEVER
- *                 platform-* pages (those belong to the Platform Admin account).
+ *                 apply — internal SaaS account with full CMS access); NEVER
+ *                 platform-* pages (those belong to the Platform Admin account)
+ *                 and NEVER 'analytics' / 'billing' (intentionally removed
+ *                 from the Internal Account experience).
  * CLIENT/ADMIN:   full access to all built-in CMS + settings pages; NOT platform-*.
  * EDITOR:         only pages in their pagePermissions array.
  */
@@ -203,13 +210,27 @@ export function canAccessPage(
   // CMS page and feature (the complete Admin-User-grade module set,
   // including plan-gated modules — the Internal Account is not a
   // customer subscription, plan restrictions never apply to it). The
-  // ONLY exception: Platform Admin management pages (platform-*) stay
-  // exclusive to the Platform Admin account type. The client 'dashboard'
-  // hash is technically allowed (no Access-Denied flash) but the app
-  // shell routes the Internal Account to its own dedicated
-  // #internal-dashboard instead (see admin-app.tsx).
+  // ONLY exceptions:
+  //   1. Platform Admin management pages (platform-*) stay exclusive to
+  //      the Platform Admin account type.
+  //   2. ANALYTICS + BILLING are explicitly removed from the Internal
+  //      Account experience (Internal = internal platform workspace, not
+  //      a customer with subscriptions or a consumer of the customer-
+  //      side Analytics module). The sidebar + command palette entries
+  //      for these are gone for INTERNAL, and admin-app.tsx redirects
+  //      direct-URL access back to #internal-dashboard. This server-
+  //      side pageKey check is defense-in-depth: even if the client
+  //      guard has not fired yet (first render), canAccessPage() returns
+  //      false so the Access Denied notice renders instead of the
+  //      module. The modules themselves stay available to every other
+  //      account type that is supposed to reach them.
+  // The client 'dashboard' hash is technically allowed (no Access-
+  // Denied flash) but the app shell routes the Internal Account to its
+  // own dedicated #internal-dashboard instead (see admin-app.tsx).
   if (role === 'INTERNAL') {
-    return !isPlatformPage(pageKey);
+    if (isPlatformPage(pageKey)) return false;
+    if (pageKey === 'analytics' || pageKey === 'billing') return false;
+    return true;
   }
 
   // Client roles must never reach platform pages.

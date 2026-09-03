@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard,
-  BarChart3,
   FileText,
   Image,
   Users,
@@ -176,24 +175,28 @@ const PLATFORM_NAV_ITEMS: CommandItemDef[] = [
 
 // -------------------- Internal Account Navigation Items --------------------
 // Shown ONLY when the signed-in user is the INTERNAL-role account (the
-// SaaS owner's internal account with FULL platform access). DERIVED
-// from the complete client CMS command list so it mirrors the full
-// module structure (every client module + settings/backups/AI
-// sub-pages + categories/tags/jobs): the client 'dashboard' entry is
-// swapped for the Internal Account's own dashboard, Analytics
-// (module-registry page not in the client list) and Billing &
-// Subscription are added, and the 'Security' entry (a client-list
-// legacy whose module id is not in the module registry) is dropped.
-// Plan feature locking NEVER applies (see withoutFeatureLocked —
-// the Internal Account is not a customer subscription).
+// SaaS owner's internal account with FULL CMS access). DERIVED from
+// the complete client CMS command list so it mirrors the full module
+// structure (every client module + settings/backups/AI sub-pages +
+// categories/tags/jobs): the client 'dashboard' entry is swapped for
+// the Internal Account's own dashboard, and the 'Security' entry (a
+// client-list legacy whose module id is not in the module registry)
+// is dropped.
+//
+// ANALYTICS + BILLING are intentionally NOT added for the Internal
+// Account (mirrors the sidebar): the Internal Account has no use for
+// the customer-side Analytics module and is NOT a paying customer
+// (no customer Billing & Subscription). This is an Internal-Account-
+// only removal — both modules stay available to every other account
+// type that is supposed to reach them. Plan feature locking NEVER
+// applies (see withoutFeatureLocked — the Internal Account is not a
+// customer subscription).
 
 const INTERNAL_NAV_ITEMS: CommandItemDef[] = [
   { id: 'internal-dashboard', label: 'Dashboard', icon: LayoutDashboard, shortcut: 'G D', module: 'internal-dashboard' },
   ...NAV_ITEMS.filter(
     (i) => i.id !== 'nav-dashboard' && i.id !== 'nav-security',
   ).map((i) => ({ ...i, id: i.id.startsWith('nav-') ? `internal-${i.id.slice(4)}` : i.id })),
-  { id: 'internal-analytics', label: 'Analytics', icon: BarChart3, module: 'analytics' },
-  { id: 'internal-billing', label: 'Billing & Subscription', icon: CreditCard, module: 'billing' },
 ];
 
 // -------------------- Recent Items (in-memory) --------------------

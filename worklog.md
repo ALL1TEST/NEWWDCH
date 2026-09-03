@@ -10062,3 +10062,89 @@ Stage Summary:
 - KEY CHECKS: login screen renders ✅ | login + dashboard render ✅ (owner role) | at least one module shows real data ✅ (Overview dashboard with stat cards + chart + tables) | mobile responsive + drawer ✅ | dev.log clean of hydration/runtime/500 errors ✅ (only expected 401s for unauthenticated probes + rejected admin login) | footer = informational (no semantic <footer>, copyright text only; no overlap/floating gap observed).
 - Caveats: admin@example.com/admin123 login rejected by API (401) — use owner@example.com/owner123 for any future E2E in this DB; page <title> metadata still says "Z.ai Code Scaffold" (cosmetic, recommend updating in app layout).
 - Artifacts left for review: /home/z/my-project/.verify-shots/ (5 PNGs + results.json), /home/z/my-project/.verify-cms.mjs, /home/z/my-project/.verify-mobile.mjs (can be deleted; not part of repo source).
+
+---
+Task ID: 9
+Agent: main (Internal Account dashboard/profile/nav refactor)
+Task: Internal-Account-only changes — remove Account Identity + Security & Credentials sections from Internal dashboard, change dashboard header to "Overview", de-duplicate "Internal Account" text in profile dropdown, remove Analytics + Billing from Internal sidebar/command-palette/route access (keep all other CMS modules + bypass plan limits; do NOT touch Admin User or Platform Admin behavior)
+
+Work Log:
+- Read worklog tail (Tasks 2-b i18n + Task 8 clone verification) and inspected the Internal Account architecture: src/modules/internal/internal-dashboard.tsx (dashboard), src/components/layout/sidebar.tsx (NAV_ITEMS + INTERNAL_NAV_ITEMS derived from client nav + Analytics/Billing injected), src/components/layout/admin-app.tsx (route guards), src/lib/permissions.ts (canAccessPage / INTERNAL_PAGES), src/components/layout/user-profile-menu.tsx (profile dropdown), src/components/patterns/command-palette.tsx (INTERNAL_NAV_ITEMS), src/lib/i18n/fragments/{en,fr}/client-account.ts (internal.* keys).
+- Confirmed seeded INTERNAL user: name="Internal Account", email="internal@example.com" (so the "duplicate Internal Account text" in the profile dropdown = name "Internal Account" + badge "Internal Account" on the same line).
+- Changes made (8 files):
+  1. src/modules/internal/internal-dashboard.tsx — REWROTE: removed the entire "Account Identity" card and "Security & Credentials" card + their wrapping grid; removed now-unused imports (Avatar/AvatarFallback/AvatarImage, Card*, Separator, ShieldCheck, Mail, Lock, ArrowRight, getInitials, formatDate, useAuthStore user). Kept the 2FA useQuery running (shared cache key with Profile page) but no longer render its result. Header title now resolves to t('internal.title') = "Overview"; subtitle = clean professional internal-platform description; INTERNAL badge kept next to title; "Open Profile" action kept. Dashboard body = just <DashboardWidgets /> (full CMS dashboard content). No empty cards/placeholders left.
+  2. src/lib/i18n/fragments/en/client-account.ts — internal.title: "Internal Account" → "Overview"; internal.subtitle: "Internal SaaS account — platform team workspace." → "Full-access internal platform workspace — complete CMS overview with every module available." (badge/badgeSidebar unchanged).
+  3. src/lib/i18n/fragments/fr/client-account.ts — internal.title: "Compte interne" → "Vue d'ensemble"; internal.subtitle → "Espace de travail interne à accès complet — vue d'ensemble complète du CMS avec tous les modules disponibles." (badge unchanged).
+  4. src/components/layout/user-profile-menu.tsx — profile dropdown badge for INTERNAL: changed from t('internal.badge') ("Internal Account") to t('internal.badgeSidebar') ("INTERNAL ACCOUNT" uppercase) so the badge no longer reads as a duplicate of the user's name "Internal Account" on the same line. Name shown once, badge shown once (uppercase, distinct).
+  5. src/components/layout/sidebar.tsx — INTERNAL_NAV_ITEMS construction: removed the `if (item.href === '#settings') push Analytics` block AND the `internalNavBody.push(Billing & Subscription)` append. Internal nav now = Dashboard(#internal-dashboard) + the plain client CMS modules (Articles, Calendar, Media, Users, Comments, Newsletter, SEO, AI, Automation, Settings+children). Analytics + Billing no longer appear in the Internal sidebar. Updated the explanatory comment block.
+  6. src/components/patterns/command-palette.tsx — INTERNAL_NAV_ITEMS: removed the `internal-analytics` and `internal-billing` entries (mirrors sidebar). Removed now-unused BarChart3 import. CreditCard import retained (still used by platform-stripe-settings entry).
+  7. src/components/layout/admin-app.tsx — INTERNAL route guard: extended the redirect condition to also catch currentModule === 'analytics' || currentModule === 'billing' → navigate('internal-dashboard'). Updated comments. The existing Admin-User analytics guard (!isPlatformStaff && !isInternalAccount && analytics → dashboard) is preserved unchanged. Platform Admin / Owner behavior untouched.
+  8. src/lib/permissions.ts — canAccessPage() INTERNAL branch: added explicit denial for pageKey === 'analytics' || pageKey === 'billing' (defense-in-depth, so even before the client effect fires, hasAccess=false → Access Denied notice renders instead of the module). INTERNAL_PAGES export: removed 'analytics' and 'billing' from the list. getAccessiblePages() for INTERNAL returns [...INTERNAL_PAGES] so the enumeration stays consistent. Updated JSDoc + section comment.
+- Verification:
+  - `bunx eslint` on the 8 changed files → EXIT 0 (zero errors/warnings). Project-wide `bun run lint` still at the exact 7-problem pre-existing baseline (all in content-edit-page.tsx + seo-broken-links-page.tsx — untouched by this task).
+  - Dev server recompiled cleanly (✓ Compiled in ~1s, no errors); GET / → HTTP 200; only expected 401s on unauthenticated /api/auth/me + /api/entitlements probes.
+  - Delegated full E2E browser verification (login as internal@example.com / internal123; check dashboard header = "Overview", no Account Identity/Security cards, profile dropdown name once + INTERNAL ACCOUNT badge, sidebar has no Analytics/Billing, direct #analytics + #billing URLs redirect to #internal-dashboard, other modules accessible, Admin User + Platform Admin billing unaffected) to a subagent (Task ID 9-v).
+
+Stage Summary:
+- 8 files edited, 0 new files, 0 deleted files. Internal-Account-only behavior change; Admin User + Platform Admin code paths untouched.
+- Internal dashboard: "Overview" title + clean subtitle + INTERNAL badge + full DashboardWidgets; Account Identity + Security & Credentials cards fully removed (no empty placeholders).
+- Profile dropdown: name "Internal Account" shown once + green "INTERNAL ACCOUNT" uppercase badge (no longer a duplicate of the name).
+- Sidebar + command palette: Analytics + Billing removed for INTERNAL only.
+- Route access: admin-app.tsx redirects Internal #analytics/#billing → #internal-dashboard; canAccessPage() denies analytics/billing for INTERNAL (Access Denied fallback). Both modules remain fully available to Admin User (billing) and Platform Admin.
+- Internal keeps full CMS access to all other modules + bypasses Free/Plus/Pro plan limits (bypassPlanGate unchanged, hasBillingBypass server-side unchanged).
+
+---
+Task ID: 9-v
+Agent: Agent Browser (Internal Account verification)
+Task: Playwright end-to-end verification of the Internal-Account-only changes implemented in Task 9 (25-item checklist)
+
+Work Log:
+- Read worklog tail (Task 9 implementation summary) + inspected the 8 changed source files (internal-dashboard.tsx, sidebar.tsx, command-palette.tsx, admin-app.tsx, permissions.ts, user-profile-menu.tsx, en/client-account.ts, fr/client-account.ts) to know exactly what to verify.
+- Confirmed env: Playwright 1.62.1 globally installed; chromium-1200 cache present; dev server on :3000 returns HTTP 200; login form on /. The `agent-browser` skill is NOT registered here, so used Playwright directly via Node scripts in /home/z/my-project/.verify-internal/.
+- Wrote /home/z/my-project/.verify-internal/verify-internal.mjs — headless chromium at 1440x900; logs in as internal@example.com/internal123 → walks the 25-item checklist (dashboard header/subtitle/badge, removed sections, dropdown name+badge, sidebar items, direct #analytics/#billing URL block, #content/#seo/#ai/#settings module render, owner regression on Plans & Pricing + #platform-plans). Captures console + page errors. Wrote a small DOM probe (probe-sidebar.mjs) to discover the sidebar root = [data-sidebar="sidebar"] DIV (ShadCN Sidebar), and a settings-children probe (probe-settings-children.mjs) to verify the Settings sub-menu expands to its 4 children when Settings is active.
+- Iteration 1: 4 FAIL (broken sidebar-text selector + an inverted conditional on the INTERNAL ACCOUNT badge check + an over-eager "empty card" heuristic that counted size-3 icon chips). Fixed the selector to use [data-sidebar] + largest-by-area dedupe, fixed the badge check to a clean positive regex, and tightened the empty-card heuristic to require >=80x60 box and <3 chars of text. Iteration 2: 24/24 PASS.
+- Captured 12 PNG screenshots in /home/z/my-project/.verify-internal/shots/ (internal dashboard, profile dropdown open, sidebar, analytics-blocked, billing-blocked, content, seo, ai, settings, owner dashboard, platform-plans, settings-expanded).
+- Read last 200 lines of /home/z/my-project/dev.log + grepped for error/hydration/500/⨯ patterns; tallied HTTP status codes project-wide.
+
+Findings (25-item checklist):
+- A. Internal Dashboard (1–8): ALL PASS
+  1. Login redirects to #internal-dashboard (URL after login = http://localhost:3000/#internal-dashboard) ✅
+  2. Dashboard h1 text = "Overview" (NOT "Internal Account") ✅
+  3. Subtitle = "Full-access internal platform workspace — complete CMS overview with every module available." (NOT the old "Internal SaaS account — platform team workspace.") ✅
+  4. Green "Internal Account" badge present next to the "Overview" title — element class includes `bg-emerald-600 dark:bg-emerald-500 text-white` ✅
+  5. "Account Identity" section COMPLETELY GONE — no heading, no body-text match ✅
+  6. "Security & Credentials" section COMPLETELY GONE — no heading, no body-text match ✅
+  7. Dashboard renders full CMS widgets — 30 cards, 34 SVGs, 745 chars of main text (NOT empty) ✅
+  8. No empty Cards (≥80x60 box with <3 chars) and no placeholder headings left behind ✅
+- B. Profile Dropdown (9–13): ALL PASS
+  9. Dropdown opens (avatar button in sidebar footer) ✅
+  10. User name "Internal Account" appears EXACTLY ONCE (case-sensitive match count = 1) ✅
+  11. Uppercase "INTERNAL ACCOUNT" badge present next to the name (distinct from name "Internal Account") ✅
+  12. Email "internal@example.com" present below the name ✅
+  13. "Manage Subscription" menu item ABSENT for Internal ✅
+- C. Sidebar — Analytics removed (14, 15): ALL PASS
+  14. Sidebar contains NO "Analytics" nav item ✅
+  15. Sidebar contains all required modules — Dashboard, Articles, Calendar, Media, Users, Comments, Newsletter, SEO, AI, Automation, Settings — all present. Settings sub-menu expands (auto-expanded when Settings is the active module) to its 4 children Email Templates, SMTP Settings, Notifications, Backups (verified via probe-settings-children.mjs) ✅
+- D. Sidebar — Billing removed (16): PASS — no "Billing" item present ✅
+- E. Direct #analytics blocked (17): PASS — navigating hash to #analytics redirects to #internal-dashboard (URL after = http://localhost:3000/#internal-dashboard); Analytics module does NOT render ✅
+- F. Direct #billing blocked (18): PASS — navigating hash to #billing redirects to #internal-dashboard; Billing module does NOT render ✅
+- G. Other modules accessible (19–22): ALL PASS
+  19. #content renders Articles list (URL = #content; body snippet includes "Articles Manage ...") ✅
+  20. #seo renders SEO module (URL = #seo; body snippet includes "Overview SEO Audit") ✅
+  21. #ai renders AI module (URL = #ai/providers; body snippet includes "Providers Models P...") ✅
+  22. #settings renders Settings/SMTP module (URL = #settings; body snippet includes "Settings Email Templates SMTP Settings Notifications Backups") ✅
+- H. Regression — Owner / Platform Admin (23, 24): ALL PASS
+  23. Logged out, logged in as owner@example.com/owner123 → owner sidebar STILL contains "Plans & Pricing" (platform billing intact) ✅
+  24. Owner can navigate to #platform-plans and it renders (URL = #platform-plans; body snippet includes "Plans & Pricing Coupons Stripe Settings ...") ✅
+- 25. dev.log status tally: project-wide = 145 × HTTP 200 + 46 × HTTP 401 = 191 total. ZERO 500/502/503. ZERO hydration mismatches. ZERO unhandled exceptions / ⨯ Next.js fatal markers. The 46 × 401s are ALL expected unauthenticated probes (/api/auth/me, /api/entitlements) on the login screen before authentication + during the cookie-clear between the internal→owner session swap. No new errors attributable to Task 9 changes. ✅
+
+Stage Summary:
+- VERDICT: **ALL INTERNAL ACCOUNT CHANGES VERIFIED ✅** — 25/25 checklist items PASS.
+- Internal dashboard: "Overview" title + clean professional subtitle + green INTERNAL badge + full DashboardWidgets; Account Identity + Security & Credentials cards completely gone, no empty placeholders left.
+- Profile dropdown: name "Internal Account" shown exactly once + green "INTERNAL ACCOUNT" uppercase badge (no longer a duplicate of the name); email present; "Manage Subscription" hidden.
+- Sidebar + command palette: Analytics + Billing removed for INTERNAL only; all other CMS modules (Articles, Calendar, Media, Users, Comments, Newsletter, SEO, AI, Automation, Settings w/ Email Templates + SMTP Settings + Notifications + Backups children) present.
+- Route access: #analytics and #billing direct-URL both redirect Internal to #internal-dashboard; modules do NOT render.
+- Other modules accessible: #content, #seo, #ai, #settings all render full module content for Internal (Internal keeps full CMS access).
+- Regression: Owner (Platform Admin) sidebar still shows Plans & Pricing; #platform-plans renders the platform billing/plan-management UI — Platform Admin behavior UNCHANGED.
+- Dev.log clean: 145 × HTTP 200 + 46 × HTTP 401 (all expected); zero 500/502/503, zero hydration mismatches, zero unhandled exceptions.
+- Artifacts left for review: /home/z/my-project/.verify-internal/verify-internal.mjs (main script), /home/z/my-project/.verify-internal/probe-sidebar.mjs, /home/z/my-project/.verify-internal/probe-settings-children.mjs, /home/z/my-project/.verify-internal/results.json, /home/z/my-project/.verify-internal/shots/ (12 PNGs). Can be deleted; not part of repo source.

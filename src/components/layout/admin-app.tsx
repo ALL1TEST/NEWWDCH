@@ -30,20 +30,33 @@ export default function AdminApp() {
     if (isPlatformStaff && !isPlatformPage(currentModule) && currentModule !== 'profile') {
       navigate('platform-overview');
     }
-    // INTERNAL — the SaaS owner's internal account with FULL platform
+    // INTERNAL — the SaaS owner's internal account with FULL CMS
     // access. It lands on its OWN Internal Account dashboard (never the
     // Platform Admin dashboard, never the plain client '#dashboard' hash)
     // and can open EVERY client CMS module from there (Articles, Media,
-    // SEO, AI, Automation, Analytics, Settings, … — no plan gating).
-    // Only two things route it back to its own dashboard: Platform Admin
-    // management pages (platform-* — those belong to the separate
-    // Platform Admin account type) and the client 'dashboard' hash /
-    // unknown module ids (its home is #internal-dashboard).
+    // SEO, AI, Automation, Settings, … — no plan gating).
+    // Three things route it back to its own dashboard:
+    //   1. Platform Admin management pages (platform-* — those belong to
+    //      the separate Platform Admin account type)
+    //   2. the client 'dashboard' hash / unknown module ids (its home is
+    //      #internal-dashboard)
+    //   3. ANALYTICS + BILLING — intentionally removed from the Internal
+    //      Account experience (Internal = internal platform workspace,
+    //      not a customer with subscriptions or a consumer of the
+    //      customer-side Analytics module). The sidebar + command palette
+    //      entries for these two modules are gone for INTERNAL; this guard
+    //      closes the direct-URL path so #analytics and #billing can
+    //      never render their modules for the Internal Account. The
+    //      modules themselves stay fully available to every other account
+    //      type that is supposed to reach them (Admin User billing,
+    //      Platform Admin analytics, etc.).
     const isInternalAccount = user?.role === 'INTERNAL';
     if (
       isInternalAccount &&
       (isPlatformPage(currentModule) ||
         currentModule === 'dashboard' ||
+        currentModule === 'analytics' ||
+        currentModule === 'billing' ||
         !(currentModule in moduleRegistry))
     ) {
       navigate('internal-dashboard');
@@ -66,8 +79,8 @@ export default function AdminApp() {
     // redirected to their dashboard and can never reach the module.
     // Platform staff were already redirected to platform pages by the
     // rule above — the Platform Admin dashboard is unaffected. The
-    // Internal Account (full platform access) is EXEMPT: it legitimately
-    // uses the Analytics module.
+    // Internal Account (full platform access) is handled by its own
+    // rule above (#analytics → #internal-dashboard).
     if (user && !isPlatformStaff && !isInternalAccount && currentModule === 'analytics') {
       navigate('dashboard');
     }

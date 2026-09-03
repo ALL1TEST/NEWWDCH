@@ -268,11 +268,15 @@ export function UserProfileMenu({
                     Internal Account shows its own account-type badge
                     instead — identifying the signed-in account as the
                     internal SaaS account (never "Admin User", never
-                    "Platform Admin"). */}
+                    "Platform Admin"). The badge uses the uppercase
+                    sidebar-style label ("INTERNAL ACCOUNT") rather than
+                    the account name, so it never reads as a duplicate of
+                    the user's name ("Internal Account") shown on the same
+                    line — the name appears exactly once, the badge once. */}
                 {!isPlatformStaff && !isInternalAccount && <PlanBadge className="shrink-0" />}
                 {isInternalAccount && (
                   <span className="shrink-0 rounded-md bg-emerald-600 dark:bg-emerald-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
-                    {t('internal.badge')}
+                    {t('internal.badgeSidebar')}
                   </span>
                 )}
               </div>

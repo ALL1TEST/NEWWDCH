@@ -393,33 +393,34 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
 
 // -------------------- Internal Account Navigation --------------------
 // Shown ONLY to the INTERNAL-role account (the SaaS owner's internal
-// account with FULL platform access). DERIVED from the complete
-// client CMS NAV_ITEMS so it always mirrors the full module
-// structure (any future client module automatically appears here):
+// account with FULL CMS access). DERIVED from the complete client CMS
+// NAV_ITEMS so it always mirrors the full module structure (any
+// future client module automatically appears here):
 //   • the client '#' Dashboard entry is replaced by the Internal
 //     Account's own #internal-dashboard
-//   • Analytics — available in the module registry but removed from
-//     the client nav — is restored for the Internal Account (full
-//     access, placed between Automation and Settings)
-//   • Billing & Subscription is appended (the account's own internal
-//     billing status page)
-// Plan feature filtering NEVER applies to this list (the sidebar's
-// visibleItems memo returns it unfiltered — the Internal Account is
-// not a customer subscription). Profile / language / theme stay in
-// the shared avatar dropdown, same as every account type.
+//
+// ANALYTICS + BILLING are intentionally NOT added for the Internal
+// Account (see the task spec): the Internal Account is the SaaS
+// owner's internal workspace, so it has no use for the customer-side
+// Analytics module and is NOT a paying customer (no customer Billing
+// & Subscription page). This is an Internal-Account-only removal —
+// the Analytics module + the Billing module themselves stay intact
+// for every other account type that is supposed to reach them
+// (admin-app.tsx route guard enforces the same rule on direct-URL
+// access; canAccessPage() in permissions.ts enforces it server-side
+// via the pageKey allow-list). Plan feature filtering NEVER applies
+// to this list (the sidebar's visibleItems memo returns it
+// unfiltered — the Internal Account is not a customer subscription).
+// Profile / language / theme stay in the shared avatar dropdown,
+// same as every account type.
 
 const internalNavBody: NavItem[] = [];
 for (const item of NAV_ITEMS) {
   // The client '#' dashboard is replaced by the Internal Account's own
   // dedicated dashboard entry (see INTERNAL_NAV_ITEMS below).
   if (item.href === '#') continue;
-  // Analytics sits between Automation and Settings (full module set).
-  if (item.href === '#settings') {
-    internalNavBody.push({ label: 'Analytics', href: '#analytics', icon: 'BarChart3' });
-  }
   internalNavBody.push(item);
 }
-internalNavBody.push({ label: 'Billing & Subscription', href: '#billing', icon: 'CreditCard' });
 
 const INTERNAL_NAV_ITEMS: NavItem[] = [
   {

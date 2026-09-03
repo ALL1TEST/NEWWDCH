@@ -279,8 +279,12 @@ export const clientAccountEn: Record<string, string> = {
   'billing.ownAiProvider': "Your own AI provider — platform AI usage limits don't apply",
 
   // ---- Internal Account dashboard (INTERNAL-role account's own page) ----
-  'internal.title': 'Internal Account',
-  'internal.subtitle': 'Internal SaaS account — platform team workspace.',
+  // The dashboard header reads "Overview" (not "Internal Account") — the
+  // account identity is already shown in the sidebar footer + profile
+  // dropdown, so it is not duplicated in the heading. The subtitle is a
+  // clean professional description of the internal platform workspace.
+  'internal.title': 'Overview',
+  'internal.subtitle': 'Full-access internal platform workspace — complete CMS overview with every module available.',
   'internal.badge': 'Internal Account',
   'internal.badgeSidebar': 'INTERNAL ACCOUNT',
   'internal.kpiAccountType': 'Account Type',
