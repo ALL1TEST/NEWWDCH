@@ -11661,3 +11661,24 @@ Stage Summary:
 - Global brand palette migrated emerald→HubSpot orange/charcoal/peach (tokens only — all components inherit)
 - Footer rebuilt to the exact HubSpot 3-band architecture with honest Karmax content; 3 new real legal pages + routes; i18n en/fr complete
 - 8 files modified; dev cache issue diagnosed and fixed
+
+---
+Task ID: REPO-SYNC-3
+Agent: main (orchestrator)
+Task: Re-synchronize the running localhost application with https://github.com/ALL1TEST/NEWWDCH.git (third sync request; drift had re-accumulated after a sandbox restart).
+
+Work Log:
+- Confirmed the :3000 server: `bun run dev` → `next dev -p 3000 | tee dev.log` chain serving /home/z/my-project, whose git remote is already NEWWDCH → synchronized in place, no second clone
+- Drift identified: local HEAD 155b333 = 1 commit ahead of origin/main 3e7825b — a MODE-CHANGE-ONLY commit (all .zscripts files showed 0 content changes; permission bits flipped by the sandbox restart) + a modified .zscripts/dev.pid (runtime PID state). No source/UI divergence, but main ≠ origin/main exactly
+- Post-restart rogue processes found: 2× dev-runner (1834/1844, 1910/1920 — restart-loop watchdogs for a competing :3000 server, currently in failed-spawn retry since the main chain held the port) and 2× backup-scheduler (1830/1843 holding :3010, 1906/1915 duplicate). The sandbox's auto-start had re-spawned them after the environment restart
+- Stopped in order: dev-runners FIRST (port-grab risk), then the duplicate scheduler, then the old main dev chain (1618/1636/1638/1653); verified :3000 free, exactly one backup-scheduler kept on :3010
+- `git fetch origin` + `git reset --hard origin/main` → HEAD = 3e7825b, working tree fully CLEAN, rev-list 0/0 — tree now byte-identical to the repository
+- rm -rf .next (stale Turbopack cache) → `bun install` (1067 installs, no changes — dependencies complete) → Prisma schema unchanged, no db:push needed
+- Restarted dev server via double-fork `( (bun run dev &) )`: GET / → 200 (42,458 bytes), clean compile, 0 errors in dev.log
+- Browser E2E: title "Karmax — Craft content that ranks."; header Features/Pricing/Solutions/Blog/About + Log in/Get started; hero "Run every site you publish from one calm dashboard."; FOOTER = repository architecture exactly — Popular Features / Free Tools / Company / Customers / Partners, legal row Legal Center | Privacy Policy | Security | Website Accessibility, "Copyright © 2026 Karmax, Inc.", 7 social icons, bg rgb(31,31,31); routes #/pricing, #/blog, #/security, #/legal, #/features all render correct titles; docWidth 1440 zero overflow; zero console/page errors
+- Final process state: ONE dev server :3000 (26059), ONE backup-scheduler :3010 (1843), Caddy :81, zero dev-runners
+
+Stage Summary:
+- /home/z/my-project serves NEWWDCH exactly: main == origin/main == 3e7825b, clean working tree
+- localhost:3000 = the repository's Karmax marketing site, verified end-to-end (UI, routes, no old project, no duplicate servers)
+- Recurring pattern documented: the sandbox auto-start re-spawns dev-runner + duplicate schedulers on environment restarts — future syncs should check for them first
