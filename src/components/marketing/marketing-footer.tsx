@@ -150,7 +150,7 @@ const CUSTOMERS: FooterLink[] = [
   { labelKey: 'mkt.footer.joinUserGroup', inactive: true },
   { labelKey: 'mkt.footer.customerStories', inactive: true },
   { labelKey: 'mkt.footer.community', inactive: true },
-  { labelKey: 'mkt.footer.agencies', href: `${MKT.solutions}?for=agencies` },
+  { labelKey: 'mkt.footer.agencies', href: `${MKT.solutions}/agencies` },
 ];
 
 // Column 4 · Partners

@@ -29,7 +29,10 @@ import { CookieBanner } from './cookie-banner';
 import { MarketingHome } from './home-page';
 import { PricingPage } from './pricing-page';
 import { BlogPage, BlogArticlePage } from './blog-page';
-import { AboutPage, SolutionsPage, PrivacyPage, TermsPage, SecurityPage, AccessibilityPage, LegalCenterPage, ContactPage } from './content-pages';
+import { AboutPage, PrivacyPage, TermsPage, SecurityPage, AccessibilityPage, LegalCenterPage, ContactPage } from './content-pages';
+import { SolutionsOverview } from './solutions-overview';
+import { SolutionPage } from './solution-page';
+import { SOLUTION_BY_SLUG } from './solutions-data';
 import { LoginPage } from './login-page';
 import { SignupPage } from './signup-page';
 import { MarketingButton } from './primitives';
@@ -59,6 +62,7 @@ type Route =
   | { name: 'article'; slug: string }
   | { name: 'about' }
   | { name: 'solutions'; focus: string | null }
+  | { name: 'solution'; slug: string }
   | { name: 'login' }
   | { name: 'signup' }
   | { name: 'checkout' }
@@ -97,6 +101,16 @@ function parseHash(hash: string): Route {
     case 'about':
       return { name: 'about' };
     case 'solutions': {
+      // #/solutions              → overview landing page
+      // #/solutions/<slug>       → solution story page (catalog-
+      //                            validated; unknown → not found)
+      // #/solutions?for=<aud>    → overview + audience highlight
+      //                            (legacy deep links keep working)
+      if (parts[1]) {
+        return SOLUTION_BY_SLUG[parts[1]]
+          ? { name: 'solution', slug: parts[1] }
+          : { name: 'notfound' };
+      }
       const focus = query ? new URLSearchParams(query).get('for') : null;
       return { name: 'solutions', focus };
     }
@@ -182,6 +196,9 @@ export function MarketingSite() {
   //      covers crawlers for the entry URL) ----
   useEffect(() => {
     const brand = t('mkt.brand.name');
+    // Narrow the solution variant once — the titles record reads
+    // the per-slug hero key for the 'solution' route.
+    const solutionSlug = route.name === 'solution' ? route.slug : '';
     const titles: Record<Route['name'], string> = {
       home: `${brand} — ${t('mkt.brand.tagline')}`,
       pricing: `${t('mkt.pricing.heroTitle')} — ${brand}`,
@@ -189,6 +206,7 @@ export function MarketingSite() {
       article: `${t('mkt.blog.title')} — ${brand}`,
       about: `${t('mkt.about.eyebrow')} ${brand}`,
       solutions: `${t('mkt.sol.title')} — ${brand}`,
+      solution: `${t(SOLUTION_BY_SLUG[solutionSlug]?.heroTitleKey ?? 'mkt.nav.solutions')} — ${brand}`,
       login: `${t('mkt.nav.login')} — ${brand}`,
       signup: `${t('mkt.signup.title')} — ${brand}`,
       checkout: `${t('mkt.checkout.title')} — ${brand}`,
@@ -201,7 +219,11 @@ export function MarketingSite() {
       notfound: `${t('mkt.common.notFoundTitle')} — ${brand}`,
     };
     document.title = titles[route.name];
-  }, [route.name, t]);
+    // Deps include the full route (not just route.name): navigating
+    // between two pages of the SAME route kind (e.g. #/solutions/seo
+    // → #/solutions/automation, or blog article → article) must
+    // still refresh the per-page title.
+  }, [route, t]);
 
   const renderPage = useCallback(() => {
     switch (route.name) {
@@ -216,7 +238,9 @@ export function MarketingSite() {
       case 'about':
         return <AboutPage />;
       case 'solutions':
-        return <SolutionsPage focus={route.focus} />;
+        return <SolutionsOverview focus={route.focus} />;
+      case 'solution':
+        return <SolutionPage slug={route.slug} />;
       case 'login':
         return <LoginPage />;
       case 'signup':

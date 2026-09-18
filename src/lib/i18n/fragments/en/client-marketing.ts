@@ -30,17 +30,21 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.nav.closeMenu': 'Close menu',
   'mkt.nav.skipToContent': 'Skip to content',
 
-  // ---- Solutions dropdown ----
+  // ---- Solutions mega-menu (renders from the solutions catalog) ----
   'mkt.menu.solutionsTitle': 'Solutions',
   'mkt.menu.solutionsSubtitle': 'Built for teams that publish seriously',
-  'mkt.menu.forBloggers': 'For Bloggers',
-  'mkt.menu.forBloggersDesc': 'One calm dashboard for writing, media and SEO',
-  'mkt.menu.forAgencies': 'For Agencies',
-  'mkt.menu.forAgenciesDesc': 'Every client site under one roof',
-  'mkt.menu.forPublishers': 'For Publishers',
-  'mkt.menu.forPublishersDesc': 'Editorial workflow with roles and review',
-  'mkt.menu.forSeoTeams': 'For SEO Teams',
-  'mkt.menu.forSeoTeamsDesc': 'A full technical SEO suite per site',
+  'mkt.menu.contentPublishing': 'Content Publishing',
+  'mkt.menu.contentPublishingDesc': 'Create, manage and publish content across connected sites',
+  'mkt.menu.seo': 'SEO & Organic Growth',
+  'mkt.menu.seoDesc': 'Optimize content and improve search visibility',
+  'mkt.menu.automation': 'Content Automation',
+  'mkt.menu.automationDesc': 'Automate workflows, scheduling and publishing',
+  'mkt.menu.multiSite': 'Multi-Site Management',
+  'mkt.menu.multiSiteDesc': 'Manage multiple websites from one dashboard',
+  'mkt.menu.agencies': 'For Agencies & Teams',
+  'mkt.menu.agenciesDesc': 'Clients, sites and workflows on one platform',
+  'mkt.menu.integrations': 'Integrations',
+  'mkt.menu.integrationsDesc': 'Connect WordPress or any compatible REST CMS',
   'mkt.menu.exploreAll': 'Explore all solutions',
 
   // ---- Hero ----
@@ -357,11 +361,276 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.about.ctaTitle': 'Publish your next site with us.',
   'mkt.about.ctaBody': 'Start on the free plan and grow from there.',
 
-  // ---- Solutions page ----
-  'mkt.sol.eyebrow': 'Solutions',
-  'mkt.sol.title': 'One platform, every publisher.',
-  'mkt.sol.subtitle': 'Karmax adapts to how you work — solo or with a team, one site or fifty.',
+  // ---- Solutions overview (#/solutions) ----
+  'mkt.sol.title': 'Solutions for every publishing goal.',
+  'mkt.sol.subtitle':
+    'Karmax brings writing, SEO, media, automation and multi-site management together — and publishes straight to WordPress or any REST CMS.',
+  'mkt.sol.categoriesTitle': 'Find the solution that fits your work',
+  'mkt.sol.categoriesSubtitle': 'Six ways teams put Karmax to work — each one built on capabilities that ship today.',
+  'mkt.sol.audiencesSubtitle': 'One platform, shaped around how you publish.',
   'mkt.sol.details': 'See how it fits',
+
+  // ---- Solutions shared template (solution pages) ----
+  'mkt.solp.learnMore': 'Learn more',
+  'mkt.solp.workflowTitle': 'How it works',
+  'mkt.solp.storiesTitle': 'Inside the product',
+  'mkt.solp.storyLabel': 'Chapter',
+  'mkt.solp.benefitsEyebrow': 'Benefits',
+  'mkt.solp.benefitsTitle': 'What you get',
+  'mkt.solp.usecasesTitle': 'Built for the way you publish',
+  'mkt.solp.usecasesSubtitle': 'Whatever you publish, the workflow stays calm.',
+  'mkt.solp.usecaseLink': 'Explore this solution',
+  'mkt.solp.possibleEyebrow': 'Examples',
+  'mkt.solp.possibleTitle': 'See what’s possible with Karmax',
+  'mkt.solp.possibleSubtitle': 'Real workflows you can set up today — no invented numbers, just what the product does.',
+  'mkt.solp.relatedTitle': 'Related resources',
+  'mkt.solp.resBlogTitle': 'From the Karmax blog',
+  'mkt.solp.resBlogBody': 'Product updates and publishing guides from the team.',
+  'mkt.solp.resBlogCta': 'Read the blog',
+  'mkt.solp.resFeaturesTitle': 'Explore the feature set',
+  'mkt.solp.resFeaturesBody': 'AI writing, SEO, automation, media and more — every capability in one tour.',
+  'mkt.solp.resFeaturesCta': 'View all features',
+  'mkt.solp.resPricingTitle': 'Compare plans',
+  'mkt.solp.resPricingBody': 'See what every plan includes, from Free to Max.',
+  'mkt.solp.resPricingCta': 'View pricing',
+  'mkt.solp.ctaTitle': 'Ready to simplify how you publish?',
+  'mkt.solp.ctaBody': 'Create, optimize and publish your content from one calm workflow.',
+  'mkt.solp.ctaSecondary': 'Explore features',
+
+  // Audience one-liners (use-case cards)
+  'mkt.solp.uc.bloggers': 'Publish consistently without managing multiple tools.',
+  'mkt.solp.uc.publishers': 'Build repeatable editorial workflows.',
+  'mkt.solp.uc.agencies': 'Manage multiple client sites from one workspace.',
+  'mkt.solp.uc.teamsTitle': 'Teams',
+  'mkt.solp.uc.teams': 'Keep content, SEO and publishing in one workflow.',
+  'mkt.solp.uc.seoTeams': 'Run technical SEO across every site you manage.',
+  'mkt.solp.uc.businesses': 'Run your sites alongside the business.',
+
+  // ---- Solution: Content Publishing ----
+  'mkt.solp.cp.heroTitle': 'Create and publish content without the busywork.',
+  'mkt.solp.cp.heroBody':
+    'Draft with AI assistance, keep media organized and check SEO as you write — then publish straight to WordPress or any REST CMS from the same editor.',
+  'mkt.solp.cp.introTitle': 'One editor, from first draft to published post.',
+  'mkt.solp.cp.introBody':
+    'Karmax replaces the copy-paste routine. Articles, media and metadata live together, drafts keep their status and author, and publishing is a click — not a migration.',
+  'mkt.solp.cp.step1Title': 'Create',
+  'mkt.solp.cp.step1Body': 'Generate or write your content with the Karmax editor and AI tools — prompts library, job queue and editorial skills included.',
+  'mkt.solp.cp.step2Title': 'Optimize',
+  'mkt.solp.cp.step2Body': 'Improve SEO, metadata, structure and media before publishing, with per-page checks and focus keywords.',
+  'mkt.solp.cp.step3Title': 'Publish',
+  'mkt.solp.cp.step3Body': 'Send content directly to connected WordPress or REST CMS sites — immediately or on a schedule.',
+  'mkt.solp.cp.story1Title': 'Write with AI that fits your workflow.',
+  'mkt.solp.cp.story1Body':
+    'Draft complete articles with AI assistance, reusable prompt templates and editorial skills for content style and SEO ranking. Bring your own provider and keep control of models and usage.',
+  'mkt.solp.cp.story2Title': 'Every asset, organized.',
+  'mkt.solp.cp.story2Body':
+    'Upload, organize and reuse images across sites with folders, search and per-site scoping. Storage scales with your plan — from 1 GB on Free to 100 GB on Max.',
+  'mkt.solp.cp.story3Title': 'From draft to published, tracked.',
+  'mkt.solp.cp.story3Body':
+    'The article list is your editorial source of truth: filter tabs for every state, with status and author on every row.',
+  'mkt.solp.cp.story3p1': 'Draft, review, scheduled and published states',
+  'mkt.solp.cp.story3p2': 'Scheduled publishing on your calendar',
+  'mkt.solp.cp.story3p3': 'Author and status visible on every row',
+  'mkt.solp.cp.benefit1': 'Publish from one dashboard — no copy-paste between tools',
+  'mkt.solp.cp.benefit2': 'Reduce repetitive writing work with prompts and templates',
+  'mkt.solp.cp.benefit3': 'Keep SEO checks inside the writing flow, not after it',
+  'mkt.solp.cp.benefit4': 'Connect WordPress or any REST CMS and publish directly',
+  'mkt.solp.cp.pos1Title': 'The weekly post routine',
+  'mkt.solp.cp.pos1Body':
+    'Connect your WordPress site once, draft with AI assistance, run the per-page checks, schedule for Friday — and skip the admin work entirely.',
+  'mkt.solp.cp.pos2Title': 'One article, every site',
+  'mkt.solp.cp.pos2Body':
+    'Write once and adapt per site: media from the shared library, per-site SEO targets, and direct publishing to each connected CMS.',
+  'mkt.solp.cp.pos3Title': 'From idea backlog to calendar',
+  'mkt.solp.cp.pos3Body':
+    'Keep every draft in one list with status and author tracking, move them through review, and fill your publishing calendar without spreadsheets.',
+
+  // ---- Solution: SEO & Organic Growth ----
+  'mkt.solp.seo.heroTitle': 'SEO you can actually keep up with.',
+  'mkt.solp.seo.heroBody':
+    'Fourteen technical SEO tools per site — audits, schema, redirects, sitemaps, indexing — with per-page reports and Search Console data in one place.',
+  'mkt.solp.seo.introTitle': 'Technical SEO, organized per site.',
+  'mkt.solp.seo.introBody':
+    'Every connected site gets its own SEO workspace: an audit with a living score, structured data, a redirect engine and indexing status — nothing depends on one specialist remembering.',
+  'mkt.solp.seo.step1Title': 'Audit',
+  'mkt.solp.seo.step1Body': 'Run a full technical audit per site and work the issue list — missing headings, canonicals, broken links — with a living SEO score.',
+  'mkt.solp.seo.step2Title': 'Optimize',
+  'mkt.solp.seo.step2Body': 'Set focus keywords per page, fix metadata and schema, and preview social cards before anything ships.',
+  'mkt.solp.seo.step3Title': 'Monitor',
+  'mkt.solp.seo.step3Body': 'Track sitemap status, robots.txt and Search Console indexing views as content publishes.',
+  'mkt.solp.seo.story1Title': 'A living SEO score, not a quarterly PDF.',
+  'mkt.solp.seo.story1Body':
+    'The overview shows the score, the issues behind it and the status of sitemaps and Search Console connectivity — updated as you fix things.',
+  'mkt.solp.seo.story2Title': 'Traffic next to the work.',
+  'mkt.solp.seo.story2Body':
+    'Visitor trends, content counts and health score sit on the same dashboard as your SEO work — see what ships and what it does.',
+  'mkt.solp.seo.story2p1': 'Traffic overview per site',
+  'mkt.solp.seo.story2p2': 'Health score and pending actions',
+  'mkt.solp.seo.story2p3': 'Recent content at a glance',
+  'mkt.solp.seo.benefit1': 'Keep SEO workflows consistent across every site',
+  'mkt.solp.seo.benefit2': 'Catch technical issues before they cost you rankings',
+  'mkt.solp.seo.benefit3': 'Per-page reports with focus keywords, built into the editor',
+  'mkt.solp.seo.benefit4': 'Redirects, schema and sitemaps managed per site',
+  'mkt.solp.seo.pos1Title': 'The launch checklist',
+  'mkt.solp.seo.pos1Body':
+    'Connect a new site, run the first audit, fix the critical issues and submit the sitemap — the same repeatable routine for every launch.',
+  'mkt.solp.seo.pos2Title': 'The content refresh cycle',
+  'mkt.solp.seo.pos2Body':
+    'Use per-page reports to find weak metadata and broken links, fix them in the editor, and republish without leaving Karmax.',
+  'mkt.solp.seo.pos3Title': 'Multi-site oversight',
+  'mkt.solp.seo.pos3Body':
+    'Switch between per-site SEO workspaces to compare scores and issue lists — one place for every domain you manage.',
+
+  // ---- Solution: Content Automation ----
+  'mkt.solp.au.heroTitle': 'Put your publishing on autopilot.',
+  'mkt.solp.au.heroBody':
+    'Build visual automations that trigger on content events — schedule publishing, run SEO checks, send newsletters and notify your team while you sleep.',
+  'mkt.solp.au.introTitle': 'Routine work, turned into a system.',
+  'mkt.solp.au.introBody':
+    'Every automation is a visual workflow: a trigger, a set of steps, and a run history you can audit. No cron jobs, no scripts to babysit.',
+  'mkt.solp.au.step1Title': 'Trigger',
+  'mkt.solp.au.step1Body': 'Start from content events — a new article, a status change, a schedule — or run on a recurring calendar.',
+  'mkt.solp.au.step2Title': 'Act',
+  'mkt.solp.au.step2Body': 'Chain steps that publish, check SEO, send newsletters over your SMTP, or fire webhooks to the rest of your stack.',
+  'mkt.solp.au.step3Title': 'Monitor',
+  'mkt.solp.au.step3Body': 'Every run is logged with status and errors, so you can see what happened and when.',
+  'mkt.solp.au.story1Title': 'Visual workflows with a paper trail.',
+  'mkt.solp.au.story1Body':
+    'Active and completed run counts, plus trigger, status and schedule per automation — the table tells you what ran and what needs a look.',
+  'mkt.solp.au.story2Title': 'Scheduled publishing that just happens.',
+  'mkt.solp.au.story2Body':
+    'Articles move through draft and review on your calendar and publish at the time you set — status and author visible on every row.',
+  'mkt.solp.au.story2p1': 'Schedule per article or as a recurring job',
+  'mkt.solp.au.story2p2': 'Status tabs from draft to published',
+  'mkt.solp.au.story2p3': 'Author and status on every row',
+  'mkt.solp.au.benefit1': 'Automate scheduled publishing around the clock',
+  'mkt.solp.au.benefit2': 'Reduce repetitive content work with reusable workflows',
+  'mkt.solp.au.benefit3': 'Every run logged — a history you can audit',
+  'mkt.solp.au.benefit4': 'Newsletters and notifications triggered by content events',
+  'mkt.solp.au.pos1Title': 'The morning newsletter',
+  'mkt.solp.au.pos1Body':
+    'New article published, subscribers get the campaign over your SMTP, and the team is notified. One automation, zero manual steps.',
+  'mkt.solp.au.pos2Title': 'The weekly publish slot',
+  'mkt.solp.au.pos2Body':
+    'A recurring job runs your weekly post at the same slot — with run history proving it happened, every week.',
+  'mkt.solp.au.pos3Title': 'Guardrail checks',
+  'mkt.solp.au.pos3Body':
+    'Trigger checks on every status change so nothing ships without its metadata and focus keywords.',
+
+  // ---- Solution: Multi-Site Management ----
+  'mkt.solp.ms.heroTitle': 'Every site you run, one login.',
+  'mkt.solp.ms.heroBody':
+    'Switch between client sites, personal blogs and side projects instantly — with per-site data isolation, roles and permissions on each.',
+  'mkt.solp.ms.introTitle': 'Multi-site without the tab juggling.',
+  'mkt.solp.ms.introBody':
+    'Each site keeps its own articles, media, SEO workspace and settings. The switcher moves you between them in a click, and plan limits apply per site.',
+  'mkt.solp.ms.step1Title': 'Connect',
+  'mkt.solp.ms.step1Body': 'Add WordPress or REST CMS sites with the connection verifier — Karmax confirms write access before anything ships.',
+  'mkt.solp.ms.step2Title': 'Organize',
+  'mkt.solp.ms.step2Body': 'Give each site its own media folders, SEO targets and team roles.',
+  'mkt.solp.ms.step3Title': 'Switch',
+  'mkt.solp.ms.step3Body': 'Move between sites instantly — data, permissions and settings stay isolated per site.',
+  'mkt.solp.ms.story1Title': 'A home screen per site.',
+  'mkt.solp.ms.story1Body':
+    'Visitors, content counts, health score, pending actions and recent content — one dashboard per site, no mixed data.',
+  'mkt.solp.ms.story1p1': 'Per-site dashboards with traffic and content KPIs',
+  'mkt.solp.ms.story1p2': 'Data isolation between sites',
+  'mkt.solp.ms.story1p3': 'An overview of everything for platform staff',
+  'mkt.solp.ms.story2Title': 'Media scoped per site.',
+  'mkt.solp.ms.story2Body':
+    'Folders, search and per-site scoping keep one site’s assets from bleeding into another — storage tracked against your plan.',
+  'mkt.solp.ms.story2p3': 'Storage from 1 GB on Free to 100 GB on Max',
+  'mkt.solp.ms.benefit1': 'Manage multiple sites centrally from one dashboard',
+  'mkt.solp.ms.benefit2': 'Per-site isolation for data, media and settings',
+  'mkt.solp.ms.benefit3': 'Roles and granular permissions per site',
+  'mkt.solp.ms.benefit4': 'Unlimited sites on the Max plan',
+  'mkt.solp.ms.pos1Title': 'The portfolio publisher',
+  'mkt.solp.ms.pos1Body':
+    'Five niche sites, one Monday routine: switch, check each dashboard, publish the week’s posts — all before coffee.',
+  'mkt.solp.ms.pos2Title': 'Separation by default',
+  'mkt.solp.ms.pos2Body':
+    'One site’s media never appears in another site’s library — folders and per-site scoping enforce it.',
+  'mkt.solp.ms.pos3Title': 'Grow into Max',
+  'mkt.solp.ms.pos3Body':
+    'Start on Free with three sites and add more as you go — the workspace stays the same.',
+
+  // ---- Solution: Agencies & Teams ----
+  'mkt.solp.ag.heroTitle': 'Run every client site from one workspace.',
+  'mkt.solp.ag.heroBody':
+    'Agencies and teams get per-site isolation, roles and permissions, review workflows and automation — the operational backbone of client publishing.',
+  'mkt.solp.ag.introTitle': 'Client work with guardrails.',
+  'mkt.solp.ag.introBody':
+    'Admins, editors and authors get exactly the permissions they need. Reviews route drafts through the team, and every client’s data stays in its own site workspace.',
+  'mkt.solp.ag.step1Title': 'Set up clients',
+  'mkt.solp.ag.step1Body': 'Connect each client’s WordPress or REST CMS site and invite the team with roles — admin, editor, author.',
+  'mkt.solp.ag.step2Title': 'Run the workflow',
+  'mkt.solp.ag.step2Body': 'Drafts move through review with comments and tasks; the calendar keeps publishing predictable.',
+  'mkt.solp.ag.step3Title': 'Prove the work',
+  'mkt.solp.ag.step3Body': 'Run history, statuses and per-site dashboards show every client what shipped and when.',
+  'mkt.solp.ag.story1Title': 'The Monday standup view.',
+  'mkt.solp.ag.story1Body':
+    'Per-site dashboards with pending actions, traffic and recent content — the numbers you need before the client call.',
+  'mkt.solp.ag.story1p1': 'Pending actions and health score per site',
+  'mkt.solp.ag.story1p2': 'Traffic overview per site',
+  'mkt.solp.ag.story1p3': 'Recent content per site',
+  'mkt.solp.ag.story2Title': 'Editorial workflow that scales.',
+  'mkt.solp.ag.story2Body':
+    'The article list is the team’s shared source of truth — filter by state, with author and status on every row.',
+  'mkt.solp.ag.story2p1': 'Draft, review and published states per article',
+  'mkt.solp.ag.story2p2': 'Roles and granular page permissions',
+  'mkt.solp.ag.story2p3': 'Comment moderation and notifications',
+  'mkt.solp.ag.benefit1': 'Manage multiple client sites from one workspace',
+  'mkt.solp.ag.benefit2': 'Roles and granular permissions per site',
+  'mkt.solp.ag.benefit3': 'Review workflow with comments and tasks',
+  'mkt.solp.ag.benefit4': 'Automations for the recurring client work',
+  'mkt.solp.ag.pos1Title': 'The client onboarding routine',
+  'mkt.solp.ag.pos1Body':
+    'Connect the site, set roles, load the media library and schedule the first month — one checklist, one workspace.',
+  'mkt.solp.ag.pos2Title': 'Review without the email thread',
+  'mkt.solp.ag.pos2Body':
+    'Authors submit, editors review the same draft, and comments live next to the content — feedback never scatters.',
+  'mkt.solp.ag.pos3Title': 'Recurring deliverables',
+  'mkt.solp.ag.pos3Body':
+    'Weekly posts per client become scheduled automations; the team reviews output, not logistics.',
+
+  // ---- Solution: Integrations ----
+  'mkt.solp.in.heroTitle': 'Connects to the CMS you already use.',
+  'mkt.solp.in.heroBody':
+    'WordPress natively, any REST CMS through the standard adapter, your own SMTP for email, your own AI keys — Karmax talks to your stack through documented APIs.',
+  'mkt.solp.in.introTitle': 'Open platform, no lock-in.',
+  'mkt.solp.in.introBody':
+    'No proprietary plugin, no export hostage. Connections are verified before use, keys stay yours, and webhooks let the rest of your stack react to content events.',
+  'mkt.solp.in.step1Title': 'Connect',
+  'mkt.solp.in.step1Body': 'Add WordPress or a REST CMS with API-key authentication and verify write access before publishing.',
+  'mkt.solp.in.step2Title': 'Extend',
+  'mkt.solp.in.step2Body': 'Plug in your own SMTP server, your AI providers and Akismet for spam protection.',
+  'mkt.solp.in.step3Title': 'React',
+  'mkt.solp.in.step3Body': 'Outgoing webhooks fire on content events so your other tools stay in sync.',
+  'mkt.solp.in.story1Title': 'Your keys, your models.',
+  'mkt.solp.in.story1Body':
+    'AI providers are configured per workspace — models, keys and usage tracked — so the intelligence stays on your accounts.',
+  'mkt.solp.in.story1p1': 'Bring your own AI provider and keys',
+  'mkt.solp.in.story1p2': 'Models and usage tracked per provider',
+  'mkt.solp.in.story1p3': 'Provider status and latency at a glance',
+  'mkt.solp.in.story2Title': 'A documented API surface.',
+  'mkt.solp.in.story2Body':
+    'WordPress via the native REST client, any standard CMS via the adapter, SMTP for campaigns, Akismet for comments and webhooks for events.',
+  'mkt.solp.in.story2p1': 'WordPress REST API client with connection verification',
+  'mkt.solp.in.story2p2': 'Standard REST CMS adapter with API-key auth',
+  'mkt.solp.in.story2p3': 'Outgoing webhooks for content events',
+  'mkt.solp.in.benefit1': 'Connect WordPress or any compatible REST CMS',
+  'mkt.solp.in.benefit2': 'Connection verification before anything publishes',
+  'mkt.solp.in.benefit3': 'Your own SMTP, AI keys and spam protection',
+  'mkt.solp.in.benefit4': 'Outgoing webhooks for content events',
+  'mkt.solp.in.pos1Title': 'The WordPress native',
+  'mkt.solp.in.pos1Body':
+    'Connect via the REST API, verify write access and publish directly — posts, media and metadata land where they belong.',
+  'mkt.solp.in.pos2Title': 'Headless or bespoke CMS',
+  'mkt.solp.in.pos2Body':
+    'The standard REST adapter with API-key auth connects custom stacks — one configuration, the same publishing flow.',
+  'mkt.solp.in.pos3Title': 'An event-driven stack',
+  'mkt.solp.in.pos3Body':
+    'Webhooks notify your chat, CRM or analytics on every publish — Karmax becomes your content event source.',
 
   // ---- Login page ----
   'mkt.login.title': 'Welcome back.',

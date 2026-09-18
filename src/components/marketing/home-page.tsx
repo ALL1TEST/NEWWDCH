@@ -87,7 +87,18 @@ function Hero() {
             <MarketingButton href={MKT.signup} size="lg" withArrow>
               {t('mkt.hero.ctaPrimary')}
             </MarketingButton>
-            <MarketingButton href="#workflow" size="lg" variant="secondary">
+            {/* In-page anchor scrolled via JS: a bare '#workflow' href
+                would be parsed by the hash router as an unknown
+                route (not-found) instead of a section anchor. */}
+            <MarketingButton
+              href="#workflow"
+              size="lg"
+              variant="secondary"
+              onClick={(e) => {
+                e.preventDefault();
+                document.getElementById('workflow')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            >
               {t('mkt.hero.ctaSecondary')}
             </MarketingButton>
           </div>
@@ -458,13 +469,15 @@ function PlatformSection() {
 
 function UseCasesSection() {
   const { t } = useT();
+  // Audience cards deep-link into the solution story pages —
+  // each audience maps to the solution that serves it best.
   const cases = [
-    { icon: PenLine, titleKey: 'mkt.uc.bloggers.title', bodyKey: 'mkt.uc.bloggers.body', anchor: 'bloggers' },
-    { icon: Network, titleKey: 'mkt.uc.agencies.title', bodyKey: 'mkt.uc.agencies.body', anchor: 'agencies' },
-    { icon: FileText, titleKey: 'mkt.uc.publishers.title', bodyKey: 'mkt.uc.publishers.body', anchor: 'publishers' },
-    { icon: Search, titleKey: 'mkt.uc.seoteams.title', bodyKey: 'mkt.uc.seoteams.body', anchor: 'seo-teams' },
-    { icon: MessagesSquare, titleKey: 'mkt.uc.contentteams.title', bodyKey: 'mkt.uc.contentteams.body', anchor: 'content-teams' },
-    { icon: Globe2, titleKey: 'mkt.uc.businesses.title', bodyKey: 'mkt.uc.businesses.body', anchor: 'businesses' },
+    { icon: PenLine, titleKey: 'mkt.uc.bloggers.title', bodyKey: 'mkt.uc.bloggers.body', href: '#/solutions/content-publishing' },
+    { icon: Network, titleKey: 'mkt.uc.agencies.title', bodyKey: 'mkt.uc.agencies.body', href: '#/solutions/agencies' },
+    { icon: FileText, titleKey: 'mkt.uc.publishers.title', bodyKey: 'mkt.uc.publishers.body', href: '#/solutions/automation' },
+    { icon: Search, titleKey: 'mkt.uc.seoteams.title', bodyKey: 'mkt.uc.seoteams.body', href: '#/solutions/seo' },
+    { icon: MessagesSquare, titleKey: 'mkt.uc.contentteams.title', bodyKey: 'mkt.uc.contentteams.body', href: '#/solutions/agencies' },
+    { icon: Globe2, titleKey: 'mkt.uc.businesses.title', bodyKey: 'mkt.uc.businesses.body', href: '#/solutions/multi-site' },
   ];
 
   return (
@@ -484,7 +497,7 @@ function UseCasesSection() {
             return (
               <Reveal key={c.titleKey} delay={i * 60}>
                 <a
-                  href={`${MKT.solutions}?for=${c.anchor}`}
+                  href={c.href}
                   className="mkt-card-hover mkt-focus flex h-full flex-col gap-4 rounded-2xl border border-border bg-card p-6"
                 >
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-mkt-accent-soft text-mkt-accent-soft-fg">

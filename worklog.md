@@ -11713,3 +11713,49 @@ Stage Summary:
 - New honest Contact page (#/contact) + footer activation; /api/plans extended with the public features map
 - 8 files changed: api/plans/route.ts, pricing-page.tsx, content-pages.tsx (ContactPage), marketing-site.tsx (router), marketing-header.tsx (MKT map), marketing-footer.tsx (footer link), en/fr client-marketing.ts (+76/−3 keys, parity 495=495)
 - Ready to commit as MKT-PRICING-2
+
+---
+Task ID: MKT-SOLUTIONS-1
+Agent: main (orchestrator)
+Task: Rebuild the Karmax "Solutions" experience to HubSpot-Solutions-reference depth (structure/storytelling inspiration only, 100% Karmax-branded): new Solutions overview landing page, professional Solutions mega-menu, and six dedicated solution story pages on a shared premium template with original line-art illustrations, real product screenshots, honest benefits/examples, related resources and a dark CTA band.
+
+Work Log:
+- Inspected first: reference screenshots via VLM (6 HubSpot solutions captures — mega-menu, overview, detail-page anatomy: hero split → intro → zig-zag features → stats → mid CTA → stories → resources → dark bottom CTA), current SolutionsPage (content-pages.tsx audience list), SolutionsDropdown (4 audience links), router (#/solutions?for= only), 6 real product screenshots (dashboard KPIs / AI providers / SEO score 80 / automation runs / media library / articles table), i18n mkt.* inventory, mkt tokens (--mkt-accent #ff4800, surface-2 #faf5f0, footer-bg #1f1f1f)
+- NEW solutions-data.tsx: typed SOLUTION_CATALOG (single source of truth) — 6 solutions (content-publishing, seo, automation, multi-site, agencies, integrations) each with slug/icon/menu copy/hero keys/intro/3 steps/stories (real screenshots assigned per topic)/4 benefits/3 example workflows; USE_CASE_CARDS (6 audiences, one-liners, best-fit solution hrefs); solutionHref() helper
+- NEW solution-illustrations.tsx: original editorial line-art system — 7 hand-authored SVG scenes (publishing/seo/automation/multisite/agency/integrations/platform) in 520×400, charcoal currentColor strokes + text-mkt-accent orange accents + soft peach fills, no text inside art; SceneStage = off-white rounded panel + organic peach blob + dotgrid backdrop (HubSpot-style stage, redrawn original)
+- NEW solution-page.tsx: reusable template — Hero (← Solutions back link, editorial H1, Get started + Learn more JS-scroll to #how-it-works, SceneStage illustration right) → Intro (centered what-it-does) → 3-step workflow (numbered cards + connector + wide real BrowserFrame screenshot) → alternating [screenshot|illustration][copy+PointList] stories → Benefits (4 check cards) → Use cases (4 audience cards → sibling solution pages) → "See what's possible with Karmax" (3 numbered example workflows — no invented stats/customers) → Related resources (Blog/Features/Pricing — real routes only) → SolutionCta dark band (#1f1f1f, peach glow, Get started + Explore features)
+- NEW solutions-overview.tsx: #/solutions rebuilt — Hero (new title "Solutions for every publishing goal." + platform scene) → 6 category cards from the catalog → shared 4-step workflow band (mkt.workflow.* reuse) → audience directory (6 cards, legacy ?for= deep links scroll-to + highlight, cards link to solution pages) → SolutionCta
+- marketing-site.tsx: route type + parseHash extended ('solution' slug, catalog-validated — unknown → notfound); titles record gains per-solution hero title; title effect deps [route, t] (fixes stale titles when navigating between same-kind routes, e.g. solution → solution); renderPage wires SolutionsOverview + SolutionPage
+- marketing-header.tsx: SolutionsDropdown upgraded to mega-menu — 40rem panel (max-w viewport-safe), SOLUTIONS header + subtitle, 2-col grid of 6 items (icon tiles, group-hover orange fill), explore-all footer, Escape + outside-click close added (hover-intent + click kept)
+- mobile-menu.tsx: solution links now the 6 catalog pages
+- home-page.tsx: UseCasesSection cards repointed to solution pages (bloggers→content-publishing, agencies→agencies, publishers→automation, seo-teams→seo, content-teams→agencies, businesses→multi-site); FIXED pre-existing live bug — hero "See how it works" href="#workflow" routed to not-found (hash router parses it as an unknown route); now preventDefault + scrollIntoView
+- marketing-footer.tsx: Customers "Agencies" → #/solutions/agencies (was ?for=agencies)
+- content-pages.tsx: old SolutionsPage + SOLUTIONS/SOLUTION_POINTS removed (now lives in the new module); primitives.tsx: SectionHeader accepts id (aria-labelledby targets); i18n en+fr: +220 keys (mkt.menu.* 6 items, mkt.sol.* overview, mkt.solp.* template + 6 solutions full copy), −9 dead keys (4 audience menu pairs + sol.eyebrow); parity 704 = 704, 0 mismatches
+
+Bugs found & fixed during verification:
+1. ILLUSTRATION STROKE BUG (critical): scene roots set fill="none" but not stroke — SVG default stroke:none rendered scenes as empty pink rects + dots (caught by VLM review + DOM measurement: 29 elements but invisible). Rewrote all scenes with stroke="currentColor" roots + explicit stroke on accent elements (accent resolves rgb(255,72,0) verified)
+2. Zap import removed but still used by AboutPage capabilities → client-side crash on #/about (caught by route smoke test; tsc --noEmit confirms fix; dev-mode SWC does not typecheck — lesson: run tsc after import surgery)
+3. route.slug TS narrowing error in titles record → solutionSlug const
+4. Stale document.title on same-kind route navigation (solution→solution, article→article) → effect deps [route, t]
+5. Legacy ?for= scroll cancelled by router's scroll-reset parent effect (child effects run first) → deferred 60ms timer
+6. aria-labelledby pointed at non-existent ids (SectionHeader didn't forward id) → id prop added
+
+Verification (agent-browser E2E + VLM):
+- Overview: title/h1, 6 category cards + 6 audience cards, illustration, dark CTA "Ready to simplify how you publish?", docW=viewport (no overflow)
+- Mega-menu: opens (aria-expanded), 640px panel within viewport, all 6 items, explore-all; Escape closes (verified async), outside-click closes; mobile menu shows the 6 links
+- All 6 solution routes: correct H1/steps (Create-Optimize-Publish / Audit-Optimize-Monitor / Trigger-Act-Monitor / Connect-Organize-Switch / Set up clients-Run-Prove / Connect-Extend-React), screenshots assigned, 4 benefits, 3 possible cards, 3 related cards, 4 use-case cards, dark CTA bg rgb(31,31,31); integrations story-2 renders the SceneStage illustration
+- Navigation: dropdown item → page (hash normalized #solutions/<slug>), titles refresh on hash-nav, unknown slug → not found
+- Legacy #/solutions?for=agencies: card highlighted (peach border) + scrolled into view
+- FR (cms_locale + reload): htmlLang=fr, "Créez et publiez du contenu sans corvées.", steps Créer/Optimiser/Publier, audience cards Blogueurs/Éditeurs/Agences/Équipes, CTA "Prêt à simplifier votre façon de publier ?"
+- Responsive: mobile 390 (stacked hero, 1-col, stepCols 350px, no overflow, h1 36px) / tablet 768 (2-col categories 342px×2, mobile menu button, no overflow) / desktop 1440 (2-col hero, no overflow)
+- Sticky footer on solution page: bottom gap = 0
+- VLM design review (3 screens): 9.0/10 across the board — "polished, professional marketing experience… near-flawless for a B2B SaaS solutions page"; illustration close-up confirmed complete line work after the stroke fix
+- tsc --noEmit: 0 errors in marketing/i18n files (remaining 157 repo-wide errors pre-existing in dashboard modules); eslint on all touched files: 0 problems; i18n parity 704=704
+- Routes smoke test post-fix: home/pricing/about/blog/features/solutions/seo/contact/legal all render correct titles, 0 console errors, 0 broken images
+- Ops note: next-server was OOM-killed twice during heavy multi-route testing (sandbox 4GB; anon-rss ~1.9GB) — restarted each time; single dev :3000 + single backup-scheduler :3010 verified at the end
+
+Stage Summary:
+- Solutions experience rebuilt to the reference's information architecture: overview landing page + mega-menu + 6 full story pages on one reusable template (hero → intro → 3 steps → alternating stories → benefits → use cases → examples → resources → dark CTA), all rendered from a single typed catalog
+- Honest content throughout: real screenshots only, no invented stats/customers/testimonials, every link a real route; legacy ?for= deep links preserved
+- 10 files changed (4 new: solutions-data, solution-illustrations, solution-page, solutions-overview; 6 modified: marketing-site, marketing-header, mobile-menu, home-page, marketing-footer, content-pages, primitives — plus i18n en/fr); +220/−9 i18n keys per locale, parity 704=704
+- Ready to commit as MKT-SOLUTIONS-1

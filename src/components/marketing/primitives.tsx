@@ -175,9 +175,11 @@ interface SectionHeaderProps {
   subtitle?: string;
   align?: 'center' | 'left';
   className?: string;
+  /** Applied to the h2 so `aria-labelledby` can reference it. */
+  id?: string;
 }
 
-export function SectionHeader({ eyebrow, title, subtitle, align = 'center', className = '' }: SectionHeaderProps) {
+export function SectionHeader({ eyebrow, title, subtitle, align = 'center', className = '', id }: SectionHeaderProps) {
   return (
     <div
       className={`flex flex-col gap-4 ${
@@ -185,7 +187,7 @@ export function SectionHeader({ eyebrow, title, subtitle, align = 'center', clas
       } ${className}`}
     >
       {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
-      <h2 className="mkt-h2 text-text-primary text-[1.75rem] sm:text-4xl">{title}</h2>
+      <h2 id={id} className="mkt-h2 text-text-primary text-[1.75rem] sm:text-4xl">{title}</h2>
       {subtitle && <p className="text-text-secondary text-base sm:text-lg leading-relaxed">{subtitle}</p>}
     </div>
   );

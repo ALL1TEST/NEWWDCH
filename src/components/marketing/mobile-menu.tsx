@@ -17,6 +17,7 @@ import { ChevronDown, X } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { LogoWordmark, MarketingButton } from './primitives';
 import { MKT } from './marketing-header';
+import { SOLUTION_CATALOG, solutionHref } from './solutions-data';
 
 export function MobileMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useT();
@@ -40,12 +41,10 @@ export function MobileMenu({ open, onClose }: { open: boolean; onClose: () => vo
     { label: t('mkt.nav.about'), href: MKT.about },
   ];
 
-  const solutionLinks = [
-    { label: t('mkt.menu.forBloggers'), href: `${MKT.solutions}?for=bloggers` },
-    { label: t('mkt.menu.forAgencies'), href: `${MKT.solutions}?for=agencies` },
-    { label: t('mkt.menu.forPublishers'), href: `${MKT.solutions}?for=publishers` },
-    { label: t('mkt.menu.forSeoTeams'), href: `${MKT.solutions}?for=seo-teams` },
-  ];
+  const solutionLinks = SOLUTION_CATALOG.map((s) => ({
+    label: t(s.menuTitleKey),
+    href: solutionHref(s.slug),
+  }));
 
   return (
     <div

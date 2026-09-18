@@ -21,6 +21,7 @@ import { ChevronDown, Menu, X } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { LogoWordmark, MarketingButton } from './primitives';
 import { MobileMenu } from './mobile-menu';
+import { SOLUTION_CATALOG, solutionHref } from './solutions-data';
 
 // ---- Marketing routes (hash-based, distinct from dashboard hashes) ----
 export const MKT = {
@@ -54,11 +55,17 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'mkt.nav.about', href: MKT.about },
 ];
 
-// -------------------- Solutions dropdown ---------------------
+// -------------------- Solutions mega-menu ---------------------
+// Professional dropdown rendered from the solutions catalog:
+// six solution stories, each with an icon tile and a one-line
+// description, plus an "explore all" footer. Opens on hover or
+// click; closes on leave (with intent delay), Escape, outside
+// click or selecting a destination.
 
 function SolutionsDropdown({ currentHash }: { currentHash: string }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const openNow = () => {
@@ -68,17 +75,26 @@ function SolutionsDropdown({ currentHash }: { currentHash: string }) {
   const closeSoon = () => {
     closeTimer.current = setTimeout(() => setOpen(false), 120);
   };
+
   useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
 
-  const items = [
-    { key: 'mkt.menu.forBloggers', descKey: 'mkt.menu.forBloggersDesc', hash: `${MKT.solutions}?for=bloggers` },
-    { key: 'mkt.menu.forAgencies', descKey: 'mkt.menu.forAgenciesDesc', hash: `${MKT.solutions}?for=agencies` },
-    { key: 'mkt.menu.forPublishers', descKey: 'mkt.menu.forPublishersDesc', hash: `${MKT.solutions}?for=publishers` },
-    { key: 'mkt.menu.forSeoTeams', descKey: 'mkt.menu.forSeoTeamsDesc', hash: `${MKT.solutions}?for=seo-teams` },
-  ];
+  // Escape + outside click.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const onClick = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onClick);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onClick);
+    };
+  }, [open]);
 
   return (
-    <div className="relative" onMouseEnter={openNow} onMouseLeave={closeSoon}>
+    <div ref={rootRef} className="relative" onMouseEnter={openNow} onMouseLeave={closeSoon}>
       <a
         href={MKT.solutions}
         aria-haspopup="true"
@@ -99,25 +115,40 @@ function SolutionsDropdown({ currentHash }: { currentHash: string }) {
 
       {open && (
         <div
-          className="absolute left-1/2 top-[calc(100%+6px)] z-50 w-[22rem] -translate-x-1/2 rounded-2xl border border-border bg-popover p-2 shadow-xl animate-in fade-in-0 zoom-in-95 duration-150"
+          className="absolute left-1/2 top-[calc(100%+8px)] z-50 w-[40rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-2xl border border-border bg-popover p-3 shadow-xl animate-in fade-in-0 zoom-in-95 duration-150"
         >
-          <p className="px-3 pb-1.5 pt-2 text-[0.6875rem] font-semibold uppercase tracking-widest text-text-muted">
-            {t('mkt.menu.solutionsTitle')}
-          </p>
-          {items.map((it) => (
-            <a
-              key={it.key}
-              href={it.hash}
-              onClick={() => setOpen(false)}
-              className="mkt-focus group flex items-start gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-muted"
-            >
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium text-text-primary">{t(it.key)}</span>
-                <span className="text-xs leading-relaxed text-text-secondary">{t(it.descKey)}</span>
-              </div>
-            </a>
-          ))}
-          <div className="mt-1 border-t border-border px-3 pb-1 pt-2">
+          <div className="flex items-baseline justify-between gap-4 px-2 pb-2 pt-1">
+            <p className="text-[0.6875rem] font-semibold uppercase tracking-widest text-text-muted">
+              {t('mkt.menu.solutionsTitle')}
+            </p>
+            <p className="text-[0.6875rem] text-text-muted">{t('mkt.menu.solutionsSubtitle')}</p>
+          </div>
+
+          <div className="grid gap-1 sm:grid-cols-2">
+            {SOLUTION_CATALOG.map((s) => {
+              const Icon = s.icon;
+              const active = currentHash === solutionHref(s.slug);
+              return (
+                <a
+                  key={s.slug}
+                  href={solutionHref(s.slug)}
+                  aria-current={active ? 'page' : undefined}
+                  onClick={() => setOpen(false)}
+                  className="mkt-focus group flex items-start gap-3 rounded-xl px-2.5 py-2.5 transition-colors hover:bg-muted"
+                >
+                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-mkt-accent-soft text-mkt-accent-soft-fg transition-colors group-hover:bg-mkt-accent group-hover:text-mkt-accent-fg">
+                    <Icon className="h-4.5 w-4.5" aria-hidden="true" />
+                  </span>
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium text-text-primary">{t(s.menuTitleKey)}</span>
+                    <span className="text-xs leading-relaxed text-text-secondary">{t(s.menuDescKey)}</span>
+                  </span>
+                </a>
+              );
+            })}
+          </div>
+
+          <div className="mt-1.5 border-t border-border px-2 pb-1 pt-2.5">
             <a
               href={MKT.solutions}
               onClick={() => setOpen(false)}
