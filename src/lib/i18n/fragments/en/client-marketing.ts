@@ -196,9 +196,9 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.uc.businesses.body': 'Run your site alongside the business: automated publishing, backups, user management and billing under one login.',
 
   // ---- Pricing ----
-  'mkt.pricing.eyebrow': 'Pricing',
-  'mkt.pricing.title': 'Simple, transparent pricing.',
+  'mkt.pricing.heroTitle': 'The best work solution, for the best price.',
   'mkt.pricing.subtitle': 'Start free, upgrade when your sites grow. Every plan includes the full editor, SEO basics and media library.',
+  'mkt.pricing.billingToggle': 'Billing period',
   'mkt.pricing.monthly': 'Monthly',
   'mkt.pricing.yearly': 'Yearly',
   'mkt.pricing.perMonth': '/ month',
@@ -223,11 +223,86 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.pricing.newsletter': 'Newsletter & subscribers',
   'mkt.pricing.automation': 'Automation builder',
   'mkt.pricing.backups': 'Automated backups',
-  'mkt.pricing.billingNote': 'Prices in Swiss francs (CHF). Manage or cancel your subscription anytime from your dashboard.',
+  'mkt.pricing.completeFeatureList': 'Complete feature list',
+  'mkt.pricing.ctaTitle': 'Publish your next site with us.',
   'mkt.pricing.error': 'Couldn’t load plans. Please try again.',
   'mkt.pricing.retry': 'Retry',
   'mkt.pricing.loading': 'Loading plans…',
   'mkt.pricing.included': 'Included in {plan}',
+
+  // ---- Pricing: comparison table ----
+  'mkt.compare.featureCol': 'Feature',
+  'mkt.compare.usage': 'Usage',
+  'mkt.compare.sites': 'Sites',
+  'mkt.compare.content': 'Content',
+  'mkt.compare.aiContent': 'AI content',
+  'mkt.compare.comments': 'Comments',
+  'mkt.compare.emailTemplates': 'Email templates',
+  'mkt.compare.seo': 'SEO',
+  'mkt.compare.advancedSeo': 'Advanced SEO (redirects, schema, Search Console)',
+  'mkt.compare.automation': 'Automation',
+  'mkt.compare.scheduledPublishing': 'Scheduled publishing',
+  'mkt.compare.dataSecurity': 'Data & security',
+  'mkt.compare.advancedAnalytics': 'Advanced analytics',
+  'mkt.compare.auditLog': 'Audit log',
+  'mkt.compare.platform': 'Platform',
+  'mkt.compare.wordpress': 'WordPress integration',
+  'mkt.compare.restCms': 'REST CMS / API',
+  'mkt.compare.webhooks': 'Webhooks',
+  'mkt.compare.ownKeys': 'Your own API keys',
+
+  // ---- Pricing: FAQ ----
+  'mkt.faq.title': 'Frequently asked questions',
+  'mkt.faq.subtitle':
+    'Find answers to your questions right here, and don’t hesitate to Contact us if you couldn’t find what you’re looking for.',
+  'mkt.faq.contact': 'Contact us',
+  'mkt.faq.loadMore': 'Load more',
+  'mkt.faq.upgradeDowngrade.q': 'Can I upgrade or downgrade my plan?',
+  'mkt.faq.upgradeDowngrade.a':
+    'Yes — plans are self-serve. You can move between Free, Plus, Pro and Max at any time from the billing area of your dashboard, and your sites, content and media move with you.',
+  'mkt.faq.paymentMethods.q': 'What payment methods do you accept?',
+  'mkt.faq.paymentMethods.a':
+    'Payments are processed by Stripe. Card details are handled entirely by Stripe’s hosted checkout — they never reach our servers.',
+  'mkt.faq.cancel.q': 'Can I cancel my subscription?',
+  'mkt.faq.cancel.a':
+    'Yes. You can manage or cancel your subscription anytime from your dashboard. Your content stays accessible on the Free plan.',
+  'mkt.faq.planLimits.q': 'What happens when I reach my plan limits?',
+  'mkt.faq.planLimits.a':
+    'Plan limits cover the number of sites, storage and monthly AI usage. When you hit an AI limit you can upgrade your plan or connect your own AI provider keys for unlimited use.',
+  'mkt.faq.multipleSites.q': 'Can I manage multiple sites?',
+  'mkt.faq.multipleSites.a':
+    'Yes — every plan is multi-site from day one. Each plan sets how many sites you can manage, and the Max plan has no site limit.',
+  'mkt.faq.startFree.q': 'What happens if I start on the Free plan?',
+  'mkt.faq.startFree.a':
+    'Nothing expires. The Free plan stays free and includes the full editor, SEO basics and the media library — you only upgrade when your sites grow.',
+  'mkt.faq.connectCms.q': 'Can I connect WordPress or another REST CMS?',
+  'mkt.faq.connectCms.a':
+    'Yes. Karmax ships a native WordPress REST client with connection verification, plus a standard REST CMS adapter with API-key authentication — on every plan.',
+  'mkt.faq.aiLimits.q': 'How do AI article and image limits work?',
+  'mkt.faq.aiLimits.a':
+    'Platform AI usage is metered by generations: each plan sets a monthly number of AI articles and AI images, resetting every calendar month. On the Max plan you connect your own AI provider keys, which are never metered by us.',
+
+  // ---- Contact page ----
+  'mkt.contact.eyebrow': 'Contact',
+  'mkt.contact.title': 'Contact us',
+  'mkt.contact.intro':
+    'The fastest ways to get help with Karmax — every channel below is real and available today.',
+  'mkt.contact.billingTitle': 'Plans & billing',
+  'mkt.contact.billingBody':
+    'Plan changes, upgrades and cancellations are self-serve from the billing area of your dashboard. The pricing page explains what every plan includes.',
+  'mkt.contact.billingCta': 'See plans & pricing',
+  'mkt.contact.faqTitle': 'Product questions',
+  'mkt.contact.faqBody':
+    'Most questions about plans, limits, sites and AI usage are answered in the pricing FAQ.',
+  'mkt.contact.faqCta': 'Read the FAQ',
+  'mkt.contact.securityTitle': 'Security reports',
+  'mkt.contact.securityBody':
+    'If you believe you have found a security issue in Karmax, please follow the responsible disclosure process described on the security page.',
+  'mkt.contact.securityCta': 'Security & disclosure',
+  'mkt.contact.tryTitle': 'Just exploring?',
+  'mkt.contact.tryBody':
+    'The best way to evaluate Karmax is to use it — create a free account and publish your first site in minutes.',
+  'mkt.contact.tryCta': 'Create your free account',
 
   // ---- Blog ----
   'mkt.blog.title': 'Blog',

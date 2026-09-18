@@ -140,7 +140,8 @@ const COMPANY: FooterLink[] = [
   { labelKey: 'mkt.footer.managementTeam', inactive: true },
   { labelKey: 'mkt.footer.investorRelations', inactive: true },
   { labelKey: 'mkt.footer.blog', href: MKT.blog },
-  { labelKey: 'mkt.footer.contactUs', inactive: true },
+  // Contact page now exists (#/contact) — real destination.
+  { labelKey: 'mkt.footer.contactUs', href: MKT.contact },
 ];
 
 // Column 4 · Customers

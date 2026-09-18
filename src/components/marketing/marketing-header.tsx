@@ -38,6 +38,7 @@ export const MKT = {
   security: '#/security',
   accessibility: '#/accessibility',
   legal: '#/legal',
+  contact: '#/contact',
 } as const;
 
 interface NavItem {

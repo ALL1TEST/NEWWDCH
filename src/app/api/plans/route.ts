@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { ok, fail } from '@/lib/platform/platform-auth';
+import { aiModeOfEntitlements } from '@/lib/platform/feature-config';
 
 // ============================================================
 // GET /api/plans — PUBLIC pricing data for the marketing site.
@@ -14,13 +15,39 @@ import { ok, fail } from '@/lib/platform/platform-auth';
 //     plans: Array<{
 //       planId, name, description, priceMonthly, priceYearly,
 //       isFree, badgeVariant, sortOrder,
-//       limits: { maxSites, storageBytes, aiArticlesPerMonth, aiImagesPerMonth }
+//       limits: { maxSites, storageBytes, aiArticlesPerMonth, aiImagesPerMonth },
+//       features: {
+//         ai: 'none' | 'platform' | 'client',
+//         newsletter, comments, automation, backups,
+//         emailTemplates, advancedAnalytics, advancedSeo, auditLog
+//       }
 //     }>
 //   }
+//
+// `features` is the PUBLIC-SAFE projection of the plan's internal
+// entitlement list — booleans plus the AI mode — so the pricing
+// page's comparison table renders from the product's own
+// configuration. Prices, limits AND feature flags all stay
+// database-driven; nothing is hardcoded on the client.
 //
 // The marketing pricing page MUST render from THIS endpoint (the
 // product's own configuration) — never hardcoded prices.
 // ============================================================
+
+interface PublicPlanFeatures {
+  /** AI availability: 'none' = no AI, 'platform' = metered
+   *  Platform AI, 'client' = bring-your-own provider keys
+   *  (unlimited through the client's own API, never metered). */
+  ai: 'none' | 'platform' | 'client';
+  newsletter: boolean;
+  comments: boolean;
+  automation: boolean;
+  backups: boolean;
+  emailTemplates: boolean;
+  advancedAnalytics: boolean;
+  advancedSeo: boolean;
+  auditLog: boolean;
+}
 
 interface PublicPlan {
   planId: string;
@@ -37,6 +64,7 @@ interface PublicPlan {
     aiArticlesPerMonth: number;
     aiImagesPerMonth: number;
   };
+  features: PublicPlanFeatures;
 }
 
 export async function GET() {
@@ -48,6 +76,7 @@ export async function GET() {
         planId: true,
         name: true,
         features: true,
+        entitlements: true,
         priceMonthly: true,
         priceYearly: true,
         currency: true,
@@ -84,6 +113,27 @@ export async function GET() {
         // limits stays the zero-default; pricing page renders '—'
       }
 
+      // Entitlements (JSON string[]) → public-safe feature map.
+      let entitlements: string[] = [];
+      try {
+        const parsed = typeof r.entitlements === 'string' ? JSON.parse(r.entitlements) : r.entitlements;
+        if (Array.isArray(parsed)) entitlements = parsed.map(String);
+      } catch {
+        // entitlements stays []; features render as 'not included'
+      }
+      const has = (key: string) => entitlements.includes(key);
+      const features: PublicPlanFeatures = {
+        ai: aiModeOfEntitlements(entitlements),
+        newsletter: has('newsletter'),
+        comments: has('comments'),
+        automation: has('automation'),
+        backups: has('backups'),
+        emailTemplates: has('email_templates'),
+        advancedAnalytics: has('advanced_analytics'),
+        advancedSeo: has('advanced_seo'),
+        auditLog: has('audit_log'),
+      };
+
       // `features` (JSON string[]) holds the derived marketing copy
       // lines configured in Platform Admin → Plans & Pricing.
       let description = '';
@@ -106,6 +156,7 @@ export async function GET() {
         badgeVariant: r.badgeVariant,
         sortOrder: r.sortOrder,
         limits,
+        features,
       };
     });
 

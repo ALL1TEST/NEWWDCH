@@ -189,9 +189,9 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.uc.businesses.body': 'Gérez votre site aux côtés de l’entreprise : publication automatisée, sauvegardes, gestion des utilisateurs et facturation sous une seule connexion.',
 
   // ---- Tarifs ----
-  'mkt.pricing.eyebrow': 'Tarifs',
-  'mkt.pricing.title': 'Des tarifs simples et transparents.',
+  'mkt.pricing.heroTitle': 'La meilleure solution de travail, au meilleur prix.',
   'mkt.pricing.subtitle': 'Commencez gratuitement, évoluez quand vos sites grandissent. Chaque plan inclut l’éditeur complet, les bases SEO et la médiathèque.',
+  'mkt.pricing.billingToggle': 'Période de facturation',
   'mkt.pricing.monthly': 'Mensuel',
   'mkt.pricing.yearly': 'Annuel',
   'mkt.pricing.perMonth': '/ mois',
@@ -216,11 +216,86 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.pricing.newsletter': 'Newsletter & abonnés',
   'mkt.pricing.automation': 'Constructeur d’automatisations',
   'mkt.pricing.backups': 'Sauvegardes automatiques',
-  'mkt.pricing.billingNote': 'Prix en francs suisses (CHF). Gérez ou annulez votre abonnement à tout moment depuis votre tableau de bord.',
+  'mkt.pricing.completeFeatureList': 'Liste complète des fonctionnalités',
+  'mkt.pricing.ctaTitle': 'Publiez votre prochain site avec nous.',
   'mkt.pricing.error': 'Impossible de charger les plans. Veuillez réessayer.',
   'mkt.pricing.retry': 'Réessayer',
   'mkt.pricing.loading': 'Chargement des plans…',
   'mkt.pricing.included': 'Inclus dans {plan}',
+
+  // ---- Tarifs : tableau comparatif ----
+  'mkt.compare.featureCol': 'Fonctionnalité',
+  'mkt.compare.usage': 'Usage',
+  'mkt.compare.sites': 'Sites',
+  'mkt.compare.content': 'Contenu',
+  'mkt.compare.aiContent': 'Contenu IA',
+  'mkt.compare.comments': 'Commentaires',
+  'mkt.compare.emailTemplates': 'Modèles d’e-mails',
+  'mkt.compare.seo': 'SEO',
+  'mkt.compare.advancedSeo': 'SEO avancé (redirections, schema, Search Console)',
+  'mkt.compare.automation': 'Automatisation',
+  'mkt.compare.scheduledPublishing': 'Publication planifiée',
+  'mkt.compare.dataSecurity': 'Données & sécurité',
+  'mkt.compare.advancedAnalytics': 'Analyses avancées',
+  'mkt.compare.auditLog': 'Journal d’audit',
+  'mkt.compare.platform': 'Plateforme',
+  'mkt.compare.wordpress': 'Intégration WordPress',
+  'mkt.compare.restCms': 'CMS REST / API',
+  'mkt.compare.webhooks': 'Webhooks',
+  'mkt.compare.ownKeys': 'Vos propres clés API',
+
+  // ---- Tarifs : FAQ ----
+  'mkt.faq.title': 'Questions fréquentes',
+  'mkt.faq.subtitle':
+    'Trouvez les réponses à vos questions ici, et n’hésitez pas à nous contacter si vous ne trouvez pas ce que vous cherchez.',
+  'mkt.faq.contact': 'Nous contacter',
+  'mkt.faq.loadMore': 'Voir plus',
+  'mkt.faq.upgradeDowngrade.q': 'Puis-je changer de plan à la hausse ou à la baisse ?',
+  'mkt.faq.upgradeDowngrade.a':
+    'Oui — les plans sont en libre-service. Vous pouvez passer de Gratuit à Plus, Pro ou Max à tout moment depuis la section facturation de votre tableau de bord ; vos sites, contenus et médias vous suivent.',
+  'mkt.faq.paymentMethods.q': 'Quels moyens de paiement acceptez-vous ?',
+  'mkt.faq.paymentMethods.a':
+    'Les paiements sont traités par Stripe. Les données de carte sont gérées entièrement par le paiement hébergé de Stripe — elles n’atteignent jamais nos serveurs.',
+  'mkt.faq.cancel.q': 'Puis-je annuler mon abonnement ?',
+  'mkt.faq.cancel.a':
+    'Oui. Vous pouvez gérer ou annuler votre abonnement à tout moment depuis votre tableau de bord. Votre contenu reste accessible sur le plan Gratuit.',
+  'mkt.faq.planLimits.q': 'Que se passe-t-il quand j’atteins les limites de mon plan ?',
+  'mkt.faq.planLimits.a':
+    'Les limites couvrent le nombre de sites, le stockage et l’usage IA mensuel. Lorsque vous atteignez une limite IA, vous pouvez passer à un plan supérieur ou connecter vos propres clés de fournisseur IA pour un usage illimité.',
+  'mkt.faq.multipleSites.q': 'Puis-je gérer plusieurs sites ?',
+  'mkt.faq.multipleSites.a':
+    'Oui — chaque plan est multi-sites dès le premier jour. Chaque plan définit le nombre de sites gérables, et le plan Max n’a aucune limite de sites.',
+  'mkt.faq.startFree.q': 'Que se passe-t-il si je commence avec le plan Gratuit ?',
+  'mkt.faq.startFree.a':
+    'Rien n’expire. Le plan Gratuit reste gratuit et inclut l’éditeur complet, les bases SEO et la médiathèque — vous ne passez à un plan payant que quand vos sites grandissent.',
+  'mkt.faq.connectCms.q': 'Puis-je connecter WordPress ou un autre CMS REST ?',
+  'mkt.faq.connectCms.a':
+    'Oui. Karmax intègre un client WordPress REST natif avec vérification de connexion, ainsi qu’un adaptateur CMS REST standard avec authentification par clé API — sur tous les plans.',
+  'mkt.faq.aiLimits.q': 'Comment fonctionnent les limites d’articles et d’images IA ?',
+  'mkt.faq.aiLimits.a':
+    'L’usage de l’IA de la plateforme est mesuré en générations : chaque plan définit un nombre mensuel d’articles IA et d’images IA, réinitialisé chaque mois calendaire. Sur le plan Max, vous connectez vos propres clés de fournisseur IA, jamais mesurées par nous.',
+
+  // ---- Page contact ----
+  'mkt.contact.eyebrow': 'Contact',
+  'mkt.contact.title': 'Nous contacter',
+  'mkt.contact.intro':
+    'Les moyens les plus rapides d’obtenir de l’aide avec Karmax — chaque canal ci-dessous est réel et disponible aujourd’hui.',
+  'mkt.contact.billingTitle': 'Plans & facturation',
+  'mkt.contact.billingBody':
+    'Changements de plan, mises à niveau et annulations sont en libre-service depuis la section facturation de votre tableau de bord. La page des tarifs détaille ce que chaque plan inclut.',
+  'mkt.contact.billingCta': 'Voir les plans & tarifs',
+  'mkt.contact.faqTitle': 'Questions produit',
+  'mkt.contact.faqBody':
+    'La plupart des questions sur les plans, les limites, les sites et l’usage IA trouvent leur réponse dans la FAQ des tarifs.',
+  'mkt.contact.faqCta': 'Lire la FAQ',
+  'mkt.contact.securityTitle': 'Signalements de sécurité',
+  'mkt.contact.securityBody':
+    'Si vous pensez avoir trouvé un problème de sécurité dans Karmax, suivez le processus de divulgation responsable décrit sur la page sécurité.',
+  'mkt.contact.securityCta': 'Sécurité & divulgation',
+  'mkt.contact.tryTitle': 'Simplement curieux ?',
+  'mkt.contact.tryBody':
+    'La meilleure façon d’évaluer Karmax est de l’utiliser — créez un compte gratuit et publiez votre premier site en quelques minutes.',
+  'mkt.contact.tryCta': 'Créer votre compte gratuit',
 
   // ---- Blog ----
   'mkt.blog.title': 'Blog',

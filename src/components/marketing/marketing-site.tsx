@@ -29,7 +29,7 @@ import { CookieBanner } from './cookie-banner';
 import { MarketingHome } from './home-page';
 import { PricingPage } from './pricing-page';
 import { BlogPage, BlogArticlePage } from './blog-page';
-import { AboutPage, SolutionsPage, PrivacyPage, TermsPage, SecurityPage, AccessibilityPage, LegalCenterPage } from './content-pages';
+import { AboutPage, SolutionsPage, PrivacyPage, TermsPage, SecurityPage, AccessibilityPage, LegalCenterPage, ContactPage } from './content-pages';
 import { LoginPage } from './login-page';
 import { SignupPage } from './signup-page';
 import { MarketingButton } from './primitives';
@@ -67,6 +67,7 @@ type Route =
   | { name: 'security' }
   | { name: 'accessibility' }
   | { name: 'legal' }
+  | { name: 'contact' }
   | { name: 'notfound' };
 
 function parseHash(hash: string): Route {
@@ -120,6 +121,8 @@ function parseHash(hash: string): Route {
       return { name: 'accessibility' };
     case 'legal':
       return { name: 'legal' };
+    case 'contact':
+      return { name: 'contact' };
     case 'features':
       // Features live on the home page as anchor sections —
       // '#/features' scrolls to the list, '#/features#f-ai' to a
@@ -148,7 +151,7 @@ export function MarketingSite() {
     // page instead of "not found". (Split on '#' too so a nested
     // deep link like '#features#f-ai' still resolves.)
     const firstSeg = h.replace(/^#\/?/, '').split(/[/?#]/)[0];
-    const KNOWN = ['pricing', 'blog', 'about', 'solutions', 'login', 'signup', 'checkout', 'privacy', 'terms', 'security', 'accessibility', 'legal', 'features'];
+    const KNOWN = ['pricing', 'blog', 'about', 'solutions', 'login', 'signup', 'checkout', 'privacy', 'terms', 'security', 'accessibility', 'legal', 'contact', 'features'];
     return KNOWN.includes(firstSeg) ? h : '';
   });
 
@@ -181,7 +184,7 @@ export function MarketingSite() {
     const brand = t('mkt.brand.name');
     const titles: Record<Route['name'], string> = {
       home: `${brand} — ${t('mkt.brand.tagline')}`,
-      pricing: `${t('mkt.pricing.title')} — ${brand}`,
+      pricing: `${t('mkt.pricing.heroTitle')} — ${brand}`,
       blog: `${t('mkt.blog.title')} — ${brand}`,
       article: `${t('mkt.blog.title')} — ${brand}`,
       about: `${t('mkt.about.eyebrow')} ${brand}`,
@@ -194,6 +197,7 @@ export function MarketingSite() {
       security: `${t('mkt.security.title')} — ${brand}`,
       accessibility: `${t('mkt.footer.accessibility')} — ${brand}`,
       legal: `${t('mkt.footer.legalCenter')} — ${brand}`,
+      contact: `${t('mkt.contact.title')} — ${brand}`,
       notfound: `${t('mkt.common.notFoundTitle')} — ${brand}`,
     };
     document.title = titles[route.name];
@@ -229,6 +233,8 @@ export function MarketingSite() {
         return <AccessibilityPage />;
       case 'legal':
         return <LegalCenterPage />;
+      case 'contact':
+        return <ContactPage />;
       case 'notfound':
         return (
           <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5 pt-24 text-center">

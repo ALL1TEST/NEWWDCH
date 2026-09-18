@@ -15,6 +15,7 @@ import {
   BookOpen,
   Compass,
   Cookie,
+  CreditCard,
   FileText,
   Globe2,
   HeartHandshake,
@@ -26,6 +27,7 @@ import {
   Scale,
   Search,
   ShieldCheck,
+  Sparkles,
   Zap,
 } from 'lucide-react';
 import { useT } from '@/lib/i18n';
@@ -351,6 +353,86 @@ export function AccessibilityPage() {
         <Reveal><LegalSection titleKey="mkt.a11y.motionTitle" bodyKey="mkt.a11y.motionBody" /></Reveal>
         <Reveal><LegalSection titleKey="mkt.a11y.contrastTitle" bodyKey="mkt.a11y.contrastBody" /></Reveal>
         <Reveal><LegalSection titleKey="mkt.a11y.feedbackTitle" bodyKey="mkt.a11y.feedbackBody" /></Reveal>
+      </div>
+    </div>
+  );
+}
+
+// -------------------- Contact --------------------
+
+// The contact page lists the REAL support channels that exist in
+// the product today — the dashboard's self-serve billing, the
+// pricing FAQ, the security disclosure page and the signup flow.
+// No invented email address or contact form: every row links to a
+// page that actually exists.
+export function ContactPage() {
+  const { t } = useT();
+
+  const channels = [
+    {
+      icon: CreditCard,
+      titleKey: 'mkt.contact.billingTitle',
+      bodyKey: 'mkt.contact.billingBody',
+      ctaKey: 'mkt.contact.billingCta',
+      href: MKT.pricing,
+    },
+    {
+      icon: MessagesSquare,
+      titleKey: 'mkt.contact.faqTitle',
+      bodyKey: 'mkt.contact.faqBody',
+      ctaKey: 'mkt.contact.faqCta',
+      href: `${MKT.pricing}#faq`,
+    },
+    {
+      icon: ShieldCheck,
+      titleKey: 'mkt.contact.securityTitle',
+      bodyKey: 'mkt.contact.securityBody',
+      ctaKey: 'mkt.contact.securityCta',
+      href: MKT.security,
+    },
+    {
+      icon: Sparkles,
+      titleKey: 'mkt.contact.tryTitle',
+      bodyKey: 'mkt.contact.tryBody',
+      ctaKey: 'mkt.contact.tryCta',
+      href: MKT.signup,
+    },
+  ];
+
+  return (
+    <div className="mkt-container max-w-2xl pt-32 pb-10 sm:pt-40">
+      <Reveal>
+        <header className="flex flex-col gap-4 border-b border-border pb-8">
+          <Eyebrow>
+            <MessagesSquare className="h-3.5 w-3.5" aria-hidden="true" />
+            {t('mkt.contact.eyebrow')}
+          </Eyebrow>
+          <h1 className="mkt-display text-3xl text-text-primary sm:text-4xl">{t('mkt.contact.title')}</h1>
+          <p className="text-sm leading-relaxed text-text-secondary">{t('mkt.contact.intro')}</p>
+        </header>
+      </Reveal>
+
+      <div className="mt-8 flex flex-col gap-5">
+        {channels.map((c, i) => {
+          const Icon = c.icon;
+          return (
+            <Reveal key={c.titleKey} delay={i * 50}>
+              <div className="mkt-card-hover flex h-full flex-col gap-3 rounded-2xl border border-border bg-card p-6">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-mkt-accent-soft text-mkt-accent-soft-fg">
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <h2 className="text-sm font-semibold text-text-primary">{t(c.titleKey)}</h2>
+                <p className="text-sm leading-relaxed text-text-secondary">{t(c.bodyKey)}</p>
+                <a
+                  href={c.href}
+                  className="mkt-focus mt-1 inline-flex w-fit items-center gap-1 text-sm font-semibold text-mkt-accent hover:underline"
+                >
+                  {t(c.ctaKey)} <span aria-hidden="true">→</span>
+                </a>
+              </div>
+            </Reveal>
+          );
+        })}
       </div>
     </div>
   );
