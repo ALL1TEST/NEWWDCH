@@ -11759,3 +11759,31 @@ Stage Summary:
 - Honest content throughout: real screenshots only, no invented stats/customers/testimonials, every link a real route; legacy ?for= deep links preserved
 - 10 files changed (4 new: solutions-data, solution-illustrations, solution-page, solutions-overview; 6 modified: marketing-site, marketing-header, mobile-menu, home-page, marketing-footer, content-pages, primitives — plus i18n en/fr); +220/−9 i18n keys per locale, parity 704=704
 - Ready to commit as MKT-SOLUTIONS-1
+
+---
+Task ID: MKT-SOLUTIONS-2
+Agent: main (orchestrator)
+Task: Apply the Content-Publishing content cleanup to ALL solution pages — remove the post-hero intro, the "Built for the way you publish" audience section, the "See what's possible" examples section and "Related resources" from every solution detail page, while keeping Hero / How it works (3 steps + screenshot) / alternating product stories / Benefits / final dark CTA / footer untouched. No redesign — layout, illustrations, screenshots, spacing rhythm, animations and branding unchanged.
+
+Work Log:
+- Inspected first: all 6 solution pages share ONE template (solution-page.tsx) rendered from the typed catalog (solutions-data.tsx) — cleanup applied centrally, automatically covering Content Publishing, SEO, Automation, Multi-Site, Agencies and Integrations
+- Usage audit before deleting anything shared: USE_CASE_CARDS + mkt.usecases.eyebrow + mkt.solp.usecasesTitle/Subtitle are ALSO used by the #/solutions overview audience directory (and home page) → KEPT; SolutionCta shared with overview → KEPT
+- solution-page.tsx: removed SolutionIntro, SolutionUseCases, SolutionPossible, SolutionRelated components + their render calls; page now renders Hero → Workflow (how-it-works) → Stories → Benefits → SolutionCta; pruned now-unused imports (ArrowRight, FileText, ListChecks, Search, Eyebrow, USE_CASE_CARDS); header comment updated to the product-led flow
+- Spacing: no surgery needed — the removed intro's top padding (mkt-section 5.5/7/8rem) is exactly replaced by the workflow band's own top padding; VLM confirmed hero→workflow and benefits→CTA transitions are natural with no gaps
+- solutions-data.tsx: removed dead introTitleKey/introBodyKey/possible fields from SolutionDef interface + all 6 definitions (18 example cards)
+- i18n en+fr: pruned exactly 62 dead keys per locale via line-based script (12 intro + 36 possible + 9 res* + usecaseLink/possibleEyebrow/possibleTitle/possibleSubtitle/relatedTitle); parity verified en = fr = 641, zero orphans/duplicates
+- Final CTA untouched: "Ready to simplify how you publish?" + "Create, optimize and publish your content from one calm workflow." with Get started → #/signup and Explore features → #/features (real routes, verified in DOM)
+
+Verification (agent-browser E2E + VLM):
+- All 6 solution routes: correct per-solution H1; kept = How it works, Chapter stories (+ screenshots: 4 imgs on cp, 3 on seo/au/ms/ag, 2+illustration on integrations), What you get benefits, dark CTA + both buttons, footer; removed = per-solution intro text, "Built for the way you publish", audience cards, "See what's possible", example cards, "Related resources", "From the Karmax blog"/"Explore the feature set"/"Compare plans" — ALL absent on every page
+- Overview #/solutions intact: 6 category cards, audience directory KEPT (its legitimate home), CTA, no overflow
+- FR locale (cms_locale localStorage): French hero/steps/benefits/CTA render; all 4 removed-section French texts absent
+- Responsive: mobile 390 (overflow 0, full structure, VLM PASS) / tablet 768 (overflow 0) / desktop 1440 (overflow 0)
+- 0 page errors, 0 console errors; dev.log clean; tsc: 0 errors in touched files (client-content.ts duplicate media.* key pre-existing, untouched); eslint 0 problems on all 4 changed files; i18n parity 641 = 641
+- Ops: dev server was down after session gap → restarted (single :3000 + single backup-scheduler :3010)
+
+Stage Summary:
+- Every Karmax solution page is now shorter and product-led: Hero → How it works → Product stories → Benefits → dark CTA → Footer
+- 4 files changed: solution-page.tsx (−4 sections), solutions-data.tsx (−3 catalog fields ×6), en/fr client-marketing.ts (−62 keys each, parity kept)
+- Shared components/data preserved for the overview page (USE_CASE_CARDS, usecases keys, SolutionCta)
+- Ready to commit as MKT-SOLUTIONS-2

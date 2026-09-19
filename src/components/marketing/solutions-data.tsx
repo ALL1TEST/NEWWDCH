@@ -63,9 +63,6 @@ export interface SolutionDef {
   heroBodyKey: string;
   /** Hero illustration (original line art — no fake dashboards). */
   heroScene: SceneName;
-  /** "What it does" intro block. */
-  introTitleKey: string;
-  introBodyKey: string;
   /** 3-step workflow. */
   steps: [SolutionStep, SolutionStep, SolutionStep];
   /** Wide screenshot shown under the 3 steps. */
@@ -75,8 +72,6 @@ export interface SolutionDef {
   stories: SolutionStory[];
   /** Practical benefits (factual, per-solution). */
   benefits: string[];
-  /** "See what's possible" example workflows. */
-  possible: { titleKey: string; bodyKey: string }[];
 }
 
 // Reusable point keys keep the catalog honest — these describe
@@ -98,8 +93,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     heroTitleKey: 'mkt.solp.cp.heroTitle',
     heroBodyKey: 'mkt.solp.cp.heroBody',
     heroScene: 'publishing',
-    introTitleKey: 'mkt.solp.cp.introTitle',
-    introBodyKey: 'mkt.solp.cp.introBody',
     steps: [
       { icon: PenLine, titleKey: 'mkt.solp.cp.step1Title', bodyKey: 'mkt.solp.cp.step1Body' },
       { icon: ListChecks, titleKey: 'mkt.solp.cp.step2Title', bodyKey: 'mkt.solp.cp.step2Body' },
@@ -136,11 +129,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
       'mkt.solp.cp.benefit3',
       'mkt.solp.cp.benefit4',
     ],
-    possible: [
-      { titleKey: 'mkt.solp.cp.pos1Title', bodyKey: 'mkt.solp.cp.pos1Body' },
-      { titleKey: 'mkt.solp.cp.pos2Title', bodyKey: 'mkt.solp.cp.pos2Body' },
-      { titleKey: 'mkt.solp.cp.pos3Title', bodyKey: 'mkt.solp.cp.pos3Body' },
-    ],
   },
 
   // ----------------------------------------------------------
@@ -154,8 +142,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     heroTitleKey: 'mkt.solp.seo.heroTitle',
     heroBodyKey: 'mkt.solp.seo.heroBody',
     heroScene: 'seo',
-    introTitleKey: 'mkt.solp.seo.introTitle',
-    introBodyKey: 'mkt.solp.seo.introBody',
     steps: [
       { icon: Search, titleKey: 'mkt.solp.seo.step1Title', bodyKey: 'mkt.solp.seo.step1Body' },
       { icon: ListChecks, titleKey: 'mkt.solp.seo.step2Title', bodyKey: 'mkt.solp.seo.step2Body' },
@@ -185,11 +171,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
       'mkt.solp.seo.benefit3',
       'mkt.solp.seo.benefit4',
     ],
-    possible: [
-      { titleKey: 'mkt.solp.seo.pos1Title', bodyKey: 'mkt.solp.seo.pos1Body' },
-      { titleKey: 'mkt.solp.seo.pos2Title', bodyKey: 'mkt.solp.seo.pos2Body' },
-      { titleKey: 'mkt.solp.seo.pos3Title', bodyKey: 'mkt.solp.seo.pos3Body' },
-    ],
   },
 
   // ----------------------------------------------------------
@@ -203,8 +184,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     heroTitleKey: 'mkt.solp.au.heroTitle',
     heroBodyKey: 'mkt.solp.au.heroBody',
     heroScene: 'automation',
-    introTitleKey: 'mkt.solp.au.introTitle',
-    introBodyKey: 'mkt.solp.au.introBody',
     steps: [
       { icon: Zap, titleKey: 'mkt.solp.au.step1Title', bodyKey: 'mkt.solp.au.step1Body' },
       { icon: Layers, titleKey: 'mkt.solp.au.step2Title', bodyKey: 'mkt.solp.au.step2Body' },
@@ -234,11 +213,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
       'mkt.solp.au.benefit3',
       'mkt.solp.au.benefit4',
     ],
-    possible: [
-      { titleKey: 'mkt.solp.au.pos1Title', bodyKey: 'mkt.solp.au.pos1Body' },
-      { titleKey: 'mkt.solp.au.pos2Title', bodyKey: 'mkt.solp.au.pos2Body' },
-      { titleKey: 'mkt.solp.au.pos3Title', bodyKey: 'mkt.solp.au.pos3Body' },
-    ],
   },
 
   // ----------------------------------------------------------
@@ -252,8 +226,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     heroTitleKey: 'mkt.solp.ms.heroTitle',
     heroBodyKey: 'mkt.solp.ms.heroBody',
     heroScene: 'multisite',
-    introTitleKey: 'mkt.solp.ms.introTitle',
-    introBodyKey: 'mkt.solp.ms.introBody',
     steps: [
       { icon: Plug, titleKey: 'mkt.solp.ms.step1Title', bodyKey: 'mkt.solp.ms.step1Body' },
       { icon: Layers, titleKey: 'mkt.solp.ms.step2Title', bodyKey: 'mkt.solp.ms.step2Body' },
@@ -283,11 +255,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
       'mkt.solp.ms.benefit3',
       'mkt.solp.ms.benefit4',
     ],
-    possible: [
-      { titleKey: 'mkt.solp.ms.pos1Title', bodyKey: 'mkt.solp.ms.pos1Body' },
-      { titleKey: 'mkt.solp.ms.pos2Title', bodyKey: 'mkt.solp.ms.pos2Body' },
-      { titleKey: 'mkt.solp.ms.pos3Title', bodyKey: 'mkt.solp.ms.pos3Body' },
-    ],
   },
 
   // ----------------------------------------------------------
@@ -301,8 +268,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     heroTitleKey: 'mkt.solp.ag.heroTitle',
     heroBodyKey: 'mkt.solp.ag.heroBody',
     heroScene: 'agency',
-    introTitleKey: 'mkt.solp.ag.introTitle',
-    introBodyKey: 'mkt.solp.ag.introBody',
     steps: [
       { icon: Plug, titleKey: 'mkt.solp.ag.step1Title', bodyKey: 'mkt.solp.ag.step1Body' },
       { icon: Users, titleKey: 'mkt.solp.ag.step2Title', bodyKey: 'mkt.solp.ag.step2Body' },
@@ -332,11 +297,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
       'mkt.solp.ag.benefit3',
       'mkt.solp.ag.benefit4',
     ],
-    possible: [
-      { titleKey: 'mkt.solp.ag.pos1Title', bodyKey: 'mkt.solp.ag.pos1Body' },
-      { titleKey: 'mkt.solp.ag.pos2Title', bodyKey: 'mkt.solp.ag.pos2Body' },
-      { titleKey: 'mkt.solp.ag.pos3Title', bodyKey: 'mkt.solp.ag.pos3Body' },
-    ],
   },
 
   // ----------------------------------------------------------
@@ -350,8 +310,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     heroTitleKey: 'mkt.solp.in.heroTitle',
     heroBodyKey: 'mkt.solp.in.heroBody',
     heroScene: 'integrations',
-    introTitleKey: 'mkt.solp.in.introTitle',
-    introBodyKey: 'mkt.solp.in.introBody',
     steps: [
       { icon: Plug, titleKey: 'mkt.solp.in.step1Title', bodyKey: 'mkt.solp.in.step1Body' },
       { icon: Layers, titleKey: 'mkt.solp.in.step2Title', bodyKey: 'mkt.solp.in.step2Body' },
@@ -382,11 +340,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
       'mkt.solp.in.benefit2',
       'mkt.solp.in.benefit3',
       'mkt.solp.in.benefit4',
-    ],
-    possible: [
-      { titleKey: 'mkt.solp.in.pos1Title', bodyKey: 'mkt.solp.in.pos1Body' },
-      { titleKey: 'mkt.solp.in.pos2Title', bodyKey: 'mkt.solp.in.pos2Body' },
-      { titleKey: 'mkt.solp.in.pos3Title', bodyKey: 'mkt.solp.in.pos3Body' },
     ],
   },
 ];

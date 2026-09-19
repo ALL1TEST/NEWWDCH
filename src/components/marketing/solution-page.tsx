@@ -4,23 +4,22 @@
 // SOLUTION DETAIL PAGE — reusable storytelling template
 // ============================================================
 // One high-quality template renders every solution from the
-// catalog (solutions-data.tsx), following the editorial SaaS
-// flow: hero → intro → 3-step workflow → alternating product
-// stories → benefits → use cases → example workflows →
-// related resources → dark CTA. Global header/footer come from
-// the marketing shell — never duplicated here.
+// catalog (solutions-data.tsx), following a focused, product-led
+// flow: hero → 3-step workflow → alternating product stories →
+// benefits → dark CTA. Global header/footer come from the
+// marketing shell — never duplicated here.
 //
-// Honesty rules: screenshots are real captures, benefits and
-// examples describe shipped capabilities only, and every link
-// resolves to an existing route.
+// Honesty rules: screenshots are real captures, benefits
+// describe shipped capabilities only, and every link resolves
+// to an existing route.
 // ============================================================
 
 import React from 'react';
-import { ArrowRight, Check, FileText, ListChecks, Search, Tag } from 'lucide-react';
+import { Check, Tag } from 'lucide-react';
 import { useT } from '@/lib/i18n';
-import { BrowserFrame, Eyebrow, MarketingButton, PointList, Reveal, SectionHeader } from './primitives';
+import { BrowserFrame, MarketingButton, PointList, Reveal, SectionHeader } from './primitives';
 import { MKT } from './marketing-header';
-import { SOLUTION_BY_SLUG, USE_CASE_CARDS, type SolutionDef } from './solutions-data';
+import { SOLUTION_BY_SLUG, type SolutionDef } from './solutions-data';
 import { SceneStage } from './solution-illustrations';
 
 // -------------------- Dark CTA band --------------------
@@ -123,29 +122,6 @@ function SolutionHero({ def }: { def: SolutionDef }) {
             <SceneStage name={def.heroScene} />
           </Reveal>
         </div>
-      </div>
-    </section>
-  );
-}
-
-// -------------------- Intro / what it does --------------------
-
-function SolutionIntro({ def }: { def: SolutionDef }) {
-  const { t } = useT();
-  return (
-    <section className="mkt-section pb-0 sm:pb-0" aria-labelledby="solution-intro-heading">
-      <div className="mkt-container">
-        <Reveal>
-          <div className="mx-auto flex max-w-2xl flex-col items-center gap-5 text-center">
-            <Eyebrow>{t(def.menuTitleKey)}</Eyebrow>
-            <h2 id="solution-intro-heading" className="mkt-h2 text-[1.75rem] text-text-primary sm:text-4xl">
-              {t(def.introTitleKey)}
-            </h2>
-            <p className="text-base leading-relaxed text-text-secondary sm:text-lg">
-              {t(def.introBodyKey)}
-            </p>
-          </div>
-        </Reveal>
       </div>
     </section>
   );
@@ -296,148 +272,6 @@ function SolutionBenefits({ def }: { def: SolutionDef }) {
   );
 }
 
-// -------------------- Use cases --------------------
-
-function SolutionUseCases() {
-  const { t } = useT();
-  const cases = USE_CASE_CARDS.slice(0, 4);
-  return (
-    <section className="mkt-section" aria-labelledby="solution-usecases-heading">
-      <div className="mkt-container">
-        <Reveal>
-          <SectionHeader
-            id="solution-usecases-heading"
-            eyebrow={t('mkt.usecases.eyebrow')}
-            title={t('mkt.solp.usecasesTitle')}
-            subtitle={t('mkt.solp.usecasesSubtitle')}
-          />
-        </Reveal>
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {cases.map((c, i) => {
-            const Icon = c.icon;
-            return (
-              <Reveal key={c.anchor} delay={i * 60}>
-                <a
-                  href={c.href}
-                  className="mkt-card-hover mkt-focus flex h-full flex-col gap-3.5 rounded-2xl border border-border bg-card p-6"
-                >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-mkt-accent-soft text-mkt-accent-soft-fg">
-                    <Icon className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <h3 className="text-base font-semibold text-text-primary">{t(c.titleKey)}</h3>
-                  <p className="text-sm leading-relaxed text-text-secondary">{t(c.bodyKey)}</p>
-                  <span className="mt-auto inline-flex items-center gap-1 text-xs font-semibold text-mkt-accent">
-                    {t('mkt.solp.usecaseLink')} <span aria-hidden="true">→</span>
-                  </span>
-                </a>
-              </Reveal>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// -------------------- Example workflows --------------------
-// Honest alternative to customer stories: real, set-up-today
-// workflows. No names, no numbers, no testimonials.
-
-function SolutionPossible({ def }: { def: SolutionDef }) {
-  const { t } = useT();
-  return (
-    <section className="border-y border-border bg-mkt-surface-2" aria-labelledby="solution-possible-heading">
-      <div className="mkt-container py-16 sm:py-20">
-        <Reveal>
-          <SectionHeader
-            id="solution-possible-heading"
-            eyebrow={t('mkt.solp.possibleEyebrow')}
-            title={t('mkt.solp.possibleTitle')}
-            subtitle={t('mkt.solp.possibleSubtitle')}
-          />
-        </Reveal>
-        <div className="mt-12 grid gap-5 md:grid-cols-3">
-          {def.possible.map((p, i) => (
-            <Reveal key={p.titleKey} delay={i * 70}>
-              <div className="mkt-card-hover flex h-full flex-col gap-3 rounded-2xl border border-border bg-card p-6">
-                <span className="mkt-display text-3xl text-mkt-accent" aria-hidden="true">
-                  {String(i + 1).padStart(2, '0')}
-                </span>
-                <h3 className="text-sm font-semibold text-text-primary">{t(p.titleKey)}</h3>
-                <p className="text-sm leading-relaxed text-text-secondary">{t(p.bodyKey)}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// -------------------- Related resources --------------------
-// Real destinations only: the blog (live articles via the public
-// API), the feature deep-dives on home, and plan comparison.
-
-function SolutionRelated() {
-  const { t } = useT();
-  const resources = [
-    {
-      icon: FileText,
-      titleKey: 'mkt.solp.resBlogTitle',
-      bodyKey: 'mkt.solp.resBlogBody',
-      ctaKey: 'mkt.solp.resBlogCta',
-      href: MKT.blog,
-    },
-    {
-      icon: ListChecks,
-      titleKey: 'mkt.solp.resFeaturesTitle',
-      bodyKey: 'mkt.solp.resFeaturesBody',
-      ctaKey: 'mkt.solp.resFeaturesCta',
-      href: MKT.features,
-    },
-    {
-      icon: Search,
-      titleKey: 'mkt.solp.resPricingTitle',
-      bodyKey: 'mkt.solp.resPricingBody',
-      ctaKey: 'mkt.solp.resPricingCta',
-      href: MKT.pricing,
-    },
-  ];
-
-  return (
-    <section className="mkt-section" aria-labelledby="solution-related-heading">
-      <div className="mkt-container">
-        <Reveal>
-          <SectionHeader id="solution-related-heading" title={t('mkt.solp.relatedTitle')} />
-        </Reveal>
-        <div className="mt-12 grid gap-5 md:grid-cols-3">
-          {resources.map((r, i) => {
-            const Icon = r.icon;
-            return (
-              <Reveal key={r.titleKey} delay={i * 60}>
-                <a
-                  href={r.href}
-                  className="mkt-card-hover mkt-focus group flex h-full flex-col gap-3.5 rounded-2xl border border-border bg-card p-6 transition-colors hover:border-mkt-accent-border"
-                >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-mkt-accent-soft text-mkt-accent-soft-fg">
-                    <Icon className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <h3 className="text-base font-semibold text-text-primary">{t(r.titleKey)}</h3>
-                  <p className="text-sm leading-relaxed text-text-secondary">{t(r.bodyKey)}</p>
-                  <span className="mt-auto inline-flex items-center gap-1 text-sm font-semibold text-mkt-accent">
-                    {t(r.ctaKey)}
-                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-                  </span>
-                </a>
-              </Reveal>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 // -------------------- Page --------------------
 
 export function SolutionPage({ slug }: { slug: string }) {
@@ -447,13 +281,9 @@ export function SolutionPage({ slug }: { slug: string }) {
   return (
     <>
       <SolutionHero def={def} />
-      <SolutionIntro def={def} />
       <SolutionWorkflow def={def} />
       <SolutionStories def={def} />
       <SolutionBenefits def={def} />
-      <SolutionUseCases />
-      <SolutionPossible def={def} />
-      <SolutionRelated />
       <SolutionCta />
     </>
   );

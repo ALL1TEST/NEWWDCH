@@ -372,20 +372,6 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.solp.benefitsTitle': 'Ce que vous obtenez',
   'mkt.solp.usecasesTitle': 'Pensé pour votre façon de publier',
   'mkt.solp.usecasesSubtitle': 'Quoi que vous publiiez, le flux reste serein.',
-  'mkt.solp.usecaseLink': 'Explorer cette solution',
-  'mkt.solp.possibleEyebrow': 'Exemples',
-  'mkt.solp.possibleTitle': 'Voyez ce qui est possible avec Karmax',
-  'mkt.solp.possibleSubtitle': 'Des flux réels que vous pouvez configurer dès aujourd’hui — pas de chiffres inventés, uniquement ce que le produit fait.',
-  'mkt.solp.relatedTitle': 'Ressources associées',
-  'mkt.solp.resBlogTitle': 'Depuis le blog Karmax',
-  'mkt.solp.resBlogBody': 'Mises à jour produit et guides de publication de l’équipe.',
-  'mkt.solp.resBlogCta': 'Lire le blog',
-  'mkt.solp.resFeaturesTitle': 'Explorez les fonctionnalités',
-  'mkt.solp.resFeaturesBody': 'Écriture IA, SEO, automatisation, médias et plus — toutes les capacités en une visite.',
-  'mkt.solp.resFeaturesCta': 'Voir toutes les fonctionnalités',
-  'mkt.solp.resPricingTitle': 'Comparer les offres',
-  'mkt.solp.resPricingBody': 'Découvrez ce que chaque offre inclut, de Free à Max.',
-  'mkt.solp.resPricingCta': 'Voir les tarifs',
   'mkt.solp.ctaTitle': 'Prêt à simplifier votre façon de publier ?',
   'mkt.solp.ctaBody': 'Créez, optimisez et publiez votre contenu depuis un flux serein.',
   'mkt.solp.ctaSecondary': 'Explorer les fonctionnalités',
@@ -403,9 +389,6 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.solp.cp.heroTitle': 'Créez et publiez du contenu sans corvées.',
   'mkt.solp.cp.heroBody':
     'Rédigez avec l’assistance IA, gardez vos médias organisés et vérifiez le SEO en écrivant — puis publiez directement sur WordPress ou n’importe quel CMS REST depuis le même éditeur.',
-  'mkt.solp.cp.introTitle': 'Un seul éditeur, du premier brouillon à l’article publié.',
-  'mkt.solp.cp.introBody':
-    'Karmax remplace le copier-coller. Articles, médias et métadonnées vivent ensemble, les brouillons gardent leur statut et leur auteur, et la publication est un clic — pas une migration.',
   'mkt.solp.cp.step1Title': 'Créer',
   'mkt.solp.cp.step1Body': 'Générez ou rédigez votre contenu avec l’éditeur Karmax et les outils IA — bibliothèque de prompts, file d’attente et compétences éditoriales incluses.',
   'mkt.solp.cp.step2Title': 'Optimiser',
@@ -428,23 +411,11 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.solp.cp.benefit2': 'Réduisez le travail d’écriture répétitif avec les prompts et modèles',
   'mkt.solp.cp.benefit3': 'Gardez les vérifications SEO dans le flux d’écriture, pas après',
   'mkt.solp.cp.benefit4': 'Connectez WordPress ou n’importe quel CMS REST et publiez directement',
-  'mkt.solp.cp.pos1Title': 'La routine de l’article hebdomadaire',
-  'mkt.solp.cp.pos1Body':
-    'Connectez votre site WordPress une fois, rédigez avec l’assistance IA, lancez les vérifications par page, planifiez pour vendredi — et oubliez le travail administratif.',
-  'mkt.solp.cp.pos2Title': 'Un article, tous les sites',
-  'mkt.solp.cp.pos2Body':
-    'Écrivez une fois et adaptez par site : médias de la bibliothèque partagée, objectifs SEO par site et publication directe vers chaque CMS connecté.',
-  'mkt.solp.cp.pos3Title': 'Du backlog d’idées au calendrier',
-  'mkt.solp.cp.pos3Body':
-    'Gardez chaque brouillon dans une seule liste avec statut et auteur, faites-les progresser en validation, et remplissez votre calendrier éditorial sans tableur.',
 
   // ---- Solution : SEO et croissance organique ----
   'mkt.solp.seo.heroTitle': 'Un SEO que vous arrivez réellement à suivre.',
   'mkt.solp.seo.heroBody':
     'Quatorze outils SEO techniques par site — audits, schema, redirections, sitemaps, indexation — avec rapports par page et données Search Console au même endroit.',
-  'mkt.solp.seo.introTitle': 'Le SEO technique, organisé par site.',
-  'mkt.solp.seo.introBody':
-    'Chaque site connecté dispose de son espace SEO : un audit avec un score vivant, les données structurées, un moteur de redirections et l’état d’indexation — rien ne dépend de la mémoire d’un seul spécialiste.',
   'mkt.solp.seo.step1Title': 'Auditer',
   'mkt.solp.seo.step1Body': 'Lancez un audit technique complet par site et traitez la liste des problèmes — titres manquants, canoniques, liens cassés — avec un score SEO vivant.',
   'mkt.solp.seo.step2Title': 'Optimiser',
@@ -464,23 +435,11 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.solp.seo.benefit2': 'Détectez les problèmes techniques avant qu’ils ne coûtent des positions',
   'mkt.solp.seo.benefit3': 'Rapports par page avec mots-clés cibles, intégrés à l’éditeur',
   'mkt.solp.seo.benefit4': 'Redirections, schema et sitemaps gérés par site',
-  'mkt.solp.seo.pos1Title': 'La checklist de lancement',
-  'mkt.solp.seo.pos1Body':
-    'Connectez un nouveau site, lancez le premier audit, corrigez les problèmes critiques et soumettez le sitemap — la même routine reproductible à chaque lancement.',
-  'mkt.solp.seo.pos2Title': 'Le cycle de rafraîchissement',
-  'mkt.solp.seo.pos2Body':
-    'Utilisez les rapports par page pour repérer les métadonnées faibles et les liens cassés, corrigez-les dans l’éditeur et republiez sans quitter Karmax.',
-  'mkt.solp.seo.pos3Title': 'La supervision multi-sites',
-  'mkt.solp.seo.pos3Body':
-    'Basculez entre les espaces SEO de chaque site pour comparer scores et listes de problèmes — un seul endroit pour chaque domaine que vous gérez.',
 
   // ---- Solution : Automatisation du contenu ----
   'mkt.solp.au.heroTitle': 'Mettez votre publication en pilote automatique.',
   'mkt.solp.au.heroBody':
     'Construisez des automatisations visuelles déclenchées par les événements de contenu — planifiez la publication, lancez les vérifications SEO, envoyez des newsletters et notifiez votre équipe pendant que vous dormez.',
-  'mkt.solp.au.introTitle': 'Le travail répétitif, transformé en système.',
-  'mkt.solp.au.introBody':
-    'Chaque automatisation est un flux visuel : un déclencheur, une série d’étapes et un historique d’exécutions auditable. Pas de tâches cron, pas de scripts à surveiller.',
   'mkt.solp.au.step1Title': 'Déclencher',
   'mkt.solp.au.step1Body': 'Partez des événements de contenu — un nouvel article, un changement de statut, un calendrier — ou exécutez de façon récurrente.',
   'mkt.solp.au.step2Title': 'Agir',
@@ -500,23 +459,11 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.solp.au.benefit2': 'Réduisez le travail répétitif avec des flux réutilisables',
   'mkt.solp.au.benefit3': 'Chaque exécution journalisée — un historique auditable',
   'mkt.solp.au.benefit4': 'Newsletters et notifications déclenchées par les événements de contenu',
-  'mkt.solp.au.pos1Title': 'La newsletter du matin',
-  'mkt.solp.au.pos1Body':
-    'Nouvel article publié, les abonnés reçoivent la campagne via votre SMTP et l’équipe est notifiée. Une automatisation, zéro étape manuelle.',
-  'mkt.solp.au.pos2Title': 'Le créneau hebdomadaire',
-  'mkt.solp.au.pos2Body':
-    'Une tâche récurrente publie votre article hebdomadaire au même créneau — avec l’historique d’exécution pour le prouver, chaque semaine.',
-  'mkt.solp.au.pos3Title': 'Des garde-fous automatiques',
-  'mkt.solp.au.pos3Body':
-    'Déclenchez des vérifications à chaque changement de statut pour que rien ne parte sans ses métadonnées et ses mots-clés cibles.',
 
   // ---- Solution : Gestion multi-sites ----
   'mkt.solp.ms.heroTitle': 'Tous vos sites, une seule connexion.',
   'mkt.solp.ms.heroBody':
     'Basculez entre sites clients, blogs personnels et projets annexes en un instant — avec isolation des données par site, rôles et permissions sur chacun.',
-  'mkt.solp.ms.introTitle': 'Le multi-sites sans jonglage d’onglets.',
-  'mkt.solp.ms.introBody':
-    'Chaque site garde ses articles, ses médias, son espace SEO et ses réglages. Le sélecteur vous fait passer de l’un à l’autre en un clic, et les limites d’offre s’appliquent par site.',
   'mkt.solp.ms.step1Title': 'Connecter',
   'mkt.solp.ms.step1Body': 'Ajoutez des sites WordPress ou CMS REST avec le vérificateur de connexion — Karmax confirme l’accès en écriture avant toute publication.',
   'mkt.solp.ms.step2Title': 'Organiser',
@@ -537,23 +484,11 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.solp.ms.benefit2': 'Isolation par site des données, médias et réglages',
   'mkt.solp.ms.benefit3': 'Rôles et permissions granulaires par site',
   'mkt.solp.ms.benefit4': 'Sites illimités avec l’offre Max',
-  'mkt.solp.ms.pos1Title': 'L’éditeur de portefeuille',
-  'mkt.solp.ms.pos1Body':
-    'Cinq sites de niche, une routine de lundi : basculer, vérifier chaque tableau de bord, publier les articles de la semaine — le tout avant le café.',
-  'mkt.solp.ms.pos2Title': 'La séparation par défaut',
-  'mkt.solp.ms.pos2Body':
-    'Les médias d’un site n’apparaissent jamais dans la bibliothèque d’un autre — dossiers et périmètre par site l’imposent.',
-  'mkt.solp.ms.pos3Title': 'Grandir jusqu’à Max',
-  'mkt.solp.ms.pos3Body':
-    'Commencez avec l’offre Free et trois sites, puis ajoutez-en au fil du temps — l’espace de travail reste le même.',
 
   // ---- Solution : Agences et équipes ----
   'mkt.solp.ag.heroTitle': 'Gérez tous vos sites clients depuis un seul espace.',
   'mkt.solp.ag.heroBody':
     'Agences et équipes disposent de l’isolation par site, des rôles et permissions, des flux de validation et de l’automatisation — la colonne vertébrale de la publication client.',
-  'mkt.solp.ag.introTitle': 'Le travail client, avec garde-fous.',
-  'mkt.solp.ag.introBody':
-    'Admins, éditeurs et auteurs reçoivent exactement les permissions dont ils ont besoin. Les validations font circuler les brouillons dans l’équipe, et les données de chaque client restent dans leur espace dédié.',
   'mkt.solp.ag.step1Title': 'Configurer les clients',
   'mkt.solp.ag.step1Body': 'Connectez le site WordPress ou CMS REST de chaque client et invitez l’équipe avec des rôles — admin, éditeur, auteur.',
   'mkt.solp.ag.step2Title': 'Faire tourner le flux',
@@ -576,23 +511,11 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.solp.ag.benefit2': 'Rôles et permissions granulaires par site',
   'mkt.solp.ag.benefit3': 'Flux de validation avec commentaires et tâches',
   'mkt.solp.ag.benefit4': 'Automatisations pour le travail client récurrent',
-  'mkt.solp.ag.pos1Title': 'La routine d’onboarding client',
-  'mkt.solp.ag.pos1Body':
-    'Connectez le site, définissez les rôles, chargez la bibliothèque média et planifiez le premier mois — une seule checklist, un seul espace.',
-  'mkt.solp.ag.pos2Title': 'La validation sans fil d’e-mails',
-  'mkt.solp.ag.pos2Body':
-    'Les auteurs soumettent, les éditeurs relisent le même brouillon, et les commentaires vivent à côté du contenu — le retour ne s’éparpille jamais.',
-  'mkt.solp.ag.pos3Title': 'Les livrables récurrents',
-  'mkt.solp.ag.pos3Body':
-    'Les articles hebdomadaires de chaque client deviennent des automatisations planifiées ; l’équipe relit la production, pas la logistique.',
 
   // ---- Solution : Intégrations ----
   'mkt.solp.in.heroTitle': 'Se connecte au CMS que vous utilisez déjà.',
   'mkt.solp.in.heroBody':
     'WordPress en natif, n’importe quel CMS REST via l’adaptateur standard, votre propre SMTP pour l’e-mail, vos propres clés IA — Karmax parle à votre stack via des API documentées.',
-  'mkt.solp.in.introTitle': 'Plateforme ouverte, sans enfermement.',
-  'mkt.solp.in.introBody':
-    'Pas de plugin propriétaire, pas d’otage à l’export. Les connexions sont vérifiées avant usage, les clés restent les vôtres, et les webhooks laissent le reste de votre stack réagir aux événements de contenu.',
   'mkt.solp.in.step1Title': 'Connecter',
   'mkt.solp.in.step1Body': 'Ajoutez WordPress ou un CMS REST avec authentification par clé d’API et vérifiez l’accès en écriture avant de publier.',
   'mkt.solp.in.step2Title': 'Étendre',
@@ -615,15 +538,6 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.solp.in.benefit2': 'Vérification de connexion avant toute publication',
   'mkt.solp.in.benefit3': 'Votre propre SMTP, vos clés IA et la protection anti-spam',
   'mkt.solp.in.benefit4': 'Webhooks sortants pour les événements de contenu',
-  'mkt.solp.in.pos1Title': 'Le natif WordPress',
-  'mkt.solp.in.pos1Body':
-    'Connectez-vous via l’API REST, vérifiez l’accès en écriture et publiez directement — articles, médias et métadonnées arrivent au bon endroit.',
-  'mkt.solp.in.pos2Title': 'CMS headless ou sur mesure',
-  'mkt.solp.in.pos2Body':
-    'L’adaptateur REST standard avec clé d’API connecte les stacks personnalisées — une seule configuration, le même flux de publication.',
-  'mkt.solp.in.pos3Title': 'Une stack pilotée par les événements',
-  'mkt.solp.in.pos3Body':
-    'Les webhooks notifient votre chat, votre CRM ou votre analytique à chaque publication — Karmax devient votre source d’événements de contenu.',
 
   // ---- Page de connexion ----
   'mkt.login.title': 'Content de vous revoir.',
