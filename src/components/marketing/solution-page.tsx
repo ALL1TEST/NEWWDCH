@@ -5,11 +5,11 @@
 // ============================================================
 // One high-quality template renders every solution from the
 // catalog (solutions-data.tsx), following a focused, product-led
-// flow: hero → 3-step workflow → alternating product stories →
-// benefits — then straight into the global footer (no closing
-// CTA band on detail pages; the dark CTA lives on the solutions
-// overview only). Global header/footer come from the marketing
-// shell — never duplicated here.
+// flow: hero → alternating product stories → benefits — then
+// straight into the global footer (no closing CTA band on detail
+// pages; the dark CTA lives on the solutions overview only).
+// Global header/footer come from the marketing shell — never
+// duplicated here.
 //
 // Honesty rules: screenshots are real captures, benefits
 // describe shipped capabilities only, and every link resolves
@@ -82,7 +82,9 @@ function SolutionHero({ def }: { def: SolutionDef }) {
   const learnMore = (e: React.MouseEvent<HTMLAnchorElement>) => {
     // In-page anchor without touching the hash router.
     e.preventDefault();
-    document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document
+      .getElementById('inside-the-product')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   return (
@@ -115,7 +117,7 @@ function SolutionHero({ def }: { def: SolutionDef }) {
                 <MarketingButton href={MKT.signup} size="lg" withArrow>
                   {t('mkt.nav.getStarted')}
                 </MarketingButton>
-                <MarketingButton href="#how-it-works" size="lg" variant="secondary" onClick={learnMore}>
+                <MarketingButton href="#inside-the-product" size="lg" variant="secondary" onClick={learnMore}>
                   {t('mkt.solp.learnMore')}
                 </MarketingButton>
               </div>
@@ -140,78 +142,14 @@ function SolutionHero({ def }: { def: SolutionDef }) {
   );
 }
 
-// -------------------- Hero divider --------------------
-// Content Publishing: a plain, full-width hairline between the
-// hero and the "How it works" band. Deliberately just a line —
-// no icon, badge, illustration or any other decoration.
-
-function SolutionHeroDivider() {
-  return <div className="h-px w-full bg-border" aria-hidden="true" />;
-}
-
-// -------------------- 3-step workflow --------------------
-
-function SolutionWorkflow({ def, divided = false }: { def: SolutionDef; divided?: boolean }) {
-  const { t } = useT();
-  return (
-    <section
-      id="how-it-works"
-      className={`mkt-section scroll-mt-24 border-border bg-mkt-surface-2 ${divided ? 'border-b' : 'border-y'}`}
-      aria-labelledby="solution-workflow-heading"
-    >
-      <div className="mkt-container">
-        <Reveal>
-          <SectionHeader id="solution-workflow-heading" title={t('mkt.solp.workflowTitle')} />
-        </Reveal>
-
-        <ol className="relative mt-14 grid gap-10 md:grid-cols-3 lg:gap-8">
-          {/* connector (desktop) */}
-          <div
-            className="pointer-events-none absolute left-[16%] right-[16%] top-6 hidden h-px bg-border md:block"
-            aria-hidden="true"
-          />
-          {def.steps.map((s, i) => {
-            const Icon = s.icon;
-            return (
-              <Reveal as="li" key={s.titleKey} delay={i * 90}>
-                <div className="relative flex h-full flex-col gap-4">
-                  <div className="flex items-center gap-4">
-                    <span className="relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border bg-card text-mkt-accent shadow-sm">
-                      <Icon className="h-5 w-5" aria-hidden="true" />
-                    </span>
-                    <span className="mkt-display text-4xl text-border" aria-hidden="true">
-                      0{i + 1}
-                    </span>
-                  </div>
-                  <h3 className="text-base font-semibold text-text-primary">{t(s.titleKey)}</h3>
-                  <p className="text-sm leading-relaxed text-text-secondary">{t(s.bodyKey)}</p>
-                </div>
-              </Reveal>
-            );
-          })}
-        </ol>
-
-        {/* the real product, wide */}
-        <Reveal delay={180}>
-          <div className="mx-auto mt-14 w-full max-w-4xl">
-            <BrowserFrame
-              src={def.stepsShot}
-              alt={`${t(def.menuTitleKey)} — ${t('mkt.brand.name')}`}
-              label={t(def.stepsShotLabelKey)}
-            />
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
 // -------------------- Alternating product stories --------------------
+// First section after the hero — carries the id the hero's
+// "Learn more" button scrolls to.
 
 function SolutionStories({ def }: { def: SolutionDef }) {
   const { t } = useT();
   return (
-    <section className="mkt-section" aria-labelledby="solution-stories-heading">
+    <section id="inside-the-product" className="mkt-section scroll-mt-24" aria-labelledby="solution-stories-heading">
       <div className="mkt-container flex flex-col gap-16 sm:gap-24">
         <Reveal>
           <h2 id="solution-stories-heading" className="sr-only">
@@ -300,16 +238,9 @@ export function SolutionPage({ slug }: { slug: string }) {
   const def = SOLUTION_BY_SLUG[slug];
   if (!def) return null; // router validates slugs — unreachable safety net
 
-  // Content Publishing separates its hero from the workflow
-  // band with a plain hairline divider (scoped change — the
-  // other solutions keep the band's own top border).
-  const heroDivider = slug === 'content-publishing';
-
   return (
     <>
       <SolutionHero def={def} />
-      {heroDivider && <SolutionHeroDivider />}
-      <SolutionWorkflow def={def} divided={heroDivider} />
       <SolutionStories def={def} />
       <SolutionBenefits def={def} />
     </>

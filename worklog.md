@@ -11894,3 +11894,28 @@ Stage Summary:
 - Solution heroes (6 detail pages + overview) now show a professional video-preview card: real product capture, darkened overlay, perfectly centered play button, Product preview chip, working lightbox — replacing the line-art stage and its decorative blob
 - Get started button area is completely clean at all breakpoints (blob removed with the old illustration)
 - 5 files changed + 1 new component; ready to commit as MKT-SOL-VIDEO-1
+
+---
+Task ID: sol-remove-howitworks-1
+Agent: main (Z.ai Code)
+Task: Remove the entire "How it works" section from solution detail pages
+
+Work Log:
+- Removed SolutionWorkflow component from solution-page.tsx: "How it works" SectionHeader, 3-step <ol> (icons, 01/02/03 numbers, titles, descriptions), desktop connector line, and the wide BrowserFrame screenshot rendered inside that section
+- Removed SolutionHeroDivider + heroDivider slug logic (its sole purpose was separating hero from the How-it-works band; content-publishing now flows hero → stories like the rest)
+- Kept "Learn more" functional: scroll target moved from #how-it-works to the stories section (id="inside-the-product" + scroll-mt-24) — lands at the same 96px sticky-header offset as before
+- stepsShot/stepsShotLabelKey data fields KEPT — now power the hero video-preview poster/lightbox label
+- Data cleanup: removed dead `steps` interface field, SolutionStep type, 6 steps arrays, unused CalendarClock/ListChecks imports (Layers kept — USE_CASE_CARDS)
+- i18n: pruned 37 dead keys per locale (mkt.solp.workflowTitle + 36 step Title/Body keys) from en + fr; parity verified 596 = 596, no orphans; other 36 locales unaffected (fallback chain)
+- Updated file header comment flow: hero → alternating product stories → benefits
+
+Verification (agent-browser E2E + VLM):
+- All 6 solution pages: "How it works" text absent, 01/02/03 step numbers absent, #how-it-works element absent, divider gone; section order = hero → inside-the-product → benefits → footer; gap hero→stories = 0px on desktop AND mobile (390px), no horizontal overflow
+- VLM full-page check: next section starts naturally with no large empty gap, no leftover connector/step icons/orphaned screenshot, stories + benefits intact
+- Learn more → smooth-scrolls to stories landing at top:96 (scroll-mt-24), same UX as before; Get started → #/signup unchanged
+- Solutions OVERVIEW page untouched: its own 4-step workflow still present, H1 "Solutions for every publishing goal."
+- tsc 0 errors in touched files; eslint 0 problems in touched files; en/fr parity 596=596; console + page errors + dev.log clean
+
+Stage Summary:
+- Solution detail flow is now hero (title/description/CTAs/video preview) → product stories → benefits; the 3-step workflow band and its exclusive visuals are fully removed with zero gap left behind
+- 4 files changed, +13/−196; ready to commit as MKT-SOL-NOHIW-1

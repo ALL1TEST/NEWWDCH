@@ -375,7 +375,6 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.solp.previewChip': 'Product preview',
   'mkt.solp.openPreview': 'Open the product preview',
   'mkt.solp.closePreview': 'Close preview',
-  'mkt.solp.workflowTitle': 'How it works',
   'mkt.solp.storiesTitle': 'Inside the product',
   'mkt.solp.storyLabel': 'Chapter',
   'mkt.solp.benefitsEyebrow': 'Benefits',
@@ -399,12 +398,6 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.solp.cp.heroTitle': 'Create and publish content without the busywork.',
   'mkt.solp.cp.heroBody':
     'Draft with AI assistance, keep media organized and check SEO as you write — then publish straight to WordPress or any REST CMS from the same editor.',
-  'mkt.solp.cp.step1Title': 'Create',
-  'mkt.solp.cp.step1Body': 'Generate or write your content with the Karmax editor and AI tools — prompts library, job queue and editorial skills included.',
-  'mkt.solp.cp.step2Title': 'Optimize',
-  'mkt.solp.cp.step2Body': 'Improve SEO, metadata, structure and media before publishing, with per-page checks and focus keywords.',
-  'mkt.solp.cp.step3Title': 'Publish',
-  'mkt.solp.cp.step3Body': 'Send content directly to connected WordPress or REST CMS sites — immediately or on a schedule.',
   'mkt.solp.cp.story1Title': 'Write with AI that fits your workflow.',
   'mkt.solp.cp.story1Body':
     'Draft complete articles with AI assistance, reusable prompt templates and editorial skills for content style and SEO ranking. Bring your own provider and keep control of models and usage.',
@@ -426,12 +419,6 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.solp.seo.heroTitle': 'SEO you can actually keep up with.',
   'mkt.solp.seo.heroBody':
     'Fourteen technical SEO tools per site — audits, schema, redirects, sitemaps, indexing — with per-page reports and Search Console data in one place.',
-  'mkt.solp.seo.step1Title': 'Audit',
-  'mkt.solp.seo.step1Body': 'Run a full technical audit per site and work the issue list — missing headings, canonicals, broken links — with a living SEO score.',
-  'mkt.solp.seo.step2Title': 'Optimize',
-  'mkt.solp.seo.step2Body': 'Set focus keywords per page, fix metadata and schema, and preview social cards before anything ships.',
-  'mkt.solp.seo.step3Title': 'Monitor',
-  'mkt.solp.seo.step3Body': 'Track sitemap status, robots.txt and Search Console indexing views as content publishes.',
   'mkt.solp.seo.story1Title': 'A living SEO score, not a quarterly PDF.',
   'mkt.solp.seo.story1Body':
     'The overview shows the score, the issues behind it and the status of sitemaps and Search Console connectivity — updated as you fix things.',
@@ -450,12 +437,6 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.solp.au.heroTitle': 'Put your publishing on autopilot.',
   'mkt.solp.au.heroBody':
     'Build visual automations that trigger on content events — schedule publishing, run SEO checks, send newsletters and notify your team while you sleep.',
-  'mkt.solp.au.step1Title': 'Trigger',
-  'mkt.solp.au.step1Body': 'Start from content events — a new article, a status change, a schedule — or run on a recurring calendar.',
-  'mkt.solp.au.step2Title': 'Act',
-  'mkt.solp.au.step2Body': 'Chain steps that publish, check SEO, send newsletters over your SMTP, or fire webhooks to the rest of your stack.',
-  'mkt.solp.au.step3Title': 'Monitor',
-  'mkt.solp.au.step3Body': 'Every run is logged with status and errors, so you can see what happened and when.',
   'mkt.solp.au.story1Title': 'Visual workflows with a paper trail.',
   'mkt.solp.au.story1Body':
     'Active and completed run counts, plus trigger, status and schedule per automation — the table tells you what ran and what needs a look.',
@@ -474,12 +455,6 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.solp.ms.heroTitle': 'Every site you run, one login.',
   'mkt.solp.ms.heroBody':
     'Switch between client sites, personal blogs and side projects instantly — with per-site data isolation, roles and permissions on each.',
-  'mkt.solp.ms.step1Title': 'Connect',
-  'mkt.solp.ms.step1Body': 'Add WordPress or REST CMS sites with the connection verifier — Karmax confirms write access before anything ships.',
-  'mkt.solp.ms.step2Title': 'Organize',
-  'mkt.solp.ms.step2Body': 'Give each site its own media folders, SEO targets and team roles.',
-  'mkt.solp.ms.step3Title': 'Switch',
-  'mkt.solp.ms.step3Body': 'Move between sites instantly — data, permissions and settings stay isolated per site.',
   'mkt.solp.ms.story1Title': 'A home screen per site.',
   'mkt.solp.ms.story1Body':
     'Visitors, content counts, health score, pending actions and recent content — one dashboard per site, no mixed data.',
@@ -499,12 +474,6 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.solp.ag.heroTitle': 'Run every client site from one workspace.',
   'mkt.solp.ag.heroBody':
     'Agencies and teams get per-site isolation, roles and permissions, review workflows and automation — the operational backbone of client publishing.',
-  'mkt.solp.ag.step1Title': 'Set up clients',
-  'mkt.solp.ag.step1Body': 'Connect each client’s WordPress or REST CMS site and invite the team with roles — admin, editor, author.',
-  'mkt.solp.ag.step2Title': 'Run the workflow',
-  'mkt.solp.ag.step2Body': 'Drafts move through review with comments and tasks; the calendar keeps publishing predictable.',
-  'mkt.solp.ag.step3Title': 'Prove the work',
-  'mkt.solp.ag.step3Body': 'Run history, statuses and per-site dashboards show every client what shipped and when.',
   'mkt.solp.ag.story1Title': 'The Monday standup view.',
   'mkt.solp.ag.story1Body':
     'Per-site dashboards with pending actions, traffic and recent content — the numbers you need before the client call.',
@@ -526,12 +495,6 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.solp.in.heroTitle': 'Connects to the CMS you already use.',
   'mkt.solp.in.heroBody':
     'WordPress natively, any REST CMS through the standard adapter, your own SMTP for email, your own AI keys — Karmax talks to your stack through documented APIs.',
-  'mkt.solp.in.step1Title': 'Connect',
-  'mkt.solp.in.step1Body': 'Add WordPress or a REST CMS with API-key authentication and verify write access before publishing.',
-  'mkt.solp.in.step2Title': 'Extend',
-  'mkt.solp.in.step2Body': 'Plug in your own SMTP server, your AI providers and Akismet for spam protection.',
-  'mkt.solp.in.step3Title': 'React',
-  'mkt.solp.in.step3Body': 'Outgoing webhooks fire on content events so your other tools stay in sync.',
   'mkt.solp.in.story1Title': 'Your keys, your models.',
   'mkt.solp.in.story1Body':
     'AI providers are configured per workspace — models, keys and usage tracked — so the intelligence stays on your accounts.',

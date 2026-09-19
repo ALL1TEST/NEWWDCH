@@ -18,9 +18,7 @@
 
 import React from 'react';
 import {
-  CalendarClock,
   Layers,
-  ListChecks,
   type LucideIcon,
   Network,
   PenLine,
@@ -46,12 +44,6 @@ export interface SolutionStory {
   points: string[];
 }
 
-export interface SolutionStep {
-  icon: LucideIcon;
-  titleKey: string;
-  bodyKey: string;
-}
-
 export interface SolutionDef {
   slug: string;
   icon: LucideIcon;
@@ -61,9 +53,7 @@ export interface SolutionDef {
   /** Hero. */
   heroTitleKey: string;
   heroBodyKey: string;
-  /** 3-step workflow. */
-  steps: [SolutionStep, SolutionStep, SolutionStep];
-  /** Wide screenshot shown under the 3 steps. */
+  /** Hero video-preview poster (real product capture). */
   stepsShot: string;
   stepsShotLabelKey: string;
   /** Alternating [visual] [text] sections. */
@@ -90,11 +80,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     menuDescKey: 'mkt.menu.contentPublishingDesc',
     heroTitleKey: 'mkt.solp.cp.heroTitle',
     heroBodyKey: 'mkt.solp.cp.heroBody',
-    steps: [
-      { icon: PenLine, titleKey: 'mkt.solp.cp.step1Title', bodyKey: 'mkt.solp.cp.step1Body' },
-      { icon: ListChecks, titleKey: 'mkt.solp.cp.step2Title', bodyKey: 'mkt.solp.cp.step2Body' },
-      { icon: Plug, titleKey: 'mkt.solp.cp.step3Title', bodyKey: 'mkt.solp.cp.step3Body' },
-    ],
     stepsShot: '/marketing/shot-ai.png',
     stepsShotLabelKey: 'mkt.showcase.ai',
     stories: [
@@ -138,11 +123,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     menuDescKey: 'mkt.menu.seoDesc',
     heroTitleKey: 'mkt.solp.seo.heroTitle',
     heroBodyKey: 'mkt.solp.seo.heroBody',
-    steps: [
-      { icon: Search, titleKey: 'mkt.solp.seo.step1Title', bodyKey: 'mkt.solp.seo.step1Body' },
-      { icon: ListChecks, titleKey: 'mkt.solp.seo.step2Title', bodyKey: 'mkt.solp.seo.step2Body' },
-      { icon: CalendarClock, titleKey: 'mkt.solp.seo.step3Title', bodyKey: 'mkt.solp.seo.step3Body' },
-    ],
     stepsShot: '/marketing/shot-seo.png',
     stepsShotLabelKey: 'mkt.showcase.seo',
     stories: [
@@ -179,11 +159,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     menuDescKey: 'mkt.menu.automationDesc',
     heroTitleKey: 'mkt.solp.au.heroTitle',
     heroBodyKey: 'mkt.solp.au.heroBody',
-    steps: [
-      { icon: Zap, titleKey: 'mkt.solp.au.step1Title', bodyKey: 'mkt.solp.au.step1Body' },
-      { icon: Layers, titleKey: 'mkt.solp.au.step2Title', bodyKey: 'mkt.solp.au.step2Body' },
-      { icon: ListChecks, titleKey: 'mkt.solp.au.step3Title', bodyKey: 'mkt.solp.au.step3Body' },
-    ],
     stepsShot: '/marketing/shot-automation.png',
     stepsShotLabelKey: 'mkt.showcase.automation',
     stories: [
@@ -220,11 +195,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     menuDescKey: 'mkt.menu.multiSiteDesc',
     heroTitleKey: 'mkt.solp.ms.heroTitle',
     heroBodyKey: 'mkt.solp.ms.heroBody',
-    steps: [
-      { icon: Plug, titleKey: 'mkt.solp.ms.step1Title', bodyKey: 'mkt.solp.ms.step1Body' },
-      { icon: Layers, titleKey: 'mkt.solp.ms.step2Title', bodyKey: 'mkt.solp.ms.step2Body' },
-      { icon: Network, titleKey: 'mkt.solp.ms.step3Title', bodyKey: 'mkt.solp.ms.step3Body' },
-    ],
     stepsShot: '/marketing/shot-dashboard.png',
     stepsShotLabelKey: 'mkt.showcase.dashboard',
     stories: [
@@ -261,11 +231,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     menuDescKey: 'mkt.menu.agenciesDesc',
     heroTitleKey: 'mkt.solp.ag.heroTitle',
     heroBodyKey: 'mkt.solp.ag.heroBody',
-    steps: [
-      { icon: Plug, titleKey: 'mkt.solp.ag.step1Title', bodyKey: 'mkt.solp.ag.step1Body' },
-      { icon: Users, titleKey: 'mkt.solp.ag.step2Title', bodyKey: 'mkt.solp.ag.step2Body' },
-      { icon: ListChecks, titleKey: 'mkt.solp.ag.step3Title', bodyKey: 'mkt.solp.ag.step3Body' },
-    ],
     stepsShot: '/marketing/shot-articles.png',
     stepsShotLabelKey: 'mkt.showcase.dashboard',
     stories: [
@@ -302,11 +267,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     menuDescKey: 'mkt.menu.integrationsDesc',
     heroTitleKey: 'mkt.solp.in.heroTitle',
     heroBodyKey: 'mkt.solp.in.heroBody',
-    steps: [
-      { icon: Plug, titleKey: 'mkt.solp.in.step1Title', bodyKey: 'mkt.solp.in.step1Body' },
-      { icon: Layers, titleKey: 'mkt.solp.in.step2Title', bodyKey: 'mkt.solp.in.step2Body' },
-      { icon: Zap, titleKey: 'mkt.solp.in.step3Title', bodyKey: 'mkt.solp.in.step3Body' },
-    ],
     stepsShot: '/marketing/shot-automation.png',
     stepsShotLabelKey: 'mkt.showcase.automation',
     stories: [
