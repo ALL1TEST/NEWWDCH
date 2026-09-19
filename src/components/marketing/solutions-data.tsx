@@ -61,8 +61,6 @@ export interface SolutionDef {
   /** Hero. */
   heroTitleKey: string;
   heroBodyKey: string;
-  /** Hero illustration (original line art — no fake dashboards). */
-  heroScene: SceneName;
   /** 3-step workflow. */
   steps: [SolutionStep, SolutionStep, SolutionStep];
   /** Wide screenshot shown under the 3 steps. */
@@ -92,7 +90,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     menuDescKey: 'mkt.menu.contentPublishingDesc',
     heroTitleKey: 'mkt.solp.cp.heroTitle',
     heroBodyKey: 'mkt.solp.cp.heroBody',
-    heroScene: 'publishing',
     steps: [
       { icon: PenLine, titleKey: 'mkt.solp.cp.step1Title', bodyKey: 'mkt.solp.cp.step1Body' },
       { icon: ListChecks, titleKey: 'mkt.solp.cp.step2Title', bodyKey: 'mkt.solp.cp.step2Body' },
@@ -141,7 +138,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     menuDescKey: 'mkt.menu.seoDesc',
     heroTitleKey: 'mkt.solp.seo.heroTitle',
     heroBodyKey: 'mkt.solp.seo.heroBody',
-    heroScene: 'seo',
     steps: [
       { icon: Search, titleKey: 'mkt.solp.seo.step1Title', bodyKey: 'mkt.solp.seo.step1Body' },
       { icon: ListChecks, titleKey: 'mkt.solp.seo.step2Title', bodyKey: 'mkt.solp.seo.step2Body' },
@@ -183,7 +179,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     menuDescKey: 'mkt.menu.automationDesc',
     heroTitleKey: 'mkt.solp.au.heroTitle',
     heroBodyKey: 'mkt.solp.au.heroBody',
-    heroScene: 'automation',
     steps: [
       { icon: Zap, titleKey: 'mkt.solp.au.step1Title', bodyKey: 'mkt.solp.au.step1Body' },
       { icon: Layers, titleKey: 'mkt.solp.au.step2Title', bodyKey: 'mkt.solp.au.step2Body' },
@@ -225,7 +220,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     menuDescKey: 'mkt.menu.multiSiteDesc',
     heroTitleKey: 'mkt.solp.ms.heroTitle',
     heroBodyKey: 'mkt.solp.ms.heroBody',
-    heroScene: 'multisite',
     steps: [
       { icon: Plug, titleKey: 'mkt.solp.ms.step1Title', bodyKey: 'mkt.solp.ms.step1Body' },
       { icon: Layers, titleKey: 'mkt.solp.ms.step2Title', bodyKey: 'mkt.solp.ms.step2Body' },
@@ -267,7 +261,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     menuDescKey: 'mkt.menu.agenciesDesc',
     heroTitleKey: 'mkt.solp.ag.heroTitle',
     heroBodyKey: 'mkt.solp.ag.heroBody',
-    heroScene: 'agency',
     steps: [
       { icon: Plug, titleKey: 'mkt.solp.ag.step1Title', bodyKey: 'mkt.solp.ag.step1Body' },
       { icon: Users, titleKey: 'mkt.solp.ag.step2Title', bodyKey: 'mkt.solp.ag.step2Body' },
@@ -309,7 +302,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     menuDescKey: 'mkt.menu.integrationsDesc',
     heroTitleKey: 'mkt.solp.in.heroTitle',
     heroBodyKey: 'mkt.solp.in.heroBody',
-    heroScene: 'integrations',
     steps: [
       { icon: Plug, titleKey: 'mkt.solp.in.step1Title', bodyKey: 'mkt.solp.in.step1Body' },
       { icon: Layers, titleKey: 'mkt.solp.in.step2Title', bodyKey: 'mkt.solp.in.step2Body' },

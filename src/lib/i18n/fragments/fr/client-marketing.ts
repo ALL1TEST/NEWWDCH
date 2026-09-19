@@ -365,6 +365,9 @@ export const clientMarketingFr: Record<string, string> = {
 
   // ---- Gabarit partagé des pages solution ----
   'mkt.solp.learnMore': 'En savoir plus',
+  'mkt.solp.previewChip': 'Aperçu du produit',
+  'mkt.solp.openPreview': 'Ouvrir l’aperçu du produit',
+  'mkt.solp.closePreview': 'Fermer l’aperçu',
   'mkt.solp.workflowTitle': 'Comment ça marche',
   'mkt.solp.storiesTitle': 'Dans le produit',
   'mkt.solp.storyLabel': 'Chapitre',

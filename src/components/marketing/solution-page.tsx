@@ -23,6 +23,7 @@ import { BrowserFrame, MarketingButton, PointList, Reveal, SectionHeader } from 
 import { MKT } from './marketing-header';
 import { SOLUTION_BY_SLUG, type SolutionDef } from './solutions-data';
 import { SceneStage } from './solution-illustrations';
+import { SolutionVideoPreview } from './solution-video-preview';
 
 // -------------------- Dark CTA band --------------------
 // The strong, full-width close — charcoal band, peach glow,
@@ -121,9 +122,17 @@ function SolutionHero({ def }: { def: SolutionDef }) {
             </div>
           </Reveal>
 
-          {/* Original illustration on a soft stage */}
+          {/* Product video preview — real capture, centered
+              play button, opens a full-size lightbox. Replaces
+              the old line-art stage (and its decorative backdrop
+              blob that peeked out around the card edges). */}
           <Reveal delay={140}>
-            <SceneStage name={def.heroScene} />
+            <SolutionVideoPreview
+              poster={def.stepsShot}
+              title={t(def.menuTitleKey)}
+              label={t(def.stepsShotLabelKey)}
+              className="mx-auto w-full max-w-xl lg:mx-0 lg:max-w-none"
+            />
           </Reveal>
         </div>
       </div>

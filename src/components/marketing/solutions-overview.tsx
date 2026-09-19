@@ -19,7 +19,7 @@ import {
   USE_CASE_CARDS,
   solutionHref,
 } from './solutions-data';
-import { SceneStage } from './solution-illustrations';
+import { SolutionVideoPreview } from './solution-video-preview';
 import { SolutionCta } from './solution-page';
 import {
   CalendarClock,
@@ -62,7 +62,12 @@ function OverviewHero() {
             </div>
           </Reveal>
           <Reveal delay={140}>
-            <SceneStage name="platform" />
+            <SolutionVideoPreview
+              poster="/marketing/shot-dashboard.png"
+              title={t('mkt.nav.solutions')}
+              label={t('mkt.showcase.dashboard')}
+              className="mx-auto w-full max-w-xl lg:mx-0 lg:max-w-none"
+            />
           </Reveal>
         </div>
       </div>

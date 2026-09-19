@@ -11866,3 +11866,31 @@ Stage Summary:
 - Single canonical dev server: bun run dev → next dev -p 3000, kept alive by .zscripts/dev-supervisor.sh (PPID=1, survives sessions); backup-scheduler mini-service running; dev-runners stopped (files kept — they are tracked in repo)
 - Dirty pre-sync state preserved in git stash "backup: dirty working tree pre-repo-sync 20260919-231349"
 - UI/features browser-verified to match repository: footer rebuild, solutions mega-menu + story pages, features anchors all live; no old project served
+
+---
+Task ID: sol-hero-video-1
+Agent: main (Z.ai Code)
+Task: Rebuild solution page hero right-side visual as HubSpot-style video preview; remove stray decorative artifact under Get started button
+
+Work Log:
+- Diagnosed "stray icon under Get started": SceneStage's organic backdrop blob (absolute SVG behind the rounded illustration card) peeked out around the card corners — on mobile it appeared directly beneath the CTA buttons as a floating translucent shape
+- Confirmed no real demo video exists in the project (no mp4/webm anywhere) → per instructions built an honest placeholder from REAL product screenshots only
+- New component src/components/marketing/solution-video-preview.tsx: large rounded-[2rem] video card (aspect 16/10) with the solution's real /marketing/shot-*.png capture, darkened gradient overlay, 80px white circular play button (brand-orange triangle, soft halo ring, hover scale — mathematically centered, verified offset 0,0), bottom-left glass "Product preview" chip; click opens a lightbox (z-70) with the full-size BrowserFrame capture — real behavior, no fake/broken video source; Escape/X/backdrop close, focus managed (trigger↔close), .mkt-scroll-root + body scroll lock
+- solution-page.tsx SolutionHero: replaced SceneStage with SolutionVideoPreview (poster = def.stepsShot per solution); solutions-overview.tsx hero: same treatment with shot-dashboard.png; kept hero copy, buttons, header, branding, background, typography untouched
+- Removed now-dead heroScene field + 6 data entries + comment from solutions-data.tsx (SceneStage kept for story.illustration fallback)
+- i18n: +3 keys en/fr (mkt.solp.previewChip 'Product preview'/'Aperçu du produit', openPreview, closePreview); other 36 locales fall back to en via t() chain
+
+Verification (agent-browser E2E + VLM):
+- Desktop 1440: card in right grid column 523×328, real screenshot loaded, play button exactly centered (offset [0,0]), chip visible; VLM confirms clean HubSpot-style hero, NO stray/floating/transparent artifacts near Get started/Learn more
+- Lightbox: opens (BrowserFrame + loaded img + label chip), focus → "Close preview", scroll locked; Escape/X/backdrop all close, scroll restored, focus returned to trigger
+- CTAs unchanged: Get started href #/signup → navigates to "Create your account — Karmax"; Learn more → smooth-scrolls to #how-it-works landing at scroll-mt-24 (96px) exactly as before
+- Mobile 390: stack order title→description→buttons→video, card 350px, zero horizontal overflow (scrollWidth 390 == clientWidth 390); VLM confirms the peach blob artifact is GONE from the gap below buttons
+- Tablet 768: stacked with capped max-w-xl centered video (576px), no overflow
+- All 6 solution pages verified with their real posters (shot-ai/seo/automation/dashboard/articles) + solutions overview (shot-dashboard)
+- FR locale: aria "Ouvrir l'aperçu du produit — Pour les agences et les équipes", chip "Aperçu du produit", French H1/buttons render clean
+- tsc: 0 errors in touched files; eslint: 0 problems in touched files (remaining repo errors pre-existing in unrelated files); dev.log clean
+
+Stage Summary:
+- Solution heroes (6 detail pages + overview) now show a professional video-preview card: real product capture, darkened overlay, perfectly centered play button, Product preview chip, working lightbox — replacing the line-art stage and its decorative blob
+- Get started button area is completely clean at all breakpoints (blob removed with the old illustration)
+- 5 files changed + 1 new component; ready to commit as MKT-SOL-VIDEO-1

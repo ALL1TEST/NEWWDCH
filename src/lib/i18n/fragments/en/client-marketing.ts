@@ -372,6 +372,9 @@ export const clientMarketingEn: Record<string, string> = {
 
   // ---- Solutions shared template (solution pages) ----
   'mkt.solp.learnMore': 'Learn more',
+  'mkt.solp.previewChip': 'Product preview',
+  'mkt.solp.openPreview': 'Open the product preview',
+  'mkt.solp.closePreview': 'Close preview',
   'mkt.solp.workflowTitle': 'How it works',
   'mkt.solp.storiesTitle': 'Inside the product',
   'mkt.solp.storyLabel': 'Chapter',
