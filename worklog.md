@@ -11814,3 +11814,31 @@ Stage Summary:
 - Content Publishing uniquely has the plain 1px full-width divider after its hero (scoped per instruction; siblings keep the band's own top border — can be propagated on request)
 - 1 file changed: solution-page.tsx; zero i18n/schema/route changes
 - Ready to commit as MKT-SOLUTIONS-3
+
+---
+Task ID: MKT-FOOTER-2
+Agent: main (orchestrator)
+Task: Restructure the Karmax footer content to the requested 4-section architecture (content only — dark design, spacing, typography, branding, social row, responsive behavior all unchanged): replace Popular Features / Free Tools / Company / Customers / Partners with Product · Integrations | Features · Resources (thin vertical center divider, line only), Karmax content per exact lists, real routes only, remove Website Accessibility, legal row = Privacy Policy | Terms of Service | Cookie Preferences, copyright "© 2026 Karmax. All rights reserved."
+
+Work Log:
+- Route audit before writing: real destinations = #/features (scrolls to features-list) + anchors f-ai/f-seo/f-automation/f-media/f-platform (home feature blocks), #/pricing, #/blog, #/solutions/{6 slugs}, #/privacy, #/terms (exists — MKT.terms), openCookiePreferences() real control (cookie-banner.tsx re-open hook). NO pages exist for: analytics, documentation, help center, free tools, guides, API/developer → rendered in the established INACTIVE pattern (muted, aria-disabled, non-clickable) — no fake routes
+- marketing-footer.tsx restructured: PRODUCT (8 items: AI Content→#f-ai, SEO Suite→#f-seo, Media Library→#f-media, Automation→#f-automation, Newsletter→#/solutions/automation [capability documented there], Analytics inactive, Sites→#/solutions/multi-site, Pricing→#/pricing); INTEGRATIONS (5: WordPress/Any REST CMS/Stripe/SMTP/AI Providers — all →#f-platform where each is a real card); FEATURES_FOOTER (7: same product anchors + Multi-site→#/solutions/multi-site + Analytics inactive); RESOURCES (6: Blog→#/blog active; Documentation/Help Center/Free Tools/Guides/API-Developer inactive)
+- Desktop layout: lg grid [1fr_1fr_1px_1fr_1fr] — Product, Integrations, plain 1px vertical divider (w-px self-stretch bg-mkt-footer-border, hidden below lg), Features, Resources; md keeps 2-col grid; <md accordion now 4 groups (Product/Integrations/Features/Resources) with the existing 0fr→1fr animation
+- Legal band: Privacy Policy (#/privacy) | Terms of Service (#/terms) | Cookie Preferences (button → openCookiePreferences(), same LEGAL_LINK_CLASS styling); Legal Center/Security links removed from the row (pages + their i18n keys KEPT — used by legal pages/document titles); copyright now "© {year} Karmax. {rightsReserved}"
+- i18n en+fr: +16 keys (product/integrations/features/resources headings, aiContent, mediaLibrary, newsletter, analytics, sites, anyRestCms, smtp, documentation, helpCenter, guides, apiDeveloper, rightsReserved), cookiePrefs text updated 'Cookie Settings'→'Cookie Preferences'/'Préférences de cookies', 28 dead keys pruned per locale (popularFeatures…marketplace set incl. already-dead userGroups); section comments updated; parity 629 = 629
+
+Verification (agent-browser E2E + VLM):
+- Desktop 1440: headings exactly [Product, Integrations, Features, Resources]; old five sections + Website Accessibility + Legal Center all absent from footer; divider = 1px, rgba(255,255,255,.14), height 292px = full grid content height, mathematically centered between the two groups; no icon/decoration on it
+- All 26 nav items render with the exact requested labels; every active href verified real (#/features#f-ai, #f-seo, #f-media, #f-automation, #f-platform, #/solutions/automation, #/solutions/multi-site, #/pricing, #/blog); inactive spans aria-disabled
+- Cookie Preferences: clicked → consent dialog re-opens with analytics toggle + Save preferences; Save works; re-open verified twice
+- Deep link: footer "AI Content" → hash #features#f-ai, f-ai block lands at viewport top (aiTop 112px); #/terms renders "Terms of Service — Karmax"
+- Copyright "© 2026 Karmax. All rights reserved." + legal row (Privacy Policy | Terms of Service | Cookie Preferences) on EN; FR: Produit/Intégrations/Fonctionnalités/Ressources + all FR items + "© 2026 Karmax. Tous droits réservés." + FR legal row
+- Mobile 390: 4 accordion groups (Product expands to its 7 links), desktop grid hidden, overflow 0; tablet 768: 2-col grid, divider hidden, overflow 0
+- 7 social icons intact; 0 page/console errors; dev.log clean; tsc 0 errors; eslint 0 problems; i18n parity 629=629
+- VLM review: all 5 spec points PASS (sections order, plain center divider, social row, bottom band content, clean layout)
+
+Stage Summary:
+- Footer information architecture now: Product · Integrations | Features · Resources with the thin center line divider, honest links only (18 active real routes, 8 inactive placeholders for pageless areas)
+- Website Accessibility removed from the footer everywhere (page route untouched); legal row = the 3 requested entries incl. the working cookie-preferences control
+- 3 files changed: marketing-footer.tsx (restructured), en/fr client-marketing.ts (+16/−28 keys each)
+- Ready to commit as MKT-FOOTER-2

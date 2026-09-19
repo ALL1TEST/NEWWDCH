@@ -652,51 +652,40 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.cta.secondary': 'Voir les tarifs',
 
   // ---- Pied de page ----
-  // (footer architecture HubSpot : grille de navigation 4 colonnes
-  //  avec le groupe Fonctionnalités populaires en 2 sous-colonnes,
-  //  rangée sociale entre filets, logo centré + copyright + liens
-  //  légaux séparés par des barres verticales ; les liens actifs
-  //  pointent vers de vraies pages/sections, les éléments sans
-  //  destination sont affichés inactifs)
+  // (pied de page à 4 sections : Produit · Intégrations |
+  //  Fonctionnalités · Ressources avec séparateur vertical
+  //  central, rangée sociale entre filets, logo centré +
+  //  copyright + liens légaux séparés par des barres verticales ;
+  //  les liens actifs pointent vers de vraies pages/sections, les
+  //  éléments sans destination sont affichés inactifs)
   'mkt.footer.navigation': 'Pied de page',
-  'mkt.footer.popularFeatures': 'Fonctionnalités populaires',
-  'mkt.footer.allFeatures': 'Toutes les fonctionnalités',
-  'mkt.footer.aiWriting': 'Rédaction assistée par IA',
+  'mkt.footer.product': 'Produit',
+  'mkt.footer.integrations': 'Intégrations',
+  'mkt.footer.features': 'Fonctionnalités',
+  'mkt.footer.resources': 'Ressources',
+  'mkt.footer.aiContent': 'Contenu IA',
   'mkt.footer.seoSuite': 'Suite SEO',
-  'mkt.footer.mediaManagement': 'Gestion des médias',
-  'mkt.footer.newsletterAutomation': 'Automatisation des newsletters',
-  'mkt.footer.wordpressIntegration': 'Intégration WordPress',
-  'mkt.footer.restCms': 'CMS REST',
-  'mkt.footer.freeTools': 'Outils gratuits',
-  'mkt.footer.websiteSpeedTest': 'Test de vitesse de site',
-  'mkt.footer.headlineAnalyzer': 'Analyseur de titres',
-  'mkt.footer.blogPostGenerator': 'Générateur d’articles de blog',
-  'mkt.footer.metaTagGenerator': 'Générateur de balises meta',
-  'mkt.footer.company': 'Entreprise',
-  'mkt.footer.aboutKarmax': 'À propos de Karmax',
-  'mkt.footer.careers': 'Carrières',
-  'mkt.footer.managementTeam': 'Équipe de direction',
-  'mkt.footer.investorRelations': 'Relations investisseurs',
+  'mkt.footer.mediaLibrary': 'Médiathèque',
+  'mkt.footer.newsletter': 'Newsletter',
+  'mkt.footer.analytics': 'Analytique',
+  'mkt.footer.sites': 'Sites',
+  'mkt.footer.anyRestCms': 'Tout CMS REST',
+  'mkt.footer.smtp': 'SMTP',
   'mkt.footer.blog': 'Blog',
-  'mkt.footer.contactUs': 'Nous contacter',
-  'mkt.footer.customers': 'Clients',
-  'mkt.footer.customerSupport': 'Assistance clientèle',
-  'mkt.footer.joinUserGroup': "Rejoindre un groupe d'utilisateurs local",
-  'mkt.footer.customerStories': 'Témoignages clients',
-  'mkt.footer.community': 'Communauté',
-  'mkt.footer.userGroups': "Groupes d'utilisateurs",
-  'mkt.footer.agencies': 'Agences',
-  'mkt.footer.partners': 'Partenaires',
-  'mkt.footer.partnerProgram': 'Programme partenaires',
-  'mkt.footer.findAPartner': 'Trouver un partenaire',
-  'mkt.footer.marketplace': 'Marketplace',
+  'mkt.footer.documentation': 'Documentation',
+  'mkt.footer.helpCenter': 'Centre d’aide',
+  'mkt.footer.freeTools': 'Outils gratuits',
+  'mkt.footer.guides': 'Guides',
+  'mkt.footer.apiDeveloper': 'API / Développeurs',
   'mkt.footer.legal': 'Légal',
-  'mkt.footer.legalCenter': 'Centre juridique',
   'mkt.footer.privacy': 'Politique de confidentialité',
   'mkt.footer.terms': "Conditions d'utilisation",
+  // Utilisés par les pages légales / titres de document — pas par le pied de page.
   'mkt.footer.security': 'Sécurité',
   'mkt.footer.accessibility': 'Accessibilité du site',
-  'mkt.footer.cookiePrefs': 'Paramètres des cookies',
+  'mkt.footer.legalCenter': 'Centre juridique',
+  'mkt.footer.cookiePrefs': 'Préférences de cookies',
+  'mkt.footer.rightsReserved': 'Tous droits réservés.',
   'mkt.footer.social': 'Réseaux sociaux',
   'mkt.footer.socialFacebook': 'Karmax sur Facebook',
   'mkt.footer.socialInstagram': 'Karmax sur Instagram',

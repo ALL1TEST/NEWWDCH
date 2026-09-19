@@ -659,50 +659,40 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.cta.secondary': 'View pricing',
 
   // ---- Footer ----
-  // (HubSpot-architecture footer: 4-column nav grid with a
-  //  two-sub-column Popular Features group, social row between
-  //  hairlines, centered logo + copyright + pipe-separated legal
-  //  links; active links point at real pages/sections, items
-  //  without a destination yet render visually inactive)
+  // (4-section footer: Product · Integrations | Features ·
+  //  Resources nav grid with a vertical center divider, social
+  //  row between hairlines, centered logo + copyright +
+  //  pipe-separated legal links; active links point at real
+  //  pages/sections, items without a destination yet render
+  //  visually inactive)
   'mkt.footer.navigation': 'Footer',
-  'mkt.footer.popularFeatures': 'Popular Features',
-  'mkt.footer.allFeatures': 'All Features',
-  'mkt.footer.aiWriting': 'AI-Assisted Writing',
+  'mkt.footer.product': 'Product',
+  'mkt.footer.integrations': 'Integrations',
+  'mkt.footer.features': 'Features',
+  'mkt.footer.resources': 'Resources',
+  'mkt.footer.aiContent': 'AI Content',
   'mkt.footer.seoSuite': 'SEO Suite',
-  'mkt.footer.mediaManagement': 'Media Management',
-  'mkt.footer.newsletterAutomation': 'Newsletter Automation',
-  'mkt.footer.wordpressIntegration': 'WordPress Integration',
-  'mkt.footer.restCms': 'REST CMS',
-  'mkt.footer.freeTools': 'Free Tools',
-  'mkt.footer.websiteSpeedTest': 'Website Speed Test',
-  'mkt.footer.headlineAnalyzer': 'Headline Analyzer',
-  'mkt.footer.blogPostGenerator': 'Blog Post Generator',
-  'mkt.footer.metaTagGenerator': 'Meta Tag Generator',
-  'mkt.footer.company': 'Company',
-  'mkt.footer.aboutKarmax': 'About Karmax',
-  'mkt.footer.careers': 'Careers',
-  'mkt.footer.managementTeam': 'Management Team',
-  'mkt.footer.investorRelations': 'Investor Relations',
+  'mkt.footer.mediaLibrary': 'Media Library',
+  'mkt.footer.newsletter': 'Newsletter',
+  'mkt.footer.analytics': 'Analytics',
+  'mkt.footer.sites': 'Sites',
+  'mkt.footer.anyRestCms': 'Any REST CMS',
+  'mkt.footer.smtp': 'SMTP',
   'mkt.footer.blog': 'Blog',
-  'mkt.footer.contactUs': 'Contact Us',
-  'mkt.footer.customers': 'Customers',
-  'mkt.footer.customerSupport': 'Customer Support',
-  'mkt.footer.joinUserGroup': 'Join a Local User Group',
-  'mkt.footer.customerStories': 'Customer Stories',
-  'mkt.footer.community': 'Community',
-  'mkt.footer.userGroups': 'User Groups',
-  'mkt.footer.agencies': 'Agencies',
-  'mkt.footer.partners': 'Partners',
-  'mkt.footer.partnerProgram': 'Partner Program',
-  'mkt.footer.findAPartner': 'Find a Partner',
-  'mkt.footer.marketplace': 'Marketplace',
+  'mkt.footer.documentation': 'Documentation',
+  'mkt.footer.helpCenter': 'Help Center',
+  'mkt.footer.freeTools': 'Free Tools',
+  'mkt.footer.guides': 'Guides',
+  'mkt.footer.apiDeveloper': 'API / Developer',
   'mkt.footer.legal': 'Legal',
-  'mkt.footer.legalCenter': 'Legal Center',
   'mkt.footer.privacy': 'Privacy Policy',
   'mkt.footer.terms': 'Terms of Service',
+  // Used by the legal pages / document titles — not the footer row.
   'mkt.footer.security': 'Security',
   'mkt.footer.accessibility': 'Website Accessibility',
-  'mkt.footer.cookiePrefs': 'Cookie Settings',
+  'mkt.footer.legalCenter': 'Legal Center',
+  'mkt.footer.cookiePrefs': 'Cookie Preferences',
+  'mkt.footer.rightsReserved': 'All rights reserved.',
   'mkt.footer.social': 'Social media',
   'mkt.footer.socialFacebook': 'Karmax on Facebook',
   'mkt.footer.socialInstagram': 'Karmax on Instagram',
