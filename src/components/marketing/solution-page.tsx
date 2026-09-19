@@ -6,8 +6,10 @@
 // One high-quality template renders every solution from the
 // catalog (solutions-data.tsx), following a focused, product-led
 // flow: hero → 3-step workflow → alternating product stories →
-// benefits → dark CTA. Global header/footer come from the
-// marketing shell — never duplicated here.
+// benefits — then straight into the global footer (no closing
+// CTA band on detail pages; the dark CTA lives on the solutions
+// overview only). Global header/footer come from the marketing
+// shell — never duplicated here.
 //
 // Honesty rules: screenshots are real captures, benefits
 // describe shipped capabilities only, and every link resolves
@@ -23,8 +25,10 @@ import { SOLUTION_BY_SLUG, type SolutionDef } from './solutions-data';
 import { SceneStage } from './solution-illustrations';
 
 // -------------------- Dark CTA band --------------------
-// The strong, full-width close before the (dark) footer —
-// charcoal band, peach glow, brand-orange primary action.
+// The strong, full-width close — charcoal band, peach glow,
+// brand-orange primary action. Rendered by the SOLUTIONS
+// OVERVIEW page only; solution detail pages end at their last
+// content section and flow directly into the footer.
 
 export function SolutionCta() {
   const { t } = useT();
@@ -127,14 +131,23 @@ function SolutionHero({ def }: { def: SolutionDef }) {
   );
 }
 
+// -------------------- Hero divider --------------------
+// Content Publishing: a plain, full-width hairline between the
+// hero and the "How it works" band. Deliberately just a line —
+// no icon, badge, illustration or any other decoration.
+
+function SolutionHeroDivider() {
+  return <div className="h-px w-full bg-border" aria-hidden="true" />;
+}
+
 // -------------------- 3-step workflow --------------------
 
-function SolutionWorkflow({ def }: { def: SolutionDef }) {
+function SolutionWorkflow({ def, divided = false }: { def: SolutionDef; divided?: boolean }) {
   const { t } = useT();
   return (
     <section
       id="how-it-works"
-      className="mkt-section scroll-mt-24 border-y border-border bg-mkt-surface-2"
+      className={`mkt-section scroll-mt-24 border-border bg-mkt-surface-2 ${divided ? 'border-b' : 'border-y'}`}
       aria-labelledby="solution-workflow-heading"
     >
       <div className="mkt-container">
@@ -278,13 +291,18 @@ export function SolutionPage({ slug }: { slug: string }) {
   const def = SOLUTION_BY_SLUG[slug];
   if (!def) return null; // router validates slugs — unreachable safety net
 
+  // Content Publishing separates its hero from the workflow
+  // band with a plain hairline divider (scoped change — the
+  // other solutions keep the band's own top border).
+  const heroDivider = slug === 'content-publishing';
+
   return (
     <>
       <SolutionHero def={def} />
-      <SolutionWorkflow def={def} />
+      {heroDivider && <SolutionHeroDivider />}
+      <SolutionWorkflow def={def} divided={heroDivider} />
       <SolutionStories def={def} />
       <SolutionBenefits def={def} />
-      <SolutionCta />
     </>
   );
 }

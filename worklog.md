@@ -11787,3 +11787,30 @@ Stage Summary:
 - 4 files changed: solution-page.tsx (−4 sections), solutions-data.tsx (−3 catalog fields ×6), en/fr client-marketing.ts (−62 keys each, parity kept)
 - Shared components/data preserved for the overview page (USE_CASE_CARDS, usecases keys, SolutionCta)
 - Ready to commit as MKT-SOLUTIONS-2
+
+---
+Task ID: MKT-SOLUTIONS-3
+Agent: main (orchestrator)
+Task: Per user's exact spec: (1) remove the final dark CTA band ("Ready to simplify how you publish?") from ALL solution detail pages so they flow from last content section directly into the footer; (2) add a plain thin horizontal divider between the hero and "How it works" on Content Publishing ONLY (no icon/badge/decoration — simple line only); (3) keep everything else unchanged (hero, illustration, buttons, workflow, screenshots, benefits, spacing, footer, responsive).
+
+Work Log:
+- solution-page.tsx only file changed (+26/−8): removed <SolutionCta/> from SolutionPage render — applies to all 6 detail pages via the shared template (Content Publishing, SEO, Automation, Multi-Site, Agencies, Integrations)
+- SolutionCta component KEPT in the file (still rendered by the solutions overview #/solutions — shared-component rule); its i18n keys (ctaTitle/ctaBody/ctaSecondary) therefore also kept, no i18n changes, parity untouched at 641=641
+- Added SolutionHeroDivider: <div className="h-px w-full bg-border" aria-hidden/> rendered only when slug === 'content-publishing'; SolutionWorkflow gained a `divided` prop that swaps border-y → border-b on the band so the divider is exactly ONE 1px line at the hero/band boundary (no doubled line), same token color as every other border on the page
+- Shell check: pages mount directly in <main className="flex-1"> with no wrapper gap → benefits section meets footer flush
+
+Verification (agent-browser E2E + pixel analysis + VLM):
+- CP page: CTA text/buttons fully absent; divider = DIV, 1px, full viewport width, positioned between hero and #how-it-works; band borderTop 0px / borderBottom 1px on CP (other 5 pages keep border-y 1px/1px); hero Get started + Learn more kept; How it works + 3 steps + Chapter stories + screenshots + What you get + footer all present
+- Pixel-level proof of the divider: screenshot row scan — y=288 uniform (229,229,229) across full width, white (255,255,255) above, band peach (250,245,240) below; 5x-zoom crop VLM-confirmed "thin, plain horizontal gray divider line", no icons
+- Benefits→footer: DOM-measured gap = 0px (flush, border-b kept), scroll-root at true bottom, footer 744px visible — no empty gap where the CTA was
+- All 5 sibling pages: CTA removed, no divider element, structure intact, overflow 0
+- Overview #/solutions: closing CTA intentionally KEPT (it is the solutions hub, not one of the 6 listed detail pages) — flagged to user as reversible
+- Responsive: 390px (divider 390px wide, overflow 0, full structure) / 768px (divider 768px, overflow 0) / 1440px
+- FR locale: divider present, French CTA ("Prêt à simplifier…") absent, French hero/workflow/benefits/footer render
+- 0 page errors, 0 console errors; dev.log clean; tsc 0 errors; eslint 0 problems
+
+Stage Summary:
+- All 6 solution detail pages now end: … → Benefits → footer (no CTA band); hero CTAs untouched
+- Content Publishing uniquely has the plain 1px full-width divider after its hero (scoped per instruction; siblings keep the band's own top border — can be propagated on request)
+- 1 file changed: solution-page.tsx; zero i18n/schema/route changes
+- Ready to commit as MKT-SOLUTIONS-3
