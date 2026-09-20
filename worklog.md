@@ -11919,3 +11919,44 @@ Verification (agent-browser E2E + VLM):
 Stage Summary:
 - Solution detail flow is now hero (title/description/CTAs/video preview) → product stories → benefits; the 3-step workflow band and its exclusive visuals are fully removed with zero gap left behind
 - 4 files changed, +13/−196; ready to commit as MKT-SOL-NOHIW-1
+
+---
+Task ID: sol-hero-player-1
+Agent: main (Z.ai Code)
+Task: Add full video player functionality to the hero video; remove the Product preview chip
+
+Work Log:
+- Copied the uploaded demo video (Minuteur 1 Minute_720p.mp4 — H.264 1280×720, AAC, 70s, 1.66MB) to public/marketing/hero-demo.mp4; verified static serving with range support (HTTP 206)
+- Rewrote solution-video-preview.tsx from preview+lightbox into a full inline player on a real <video> element:
+  - Play/Pause: large centered white-circle overlay while paused (same visual as before) + bar button + video click + Space/K
+  - Progress/timeline: seekable bar (pointer capture drag + click), buffered-range indicator, orange fill, hover thumb; role=slider with aria-valuenow
+  - Current time / total duration (tabular nums, e.g. 0:36 / 1:10)
+  - Volume/mute: button with live icon (VolumeX/Volume1/Volume2) + hover/focus-expand slider, M key
+  - Playback speed menu: 0.5×/0.75×/1×/1.25×/1.5×/2× (menuitemradio, active dot), button shows current rate
+  - Quality menu: 720p · HD as the single shipped rendition (active)
+  - Fullscreen: button + double-click; wrapper goes bg-black + object-contain; Escape/F keys; iOS webkitEnterFullscreen fallback
+  - Keyboard: Space/K, ←/→ ±5s, J/L ±10s, ↑/↓ volume, M, F, Esc closes menus
+  - Auto-hide: controls fade after 2.6s idle while playing (cursor-none); always visible when paused/menu open; any pointermove/interaction restores
+  - Buffering spinner (waiting/playing/canplay events)
+  - Live state read from the video element (paused/duration/volume) — no state mirrors; refs only in handlers (React Compiler clean)
+- Removed the Product preview chip entirely (no replacement text) and the lightbox; poster stays each solution's real product capture so the card is visually identical until played
+- Removed now-dead label prop + stepsShotLabelKey field/entries from solutions-data.tsx
+- i18n en/fr: removed previewChip/openPreview/closePreview; added 12 keys (videoPlayer, play, pause, mute, unmute, volume, speed, quality, fullscreen, exitFullscreen, seek); parity 604 = 604
+
+Verification (agent-browser E2E + VLM):
+- Structure: video src /marketing/hero-demo.mp4, per-solution posters, duration 70.08 loaded, buttons [Play, Play, Mute, Playback speed, Video quality, Enter fullscreen], chip absent
+- Trusted-click play → plays, time advances, overlay hides; pause → overlay + bar return; auto-hide verified twice (idle → opacity 0 + cursor-none; mousemove → visible; idle → hidden again)
+- Seek: 50% click → jumps (~keyframe snap), time text + aria-valuenow update
+- Mute/unmute toggles v.muted with aria-label swap; volume slider present
+- Speed: menu lists 6 rates, 1× checked; select 1.5× → playbackRate 1.5, button label 1.5×, menu closes; reset to 1×
+- Quality menu opens: single "720p · HD" active item
+- Fullscreen (trusted click): enters (bg-black, object-contain, Exit fullscreen button), exits cleanly
+- Keyboard (focused wrapper): ArrowRight 20→25 exact, ArrowLeft back, M mutes/unmutes, Space plays, L +10, J −10
+- VLM desktop + mobile: centered big play button, full control bar (play/time/orange progress/volume/1×/720p/fullscreen), NO Product preview chip, no defects
+- Mobile 390: card 350px, bar fits, buttons [Play, Mute, Playback speed, Fullscreen] (quality hidden on xs by design), zero horizontal overflow, stack order intact
+- All 6 solution pages + overview render the player with correct posters; FR labels verified (Vidéo de démonstration…, Lire, Couper le son, Vitesse de lecture, Qualité vidéo, Passer en plein écran, Rechercher)
+- tsc 0 errors in touched files; eslint 0 problems in touched files; console/page errors/dev.log clean; en/fr parity 604=604
+
+Stage Summary:
+- Hero video is now a real, fully controllable video player playing the uploaded demo file, with the paused-state look preserved (poster + big centered play button) and zero leftover preview labels
+- 6 files changed + hero-demo.mp4 added; ready to commit as MKT-SOL-PLAYER-1

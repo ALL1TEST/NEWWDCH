@@ -53,9 +53,8 @@ export interface SolutionDef {
   /** Hero. */
   heroTitleKey: string;
   heroBodyKey: string;
-  /** Hero video-preview poster (real product capture). */
+  /** Hero video-player poster (real product capture). */
   stepsShot: string;
-  stepsShotLabelKey: string;
   /** Alternating [visual] [text] sections. */
   stories: SolutionStory[];
   /** Practical benefits (factual, per-solution). */
@@ -81,7 +80,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     heroTitleKey: 'mkt.solp.cp.heroTitle',
     heroBodyKey: 'mkt.solp.cp.heroBody',
     stepsShot: '/marketing/shot-ai.png',
-    stepsShotLabelKey: 'mkt.showcase.ai',
     stories: [
       {
         shot: '/marketing/shot-ai.png',
@@ -124,7 +122,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     heroTitleKey: 'mkt.solp.seo.heroTitle',
     heroBodyKey: 'mkt.solp.seo.heroBody',
     stepsShot: '/marketing/shot-seo.png',
-    stepsShotLabelKey: 'mkt.showcase.seo',
     stories: [
       {
         shot: '/marketing/shot-seo.png',
@@ -160,7 +157,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     heroTitleKey: 'mkt.solp.au.heroTitle',
     heroBodyKey: 'mkt.solp.au.heroBody',
     stepsShot: '/marketing/shot-automation.png',
-    stepsShotLabelKey: 'mkt.showcase.automation',
     stories: [
       {
         shot: '/marketing/shot-automation.png',
@@ -196,7 +192,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     heroTitleKey: 'mkt.solp.ms.heroTitle',
     heroBodyKey: 'mkt.solp.ms.heroBody',
     stepsShot: '/marketing/shot-dashboard.png',
-    stepsShotLabelKey: 'mkt.showcase.dashboard',
     stories: [
       {
         shot: '/marketing/shot-dashboard.png',
@@ -232,7 +227,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     heroTitleKey: 'mkt.solp.ag.heroTitle',
     heroBodyKey: 'mkt.solp.ag.heroBody',
     stepsShot: '/marketing/shot-articles.png',
-    stepsShotLabelKey: 'mkt.showcase.dashboard',
     stories: [
       {
         shot: '/marketing/shot-dashboard.png',
@@ -268,7 +262,6 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     heroTitleKey: 'mkt.solp.in.heroTitle',
     heroBodyKey: 'mkt.solp.in.heroBody',
     stepsShot: '/marketing/shot-automation.png',
-    stepsShotLabelKey: 'mkt.showcase.automation',
     stories: [
       {
         shot: '/marketing/shot-ai.png',

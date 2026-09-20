@@ -124,15 +124,13 @@ function SolutionHero({ def }: { def: SolutionDef }) {
             </div>
           </Reveal>
 
-          {/* Product video preview — real capture, centered
-              play button, opens a full-size lightbox. Replaces
-              the old line-art stage (and its decorative backdrop
-              blob that peeked out around the card edges). */}
+          {/* Product video player — real demo video with full
+              controls; poster is the solution's real product
+              capture so the card looks identical until played. */}
           <Reveal delay={140}>
             <SolutionVideoPreview
               poster={def.stepsShot}
               title={t(def.menuTitleKey)}
-              label={t(def.stepsShotLabelKey)}
               className="mx-auto w-full max-w-xl lg:mx-0 lg:max-w-none"
             />
           </Reveal>

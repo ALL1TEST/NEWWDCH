@@ -65,7 +65,6 @@ function OverviewHero() {
             <SolutionVideoPreview
               poster="/marketing/shot-dashboard.png"
               title={t('mkt.nav.solutions')}
-              label={t('mkt.showcase.dashboard')}
               className="mx-auto w-full max-w-xl lg:mx-0 lg:max-w-none"
             />
           </Reveal>
