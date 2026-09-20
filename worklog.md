@@ -11960,3 +11960,32 @@ Verification (agent-browser E2E + VLM):
 Stage Summary:
 - Hero video is now a real, fully controllable video player playing the uploaded demo file, with the paused-state look preserved (poster + big centered play button) and zero leftover preview labels
 - 6 files changed + hero-demo.mp4 added; ready to commit as MKT-SOL-PLAYER-1
+
+---
+Task ID: sol-hero-controls-1
+Agent: main (Z.ai Code)
+Task: Hero video controls update — hover-only visibility + Settings (gear) menu
+
+Work Log:
+- Controls now hidden by default; purely pointer-driven visibility: shown while hovering the video, while scrubbing the timeline, while the settings menu is open, or while the player has KEYBOARD focus (:focus-visible only — mouse clicks focus the player but don't pin the controls). Removed the 2.6s auto-hide timer entirely (replaced by enter/leave semantics). Center play button starts the video immediately (unchanged)
+- Removed the separate "1×" speed button and "720p" quality button from the main bar → single Settings (⚙, lucide Settings) button; bar is now: play/pause · time · spacer · volume · settings · fullscreen
+- Settings menu: compact popover with two sections — "Playback speed" (0.5×/1×/1.25×/1.5×/2×, dropped 0.75× per spec) and "Quality" (Auto / 720p — the single shipped rendition; 1080p omitted as unsupported), menuitemradio semantics with active-dot checkmarks, closes on selection/outside-pointerdown/Esc
+- Volume slider keeps hover/focus-expand (group/vol classes verified present in CSSOM); timeline drag uses pointer capture with release-outside handling that also clears hover
+- i18n en/fr: +3 keys (settings, qualityShort, qualityAuto), removed unused quality key; parity 606 = 606
+- Removed never-defined mkt-player-btn class names (no-op)
+
+Verification (agent-browser E2E + VLM):
+- Default state (desktop + mobile 390): control bar opacity 0 + pointer-events none, big centered play visible; VLM confirms no bar, no chip, clean card
+- Trusted center-play click → plays immediately; controls visible while pointer over player; mouse away → hidden + cursor-none, video keeps playing; hover again → visible; fullscreen enter/exit cycle leaves no stuck state (an earlier stuck-bar sighting was stale HMR state — clean reload verified all transitions)
+- Settings flow: gear opens menu [Playback speed: 0.5×/1×/1.25×/1.5×/2× | Quality: Auto/720p], 1×+Auto checked by default; select 1.5× → playbackRate 1.5, menu closes, checkmark moves; select 720p → checkmark moves; Esc + real outside pointerdown close the menu
+- Seek: real pointerdown at 25%/50% of the track jumps to ~keyframe-accurate positions; time display + aria-valuenow update
+- Keyboard: Tab into player shows controls (focus-visible); K/Space toggle play; ←/→ seek ±5s; M mute/unmute; Esc closes menu; programmatic focus does NOT pin the controls
+- Fullscreen: enters (bg-black + object-contain + Exit button) and exits cleanly
+- Volume: mute/unmute buttons + M key verified; slider expansion rule confirmed in CSSOM (.group-hover/vol:w-16 → calc(var(--spacing)*16), correct cascade order after .w-0) — note: Tailwind v4 wraps ALL hover variants in @media (hover: hover), which the headless test browser reports as (hover: none); hover-styled effects cannot render there but are correct for real pointer devices (applies to every hover rule site-wide, 221 rules)
+- All 6 solution pages + overview: player renders, posters correct, bar hidden by default; FR labels verified (Lire/Couper le son/Paramètres/Passer en plein écran; menu: Vitesse de lecture/Qualité/Auto)
+- VLM (hovered desktop): bar shows play + time + orange progress + volume + gear + fullscreen, NO 1x/720p text buttons, clean minimal design
+- tsc 0 errors; eslint 0 problems in touched files; console/page errors/dev.log clean; en/fr parity 606=606
+
+Stage Summary:
+- Player now behaves like a professional SaaS video player: controls hidden by default, hover-revealed, minimal bar with a single Settings menu housing speed + quality
+- 3 files changed; ready to commit as MKT-SOL-CTRL-1
