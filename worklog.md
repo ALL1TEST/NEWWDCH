@@ -11989,3 +11989,29 @@ Verification (agent-browser E2E + VLM):
 Stage Summary:
 - Player now behaves like a professional SaaS video player: controls hidden by default, hover-revealed, minimal bar with a single Settings menu housing speed + quality
 - 3 files changed; ready to commit as MKT-SOL-CTRL-1
+
+---
+Task ID: about-redesign-1
+Agent: main (Z.ai Code)
+Task: Redesign the Karmax About page as a premium long-form SaaS page (ClickUp mission hero + HubSpot story rows + testimonial carousel references, no copying)
+
+Work Log:
+- Analyzed the 3 provided reference screenshots via VLM (mission hero w/ gradient headline + mountain + flag; alternating story rows; avatar-overlapping testimonial card)
+- New src/components/marketing/about-page.tsx: (1) Hero — centered serif "Our mission." (Fraunces) with blue→pink→brand-orange gradient, original layered mountain SVG scene (theme-aware palette, Karmax pennant at summit, blurred mist dissolving into background) rising in front of the headline, mission statement below; (2) Story & mission — 2 alternating rows (image left/text right, then text left/image right) with rounded photo cards + serif editorial headlines; (3) What we believe — 4 principle cards (Simplicity/Automation/Quality/Control) with icons on warm-grey bg; (4) Customer perspective — section ships the full carousel structure, honest empty state (no fake testimonials) styled with the same avatar-overlapping card architecture; (5) Dark final CTA (#1F1F1F, brand-orange primary, Get started + Explore features)
+- New src/components/marketing/testimonial-carousel.tsx: premium card carousel — avatar overlapping top border (crossfade), centered quote, hairline divider, uppercase author + role/company, hover-revealed floating chevrons (always visible on touch), brand-orange active dots, autoplay w/ hover+focus pause, swipe, full a11y (roledescription, aria-live, keyboard). Renders only REAL customer data — empty list renders nothing
+- content-pages.tsx: removed the old AboutPage (file now legal/contact only); marketing-site.tsx: imports AboutPage from about-page
+- Brand imagery generated (z-ai image, VLM-checked, 1 regen for hand artifacts): public/marketing/about-studio.png (CALM letter-installation lounge) + about-team.png (team at work studio) — decorative brand visuals, no invented people/history/claims; copy adapted from existing about texts
+- Typography: Fraunces (next/font, SOFT+opsz axes) added to layout.tsx; .mkt-serif utility + --mkt-about-warm (#FAF8F5) + .mkt-mountain palette tokens in globals.css (light+dark)
+- i18n en+fr: rebuilt the About key block for the new structure (27 keys, incl. heroTitle/missionHead/missionLead/rowMission*/rowStory*/believe*/customers*/carousel*/cta*); parity verified EN=FR (diff clean)
+
+Verification (agent-browser E2E + VLM):
+- Desktop 1440: h1 "Our mission." renders in Fraunces with gradient; section order hero → mission/story rows → What we believe → customers → dark CTA → footer; both brand images load; CTA "Create, optimize and publish — from one calm place." with Get started + Explore features; honest empty testimonial state present; footer #1F1F1F intact; 0 horizontal overflow; 0 page/console errors
+- VLM hero review: "Premium and well-composed… no layout defects, overlaps, clipping or awkward artifacts; pennant integration seamless; mist transition professional"
+- Mobile 390: overflow 0, h1 + both images present; Tablet 768: overflow 0
+- FR locale (cms_locale=fr): "Notre mission." + FR mission/story headings render, html lang=fr
+- tsc: 0 errors in touched files (157 pre-existing baseline errors in unrelated examples/prisma/api files); eslint: 0 problems in touched files; en/fr parity OK; dev.log clean
+
+Stage Summary:
+- About page is now a premium editorial long-form page matching the reference structure/quality without copying any branding, text or images
+- 9 files: about-page.tsx (new), testimonial-carousel.tsx (new), content-pages.tsx, marketing-site.tsx, layout.tsx, globals.css, en+fr client-marketing.ts, + 2 generated images
+- Ready to commit & push as MKT-ABOUT-1
