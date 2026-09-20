@@ -335,26 +335,25 @@ export const clientMarketingEn: Record<string, string> = {
 
   // ---- About ----
   'mkt.about.eyebrow': 'About',
-  'mkt.about.title': 'Building a calmer way to create and publish.',
-  'mkt.about.intro':
-    'Karmax is an independent product built by a small team that runs multiple content sites and got tired of stitching six tools together for every article.',
-  'mkt.about.heroFigure':
-    'The Karmax workflow — AI content, SEO, media, automation and publishing in one workspace.',
-  'mkt.about.missionTitle': 'Our mission',
-  'mkt.about.missionBody':
+  'mkt.about.heroTitle': 'Our mission.',
+  'mkt.about.missionHead': 'One calm workflow for everything you publish.',
+  'mkt.about.missionLead':
+    'Karmax exists because the way teams publish is broken — writing in one app, SEO in another, media in a third, publishing by copy-paste. We are an independent product built by a small team that runs multiple content sites and got tired of stitching six tools together for every article.',
+  'mkt.about.rowsLabel': 'Mission and story',
+  'mkt.about.studioAlt':
+    'A calm office lounge with orange armchairs and a large “CALM” letter installation on a wooden slat wall',
+  'mkt.about.rowMissionTitle': 'Our mission: one calm platform for people who publish.',
+  'mkt.about.rowMissionBody1':
     'Give every person who publishes — solo bloggers, agencies, publishers, businesses — one calm, honest platform for the whole content workflow: writing, media, SEO, engagement and automation.',
-  'mkt.about.storyTitle': 'Our story',
-  'mkt.about.storySubtitle': 'From too many tabs to one calm workflow.',
-  'mkt.about.storyLabel': 'Part',
-  'mkt.about.story1Title': 'The tools were all there. Never together.',
-  'mkt.about.story1Body':
-    'Writing lived in one app, SEO in another, media in a third — and publishing happened by copy-paste. Every article meant a relay of tabs, exports and re-uploads.',
-  'mkt.about.story2Title': 'So we built the workflow itself.',
-  'mkt.about.story2Body':
-    'We connected an editor, a full SEO suite, a media library, a newsletter and automations into one product that talks to the sites you already run. The workflow is the product.',
-  'mkt.about.story3Title': 'Your sites stay yours.',
-  'mkt.about.story3Body':
-    'Karmax is a multi-tenant platform: you connect your sites — WordPress via its REST API or any CMS with a standard REST endpoint — and manage content, media, SEO, comments and newsletters per site from one dashboard. Roles and permissions mirror real editorial teams, and automations handle the routine parts.',
+  'mkt.about.rowMissionBody2':
+    'We only win when your workflow gets calmer. Your content lives in your CMS and your sites stay yours — Karmax manages and publishes, it never holds your work hostage.',
+  'mkt.about.teamAlt': 'A small team collaborating around a desk in a warm studio workspace',
+  'mkt.about.rowStoryTitle': 'Our story',
+  'mkt.about.rowStoryBody1':
+    'The tools were all there, but never together. Writing lived in one app, SEO in another, media in a third — and publishing happened by copy-paste. So we built the workflow itself: an editor, a full SEO suite, a media library, a newsletter and automations, connected in one product that talks to the sites you already run.',
+  'mkt.about.rowStoryBody2':
+    'Today Karmax is a multi-tenant platform: you connect your sites — WordPress via its REST API or any CMS with a standard REST endpoint — and manage content, media, SEO, comments and newsletters per site from one dashboard. Roles and permissions mirror real editorial teams, and automations handle the routine parts.',
+  'mkt.about.believeEyebrow': 'Principles',
   'mkt.about.believeTitle': 'What we believe',
   'mkt.about.believeSubtitle': 'Four principles that shape every decision.',
   'mkt.about.believe1Title': 'Simplicity',
@@ -365,10 +364,11 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.about.believe3Body': 'What the marketing says is what the product does. No fake urgency, no dark patterns, no invented numbers.',
   'mkt.about.believe4Title': 'Control',
   'mkt.about.believe4Body': 'Your content lives in your CMS. Documented REST integrations and your own keys — leave anytime, nothing to export.',
-  'mkt.about.customersTitle': 'Customer perspective',
-  'mkt.about.customersBody': 'Real stories from real customers — nothing invented.',
+  'mkt.about.customersTitle': 'What our customers say',
+  'mkt.about.customersBody': 'Real stories from real Karmax customers — in their own words.',
   'mkt.about.customersEmpty':
     'We’re a young product, so this space is waiting for its first story. When customers share their experience, it will appear here — their words, their results.',
+  'mkt.about.customersEmptyRole': 'Independent content publishing platform',
   'mkt.about.carouselLabel': 'Customer testimonials',
   'mkt.about.carouselPrev': 'Previous testimonial',
   'mkt.about.carouselNext': 'Next testimonial',

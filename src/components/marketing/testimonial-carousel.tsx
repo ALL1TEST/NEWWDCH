@@ -3,9 +3,13 @@
 // ============================================================
 // TESTIMONIAL CAROUSEL — customer-perspective slider
 // ============================================================
-// Data-driven carousel: avatar, quote, name and role per slide,
-// prev/next buttons, dot indicators, autoplay (paused on hover
-// and focus), pointer swipe and full keyboard access.
+// Premium card architecture: a single elevated white card whose
+// circular avatar overlaps the top border (crossfading between
+// slides), a centered quote, a hairline divider and the author
+// block (uppercase name + role/company). Floating chevron
+// controls outside the card appear on hover (always visible on
+// touch devices); dot pagination marks the active slide in
+// brand orange.
 //
 // HONESTY RULE: this component renders ONLY the testimonials it
 // is given. Callers must pass real customer data — never
@@ -15,31 +19,34 @@
 // ============================================================
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Quote } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 
 export interface Testimonial {
   quote: string;
   name: string;
   role: string;
+  /** Company the customer works at (rendered under the role). */
+  company?: string;
   /** Optional avatar image URL; falls back to styled initials. */
   avatar?: string;
 }
 
 const AUTO_ADVANCE_MS = 7000;
+const AVATAR_SIZE = 80;
 
-/** Initials circle used when no avatar image is provided. */
+/** Circular avatar with a card-colored ring; initials fallback. */
 function TestimonialAvatar({ testimonial }: { testimonial: Testimonial }) {
   if (testimonial.avatar) {
     return (
       <img
         src={testimonial.avatar}
         alt=""
-        width={48}
-        height={48}
+        width={AVATAR_SIZE}
+        height={AVATAR_SIZE}
         loading="lazy"
         decoding="async"
-        className="h-12 w-12 shrink-0 rounded-full border border-border object-cover"
+        className="h-20 w-20 rounded-full object-cover ring-4 ring-card"
       />
     );
   }
@@ -52,7 +59,7 @@ function TestimonialAvatar({ testimonial }: { testimonial: Testimonial }) {
   return (
     <span
       aria-hidden="true"
-      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-mkt-accent-soft text-base font-bold text-mkt-accent-soft-fg"
+      className="flex h-20 w-20 items-center justify-center rounded-full bg-mkt-accent-soft text-xl font-bold text-mkt-accent-soft-fg ring-4 ring-card"
     >
       {initials}
     </span>
@@ -118,7 +125,7 @@ export function TestimonialCarousel({
       role="region"
       aria-roledescription="carousel"
       aria-label={t('mkt.about.carouselLabel')}
-      className="mx-auto w-full max-w-3xl"
+      className="group/carousel relative mx-auto w-full max-w-2xl"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
@@ -127,11 +134,26 @@ export function TestimonialCarousel({
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
     >
-      {/* Slides */}
+      {/* Card — single frame, content slides inside */}
       <div
-        className="overflow-hidden rounded-3xl border border-border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_40px_-12px_rgb(0_0_0/0.12)]"
+        className="relative overflow-hidden rounded-3xl border border-border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_40px_-12px_rgb(0_0_0/0.12)]"
         aria-live="polite"
       >
+        {/* Avatar overlapping the top border — crossfades per slide */}
+        <div className="pointer-events-none absolute left-1/2 top-0 z-10 h-20 w-20 -translate-x-1/2 -translate-y-1/2">
+          {testimonials.map((testimonial, i) => (
+            <span
+              key={`avatar-${testimonial.name}-${i}`}
+              className={`absolute inset-0 transition-opacity duration-500 motion-reduce:transition-none ${
+                i === index ? 'opacity-100' : 'opacity-0'
+              }`}
+            >
+              <TestimonialAvatar testimonial={testimonial} />
+            </span>
+          ))}
+        </div>
+
+        {/* Slides */}
         <div
           className="flex transition-transform duration-500 ease-out motion-reduce:transition-none"
           style={{ transform: `translateX(-${index * 100}%)` }}
@@ -145,24 +167,20 @@ export function TestimonialCarousel({
               aria-label={`${i + 1} / ${count}`}
               aria-hidden={i !== index}
             >
-              <div className="flex flex-col items-center gap-6 px-6 py-12 text-center sm:px-12 sm:py-16">
-                <span
-                  className="flex h-12 w-12 items-center justify-center rounded-2xl bg-mkt-accent-soft text-mkt-accent-soft-fg"
-                  aria-hidden="true"
-                >
-                  <Quote className="h-6 w-6" />
-                </span>
-                <blockquote className="max-w-2xl">
-                  <p className="text-lg leading-relaxed text-text-primary sm:text-xl">
+              <div className="flex h-full flex-col items-center gap-6 px-6 pb-8 pt-16 text-center sm:px-12 sm:pt-20">
+                <blockquote className="max-w-xl">
+                  <p className="text-base leading-relaxed text-text-primary sm:text-lg">
                     “{testimonial.quote}”
                   </p>
                 </blockquote>
-                <figcaption className="flex items-center gap-3.5">
-                  <TestimonialAvatar testimonial={testimonial} />
-                  <span className="flex flex-col items-start text-left">
-                    <span className="text-sm font-bold text-text-primary">{testimonial.name}</span>
-                    <span className="text-sm text-text-secondary">{testimonial.role}</span>
-                  </span>
+                <figcaption className="w-full border-t border-border pt-5">
+                  <p className="text-sm font-bold uppercase tracking-wider text-text-primary">
+                    {testimonial.name}
+                  </p>
+                  <p className="mt-1 text-sm leading-snug text-text-secondary">
+                    {testimonial.role}
+                    {testimonial.company ? ` · ${testimonial.company}` : ''}
+                  </p>
                 </figcaption>
               </div>
             </figure>
@@ -170,18 +188,32 @@ export function TestimonialCarousel({
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="mt-6 flex items-center justify-center gap-4">
-        <button
-          type="button"
-          onClick={() => go(index - 1)}
-          disabled={count <= 1}
-          aria-label={t('mkt.about.carouselPrev')}
-          className="mkt-focus flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-text-secondary transition-colors hover:border-muted-foreground/50 hover:text-text-primary disabled:opacity-40"
-        >
-          <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-        </button>
-        <div className="flex items-center gap-2.5">
+      {/* Floating chevron controls — revealed on hover (pointer
+          devices), always visible on touch, always keyboard-safe. */}
+      {count > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={() => go(index - 1)}
+            aria-label={t('mkt.about.carouselPrev')}
+            className="mkt-focus absolute -left-4 top-1/2 z-20 hidden -translate-y-1/2 rounded-full p-2 text-muted-foreground transition-opacity duration-200 hover:text-text-primary focus-visible:opacity-100 sm:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/carousel:opacity-100 [@media(pointer:coarse)]:opacity-100"
+          >
+            <ChevronLeft className="h-7 w-7" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => go(index + 1)}
+            aria-label={t('mkt.about.carouselNext')}
+            className="mkt-focus absolute -right-4 top-1/2 z-20 hidden -translate-y-1/2 rounded-full p-2 text-muted-foreground transition-opacity duration-200 hover:text-text-primary focus-visible:opacity-100 sm:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/carousel:opacity-100 [@media(pointer:coarse)]:opacity-100"
+          >
+            <ChevronRight className="h-7 w-7" aria-hidden="true" />
+          </button>
+        </>
+      )}
+
+      {/* Dots */}
+      {count > 1 && (
+        <div className="mt-8 flex items-center justify-center gap-2.5">
           {testimonials.map((testimonial, i) => (
             <button
               key={`dot-${testimonial.name}-${i}`}
@@ -190,21 +222,14 @@ export function TestimonialCarousel({
               aria-label={`${t('mkt.about.carouselGoTo')} ${i + 1}`}
               aria-current={i === index}
               className={`mkt-focus h-2.5 rounded-full transition-all duration-300 motion-reduce:transition-none ${
-                i === index ? 'w-6 bg-mkt-accent' : 'w-2.5 bg-border hover:bg-muted-foreground/40'
+                i === index
+                  ? 'w-6 bg-mkt-accent'
+                  : 'w-2.5 bg-border hover:bg-muted-foreground/40'
               }`}
             />
           ))}
         </div>
-        <button
-          type="button"
-          onClick={() => go(index + 1)}
-          disabled={count <= 1}
-          aria-label={t('mkt.about.carouselNext')}
-          className="mkt-focus flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-text-secondary transition-colors hover:border-muted-foreground/50 hover:text-text-primary disabled:opacity-40"
-        >
-          <ChevronRight className="h-5 w-5" aria-hidden="true" />
-        </button>
-      </div>
+      )}
     </div>
   );
 }

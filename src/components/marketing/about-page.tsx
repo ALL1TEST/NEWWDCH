@@ -3,14 +3,15 @@
 // ============================================================
 // ABOUT — premium long-form editorial page
 // ============================================================
-// Hero/mission → Our mission → Our story (alternating blocks) →
-// What we believe → Customer perspective → dark final CTA.
+// Mission hero ("Our mission." gradient headline over an original
+// mountain scene with the Karmax flag at the summit) → mission
+// statement → alternating story/mission split rows → What we
+// believe → customer testimonial carousel → dark final CTA.
 //
 // Product-honest by construction: copy is adapted from the
-// existing about texts; the visuals are the real product
-// screenshots and the site's illustration language. No invented
-// history, customers, statistics, awards or claims — the
-// testimonial section ships its carousel structure with an
+// existing about texts; the story-row visuals are brand imagery
+// (no invented people, history, customers, stats or claims).
+// The testimonial section ships its carousel structure with an
 // honest empty state until REAL customer data exists.
 // ============================================================
 
@@ -18,17 +19,12 @@ import React from 'react';
 import {
   BadgeCheck,
   Feather,
-  Globe2,
-  Image as ImageIcon,
-  PenLine,
   Quote,
-  Search,
   ShieldCheck,
   Zap,
 } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import {
-  BrowserFrame,
   Eyebrow,
   Logo,
   MarketingButton,
@@ -36,117 +32,178 @@ import {
   SectionHeader,
 } from './primitives';
 import { MKT } from './marketing-header';
-import { SceneStage, SolutionScene } from './solution-illustrations';
 import { TestimonialCarousel, type Testimonial } from './testimonial-carousel';
 
-// -------------------- Hero / mission --------------------
-// Centered editorial headline + a large branded visual: the
-// platform scene on a warm cream panel, with the five workflow
-// pillars orbiting it as floating chips (a static wrapped row
-// on mobile).
+// -------------------- Mountain scene --------------------
+// An original layered-peak illustration: warm stone tones, a
+// snow-capped summit flying the Karmax pennant, and mist that
+// dissolves into the page background (theme-aware via CSS vars
+// + a token-colored fade overlay). Pure SVG — no external asset.
 
-const HERO_CHIPS = [
-  { icon: PenLine, labelKey: 'mkt.feat.ai.label', pos: 'left-[7%] -top-5 -rotate-2' },
-  { icon: Search, labelKey: 'mkt.feat.seo.label', pos: 'right-[9%] -top-5 rotate-2' },
-  { icon: ImageIcon, labelKey: 'mkt.feat.media.label', pos: '-left-4 top-[36%] rotate-1' },
-  { icon: Zap, labelKey: 'mkt.feat.automation.label', pos: '-right-4 top-[58%] -rotate-1' },
-  { icon: Globe2, labelKey: 'mkt.menu.contentPublishing', pos: 'left-1/2 -bottom-5 -translate-x-1/2' },
-];
-
-function HeroChip({ icon: Icon, label }: { icon: typeof PenLine; label: string }) {
+function MountainScene() {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-2 text-sm font-medium text-text-primary shadow-[0_2px_12px_-2px_rgb(0_0_0/0.14)]">
-      <Icon className="h-4 w-4 shrink-0 text-mkt-accent" aria-hidden="true" />
-      {label}
-    </span>
+    <svg
+      viewBox="0 0 1200 560"
+      className="mkt-mountain h-auto w-full"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <filter id="mkt-mtn-blur" x="-30%" y="-60%" width="160%" height="220%">
+          <feGaussianBlur stdDeviation="14" />
+        </filter>
+      </defs>
+
+      {/* Back range — soft distant masses */}
+      <path d="M-40 560 L300 244 L640 560 Z" fill="var(--mtn-back)" />
+      <path d="M560 560 L880 218 L1240 560 Z" fill="var(--mtn-back)" />
+      <path d="M170 560 L520 302 L870 560 Z" fill="var(--mtn-mid)" opacity="0.75" />
+
+      {/* Main peak — two faces for volume */}
+      <path d="M600 88 L340 560 L600 560 Z" fill="var(--mtn-face)" />
+      <path d="M600 88 L860 560 L600 560 Z" fill="var(--mtn-mid)" />
+
+      {/* Ridge lines */}
+      <path
+        d="M600 88 L340 560 M600 88 L860 560"
+        stroke="var(--mtn-ridge)"
+        strokeWidth="2"
+        strokeOpacity="0.45"
+        strokeLinecap="round"
+        fill="none"
+      />
+      <path
+        d="M600 96 L560 200 L586 268 M602 110 L648 214 L622 286"
+        stroke="var(--mtn-ridge)"
+        strokeWidth="1.6"
+        strokeOpacity="0.3"
+        strokeLinecap="round"
+        fill="none"
+      />
+
+      {/* Snow cap — jagged drape over the summit */}
+      <path
+        d="M600 88 L668 212 L650 198 L636 222 L620 204 L604 226 L588 206 L572 222 L556 200 L534 210 Z"
+        fill="var(--mtn-snow)"
+      />
+
+      {/* Karmax pennant at the summit */}
+      <path d="M600 88 L600 26" stroke="var(--mtn-pole)" strokeWidth="3.5" strokeLinecap="round" fill="none" />
+      <path
+        d="M600 28 C 622 21 640 33 666 26 L661 52 C 640 59 622 47 600 54 Z"
+        fill="var(--mkt-accent)"
+      />
+      <path
+        d="M611 33.5 L611 49.5 M626 34.5 L615.5 41.5 L626 48.5"
+        stroke="#ffffff"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+
+      {/* Atmospheric mist — theme-colored clouds blurring the base */}
+      <g filter="url(#mkt-mtn-blur)">
+        <ellipse cx="252" cy="352" rx="96" ry="22" fill="var(--background)" opacity="0.6" />
+        <ellipse cx="962" cy="384" rx="104" ry="24" fill="var(--background)" opacity="0.6" />
+        <ellipse cx="386" cy="436" rx="184" ry="38" fill="var(--background)" opacity="0.85" />
+        <ellipse cx="824" cy="472" rx="222" ry="44" fill="var(--background)" opacity="0.85" />
+        <ellipse cx="600" cy="506" rx="330" ry="50" fill="var(--background)" opacity="0.95" />
+      </g>
+    </svg>
   );
 }
+
+// -------------------- Hero / mission --------------------
+// Centered serif "Our mission." with the brand gradient; the
+// mountain rises IN FRONT of the headline's lower portion
+// (depth effect), then the mission statement lands below.
 
 function AboutHero() {
   const { t } = useT();
   return (
     <section className="relative overflow-hidden pt-32 sm:pt-40">
-      <div className="mkt-dotgrid pointer-events-none absolute inset-0" aria-hidden="true" />
-      <div
-        className="pointer-events-none absolute left-1/2 top-[-25%] h-[32rem] w-[58rem] -translate-x-1/2 rounded-full blur-3xl"
-        style={{ background: 'var(--mkt-hero-glow)' }}
-        aria-hidden="true"
-      />
-      <div className="mkt-container relative pb-20 sm:pb-28">
+      <div className="mkt-container relative">
         <Reveal>
-          <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 text-center">
-            <Eyebrow>{t('mkt.about.eyebrow')}</Eyebrow>
-            <h1 className="mkt-display text-[2.25rem] leading-[1.08] text-text-primary sm:text-5xl lg:text-[3.4rem]">
-              {t('mkt.about.title')}
-            </h1>
-            <p className="max-w-2xl text-base leading-relaxed text-text-secondary sm:text-lg">
-              {t('mkt.about.intro')}
-            </p>
-          </div>
+          <h1 className="mkt-display mkt-serif relative z-10 mx-auto max-w-4xl text-center text-5xl leading-[1.05] sm:text-7xl lg:text-8xl">
+            <span className="bg-gradient-to-r from-[#3B82F6] via-[#EC4899] to-[#FF4800] bg-clip-text text-transparent">
+              {t('mkt.about.heroTitle')}
+            </span>
+          </h1>
         </Reveal>
 
-        <Reveal delay={160}>
-          <figure
-            className="relative mx-auto mt-14 w-full max-w-5xl sm:mt-20"
-            aria-label={t('mkt.about.heroFigure')}
-          >
-            {/* Floating workflow chips (md+) */}
-            <div className="pointer-events-none absolute inset-0 z-10 hidden md:block">
-              {HERO_CHIPS.map((chip) => {
-                const Icon = chip.icon;
-                return (
-                  <span key={chip.labelKey} className={`absolute ${chip.pos}`}>
-                    <HeroChip icon={Icon} label={t(chip.labelKey)} />
-                  </span>
-                );
-              })}
-            </div>
+        {/* Mountain scene — summit overlaps the headline bottom */}
+        <div className="pointer-events-none relative z-20 -mt-16 sm:-mt-24 lg:-mt-32">
+          <MountainScene />
+          {/* Fade the base into the page background */}
+          <div className="absolute inset-x-0 bottom-0 h-[34%] bg-gradient-to-b from-transparent to-background" />
+        </div>
 
-            {/* Branded visual — the platform scene on a cream panel */}
-            <div className="relative overflow-hidden rounded-[2rem] border border-border bg-mkt-surface-2 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_16px_48px_-16px_rgb(0_0_0/0.14)]">
-              <div className="mkt-dotgrid absolute inset-0" aria-hidden="true" />
-              <SolutionScene name="platform" className="relative mx-auto max-w-2xl p-6 sm:p-10" />
-            </div>
-
-            {/* Static chip row on small screens */}
-            <div className="mt-5 flex flex-wrap justify-center gap-2.5 md:hidden">
-              {HERO_CHIPS.map((chip) => {
-                const Icon = chip.icon;
-                return <HeroChip key={chip.labelKey} icon={Icon} label={t(chip.labelKey)} />;
-              })}
-            </div>
-          </figure>
+        {/* Mission statement */}
+        <Reveal delay={120}>
+          <div className="relative z-10 mx-auto -mt-10 flex max-w-2xl flex-col items-center gap-5 text-center sm:-mt-16">
+            <h2 className="mkt-serif text-2xl font-bold text-text-primary sm:text-[2rem]">
+              {t('mkt.about.missionHead')}
+            </h2>
+            <p className="text-base leading-relaxed text-text-secondary sm:text-lg">
+              {t('mkt.about.missionLead')}
+            </p>
+          </div>
         </Reveal>
       </div>
     </section>
   );
 }
 
-// -------------------- Our mission --------------------
-// Cream band, editorial typography: large statement text on one
-// side, the publishing illustration on the other.
+// -------------------- Story & mission split rows --------------------
+// Editorial alternating photo + text rows. The visuals are brand
+// imagery (generated illustrations of the workspace and a team
+// at work) — no invented people, names or milestones.
 
-function AboutMission() {
+function StoryFigure({ src, alt }: { src: string; alt: string }) {
+  return (
+    <figure className="overflow-hidden rounded-[1.5rem] shadow-[0_2px_8px_rgb(0_0_0/0.05),0_24px_64px_-24px_rgb(0_0_0/0.22)]">
+      <img src={src} alt={alt} loading="lazy" decoding="async" className="h-auto w-full" width={1344} height={768} />
+    </figure>
+  );
+}
+
+function AboutStoryRows() {
   const { t } = useT();
   return (
-    <section className="border-y border-border bg-mkt-surface-2" aria-labelledby="about-mission-heading">
-      <div className="mkt-container py-20 sm:py-28">
-        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
+    <section className="mkt-section" aria-label={t('mkt.about.rowsLabel')}>
+      <div className="mkt-container flex flex-col gap-20 sm:gap-28">
+        {/* Row 1 — mission: image left, text right */}
+        <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
           <Reveal>
-            <div className="flex flex-col items-start gap-6">
-              <h2
-                id="about-mission-heading"
-                className="mkt-h2 text-[1.75rem] text-text-primary sm:text-4xl"
-              >
-                {t('mkt.about.missionTitle')}
+            <StoryFigure src="/marketing/about-studio.png" alt={t('mkt.about.studioAlt')} />
+          </Reveal>
+          <Reveal delay={100}>
+            <div className="flex flex-col items-start gap-5">
+              <Eyebrow>{t('mkt.about.missionTitle')}</Eyebrow>
+              <h2 className="mkt-serif text-[1.75rem] font-bold leading-[1.15] text-text-primary sm:text-[2.125rem]">
+                {t('mkt.about.rowMissionTitle')}
               </h2>
-              <p className="text-xl leading-relaxed text-text-secondary sm:text-2xl sm:leading-[1.45]">
-                {t('mkt.about.missionBody')}
-              </p>
+              <p className="text-base leading-relaxed text-text-secondary">{t('mkt.about.rowMissionBody1')}</p>
+              <p className="text-base leading-relaxed text-text-secondary">{t('mkt.about.rowMissionBody2')}</p>
             </div>
           </Reveal>
-          <Reveal delay={120}>
-            <SceneStage name="publishing" />
+        </div>
+
+        {/* Row 2 — story: text left, image right */}
+        <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
+          <Reveal>
+            <div className="flex flex-col items-start gap-5 lg:order-first">
+              <Eyebrow>{t('mkt.about.rowStoryEyebrow')}</Eyebrow>
+              <h2 className="mkt-serif text-[1.75rem] font-bold leading-[1.15] text-text-primary sm:text-[2.125rem]">
+                {t('mkt.about.rowStoryTitle')}
+              </h2>
+              <p className="text-base leading-relaxed text-text-secondary">{t('mkt.about.rowStoryBody1')}</p>
+              <p className="text-base leading-relaxed text-text-secondary">{t('mkt.about.rowStoryBody2')}</p>
+            </div>
+          </Reveal>
+          <Reveal delay={100}>
+            <StoryFigure src="/marketing/about-team.png" alt={t('mkt.about.teamAlt')} />
           </Reveal>
         </div>
       </div>
@@ -154,80 +211,9 @@ function AboutMission() {
   );
 }
 
-// -------------------- Our story --------------------
-// Alternating text + real product screenshot blocks, telling
-// why Karmax exists and how it works. Copy adapted from the
-// existing about texts — nothing invented.
-
-const STORY_BLOCKS = [
-  {
-    shot: '/marketing/shot-articles.png',
-    titleKey: 'mkt.about.story1Title',
-    bodyKey: 'mkt.about.story1Body',
-  },
-  {
-    shot: '/marketing/shot-seo.png',
-    titleKey: 'mkt.about.story2Title',
-    bodyKey: 'mkt.about.story2Body',
-  },
-  {
-    shot: '/marketing/shot-automation.png',
-    titleKey: 'mkt.about.story3Title',
-    bodyKey: 'mkt.about.story3Body',
-  },
-];
-
-function AboutStory() {
-  const { t } = useT();
-  return (
-    <section className="mkt-section" aria-labelledby="about-story-heading">
-      <div className="mkt-container flex flex-col gap-16 sm:gap-24">
-        <Reveal>
-          <SectionHeader
-            id="about-story-heading"
-            title={t('mkt.about.storyTitle')}
-            subtitle={t('mkt.about.storySubtitle')}
-          />
-        </Reveal>
-        {STORY_BLOCKS.map((block, i) => {
-          const flip = i % 2 === 1;
-          return (
-            <Reveal key={block.titleKey}>
-              <div
-                className={`flex flex-col gap-10 lg:items-center lg:gap-16 ${
-                  flip ? 'lg:flex-row-reverse' : 'lg:flex-row'
-                }`}
-              >
-                <div className="flex flex-1 flex-col items-start gap-5">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-widest text-mkt-accent">
-                    <span className="h-1 w-1 rounded-full bg-mkt-accent" aria-hidden="true" />
-                    {t('mkt.about.storyLabel')} {String(i + 1).padStart(2, '0')}
-                  </span>
-                  <h3 className="mkt-h2 max-w-md text-2xl text-text-primary sm:text-[2rem]">
-                    {t(block.titleKey)}
-                  </h3>
-                  <p className="max-w-md text-base leading-relaxed text-text-secondary">
-                    {t(block.bodyKey)}
-                  </p>
-                </div>
-                <div className="flex-1">
-                  <BrowserFrame
-                    src={block.shot}
-                    alt={`${t(block.titleKey)} — ${t('mkt.brand.name')}`}
-                  />
-                </div>
-              </div>
-            </Reveal>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
 // -------------------- What we believe --------------------
-// Cream band with a 4-card principle grid — subtle borders,
-// small icons, concise descriptions.
+// 4 principle cards — subtle borders, small icons, concise
+// descriptions.
 
 const BELIEFS = [
   { icon: Feather, titleKey: 'mkt.about.believe1Title', bodyKey: 'mkt.about.believe1Body' },
@@ -239,11 +225,12 @@ const BELIEFS = [
 function AboutBeliefs() {
   const { t } = useT();
   return (
-    <section className="border-y border-border bg-mkt-surface-2" aria-labelledby="about-believe-heading">
-      <div className="mkt-container py-20 sm:py-28">
+    <section className="mkt-section pt-0" aria-labelledby="about-believe-heading">
+      <div className="mkt-container">
         <Reveal>
           <SectionHeader
             id="about-believe-heading"
+            eyebrow={t('mkt.about.believeEyebrow')}
             title={t('mkt.about.believeTitle')}
             subtitle={t('mkt.about.believeSubtitle')}
           />
@@ -253,16 +240,12 @@ function AboutBeliefs() {
             const Icon = belief.icon;
             return (
               <Reveal key={belief.titleKey} delay={i * 70}>
-                <div className="mkt-card-hover h-full rounded-2xl border border-border bg-card p-6">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-mkt-accent-soft text-mkt-accent-soft-fg">
+                <div className="mkt-card-hover h-full rounded-2xl border border-border bg-mkt-about-warm p-6">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-card text-mkt-accent shadow-[0_1px_2px_rgb(0_0_0/0.05)]">
                     <Icon className="h-5 w-5" aria-hidden="true" />
                   </span>
-                  <h3 className="mt-4 text-sm font-semibold text-text-primary">
-                    {t(belief.titleKey)}
-                  </h3>
-                  <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                    {t(belief.bodyKey)}
-                  </p>
+                  <h3 className="mt-4 text-sm font-semibold text-text-primary">{t(belief.titleKey)}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-text-secondary">{t(belief.bodyKey)}</p>
                 </div>
               </Reveal>
             );
@@ -283,8 +266,8 @@ const TESTIMONIALS: Testimonial[] = [];
 function AboutCustomers() {
   const { t } = useT();
   return (
-    <section className="mkt-section" aria-labelledby="about-customers-heading">
-      <div className="mkt-container">
+    <section className="border-y border-border bg-mkt-about-warm" aria-labelledby="about-customers-heading">
+      <div className="mkt-container py-20 sm:py-28">
         <Reveal>
           <SectionHeader
             id="about-customers-heading"
@@ -292,24 +275,29 @@ function AboutCustomers() {
             subtitle={t('mkt.about.customersBody')}
           />
         </Reveal>
-        <Reveal delay={100} className="mt-12">
+        <Reveal delay={100} className="mt-16">
           {TESTIMONIALS.length > 0 ? (
             <TestimonialCarousel testimonials={TESTIMONIALS} />
           ) : (
-            <div className="mx-auto flex max-w-2xl flex-col items-center gap-5 rounded-3xl border border-dashed border-muted-foreground/35 bg-mkt-surface p-8 text-center sm:p-12">
-              <span
-                className="flex h-12 w-12 items-center justify-center rounded-2xl bg-mkt-accent-soft text-mkt-accent-soft-fg"
-                aria-hidden="true"
-              >
-                <Quote className="h-6 w-6" />
+            /* Honest empty state — same card architecture as the
+               carousel (avatar overlapping the top border, quote,
+               author area) without any fabricated testimonial. */
+            <figure className="relative mx-auto flex w-full max-w-2xl flex-col items-center gap-5 rounded-3xl border border-border bg-card px-6 pb-9 pt-16 text-center shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_40px_-12px_rgb(0_0_0/0.12)] sm:px-12">
+              <span className="absolute left-1/2 top-0 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-mkt-accent-soft ring-4 ring-card">
+                <Quote className="h-8 w-8 text-mkt-accent-soft-fg" aria-hidden="true" />
               </span>
-              <p className="max-w-xl text-base leading-relaxed text-text-secondary">
-                {t('mkt.about.customersEmpty')}
-              </p>
-              <MarketingButton href={MKT.features} variant="secondary">
-                {t('mkt.about.ctaSecondary')}
-              </MarketingButton>
-            </div>
+              <blockquote className="max-w-xl">
+                <p className="text-base leading-relaxed text-text-primary sm:text-lg">
+                  {t('mkt.about.customersEmpty')}
+                </p>
+              </blockquote>
+              <div className="mt-2 w-full border-t border-border pt-5">
+                <p className="text-sm font-bold uppercase tracking-wider text-text-primary">
+                  {t('mkt.brand.name')}
+                </p>
+                <p className="mt-1 text-sm text-text-secondary">{t('mkt.about.customersEmptyRole')}</p>
+              </div>
+            </figure>
           )}
         </Reveal>
       </div>
@@ -336,10 +324,7 @@ function AboutCta() {
         <Reveal>
           <div className="mx-auto flex max-w-2xl flex-col items-center gap-5 text-center">
             <Logo tone="accent" />
-            <h2
-              id="about-cta-heading"
-              className="mkt-h2 text-[1.75rem] text-mkt-footer-heading sm:text-4xl"
-            >
+            <h2 id="about-cta-heading" className="mkt-h2 text-[1.75rem] text-mkt-footer-heading sm:text-4xl">
               {t('mkt.about.ctaTitle')}
             </h2>
             <p className="text-base leading-relaxed text-mkt-footer-text">{t('mkt.about.ctaBody')}</p>
@@ -364,8 +349,7 @@ export function AboutPage() {
   return (
     <>
       <AboutHero />
-      <AboutMission />
-      <AboutStory />
+      <AboutStoryRows />
       <AboutBeliefs />
       <AboutCustomers />
       <AboutCta />

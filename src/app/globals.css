@@ -331,6 +331,7 @@
   --mkt-accent-border: #fcd0bb;                      /* peach border */
   --mkt-surface: oklch(0.992 0 0);                   /* off-white section bg */
   --mkt-surface-2: #faf5f0;                          /* warm-tinted bg */
+  --mkt-about-warm: #faf8f5;                         /* About page soft warm grey */
   --mkt-grid-line: oklch(0.922 0 0 / 55%);
   --mkt-hero-glow: rgb(255 72 0 / 8%);
   --mkt-code-bg: oklch(0.205 0 0);
@@ -346,6 +347,7 @@
   --mkt-accent-border: rgb(255 122 89 / 32%);
   --mkt-surface: oklch(0.17 0 0);
   --mkt-surface-2: #211c19;
+  --mkt-about-warm: #201d1a;
   --mkt-grid-line: oklch(1 0 0 / 6%);
   --mkt-hero-glow: rgb(255 122 89 / 10%);
   --mkt-code-bg: oklch(0.17 0 0);
@@ -379,6 +381,7 @@
   --color-mkt-accent-border: var(--mkt-accent-border);
   --color-mkt-surface: var(--mkt-surface);
   --color-mkt-surface-2: var(--mkt-surface-2);
+  --color-mkt-about-warm: var(--mkt-about-warm);
   --color-mkt-code-bg: var(--mkt-code-bg);
   --color-mkt-code-fg: var(--mkt-code-fg);
   --color-mkt-footer-bg: var(--mkt-footer-bg);
@@ -432,6 +435,7 @@
   --mkt-accent-border: #fcd0bb;
   --mkt-surface: oklch(0.992 0 0);
   --mkt-surface-2: #faf5f0;
+  --mkt-about-warm: #faf8f5;
   --mkt-grid-line: oklch(0.922 0 0 / 55%);
   --mkt-hero-glow: rgb(255 72 0 / 8%);
   --mkt-code-bg: oklch(0.205 0 0);
@@ -490,6 +494,31 @@
   text-wrap: balance;
 }
 .mkt-h2 { letter-spacing: -0.025em; line-height: 1.08; font-weight: 700; text-wrap: balance; }
+
+/* Editorial display serif (About page) — Fraunces with a
+   Georgia-system fallback; used for premium long-form headings. */
+.mkt-serif {
+  font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  font-optical-sizing: auto;
+}
+
+/* About-page mountain scene palette (light + dark). */
+.mkt-mountain {
+  --mtn-back: #ede7de;
+  --mtn-mid: #dcd3c6;
+  --mtn-face: #c9beac;
+  --mtn-ridge: #b3a48d;
+  --mtn-snow: #fdfbf7;
+  --mtn-pole: #57504a;
+}
+.dark .mkt-mountain {
+  --mtn-back: #2a2620;
+  --mtn-mid: #37312a;
+  --mtn-face: #463e33;
+  --mtn-ridge: #5d5343;
+  --mtn-snow: #d9d3c9;
+  --mtn-pole: #c9c2b8;
+}
 
 /* Eyebrow label */
 .mkt-eyebrow {
