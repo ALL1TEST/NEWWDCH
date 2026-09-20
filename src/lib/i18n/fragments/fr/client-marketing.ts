@@ -328,31 +328,47 @@ export const clientMarketingFr: Record<string, string> = {
 
   // ---- À propos ----
   'mkt.about.eyebrow': 'À propos',
-  'mkt.about.title': 'Nous construisons l’outil avec lequel nous publions.',
+  'mkt.about.title': 'Bâtir une manière plus sereine de créer et de publier.',
   'mkt.about.intro':
     'Karmax est un produit indépendant, construit par une petite équipe qui gère plusieurs sites de contenu et s’est lassée d’assembler six outils pour chaque article.',
+  'mkt.about.heroFigure':
+    'Le workflow Karmax — contenu IA, SEO, médias, automatisation et publication dans un seul espace.',
   'mkt.about.missionTitle': 'Notre mission',
   'mkt.about.missionBody':
     'Offrir à toute personne qui publie — blogueurs solos, agences, éditeurs, entreprises — une plateforme sereine et honnête pour tout le flux de contenu : écriture, médias, SEO, engagement et automatisation.',
-  'mkt.about.whyTitle': 'Pourquoi nous l’avons construit',
-  'mkt.about.whyBody':
-    'Les outils existaient tous, mais jamais réunis. L’écriture vivait dans une appli, le SEO dans une autre, les médias dans une troisième, la publication par copier-coller. Nous voulions le flux lui-même — alors nous avons connecté un éditeur, une suite SEO complète, une médiathèque, la newsletter et l’automatisation dans un produit qui dialogue avec les sites que vous gérez déjà.',
-  'mkt.about.howTitle': 'Comment ça marche',
-  'mkt.about.howBody':
+  'mkt.about.storyTitle': 'Notre histoire',
+  'mkt.about.storySubtitle': 'De trop d’onglets à un flux de travail apaisé.',
+  'mkt.about.storyLabel': 'Partie',
+  'mkt.about.story1Title': 'Les outils existaient. Jamais ensemble.',
+  'mkt.about.story1Body':
+    'L’écriture vivait dans une application, le SEO dans une autre, les médias dans une troisième — et la publication se faisait par copier-coller. Chaque article impliquait une chaîne d’onglets, d’exports et de rechargements.',
+  'mkt.about.story2Title': 'Alors, nous avons construit le workflow lui-même.',
+  'mkt.about.story2Body':
+    'Nous avons réuni un éditeur, une suite SEO complète, une médiathèque, une newsletter et des automatisations dans un seul produit, qui dialogue avec les sites que vous exploitez déjà. Le workflow est le produit.',
+  'mkt.about.story3Title': 'Vos sites restent les vôtres.',
+  'mkt.about.story3Body':
     'Karmax est une plateforme multi-tenant : vous connectez vos sites — WordPress via son API REST ou tout CMS avec un point d’accès REST standard — et vous gérez contenu, médias, SEO, commentaires et newsletters par site depuis un seul tableau de bord. Les rôles et permissions reflètent de vraies équipes éditoriales, et les automatisations s’occupent des tâches récurrentes.',
-  'mkt.about.principlesTitle': 'Principes fondateurs',
-  'mkt.about.principle1Title': 'Un logiciel honnête',
-  'mkt.about.principle1Body': 'Pas de fausse urgence, pas de manipulation, pas de chiffres inventés. Ce que dit le marketing, le produit le fait.',
-  'mkt.about.principle2Title': 'Vos données, vos sites',
-  'mkt.about.principle2Body': 'Votre contenu vit dans votre CMS. Karmax gère et publie — il ne retient jamais votre site en otage.',
-  'mkt.about.principle3Title': 'Serein par défaut',
-  'mkt.about.principle3Body': 'Une interface discrète, des réglages par défaut sensés et zéro animation gratuite. Le travail est le héros, pas l’interface.',
-  'mkt.about.principle4Title': 'Connexions ouvertes',
-  'mkt.about.principle4Body': 'Intégrations REST documentées, webhooks, votre propre SMTP et vos clés IA. Partez quand vous voulez — rien à exporter.',
-  'mkt.about.capabilitiesTitle': 'Capacités clés',
-  'mkt.about.capabilitiesBody': 'Tout ce qui suit est livré dans le produit aujourd’hui — pas sur une diapositive de feuille de route.',
-  'mkt.about.ctaTitle': 'Publiez votre prochain site avec nous.',
-  'mkt.about.ctaBody': 'Commencez sur le plan gratuit et évoluez à votre rythme.',
+  'mkt.about.believeTitle': 'Ce en quoi nous croyons',
+  'mkt.about.believeSubtitle': 'Quatre principes qui guident chaque décision.',
+  'mkt.about.believe1Title': 'Simplicité',
+  'mkt.about.believe1Body': 'Une interface calme, des réglages par défaut sensés et zéro animation gratuite. Le travail est le héros, pas l’interface.',
+  'mkt.about.believe2Title': 'Automatisation',
+  'mkt.about.believe2Body': 'La planification, la distribution et la publication doivent se faire toutes seules — pour que vous restiez concentré sur l’écriture.',
+  'mkt.about.believe3Title': 'Qualité',
+  'mkt.about.believe3Body': 'Ce que dit le marketing, le produit le fait. Pas de fausse urgence, pas de manipulation, pas de chiffres inventés.',
+  'mkt.about.believe4Title': 'Contrôle',
+  'mkt.about.believe4Body': 'Votre contenu vit dans votre CMS. Intégrations REST documentées et vos propres clés — partez quand vous voulez, rien à exporter.',
+  'mkt.about.customersTitle': 'La perspective client',
+  'mkt.about.customersBody': 'Des histoires vraies, de vrais clients — rien d’inventé.',
+  'mkt.about.customersEmpty':
+    'Nous sommes un produit jeune : cet espace attend sa première histoire. Quand des clients partageront leur expérience, elle apparaîtra ici — leurs mots, leurs résultats.',
+  'mkt.about.carouselLabel': 'Témoignages clients',
+  'mkt.about.carouselPrev': 'Témoignage précédent',
+  'mkt.about.carouselNext': 'Témoignage suivant',
+  'mkt.about.carouselGoTo': 'Aller au témoignage',
+  'mkt.about.ctaTitle': 'Créer, optimiser et publier — depuis un seul endroit apaisé.',
+  'mkt.about.ctaBody': 'Commencez sur le plan gratuit et évoluez à votre rythme. Vos sites restent les vôtres.',
+  'mkt.about.ctaSecondary': 'Découvrir les fonctionnalités',
 
   // ---- Vue d’ensemble Solutions (#/solutions) ----
   'mkt.sol.title': 'Des solutions pour chaque objectif de publication.',

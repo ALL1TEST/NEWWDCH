@@ -335,31 +335,47 @@ export const clientMarketingEn: Record<string, string> = {
 
   // ---- About ----
   'mkt.about.eyebrow': 'About',
-  'mkt.about.title': 'We build the tool we publish with.',
+  'mkt.about.title': 'Building a calmer way to create and publish.',
   'mkt.about.intro':
     'Karmax is an independent product built by a small team that runs multiple content sites and got tired of stitching six tools together for every article.',
+  'mkt.about.heroFigure':
+    'The Karmax workflow — AI content, SEO, media, automation and publishing in one workspace.',
   'mkt.about.missionTitle': 'Our mission',
   'mkt.about.missionBody':
     'Give every person who publishes — solo bloggers, agencies, publishers, businesses — one calm, honest platform for the whole content workflow: writing, media, SEO, engagement and automation.',
-  'mkt.about.whyTitle': 'Why we built it',
-  'mkt.about.whyBody':
-    'The tools were all there, but never together. Writing lived in one app, SEO in another, media in a third, publishing by copy-paste. We wanted the workflow itself — so we connected an editor, a full SEO suite, a media library, newsletter and automation into one product that talks to the sites you already run.',
-  'mkt.about.howTitle': 'How it works',
-  'mkt.about.howBody':
+  'mkt.about.storyTitle': 'Our story',
+  'mkt.about.storySubtitle': 'From too many tabs to one calm workflow.',
+  'mkt.about.storyLabel': 'Part',
+  'mkt.about.story1Title': 'The tools were all there. Never together.',
+  'mkt.about.story1Body':
+    'Writing lived in one app, SEO in another, media in a third — and publishing happened by copy-paste. Every article meant a relay of tabs, exports and re-uploads.',
+  'mkt.about.story2Title': 'So we built the workflow itself.',
+  'mkt.about.story2Body':
+    'We connected an editor, a full SEO suite, a media library, a newsletter and automations into one product that talks to the sites you already run. The workflow is the product.',
+  'mkt.about.story3Title': 'Your sites stay yours.',
+  'mkt.about.story3Body':
     'Karmax is a multi-tenant platform: you connect your sites — WordPress via its REST API or any CMS with a standard REST endpoint — and manage content, media, SEO, comments and newsletters per site from one dashboard. Roles and permissions mirror real editorial teams, and automations handle the routine parts.',
-  'mkt.about.principlesTitle': 'Core principles',
-  'mkt.about.principle1Title': 'Honest software',
-  'mkt.about.principle1Body': 'No fake urgency, no dark patterns, no invented numbers. What the marketing says is what the product does.',
-  'mkt.about.principle2Title': 'Your data, your sites',
-  'mkt.about.principle2Body': 'Your content lives in your CMS. Karmax manages and publishes — it never holds your site hostage.',
-  'mkt.about.principle3Title': 'Calm by default',
-  'mkt.about.principle3Body': 'A quiet interface, sensible defaults and zero gratuitous animations. The work is the hero, not the UI.',
-  'mkt.about.principle4Title': 'Open connections',
-  'mkt.about.principle4Body': 'Documented REST integrations, webhooks, and your own SMTP and AI keys. Leave anytime — nothing to export.',
-  'mkt.about.capabilitiesTitle': 'Key capabilities',
-  'mkt.about.capabilitiesBody': 'Everything below ships in the product today — not on a roadmap slide.',
-  'mkt.about.ctaTitle': 'Publish your next site with us.',
-  'mkt.about.ctaBody': 'Start on the free plan and grow from there.',
+  'mkt.about.believeTitle': 'What we believe',
+  'mkt.about.believeSubtitle': 'Four principles that shape every decision.',
+  'mkt.about.believe1Title': 'Simplicity',
+  'mkt.about.believe1Body': 'A calm interface, sensible defaults and zero gratuitous animations. The work is the hero, not the UI.',
+  'mkt.about.believe2Title': 'Automation',
+  'mkt.about.believe2Body': 'Scheduling, distribution and publishing should run on their own — so you can stay focused on the writing.',
+  'mkt.about.believe3Title': 'Quality',
+  'mkt.about.believe3Body': 'What the marketing says is what the product does. No fake urgency, no dark patterns, no invented numbers.',
+  'mkt.about.believe4Title': 'Control',
+  'mkt.about.believe4Body': 'Your content lives in your CMS. Documented REST integrations and your own keys — leave anytime, nothing to export.',
+  'mkt.about.customersTitle': 'Customer perspective',
+  'mkt.about.customersBody': 'Real stories from real customers — nothing invented.',
+  'mkt.about.customersEmpty':
+    'We’re a young product, so this space is waiting for its first story. When customers share their experience, it will appear here — their words, their results.',
+  'mkt.about.carouselLabel': 'Customer testimonials',
+  'mkt.about.carouselPrev': 'Previous testimonial',
+  'mkt.about.carouselNext': 'Next testimonial',
+  'mkt.about.carouselGoTo': 'Go to testimonial',
+  'mkt.about.ctaTitle': 'Create, optimize and publish — from one calm place.',
+  'mkt.about.ctaBody': 'Start on the free plan and grow from there. Your sites stay yours.',
+  'mkt.about.ctaSecondary': 'Explore features',
 
   // ---- Solutions overview (#/solutions) ----
   'mkt.sol.title': 'Solutions for every publishing goal.',
