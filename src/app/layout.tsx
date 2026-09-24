@@ -83,6 +83,37 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var origSet = Element.prototype.setAttribute;
+                  Element.prototype.setAttribute = function(name, value) {
+                    if (typeof name === 'string' && (name === 'bis_skin_checked' || name.indexOf('bis_') === 0)) {
+                      return;
+                    }
+                    return origSet.apply(this, arguments);
+                  };
+                  if (typeof document !== 'undefined') {
+                    var clean = function() {
+                      var els = document.querySelectorAll('[bis_skin_checked]');
+                      for (var i = 0; i < els.length; i++) {
+                        els[i].removeAttribute('bis_skin_checked');
+                      }
+                    };
+                    clean();
+                    if (document.readyState === 'loading') {
+                      document.addEventListener('DOMContentLoaded', clean, { once: true });
+                    }
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body
         suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} ${frauncesSerif.variable} antialiased bg-background text-foreground`}

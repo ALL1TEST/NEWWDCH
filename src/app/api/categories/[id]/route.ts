@@ -154,10 +154,10 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     }
 
     if (existing._count.children > 0) {
-      return NextResponse.json(
-        { error: { code: 'CONFLICT', message: 'Cannot delete category with child categories' }, meta: { requestId: id } },
-        { status: 409 },
-      );
+      await db.category.updateMany({
+        where: { parentId: categoryId },
+        data: { parentId: null },
+      });
     }
 
     await db.category.delete({ where: { id: categoryId } });

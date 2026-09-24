@@ -91,6 +91,7 @@ interface AiProvider {
   apiKey: string | null;
   apiKeyMasked: string | null;
   apiVersion: string | null;
+  config?: string | null;
   isActive: boolean;
   isDefault: boolean;
   connectionStatus: AiConnectionStatus;
@@ -108,7 +109,9 @@ interface ProviderFormData {
   baseUrl: string;
   apiKey: string;
   apiVersion: string;
+  config: string;
   isActive: boolean;
+  isDefault: boolean;
 }
 
 // -------------------- Constants --------------------
@@ -117,7 +120,7 @@ interface ProviderFormData {
 // Legacy kinds (OPENROUTER, OLLAMA, AZURE_OPENAI) are kept in PROVIDER_CONFIGS
 // for display of existing rows but are no longer selectable.
 const PROVIDER_KINDS: AiProviderKind[] = [
-  'OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK', 'CUSTOM',
+  'OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK', 'CLOUDFLARE', 'CUSTOM',
 ];
 
 // NOTE: typed as `Record<string, ...>` (not `Record<AiProviderKind, ...>`) because
@@ -130,6 +133,7 @@ const PROVIDER_CONFIGS: Record<string, { label: string; defaultUrl: string; colo
   OPENROUTER: { label: 'OpenRouter', defaultUrl: 'https://openrouter.ai/api/v1', color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
   GROQ: { label: 'Groq', defaultUrl: 'https://api.groq.com/openai/v1', color: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' },
   DEEPSEEK: { label: 'DeepSeek', defaultUrl: 'https://api.deepseek.com/v1', color: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400' },
+  CLOUDFLARE: { label: 'Cloudflare', defaultUrl: 'https://api.cloudflare.com/client/v4', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
   OLLAMA: { label: 'Ollama', defaultUrl: 'http://localhost:11434/v1', color: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300' },
   AZURE_OPENAI: { label: 'Azure OpenAI', defaultUrl: '', color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400' },
   CUSTOM: { label: 'Custom', defaultUrl: '', color: 'bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300' },
@@ -262,7 +266,9 @@ const emptyForm: ProviderFormData = {
   baseUrl: PROVIDER_CONFIGS.OPENAI.defaultUrl,
   apiKey: '',
   apiVersion: '',
+  config: '',
   isActive: true,
+  isDefault: false,
 };
 
 // -------------------- Component --------------------
@@ -394,6 +400,22 @@ export function ProvidersPage() {
     },
   });
 
+  // Unset default mutation
+  const unsetDefaultMutation = useMutation({
+    mutationFn: (id: string) => patchApi(`/api/ai/providers/${id}`, { isDefault: false }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiProviders.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
+      toast.success(t('ai.defaultRemoved') || 'Default provider removed');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || t('ai.failedToUpdateProvider'));
+    },
+  });
+
   // Toggle active mutation
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
@@ -423,9 +445,11 @@ export function ProvidersPage() {
       name: provider.name,
       kind: provider.kind,
       baseUrl: provider.baseUrl,
-      apiKey: '', // masked in edit
+      apiKey: provider.apiKey ?? '',
       apiVersion: provider.apiVersion ?? '',
+      config: provider.config ?? '',
       isActive: provider.isActive,
+      isDefault: provider.isDefault,
     });
     setShowApiKey(false);
     setDialogOpen(true);
@@ -446,6 +470,17 @@ export function ProvidersPage() {
     if (!editingProvider && !formData.apiKey.trim()) {
       toast.error(t('ai.apiKeyRequired'));
       return;
+    }
+    // CLOUDFLARE providers require Account ID
+    if (formData.kind === 'CLOUDFLARE') {
+      let accountId = '';
+      try {
+        accountId = JSON.parse(formData.config || '{}').accountId || '';
+      } catch {}
+      if (!accountId.trim()) {
+        toast.error('Cloudflare Account ID is required');
+        return;
+      }
     }
     // CUSTOM providers require a Base URL
     if (formData.kind === 'CUSTOM' && !formData.baseUrl.trim()) {
@@ -474,10 +509,13 @@ export function ProvidersPage() {
     setFormData((prev) => ({
       ...prev,
       kind: providerKind,
+      name: (!prev.name || prev.name === PROVIDER_CONFIGS[prev.kind]?.label) ? (PROVIDER_CONFIGS[providerKind]?.label ?? prev.name) : prev.name,
       baseUrl:
         !prev.baseUrl || prev.baseUrl === prevDefaultUrl
-          ? PROVIDER_CONFIGS[providerKind].defaultUrl
+          ? (PROVIDER_CONFIGS[providerKind]?.defaultUrl ?? '')
           : prev.baseUrl,
+      apiKey: '',
+      config: '',
     }));
   };
 
@@ -695,10 +733,33 @@ export function ProvidersPage() {
                             : '—'}
                         </TableCell>
                         <TableCell>
-                          {provider.isDefault && (
-                            <Badge variant="secondary" className="bg-amber-100 text-amber-700">
-                              {t('ai.default')}
-                            </Badge>
+                          {provider.isDefault ? (
+                            <button
+                              type="button"
+                              onClick={() => unsetDefaultMutation.mutate(provider.id)}
+                              disabled={unsetDefaultMutation.isPending && unsetDefaultMutation.variables === provider.id}
+                              title={t('ai.removeDefault') || 'Click to remove default'}
+                              className="inline-flex items-center gap-1 group cursor-pointer"
+                            >
+                              <Badge
+                                variant="secondary"
+                                className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 group-hover:bg-amber-200 dark:group-hover:bg-amber-900/50 transition-colors"
+                              >
+                                {t('ai.default')}
+                                <span className="ml-1 text-[10px] opacity-70 group-hover:opacity-100">✕</span>
+                              </Badge>
+                            </button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={() => setDefaultMutation.mutate(provider.id)}
+                              disabled={setDefaultMutation.isPending && setDefaultMutation.variables === provider.id}
+                              title={t('ai.setAsDefault')}
+                            >
+                              <Star className="h-3.5 w-3.5 text-zinc-400 hover:text-amber-500 transition-colors" />
+                            </Button>
                           )}
                         </TableCell>
                         <TableCell>
@@ -735,12 +796,6 @@ export function ProvidersPage() {
                                 <RefreshCw className="h-4 w-4 mr-2" />
                                 {t('ai.syncModels')}
                               </DropdownMenuItem>
-                              {!provider.isDefault && (
-                                <DropdownMenuItem onClick={() => setDefaultMutation.mutate(provider.id)}>
-                                  <Star className="h-4 w-4 mr-2" />
-                                  {t('ai.setDefault')}
-                                </DropdownMenuItem>
-                              )}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => handleOpenEdit(provider)}>
                                 <Pencil className="h-4 w-4 mr-2" />
@@ -812,7 +867,11 @@ export function ProvidersPage() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="provider-kind">{t('ai.providerKind')}</Label>
-              <Select value={formData.kind} onValueChange={handleKindChange}>
+              <Select
+                value={formData.kind}
+                onValueChange={handleKindChange}
+                disabled={!!editingProvider}
+              >
                 <SelectTrigger id="provider-kind">
                   <SelectValue />
                 </SelectTrigger>
@@ -822,14 +881,45 @@ export function ProvidersPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {editingProvider && (
+                <p className="text-xs text-muted-foreground">
+                  {t('ai.kindLockedHint')}
+                </p>
+              )}
             </div>
+            {formData.kind === 'CLOUDFLARE' && (
+              <div className="grid gap-2">
+                <Label htmlFor="provider-account-id">
+                  Account ID <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="provider-account-id"
+                  placeholder="e.g. 01a23b4c5d6e7f8a9b0c1d2e3f4a5b6c"
+                  value={(() => {
+                    try {
+                      return JSON.parse(formData.config || '{}').accountId || '';
+                    } catch {
+                      return '';
+                    }
+                  })()}
+                  onChange={(e) => {
+                    const val = e.target.value.trim();
+                    let prevCfg: Record<string, unknown> = {};
+                    try { prevCfg = JSON.parse(formData.config || '{}'); } catch {}
+                    prevCfg.accountId = val;
+                    setFormData((p) => ({ ...p, config: JSON.stringify(prevCfg) }));
+                  }}
+                  required
+                />
+              </div>
+            )}
             <div className="grid gap-2">
               <Label htmlFor="provider-url">
                 {t('ai.baseUrl')}{formData.kind === 'CUSTOM' ? ' *' : ''}
               </Label>
               <Input
                 id="provider-url"
-                placeholder={formData.kind === 'CUSTOM' ? 'https://api.example.com/v1' : 'https://api.openai.com/v1'}
+                placeholder={formData.kind === 'CUSTOM' ? 'https://api.example.com/v1' : (PROVIDER_CONFIGS[formData.kind]?.defaultUrl || 'https://api.openai.com/v1')}
                 value={formData.baseUrl}
                 onChange={(e) => setFormData((p) => ({ ...p, baseUrl: e.target.value }))}
                 required={formData.kind === 'CUSTOM'}
@@ -841,12 +931,18 @@ export function ProvidersPage() {
               )}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="provider-key">{t('ai.apiKey')}</Label>
+              <Label htmlFor="provider-key">
+                {formData.kind === 'CLOUDFLARE' ? 'API Token' : t('ai.apiKey')}
+              </Label>
               <div className="relative">
                 <Input
                   id="provider-key"
                   type={showApiKey ? 'text' : 'password'}
-                  placeholder={editingProvider ? t('ai.apiKeyKeepPlaceholder') : 'sk-...'}
+                  placeholder={
+                    formData.kind === 'CLOUDFLARE'
+                      ? 'Cloudflare API Token'
+                      : 'sk-...'
+                  }
                   value={formData.apiKey}
                   onChange={(e) => setFormData((p) => ({ ...p, apiKey: e.target.value }))}
                 />
@@ -856,28 +952,35 @@ export function ProvidersPage() {
                   size="sm"
                   className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
                   onClick={() => setShowApiKey(!showApiKey)}
+                  title={showApiKey ? 'Hide' : 'Show'}
                 >
                   {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
-              {editingProvider && (
-                <p className="text-xs text-muted-foreground">
-                  {t('ai.apiKeyHint')}
-                </p>
-              )}
             </div>
             {formData.kind === 'AZURE_OPENAI' && (
               <p className="text-xs text-muted-foreground">
                 {t('ai.azureLegacyNote')}
               </p>
             )}
-            <div className="flex items-center justify-between">
-              <Label htmlFor="provider-active">{t('common.active')}</Label>
-              <Switch
-                id="provider-active"
-                checked={formData.isActive}
-                onCheckedChange={(checked) => setFormData((p) => ({ ...p, isActive: checked }))}
-              />
+            {/* Active + Default toggles matching Models dialog */}
+            <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+              <div className="flex items-center gap-2.5">
+                <Switch
+                  id="provider-active-toggle"
+                  checked={formData.isActive}
+                  onCheckedChange={(checked) => setFormData((p) => ({ ...p, isActive: checked }))}
+                />
+                <Label htmlFor="provider-active-toggle" className="cursor-pointer text-sm font-medium">{t('common.active')}</Label>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <Switch
+                  id="provider-default-toggle"
+                  checked={formData.isDefault}
+                  onCheckedChange={(checked) => setFormData((p) => ({ ...p, isDefault: checked }))}
+                />
+                <Label htmlFor="provider-default-toggle" className="cursor-pointer text-sm font-medium">{t('ai.setAsDefaultLabel') || 'Set as Default'}</Label>
+              </div>
             </div>
           </div>
           <DialogFooter>

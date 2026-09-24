@@ -25,6 +25,8 @@ import {
 import { useSiteStore, type Site } from '@/lib/stores/site-store';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/query-keys';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -970,6 +972,34 @@ function EditSiteDialog({ open, onOpenChange, site }: EditSiteDialogProps) {
     }
   };
 
+  const queryClient = useQueryClient();
+  const [isSyncingContent, setIsSyncingContent] = useState(false);
+
+  const handleSyncContent = async () => {
+    setIsSyncingContent(true);
+    try {
+      const res = await fetch(`/api/sites/${site.id}/sync`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        const report = data.data;
+        queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.categories.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.tags.all });
+        toast.success(
+          `Synced: ${report.postsDiscovered} posts, ${report.pagesDiscovered} pages (${report.created} created, ${report.updated} updated, ${report.unchanged} unchanged).`
+        );
+      } else {
+        toast.error(data.error || 'Failed to sync content');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to sync content');
+    } finally {
+      setIsSyncingContent(false);
+    }
+  };
+
   const handleSave = async () => {
     const errors = validateSiteFields(name, slug, t);
     if (errors.name || errors.slug) {
@@ -1204,23 +1234,40 @@ function EditSiteDialog({ open, onOpenChange, site }: EditSiteDialogProps) {
             )}
 
             <div className="flex items-center justify-between pt-1">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleReverify}
-                disabled={isVerifying}
-                className="text-xs h-7"
-              >
-                {isVerifying ? (
-                  <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
-                ) : (
-                  <RefreshCw className="h-3 w-3 mr-1.5" />
-                )}
-                Test Connection
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleReverify}
+                  disabled={isVerifying}
+                  className="text-xs h-7"
+                >
+                  {isVerifying ? (
+                    <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3 mr-1.5" />
+                  )}
+                  Test Connection
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSyncContent}
+                  disabled={isSyncingContent}
+                  className="text-xs h-7 border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400"
+                >
+                  {isSyncingContent ? (
+                    <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3 mr-1.5" />
+                  )}
+                  Sync Content
+                </Button>
+              </div>
               {verification.message && (
-                <span className="text-[11px] text-muted-foreground truncate max-w-[280px]">
+                <span className="text-[11px] text-muted-foreground truncate max-w-[200px]">
                   {verification.message}
                 </span>
               )}

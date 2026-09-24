@@ -16,6 +16,7 @@ const dashboard = dynamic(() => import('@/modules/dashboard').then(m => ({ defau
 // own dashboard (separate from both the client CMS and Platform Admin).
 const internalDashboard = dynamic(() => import('@/modules/internal').then(m => ({ default: m.InternalDashboardModule as ComponentType })), { loading: ModuleFallback });
 const content = dynamic(() => import('@/modules/content').then(m => ({ default: m.ContentModule as ComponentType })), { loading: ModuleFallback });
+const pages = dynamic(() => import('@/modules/pages').then(m => ({ default: m.PagesModule as ComponentType })), { loading: ModuleFallback });
 const calendar = dynamic(() => import('@/modules/calendar').then(m => ({ default: m.CalendarModule as ComponentType })), { loading: ModuleFallback });
 const tasks = dynamic(() => import('@/modules/tasks').then(m => ({ default: m.TasksModule as ComponentType })), { loading: ModuleFallback });
 const media = dynamic(() => import('@/modules/media').then(m => ({ default: m.MediaModule as ComponentType })), { loading: ModuleFallback });
@@ -40,5 +41,5 @@ const billing = dynamic(() => import('@/modules/billing').then(m => ({ default: 
 export const moduleRegistry: Record<string, ComponentType> = {
   ...platformModuleRegistry,
   'internal-dashboard': internalDashboard,
-  dashboard, content, calendar, tasks, media, users, categories, tags, comments, newsletter, 'email-templates': emailTemplates, seo, analytics, notifications, settings, ai, audit, backups, automation, jobs, profile, billing,
+  dashboard, content, pages, calendar, tasks, media, users, categories, tags, comments, newsletter, 'email-templates': emailTemplates, seo, analytics, notifications, settings, ai, audit, backups, automation, jobs, profile, billing,
 };

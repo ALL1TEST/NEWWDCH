@@ -216,8 +216,14 @@
   border-radius: 8px;
   margin: 1em 0;
 }
+.editor-content [data-image-wrapper] {
+  margin: 1em 0;
+}
+.editor-content [data-image-wrapper] img {
+  margin: 0;
+}
 .editor-content img.ProseMirror-selectednode {
-  outline: 2px solid var(--primary);
+  outline: 2px solid #facc15;
   outline-offset: 2px;
 }
 
@@ -234,34 +240,85 @@
   opacity: 0.8;
 }
 
-/* ---- Table ---- */
-.editor-content table.editor-table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 1em 0;
-  overflow: hidden;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+/* ---- Table (Matches User Image: Clean grid with light borders and spacious cells) ---- */
+.editor-content .tableWrapper {
+  overflow-x: auto;
+  max-width: 100%;
 }
+
+:root {
+  --table-border-color: #e2e8f0;
+}
+.dark {
+  --table-border-color: #3f3f46;
+}
+
+.editor-content table,
+.editor-content table.editor-table {
+  border-collapse: collapse !important;
+  min-width: 100%;
+  margin: 1.5em 0 !important;
+  border: 1px solid var(--table-border-color, #e2e8f0) !important;
+  table-layout: fixed;
+  background-color: #ffffff;
+}
+
+.dark .editor-content table,
+.dark .editor-content table.editor-table {
+  border: 1px solid var(--table-border-color, #3f3f46) !important;
+  background-color: #18181b;
+}
+
+.editor-content table td,
+.editor-content table th,
 .editor-content table.editor-table td,
 .editor-content table.editor-table th {
-  border: 1px solid var(--border);
-  padding: 0.5em 0.75em;
-  min-width: 80px;
-  vertical-align: top;
+  border: 1px solid var(--table-border-color, #e2e8f0) !important;
+  padding: 12px 16px !important;
+  min-width: 45px;
+  min-height: 32px;
+  vertical-align: middle;
   position: relative;
+  box-sizing: border-box;
 }
+
+.dark .editor-content table td,
+.dark .editor-content table th,
+.dark .editor-content table.editor-table td,
+.dark .editor-content table.editor-table th {
+  border: 1px solid var(--table-border-color, #3f3f46) !important;
+}
+
+.editor-content table th,
 .editor-content table.editor-table th {
-  background: color-mix(in srgb, var(--muted) 50%, transparent);
-  font-weight: 600;
+  background-color: #ffffff;
+  font-weight: 500 !important;
+  color: inherit !important;
+  border: 1px solid #e2e8f0 !important;
   font-size: 0.875em;
   text-align: left;
 }
-.editor-content table.editor-table td {
+
+.dark .editor-content table th,
+.dark .editor-content table.editor-table th {
+  background-color: #18181b;
+  border: 1px solid #3f3f46 !important;
+}
+
+.editor-content table td {
   font-size: 0.925em;
 }
-.editor-content table.editor-table .selectedCell::after {
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
+
+.editor-content table td > p,
+.editor-content table th > p {
+  margin: 0 !important;
+  min-height: 1.4rem;
+  cursor: text;
+}
+
+.editor-content table.editor-table .selectedCell::after,
+.editor-content table .selectedCell::after {
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
   content: "";
   left: 0;
   right: 0;
@@ -270,62 +327,29 @@
   position: absolute;
   pointer-events: none;
 }
-.editor-content table.editor-table .column-resize-handle {
-  position: absolute;
-  right: -2px;
-  top: 0;
-  bottom: -2px;
-  width: 4px;
-  background-color: var(--primary);
-  pointer-events: none;
+
+.editor-content table.editor-table .column-resize-handle,
+.editor-content table .column-resize-handle {
+  display: none !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
 }
 
-/* Fix #4: Table border styles (based on data-borders attribute) */
+/* Fix #4: Table border styles (based on data-borders and data-border-* attributes) */
+.editor-content table[data-borders="none"],
 .editor-content table[data-borders="none"] td,
 .editor-content table[data-borders="none"] th {
-  border: none !important;
-}
-.editor-content table[data-borders="none"] {
-  border: none !important;
+  border: 1px dashed rgba(203, 213, 225, 0.7) !important;
 }
 
-.editor-content table[data-borders="outside"] td,
-.editor-content table[data-borders="outside"] th {
-  border: none !important;
-}
-.editor-content table[data-borders="outside"] {
-  border: 1px solid var(--border) !important;
+.dark .editor-content table[data-borders="none"],
+.dark .editor-content table[data-borders="none"] td,
+.dark .editor-content table[data-borders="none"] th {
+  border: 1px dashed rgba(82, 82, 91, 0.7) !important;
 }
 
-.editor-content table[data-borders="top"] td,
-.editor-content table[data-borders="top"] th,
-.editor-content table[data-borders="bottom"] td,
-.editor-content table[data-borders="bottom"] th,
-.editor-content table[data-borders="left"] td,
-.editor-content table[data-borders="left"] th,
-.editor-content table[data-borders="right"] td,
-.editor-content table[data-borders="right"] th {
-  border: none !important;
-}
 
-.editor-content table[data-borders="top"] td:first-child,
-.editor-content table[data-borders="top"] th:first-child {
-  border-top: 1px solid var(--border) !important;
-}
-.editor-content table[data-borders="top"] {
-  border-top: 1px solid var(--border) !important;
-}
-.editor-content table[data-borders="bottom"] {
-  border-bottom: 1px solid var(--border) !important;
-}
-.editor-content table[data-borders="left"] td:first-child,
-.editor-content table[data-borders="left"] th:first-child {
-  border-left: 1px solid var(--border) !important;
-}
-.editor-content table[data-borders="right"] td:last-child,
-.editor-content table[data-borders="right"] th:last-child {
-  border-right: 1px solid var(--border) !important;
-}
 
 /* ---- Video (YouTube) ---- */
 .editor-content .editor-video {
@@ -587,4 +611,27 @@
   padding: 4px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08);
   animation: table-ctx-fade-in 0.1s ease-out;
+}
+
+/* Dragged block styling (matches Images 1 & 2) */
+.editor-content [data-drag-source="true"] {
+  background-color: #fde047 !important;
+  color: #1a1a1a !important;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px #facc15;
+  transition: background-color 0.15s ease;
+}
+
+.editor-content [data-drag-source="true"] * {
+  color: #1a1a1a !important;
+}
+
+.dark .editor-content [data-drag-source="true"] {
+  background-color: #fde047 !important;
+  color: #1a1a1a !important;
+  box-shadow: 0 0 0 2px #facc15;
+}
+
+.dark .editor-content [data-drag-source="true"] * {
+  color: #1a1a1a !important;
 }

@@ -4,6 +4,7 @@ import React, { createElement, useState, useMemo, useCallback } from 'react';
 import {
   LayoutDashboard,
   FileText,
+  Files,
   Image,
   FolderOpen,
   Users,
@@ -118,6 +119,7 @@ const ALL_SITES_ALLOWED_MODULES = new Set([
   'dashboard',
   'internal-dashboard',
   'content',
+  'pages',
   'calendar',
   'media',
   'users',
@@ -130,6 +132,7 @@ const ALL_SITES_ALLOWED_MODULES = new Set([
 const ICON_MAP: Record<string, LucideIcon> = {
   'LayoutDashboard': LayoutDashboard,
   'FileText': FileText,
+  'Files': Files,
   'Image': Image,
   'FolderOpen': FolderOpen,
   'Users': Users,
@@ -251,6 +254,7 @@ const NAV_LABEL_KEYS: Record<string, string> = {
   // Client CMS nav
   '#': 'nav.dashboard',
   '#content': 'nav.articles',
+  '#pages': 'nav.pages',
   '#calendar': 'nav.calendar',
   '#tasks': 'nav.tasks',
   '#media': 'nav.media',
@@ -298,6 +302,11 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Articles',
     href: '#content',
     icon: 'FileText',
+  },
+  {
+    label: 'Pages',
+    href: '#pages',
+    icon: 'Files',
   },
   {
     label: 'Calendar',

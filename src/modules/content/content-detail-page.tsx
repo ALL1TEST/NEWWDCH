@@ -46,6 +46,7 @@ interface ContentAuthor {
 interface ContentTypeOption {
   id: string;
   name: string;
+  slug?: string;
 }
 
 interface CategoryOption {
@@ -84,14 +85,10 @@ interface ContentDetail {
 
 // -------------------- Component ----------------
 
-export function ContentDetailPage({ contentId }: { contentId: string }) {
+export function ContentDetailPage({ contentId, isPage: isPageProp }: { contentId: string; isPage?: boolean }) {
   const navigate = useNavigationStore((s) => s.navigate);
+  const currentModule = useNavigationStore((s) => s.currentModule);
   const { t } = useT();
-
-  const goEdit = React.useCallback(
-    () => navigate('content', contentId, 'edit'),
-    [navigate, contentId],
-  );
 
   // Fetch content detail
   const {
@@ -104,6 +101,19 @@ export function ContentDetailPage({ contentId }: { contentId: string }) {
     staleTime: 5_000,
     enabled: !!contentId,
   });
+
+  const isPage = Boolean(
+    isPageProp ||
+    currentModule === 'pages' ||
+    (content as any)?.type === 'PAGE' ||
+    content?.contentType?.slug?.toLowerCase() === 'page' ||
+    content?.contentType?.name?.toLowerCase() === 'page'
+  );
+
+  const goEdit = React.useCallback(
+    () => navigate(isPage ? 'pages' : 'content', contentId, 'edit'),
+    [navigate, contentId, isPage],
+  );
 
   // Loading state
   if (isLoading) {
@@ -138,7 +148,7 @@ export function ContentDetailPage({ contentId }: { contentId: string }) {
         breadcrumbs={false}
         action={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate('content')}>
+            <Button variant="outline" size="sm" onClick={() => navigate(isPage ? 'pages' : 'content')}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               {t('common.back')}
             </Button>
@@ -162,7 +172,7 @@ export function ContentDetailPage({ contentId }: { contentId: string }) {
           </div>
 
           {/* Excerpt */}
-          {content.excerpt && (
+          {!isPage && content.excerpt && (
             <p className="text-sm text-muted-foreground leading-relaxed border-l-2 border-muted-foreground/20 pl-4">
               {content.excerpt}
             </p>
@@ -199,35 +209,39 @@ export function ContentDetailPage({ contentId }: { contentId: string }) {
                 </div>
               </div>
 
-              <Separator />
+              {!isPage && (
+                <>
+                  <Separator />
 
-              {/* Category */}
-              <div className="flex items-start gap-3">
-                <FolderOpen className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">{t('articles.category')}</p>
-                  <p className="text-sm font-medium">{content.category?.name ?? t('articles.uncategorized')}</p>
-                </div>
-              </div>
-
-              {/* Tags */}
-              <div className="flex items-start gap-3">
-                <Tag className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground mb-1">{t('articles.tags')}</p>
-                  {content.tags && content.tags.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {content.tags.map((tag) => (
-                        <Badge key={tag.id} variant="secondary" className="text-xs">
-                          {tag.name}
-                        </Badge>
-                      ))}
+                  {/* Category */}
+                  <div className="flex items-start gap-3">
+                    <FolderOpen className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">{t('articles.category')}</p>
+                      <p className="text-sm font-medium">{content.category?.name ?? t('articles.uncategorized')}</p>
                     </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">{t('articles.noTags')}</p>
-                  )}
-                </div>
-              </div>
+                  </div>
+
+                  {/* Tags */}
+                  <div className="flex items-start gap-3">
+                    <Tag className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground mb-1">{t('articles.tags')}</p>
+                      {content.tags && content.tags.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {content.tags.map((tag) => (
+                            <Badge key={tag.id} variant="secondary" className="text-xs">
+                              {tag.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">{t('articles.noTags')}</p>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 

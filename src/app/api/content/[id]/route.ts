@@ -9,6 +9,8 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { slugify } from '@/lib/utils';
 import { z } from 'zod/v4';
+import { publishArticleToConnectedSite } from '@/lib/connection/site-publisher';
+import { sanitizeContentForStorage } from '@/lib/pipeline/content-item-pipeline';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -60,20 +62,21 @@ const fullIncludes = {
 const updateSchema = z.object({
   title: z.string().min(1).max(200).trim().optional(),
   slug: z.string().min(1).max(255).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).trim().optional(),
-  categoryId: z.string().optional().or(z.literal('')),
-  featuredImageId: z.string().optional().or(z.literal('')),
-  content: z.string().trim().optional().or(z.literal('')),
-  excerpt: z.string().max(1000).optional().or(z.literal('')),
+  categoryId: z.string().nullable().optional().or(z.literal('')),
+  contentTypeId: z.string().optional(),
+  featuredImageId: z.string().nullable().optional().or(z.literal('')),
+  content: z.string().nullable().optional().or(z.literal('')),
+  excerpt: z.string().max(1000).nullable().optional().or(z.literal('')),
   status: z.enum(['DRAFT', 'IN_REVIEW', 'APPROVED', 'PUBLISHED', 'UNPUBLISHED', 'ARCHIVED']).optional(),
-  seoTitle: z.string().max(70).optional().or(z.literal('')),
-  seoDescription: z.string().max(160).optional().or(z.literal('')),
-  focusKeyword: z.string().trim().optional().or(z.literal('')),
-  scheduledAt: z.string().datetime({ offset: true }).optional().or(z.literal('')),
-  expiresAt: z.string().datetime({ offset: true }).optional().or(z.literal('')),
+  seoTitle: z.string().max(70).nullable().optional().or(z.literal('')),
+  seoDescription: z.string().max(160).nullable().optional().or(z.literal('')),
+  focusKeyword: z.string().trim().nullable().optional().or(z.literal('')),
+  scheduledAt: z.string().datetime({ offset: true }).nullable().optional().or(z.literal('')),
+  expiresAt: z.string().datetime({ offset: true }).nullable().optional().or(z.literal('')),
   tagIds: z.array(z.string()).optional(),
   changeNote: z.string().max(500).trim().optional(),
-  seoReport: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
-  editorialReport: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
+  seoReport: z.union([z.string(), z.record(z.string(), z.any())]).nullable().optional(),
+  editorialReport: z.union([z.string(), z.record(z.string(), z.any())]).nullable().optional(),
 });
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -162,18 +165,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (d.title !== undefined) updateData.title = d.title;
     if (d.slug !== undefined) updateData.slug = d.slug;
     else if (d.title !== undefined && !existing.slug) updateData.slug = slugify(d.title);
-    if (d.content !== undefined) updateData.content = d.content === '' ? null : d.content;
-    if (d.excerpt !== undefined) updateData.excerpt = d.excerpt === '' ? null : d.excerpt;
+    if (d.content !== undefined) updateData.content = d.content === '' || d.content === null ? null : sanitizeContentForStorage(d.content);
+    if (d.excerpt !== undefined) updateData.excerpt = d.excerpt === '' || d.excerpt === null ? null : d.excerpt;
     if (d.status !== undefined) updateData.status = d.status;
-    if (d.seoTitle !== undefined) updateData.seoTitle = d.seoTitle === '' ? null : d.seoTitle;
-    if (d.seoDescription !== undefined) updateData.seoDescription = d.seoDescription === '' ? null : d.seoDescription;
-    if (d.focusKeyword !== undefined) updateData.focusKeyword = d.focusKeyword === '' ? null : d.focusKeyword;
-    if (d.categoryId !== undefined) updateData.categoryId = d.categoryId === '' ? null : d.categoryId;
-    if (d.featuredImageId !== undefined) updateData.featuredImageId = d.featuredImageId === '' ? null : d.featuredImageId;
-    if (d.scheduledAt !== undefined) updateData.scheduledAt = d.scheduledAt === '' ? null : d.scheduledAt ? new Date(d.scheduledAt) : null;
-    if (d.expiresAt !== undefined) updateData.expiresAt = d.expiresAt === '' ? null : d.expiresAt ? new Date(d.expiresAt) : null;
-    if (d.seoReport !== undefined) updateData.seoReport = typeof d.seoReport === 'object' ? JSON.stringify(d.seoReport) : (d.seoReport === '' ? null : d.seoReport);
-    if (d.editorialReport !== undefined) updateData.editorialReport = typeof d.editorialReport === 'object' ? JSON.stringify(d.editorialReport) : (d.editorialReport === '' ? null : d.editorialReport);
+    if (d.seoTitle !== undefined) updateData.seoTitle = d.seoTitle === '' || d.seoTitle === null ? null : d.seoTitle;
+    if (d.seoDescription !== undefined) updateData.seoDescription = d.seoDescription === '' || d.seoDescription === null ? null : d.seoDescription;
+    if (d.focusKeyword !== undefined) updateData.focusKeyword = d.focusKeyword === '' || d.focusKeyword === null ? null : d.focusKeyword;
+    if (d.categoryId !== undefined) updateData.categoryId = d.categoryId === '' || d.categoryId === null ? null : d.categoryId;
+    if (d.contentTypeId !== undefined && d.contentTypeId !== '') updateData.contentTypeId = d.contentTypeId;
+    if (d.featuredImageId !== undefined) updateData.featuredImageId = d.featuredImageId === '' || d.featuredImageId === null ? null : d.featuredImageId;
+    if (d.scheduledAt !== undefined) updateData.scheduledAt = d.scheduledAt === '' || d.scheduledAt === null ? null : new Date(d.scheduledAt);
+    if (d.expiresAt !== undefined) updateData.expiresAt = d.expiresAt === '' || d.expiresAt === null ? null : new Date(d.expiresAt);
+    if (d.seoReport !== undefined) updateData.seoReport = typeof d.seoReport === 'object' ? JSON.stringify(d.seoReport) : (d.seoReport === '' || d.seoReport === null ? null : d.seoReport);
+    if (d.editorialReport !== undefined) updateData.editorialReport = typeof d.editorialReport === 'object' ? JSON.stringify(d.editorialReport) : (d.editorialReport === '' || d.editorialReport === null ? null : d.editorialReport);
     if (d.status === 'PUBLISHED' && !existing.publishedAt) {
       updateData.publishedAt = new Date();
     }
@@ -264,6 +268,27 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       } catch (redirectError) {
         // Log but don't fail the content update
         console.warn(`[CONTENT:UPDATE:AUTO-REDIRECT] ${id} —`, redirectError);
+      }
+    }
+
+    // If status is or became PUBLISHED and site is connected, sync to external site
+    if ((d.status === 'PUBLISHED' || item.status === 'PUBLISHED') && d.status !== 'UNPUBLISHED' && d.status !== 'DRAFT') {
+      try {
+        await publishArticleToConnectedSite(contentId, existing.siteId);
+      } catch (publishErr: any) {
+        console.error(`[CONTENT:UPDATE:EXTERNAL_PUBLISH_FAILED] ${id} —`, publishErr);
+        // Do not fake success if external publish failed!
+        return NextResponse.json(
+          {
+            error: {
+              code: 'EXTERNAL_PUBLISH_FAILED',
+              message: publishErr.message || 'Failed to sync article to connected external site',
+            },
+            data: item,
+            meta: { requestId: id },
+          },
+          { status: 502 },
+        );
       }
     }
 

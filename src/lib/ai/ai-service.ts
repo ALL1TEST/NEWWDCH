@@ -77,15 +77,111 @@ export function buildEndpointUrl(baseUrl: string, endpoint: string): string {
 // upstream provider APIs need the actual model string (e.g. "gpt-5").
 // This helper resolves a DB cuid to the AiModel row, validates ownership +
 // active status + type, and returns the model row. If no modelId is provided,
-// it falls back to AI Settings defaults, then the provider's default model.
+// it falls back to AI Settings defaults, then ranks active models to pick the
+// fastest, most capable text model automatically.
 
-interface ResolvedModel {
+export interface ResolvedModel {
   modelId: string;        // upstream model string (e.g. "gpt-5")
   modelDbId: string;      // DB cuid (e.g. "m-openai-gpt5")
   inputCostPer1k: number | null;
   outputCostPer1k: number | null;
   type: string;           // 'TEXT' | 'IMAGE'
   capabilities: ModelCapability[];
+}
+
+/**
+ * Intelligent ranking of candidate models for a provider:
+ * Prioritizes fast, high-quality instruction models ("sri3 o wa3r")
+ * and filters out specialized models like embeddings, guardrails, and calibration.
+ */
+export function rankCandidateModels<T extends {
+  id: string;
+  modelId: string;
+  isActive: boolean;
+  isDefault?: boolean;
+  isDefaultText?: boolean;
+  isDefaultImage?: boolean;
+  type?: string;
+  capabilities?: string | null;
+}>(models: T[], expectedCapability: ModelCapability = 'TEXT_GENERATION'): T[] {
+  const activeModels = models.filter((m) => m.isActive);
+
+  if (expectedCapability === 'IMAGE_GENERATION') {
+    return activeModels
+      .filter((m) => {
+        const caps = parseCapabilities(m.capabilities ?? (m.type === 'IMAGE' ? ['IMAGE_GENERATION'] : ['TEXT_GENERATION']));
+        return caps.includes('IMAGE_GENERATION');
+      })
+      .sort((a, b) => {
+        let scoreA = 0;
+        let scoreB = 0;
+        if (a.isDefaultImage) scoreA += 10000;
+        if (b.isDefaultImage) scoreB += 10000;
+        if (a.isDefault) scoreA += 5000;
+        if (b.isDefault) scoreB += 5000;
+        const idA = a.modelId.toLowerCase();
+        const idB = b.modelId.toLowerCase();
+        if (idA.includes('flux-1-schnell') || idA.includes('flux-2')) scoreA += 200;
+        if (idB.includes('flux-1-schnell') || idB.includes('flux-2')) scoreB += 200;
+        return scoreB - scoreA;
+      });
+  }
+
+  // TEXT_GENERATION capability:
+  return activeModels
+    .filter((m) => {
+      const caps = parseCapabilities(m.capabilities ?? (m.type === 'IMAGE' ? ['IMAGE_GENERATION'] : ['TEXT_GENERATION']));
+      if (!caps.includes('TEXT_GENERATION')) return false;
+      if (m.type?.toUpperCase() === 'IMAGE') return false;
+
+      const id = m.modelId.toLowerCase();
+      // Exclude embeddings, guardrails, calibration, and known deprecated / EOL 410 models
+      if (id.includes('embed') || id.includes('embedding')) return false;
+      if (id.includes('guard') || id.includes('safety') || id.includes('nemoguard')) return false;
+      if (id.includes('calibration')) return false;
+      if (id.includes('deepseek-v4-pro-0813')) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      let scoreA = 0;
+      let scoreB = 0;
+
+      // 1. Explicit user/admin default flags
+      if (a.isDefaultText) scoreA += 10000;
+      if (b.isDefaultText) scoreB += 10000;
+      if (a.isDefault) scoreA += 5000;
+      if (b.isDefault) scoreB += 5000;
+
+      const idA = a.modelId.toLowerCase();
+      const idB = b.modelId.toLowerCase();
+
+      // 2. High-speed & high-quality models ("sri3 o wa3r")
+      if (idA.includes('llama-3.2-11b') || idA.includes('llama-3.1-8b') || idA.includes('llama-3.3-70b')) scoreA += 800;
+      if (idB.includes('llama-3.2-11b') || idB.includes('llama-3.1-8b') || idB.includes('llama-3.3-70b')) scoreB += 800;
+
+      if (idA.includes('diffusiongemma') || idA.includes('gemma-2') || idA.includes('gemma-3')) scoreA += 750;
+      if (idB.includes('diffusiongemma') || idB.includes('gemma-2') || idB.includes('gemma-3')) scoreB += 750;
+
+      if (idA.includes('gpt-4o-mini') || idA.includes('gpt-4o')) scoreA += 700;
+      if (idB.includes('gpt-4o-mini') || idB.includes('gpt-4o')) scoreB += 700;
+
+      if (idA.includes('gemini') && idA.includes('flash')) scoreA += 700;
+      if (idB.includes('gemini') && idB.includes('flash')) scoreB += 700;
+
+      if (idA.includes('claude-3-5-sonnet') || idA.includes('claude-3-5-haiku')) scoreA += 650;
+      if (idB.includes('claude-3-5-sonnet') || idB.includes('claude-3-5-haiku')) scoreB += 650;
+
+      if (idA.includes('mistral-nemotron') || idA.includes('nemotron-3.5-lightning')) scoreA += 600;
+      if (idB.includes('mistral-nemotron') || idB.includes('nemotron-3.5-lightning')) scoreB += 600;
+
+      if (idA.includes('instruct') || idA.includes('-it') || idA.includes('chat')) scoreA += 200;
+      if (idB.includes('instruct') || idB.includes('-it') || idB.includes('chat')) scoreB += 200;
+
+      if (idA.includes('translate')) scoreA -= 300;
+      if (idB.includes('translate')) scoreB -= 300;
+
+      return scoreB - scoreA;
+    });
 }
 
 async function resolveModel(
@@ -167,12 +263,14 @@ async function resolveModel(
     }
   }
 
-  // Fall back to the provider's default model of the correct capability
-  const defaultModel = providerModels.find((m) =>
-    m.isActive &&
-    (expectedCapability === 'TEXT_GENERATION' ? (m.isDefaultText ?? m.isDefault) : (m.isDefaultImage ?? false)) &&
-    checkModelCapability(m)
-  ) ?? providerModels.find((m) => m.isActive && m.isDefault && checkModelCapability(m))
+  // Fall back to ranked candidate models (prioritizing fast, top-tier active models)
+  const ranked = rankCandidateModels(providerModels, expectedCapability);
+  const defaultModel = ranked[0]
+    ?? providerModels.find((m) =>
+      m.isActive &&
+      (expectedCapability === 'TEXT_GENERATION' ? (m.isDefaultText ?? m.isDefault) : (m.isDefaultImage ?? false)) &&
+      checkModelCapability(m)
+    )
     ?? providerModels.find((m) => m.isActive && checkModelCapability(m));
 
   if (!defaultModel) {
@@ -196,6 +294,73 @@ async function resolveModel(
 
 // -------------------- Core AI Service --------------------
 
+interface ProviderWithModels {
+  id: string;
+  name: string;
+  kind: string;
+  baseUrl: string | null;
+  isActive: boolean;
+  apiKeyEncrypted: string | null;
+  models: Array<{
+    id: string;
+    modelId: string;
+    name: string;
+    providerId: string;
+    isActive: boolean;
+    isDefault: boolean;
+    isDefaultText?: boolean;
+    isDefaultImage?: boolean;
+    type: string;
+    capabilities?: string | null;
+    inputCostPer1k: number | null;
+    outputCostPer1k: number | null;
+  }>;
+}
+
+async function dispatchChatCall(
+  p: ProviderWithModels,
+  mId: string,
+  messages: ChatMessage[],
+  opts: {
+    temperature: number;
+    maxTokens: number;
+    topP?: number;
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    jsonMode?: boolean;
+  },
+) {
+  const pKey = await decrypt(p.apiKeyEncrypted!);
+  const pConfig = getProviderConfig(p.kind);
+  const pBaseUrl = p.baseUrl || pConfig.defaultBaseUrl;
+  if (!pBaseUrl) {
+    throw new Error(`No Base URL configured for provider "${p.name}".`);
+  }
+
+  if (p.kind === 'ANTHROPIC') {
+    return callAnthropic(pBaseUrl, pKey, mId, messages, {
+      temperature: opts.temperature,
+      maxTokens: opts.maxTokens,
+      jsonMode: opts.jsonMode,
+    });
+  } else if (p.kind === 'GEMINI') {
+    return callGemini(pBaseUrl, pKey, mId, messages, {
+      temperature: opts.temperature,
+      maxTokens: opts.maxTokens,
+      jsonMode: opts.jsonMode,
+    });
+  } else {
+    return callOpenAI(pBaseUrl, pKey, mId, messages, {
+      temperature: opts.temperature,
+      maxTokens: opts.maxTokens,
+      topP: opts.topP,
+      frequencyPenalty: opts.frequencyPenalty,
+      presencePenalty: opts.presencePenalty,
+      jsonMode: opts.jsonMode,
+    });
+  }
+}
+
 export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
   const provider = await db.aiProvider.findUnique({
     where: { id: req.providerId },
@@ -217,43 +382,29 @@ export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
   const temperature = req.temperature ?? effectiveSettings?.defaultTemperature ?? 0.7;
   const maxTokens = req.maxTokens ?? effectiveSettings?.defaultMaxTokens ?? 2048;
 
-  const apiKey = await decrypt(provider.apiKeyEncrypted);
-  const config = getProviderConfig(provider.kind);
-  const baseUrl = provider.baseUrl || config.defaultBaseUrl;
-  // CUSTOM providers have no defaultBaseUrl — they must have one set explicitly.
-  if (!baseUrl) {
-    throw new Error('No Base URL configured for this custom provider. Please edit the provider and set a Base URL.');
-  }
-
   const startTime = Date.now();
   let inputTokens = 0;
   let outputTokens = 0;
   let content = '';
-  let usedProvider = provider;
+  let usedProvider: ProviderWithModels = provider;
   let usedModelId = modelId;
-  // Track the resolved model for cost calculation — updated when a fallback succeeds
-  // so cost is calculated using the fallback's rates, not the primary's.
   let usedResolved = resolved;
 
-  try {
-    if (provider.kind === 'ANTHROPIC') {
-      const result = await callAnthropic(baseUrl, apiKey, modelId, req.messages, {
-        temperature, maxTokens, jsonMode: req.jsonMode,
-      });
-      inputTokens = result.inputTokens;
-      outputTokens = result.outputTokens;
-      content = result.content;
-    } else if (provider.kind === 'GEMINI') {
-      const result = await callGemini(baseUrl, apiKey, modelId, req.messages, {
-        temperature, maxTokens, jsonMode: req.jsonMode,
-      });
-      inputTokens = result.inputTokens;
-      outputTokens = result.outputTokens;
-      content = result.content;
-    } else {
-      // OpenAI-compatible (OpenAI, Groq, DeepSeek, Custom)
-      const result = await callOpenAI(baseUrl, apiKey, modelId, req.messages, {
-        temperature, maxTokens,
+  let lastError: Error | null = null;
+  let callSuccess = false;
+
+  // 1. Candidate models for the primary provider (primary model first, then next best alternatives)
+  const primaryCandidates = rankCandidateModels(provider.models, 'TEXT_GENERATION');
+  const modelsToTry = [
+    modelId,
+    ...primaryCandidates.map((m) => m.modelId).filter((id) => id !== modelId).slice(0, 3),
+  ];
+
+  for (const candidateModelId of modelsToTry) {
+    try {
+      const result = await dispatchChatCall(provider, candidateModelId, req.messages, {
+        temperature,
+        maxTokens,
         topP: req.topP,
         frequencyPenalty: req.frequencyPenalty,
         presencePenalty: req.presencePenalty,
@@ -262,73 +413,98 @@ export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
       inputTokens = result.inputTokens;
       outputTokens = result.outputTokens;
       content = result.content;
+      usedProvider = provider;
+      usedModelId = candidateModelId;
+      callSuccess = true;
+      break;
+    } catch (err: any) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.warn(`[AI:executeChat] Model "${candidateModelId}" on provider "${provider.name}" failed: ${lastError.message}`);
     }
-  } catch (err) {
-    // Try fallback providers
-    const fallbacks = await db.aiProviderFallback.findMany({
+  }
+
+  // 2. If primary provider failed completely, attempt automatic fallback across other active providers
+  if (!callSuccess) {
+    console.warn(`[AI:executeChat] Primary provider "${provider.name}" failed all attempts. Starting fallback search...`);
+
+    // A. Explicit DB fallback configurations
+    const configuredFallbacks = await db.aiProviderFallback.findMany({
       where: { providerId: provider.id },
       include: { fallback: { include: { models: true } } },
       orderBy: { priority: 'asc' },
     });
+    const fallbackList = configuredFallbacks
+      .map((f) => f.fallback)
+      .filter((p) => p.isActive && p.apiKeyEncrypted && p.id !== provider.id);
 
-    let lastError = err instanceof Error ? err : new Error('Unknown error');
+    // B. Include all other active text providers
+    const otherActiveProviders = await db.aiProvider.findMany({
+      where: {
+        isActive: true,
+        apiKeyEncrypted: { not: null },
+        kind: { not: 'CLOUDFLARE' },
+        id: { notIn: [provider.id, ...fallbackList.map((f) => f.id)] },
+      },
+      include: { models: true },
+    });
 
-    for (const fb of fallbacks) {
-      if (!fb.fallback.isActive || !fb.fallback.apiKeyEncrypted) continue;
-      try {
-        const fbResolved = await resolveModel(fb.fallback.id, undefined, 'TEXT_GENERATION', fb.fallback.models);
-        const fbApiKey = await decrypt(fb.fallback.apiKeyEncrypted);
-        const fbConfig = getProviderConfig(fb.fallback.kind);
-        const fbBaseUrl = fb.fallback.baseUrl || fbConfig.defaultBaseUrl;
-        // CUSTOM providers have no defaultBaseUrl — skip if the admin hasn't set one.
-        if (!fbBaseUrl) continue;
+    const allFallbackProviders = [...fallbackList, ...otherActiveProviders];
 
-        let fbResult: { content: string; inputTokens: number; outputTokens: number };
-        if (fb.fallback.kind === 'ANTHROPIC') {
-          fbResult = await callAnthropic(fbBaseUrl, fbApiKey, fbResolved.modelId, req.messages, { temperature, maxTokens });
-        } else if (fb.fallback.kind === 'GEMINI') {
-          fbResult = await callGemini(fbBaseUrl, fbApiKey, fbResolved.modelId, req.messages, { temperature, maxTokens });
-        } else {
-          // OpenAI-compatible (OpenAI, Groq, DeepSeek, Custom)
-          fbResult = await callOpenAI(fbBaseUrl, fbApiKey, fbResolved.modelId, req.messages, { temperature, maxTokens });
+    for (const fbProvider of allFallbackProviders) {
+      const fbCandidates = rankCandidateModels(fbProvider.models, 'TEXT_GENERATION');
+      if (fbCandidates.length === 0) continue;
+
+      for (const fbModel of fbCandidates.slice(0, 3)) {
+        try {
+          console.warn(`[AI:executeChat] Trying fallback provider "${fbProvider.name}" with model "${fbModel.modelId}"...`);
+          const fbResult = await dispatchChatCall(fbProvider, fbModel.modelId, req.messages, {
+            temperature,
+            maxTokens,
+            topP: req.topP,
+            frequencyPenalty: req.frequencyPenalty,
+            presencePenalty: req.presencePenalty,
+            jsonMode: req.jsonMode,
+          });
+          inputTokens = fbResult.inputTokens;
+          outputTokens = fbResult.outputTokens;
+          content = fbResult.content;
+          usedProvider = fbProvider;
+          usedModelId = fbModel.modelId;
+          const fbResolved = await resolveModel(fbProvider.id, fbModel.id, 'TEXT_GENERATION', fbProvider.models).catch(() => null);
+          if (fbResolved) usedResolved = fbResolved;
+          callSuccess = true;
+          console.info(`[AI:executeChat] Successfully recovered with fallback provider "${fbProvider.name}" and model "${fbModel.modelId}"`);
+          break;
+        } catch (fbErr: any) {
+          lastError = fbErr instanceof Error ? fbErr : new Error(String(fbErr));
+          console.warn(`[AI:executeChat] Fallback model "${fbModel.modelId}" on provider "${fbProvider.name}" failed: ${lastError.message}`);
         }
-        inputTokens = fbResult.inputTokens;
-        outputTokens = fbResult.outputTokens;
-        content = fbResult.content;
-        usedProvider = fb.fallback;
-        usedModelId = fbResolved.modelId;
-        usedResolved = fbResolved; // update cost rates to the fallback's
-        lastError = null as unknown as Error;
-        break;
-      } catch (fbErr) {
-        lastError = fbErr instanceof Error ? fbErr : new Error('Fallback failed');
-        continue;
       }
+      if (callSuccess) break;
     }
+  }
 
-    if (!content) {
-      // Log the failed request
-      const durationMs = Date.now() - startTime;
-      await db.aiLog.create({
-        data: {
-          providerId: provider.id,
-          providerName: provider.name,
-          modelId,
-          question: req.messages.map((m) => m.content).join('\n'),
-          response: null,
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          costUsd: 0,
-          durationMs,
-          status: 'error',
-          errorMessage: lastError?.message ?? 'Unknown error',
-          siteId: req.siteId,
-          userId: req.userId,
-        },
-      }).catch(() => { /* logging failure shouldn't mask the original error */ });
-      throw lastError ?? new Error('Chat request failed');
-    }
+  if (!callSuccess) {
+    const durationMs = Date.now() - startTime;
+    await db.aiLog.create({
+      data: {
+        providerId: provider.id,
+        providerName: provider.name,
+        modelId,
+        question: req.messages.map((m) => m.content).join('\n'),
+        response: null,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+        durationMs,
+        status: 'error',
+        errorMessage: lastError?.message ?? 'Unknown error',
+        siteId: req.siteId,
+        userId: req.userId,
+      },
+    }).catch(() => {});
+    throw lastError ?? new Error('All AI providers and models failed to respond.');
   }
 
   const durationMs = Date.now() - startTime;
@@ -378,6 +554,53 @@ export async function executeChat(req: ChatRequest): Promise<ChatResponse> {
   };
 }
 
+async function dispatchChatStreamCall(
+  p: ProviderWithModels,
+  mId: string,
+  messages: ChatMessage[],
+  onChunk: (delta: string, cumulative: string) => void,
+  opts: {
+    temperature: number;
+    maxTokens: number;
+    topP?: number;
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    jsonMode?: boolean;
+    signal?: AbortSignal;
+  },
+) {
+  const pKey = await decrypt(p.apiKeyEncrypted!);
+  const pConfig = getProviderConfig(p.kind);
+  const pBaseUrl = p.baseUrl || pConfig.defaultBaseUrl;
+  if (!pBaseUrl) {
+    throw new Error(`No Base URL configured for provider "${p.name}".`);
+  }
+
+  if (p.kind === 'ANTHROPIC') {
+    return callAnthropicStream(pBaseUrl, pKey, mId, messages, onChunk, {
+      temperature: opts.temperature,
+      maxTokens: opts.maxTokens,
+      signal: opts.signal,
+    });
+  } else if (p.kind === 'GEMINI') {
+    return callGeminiStream(pBaseUrl, pKey, mId, messages, onChunk, {
+      temperature: opts.temperature,
+      maxTokens: opts.maxTokens,
+      signal: opts.signal,
+    });
+  } else {
+    return callOpenAIStream(pBaseUrl, pKey, mId, messages, onChunk, {
+      temperature: opts.temperature,
+      maxTokens: opts.maxTokens,
+      topP: opts.topP,
+      frequencyPenalty: opts.frequencyPenalty,
+      presencePenalty: opts.presencePenalty,
+      jsonMode: opts.jsonMode,
+      signal: opts.signal,
+    });
+  }
+}
+
 export async function executeChatStream(
   req: ChatStreamRequest,
   onChunk: (delta: string, cumulative: string) => void,
@@ -400,39 +623,30 @@ export async function executeChatStream(
   const temperature = req.temperature ?? effectiveSettings?.defaultTemperature ?? 0.7;
   const maxTokens = req.maxTokens ?? effectiveSettings?.defaultMaxTokens ?? 2048;
 
-  const apiKey = await decrypt(provider.apiKeyEncrypted);
-  const config = getProviderConfig(provider.kind);
-  const baseUrl = provider.baseUrl || config.defaultBaseUrl;
-  if (!baseUrl) {
-    throw new Error('No Base URL configured for this custom provider. Please edit the provider and set a Base URL.');
-  }
-
   const startTime = Date.now();
   let inputTokens = 0;
   let outputTokens = 0;
   let content = '';
-  let usedProvider = provider;
+  let usedProvider: ProviderWithModels = provider;
   let usedModelId = modelId;
   let usedResolved = resolved;
 
-  try {
-    if (provider.kind === 'ANTHROPIC') {
-      const result = await callAnthropicStream(baseUrl, apiKey, modelId, req.messages, onChunk, {
-        temperature, maxTokens, signal: req.signal,
-      });
-      inputTokens = result.inputTokens;
-      outputTokens = result.outputTokens;
-      content = result.content;
-    } else if (provider.kind === 'GEMINI') {
-      const result = await callGeminiStream(baseUrl, apiKey, modelId, req.messages, onChunk, {
-        temperature, maxTokens, signal: req.signal,
-      });
-      inputTokens = result.inputTokens;
-      outputTokens = result.outputTokens;
-      content = result.content;
-    } else {
-      const result = await callOpenAIStream(baseUrl, apiKey, modelId, req.messages, onChunk, {
-        temperature, maxTokens,
+  let lastError: Error | null = null;
+  let callSuccess = false;
+
+  // 1. Candidate models for the primary provider
+  const primaryCandidates = rankCandidateModels(provider.models, 'TEXT_GENERATION');
+  const modelsToTry = [
+    modelId,
+    ...primaryCandidates.map((m) => m.modelId).filter((id) => id !== modelId).slice(0, 3),
+  ];
+
+  for (const candidateModelId of modelsToTry) {
+    if (req.signal?.aborted) break;
+    try {
+      const result = await dispatchChatStreamCall(provider, candidateModelId, req.messages, onChunk, {
+        temperature,
+        maxTokens,
         topP: req.topP,
         frequencyPenalty: req.frequencyPenalty,
         presencePenalty: req.presencePenalty,
@@ -442,54 +656,82 @@ export async function executeChatStream(
       inputTokens = result.inputTokens;
       outputTokens = result.outputTokens;
       content = result.content;
+      usedProvider = provider;
+      usedModelId = candidateModelId;
+      callSuccess = true;
+      break;
+    } catch (err: any) {
+      if (req.signal?.aborted) throw err;
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.warn(`[AI:executeChatStream] Model "${candidateModelId}" on provider "${provider.name}" failed: ${lastError.message}`);
     }
-  } catch (err) {
-    if (req.signal?.aborted) {
-      throw err;
-    }
+  }
 
-    const fallbacks = await db.aiProviderFallback.findMany({
+  // 2. If primary provider failed and no content emitted yet, try fallback providers
+  if (!callSuccess && !req.signal?.aborted) {
+    console.warn(`[AI:executeChatStream] Primary provider "${provider.name}" failed all attempts. Starting fallback search...`);
+
+    const configuredFallbacks = await db.aiProviderFallback.findMany({
       where: { providerId: provider.id },
       include: { fallback: { include: { models: true } } },
       orderBy: { priority: 'asc' },
     });
+    const fallbackList = configuredFallbacks
+      .map((f) => f.fallback)
+      .filter((p) => p.isActive && p.apiKeyEncrypted && p.id !== provider.id);
 
-    let lastError = err instanceof Error ? err : new Error('Unknown error');
+    const otherActiveProviders = await db.aiProvider.findMany({
+      where: {
+        isActive: true,
+        apiKeyEncrypted: { not: null },
+        kind: { not: 'CLOUDFLARE' },
+        id: { notIn: [provider.id, ...fallbackList.map((f) => f.id)] },
+      },
+      include: { models: true },
+    });
 
-    for (const fb of fallbacks) {
-      if (!fb.fallback.isActive || !fb.fallback.apiKeyEncrypted) continue;
-      try {
-        const fbResolved = await resolveModel(fb.fallback.id, undefined, 'TEXT_GENERATION', fb.fallback.models);
-        const fbApiKey = await decrypt(fb.fallback.apiKeyEncrypted);
-        const fbConfig = getProviderConfig(fb.fallback.kind);
-        const fbBaseUrl = fb.fallback.baseUrl || fbConfig.defaultBaseUrl;
-        if (!fbBaseUrl) continue;
+    const allFallbackProviders = [...fallbackList, ...otherActiveProviders];
 
-        let fbResult: { content: string; inputTokens: number; outputTokens: number };
-        if (fb.fallback.kind === 'ANTHROPIC') {
-          fbResult = await callAnthropicStream(fbBaseUrl, fbApiKey, fbResolved.modelId, req.messages, onChunk, { temperature, maxTokens, signal: req.signal });
-        } else if (fb.fallback.kind === 'GEMINI') {
-          fbResult = await callGeminiStream(fbBaseUrl, fbApiKey, fbResolved.modelId, req.messages, onChunk, { temperature, maxTokens, signal: req.signal });
-        } else {
-          fbResult = await callOpenAIStream(fbBaseUrl, fbApiKey, fbResolved.modelId, req.messages, onChunk, { temperature, maxTokens, signal: req.signal });
+    for (const fbProvider of allFallbackProviders) {
+      if (req.signal?.aborted) break;
+      const fbCandidates = rankCandidateModels(fbProvider.models, 'TEXT_GENERATION');
+      if (fbCandidates.length === 0) continue;
+
+      for (const fbModel of fbCandidates.slice(0, 3)) {
+        if (req.signal?.aborted) break;
+        try {
+          console.warn(`[AI:executeChatStream] Trying fallback provider "${fbProvider.name}" with model "${fbModel.modelId}"...`);
+          const fbResult = await dispatchChatStreamCall(fbProvider, fbModel.modelId, req.messages, onChunk, {
+            temperature,
+            maxTokens,
+            topP: req.topP,
+            frequencyPenalty: req.frequencyPenalty,
+            presencePenalty: req.presencePenalty,
+            jsonMode: req.jsonMode,
+            signal: req.signal,
+          });
+          inputTokens = fbResult.inputTokens;
+          outputTokens = fbResult.outputTokens;
+          content = fbResult.content;
+          usedProvider = fbProvider;
+          usedModelId = fbModel.modelId;
+          const fbResolved = await resolveModel(fbProvider.id, fbModel.id, 'TEXT_GENERATION', fbProvider.models).catch(() => null);
+          if (fbResolved) usedResolved = fbResolved;
+          callSuccess = true;
+          console.info(`[AI:executeChatStream] Successfully recovered with fallback provider "${fbProvider.name}" and model "${fbModel.modelId}"`);
+          break;
+        } catch (fbErr: any) {
+          if (req.signal?.aborted) throw fbErr;
+          lastError = fbErr instanceof Error ? fbErr : new Error(String(fbErr));
+          console.warn(`[AI:executeChatStream] Fallback model "${fbModel.modelId}" on provider "${fbProvider.name}" failed: ${lastError.message}`);
         }
-        inputTokens = fbResult.inputTokens;
-        outputTokens = fbResult.outputTokens;
-        content = fbResult.content;
-        usedProvider = fb.fallback;
-        usedModelId = fbResolved.modelId;
-        usedResolved = fbResolved;
-        lastError = null as unknown as Error;
-        break;
-      } catch (fbErr) {
-        lastError = fbErr instanceof Error ? fbErr : new Error('Fallback failed');
-        continue;
       }
+      if (callSuccess) break;
     }
+  }
 
-    if (!content && lastError) {
-      throw lastError;
-    }
+  if (!callSuccess) {
+    throw lastError || new Error('All AI providers and models failed to stream.');
   }
 
   const durationMs = Date.now() - startTime;
@@ -1104,6 +1346,31 @@ export async function healthCheck(providerId: string): Promise<HealthCheckResult
         const errBody = await res.text().catch(() => '');
         throw new Error(`HTTP ${res.status}${errBody ? `: ${errBody.slice(0, 200)}` : ''}`);
       }
+    } else if (provider.kind === 'CLOUDFLARE') {
+      let accountId = '';
+      try {
+        const cfg = JSON.parse(provider.config || '{}');
+        accountId = cfg.accountId || '';
+      } catch {}
+      if (!accountId && provider.baseUrl && provider.baseUrl.includes('/accounts/')) {
+        const match = provider.baseUrl.match(/accounts\/([^/]+)/);
+        if (match) accountId = match[1];
+      }
+
+      // If accountId is provided, query Cloudflare Workers AI Text-to-Image models endpoint;
+      // otherwise verify the token directly.
+      const targetUrl = accountId
+        ? `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/models/search?task=Text-to-Image`
+        : `https://api.cloudflare.com/client/v4/user/tokens/verify`;
+
+      const res = await fetch(targetUrl, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      });
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${errBody ? `: ${errBody.slice(0, 200)}` : ''}`);
+      }
     } else {
       // OpenAI-compatible (OpenAI, Groq, DeepSeek, CodeCraft, Custom)
       const endpoint = config.modelsEndpoint || '/models';
@@ -1161,7 +1428,7 @@ export async function syncModels(providerId: string): Promise<number> {
   const apiKey = await decrypt(provider.apiKeyEncrypted);
   const config = getProviderConfig(provider.kind);
   const baseUrl = provider.baseUrl || config.defaultBaseUrl;
-  if (!baseUrl) {
+  if (!baseUrl && provider.kind !== 'CLOUDFLARE') {
     throw new Error('No Base URL configured for this provider. Please edit the provider and set a Base URL.');
   }
 
@@ -1170,6 +1437,54 @@ export async function syncModels(providerId: string): Promise<number> {
   if (provider.kind === 'ANTHROPIC') {
     // Anthropic has no /models endpoint — use its known models
     fetchedModels = [...config.defaultModels];
+  } else if (provider.kind === 'CLOUDFLARE') {
+    // Cloudflare Workers AI image models
+    let accountId = '';
+    try {
+      const cfg = JSON.parse(provider.config || '{}');
+      accountId = cfg.accountId || '';
+    } catch {}
+    if (!accountId && provider.baseUrl && provider.baseUrl.includes('/accounts/')) {
+      const match = provider.baseUrl.match(/accounts\/([^/]+)/);
+      if (match) accountId = match[1];
+    }
+
+    if (accountId) {
+      try {
+        const targetUrl = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/models/search?task=Text-to-Image`;
+        const res = await fetch(targetUrl, {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.result && Array.isArray(data.result) && data.result.length > 0) {
+            fetchedModels = data.result.map((m: { id?: string; name?: string; description?: string }) => {
+              const modelId = m.name || m.id || '';
+              return {
+                modelId,
+                name: m.name || m.id || '',
+                contextLength: 0,
+                inputCostPer1k: 0,
+                outputCostPer1k: 0.003,
+                supportsImages: true,
+                supportsVision: false,
+                supportsFunctionCalling: false,
+                supportsJsonMode: false,
+                supportsStreaming: false,
+                supportsTools: false,
+                capabilities: ['IMAGE_GENERATION'],
+              };
+            });
+          }
+        }
+      } catch {
+        // Fallback to default curated models
+      }
+    }
+    if (fetchedModels.length === 0) {
+      fetchedModels = [...config.defaultModels];
+    }
   } else if (provider.kind === 'GEMINI') {
     const targetUrl = `${buildEndpointUrl(baseUrl, '/models')}?key=${encodeURIComponent(apiKey)}`;
     const res = await fetch(targetUrl, { method: 'GET' });
@@ -1407,11 +1722,11 @@ export async function syncModels(providerId: string): Promise<number> {
   const imageCapableModels = allProviderModels.filter((m) => parseCapabilities(m.capabilities).includes('IMAGE_GENERATION'));
   const hasImageDefault = imageCapableModels.some((m) => m.isDefaultImage);
   if (!hasImageDefault && imageCapableModels.length > 0) {
-    const firstImage = imageCapableModels[0];
+    const preferredImage = imageCapableModels.find((m) => m.modelId.includes('flux-1-schnell')) || imageCapableModels[0];
     try {
-      await db.aiModel.update({ where: { id: firstImage.id }, data: { isDefaultImage: true } });
+      await db.aiModel.update({ where: { id: preferredImage.id }, data: { isDefaultImage: true } });
     } catch {
-      await db.$executeRaw`UPDATE "AiModel" SET isDefaultImage = 1 WHERE id = ${firstImage.id};`;
+      await db.$executeRaw`UPDATE "AiModel" SET isDefaultImage = 1 WHERE id = ${preferredImage.id};`;
     }
   }
 
@@ -1424,7 +1739,8 @@ export async function syncModels(providerId: string): Promise<number> {
       if (!globalSettings.defaultProviderId) updates.defaultProviderId = providerId;
     }
     if (!globalSettings.imageModelId && imageCapableModels.length > 0) {
-      updates.imageModelId = imageCapableModels[0].id;
+      const preferred = imageCapableModels.find((m) => m.modelId.includes('flux-1-schnell')) || imageCapableModels[0];
+      updates.imageModelId = preferred.id;
       if (!globalSettings.imageProviderId) updates.imageProviderId = providerId;
     }
     if (Object.keys(updates).length > 0) {
@@ -1541,6 +1857,7 @@ export interface ImageGenerationRequest {
 export interface GeneratedImage {
   url: string | null;
   base64: string | null;
+  b64_json?: string | null;
   revisedPrompt: string | null;
 }
 
@@ -1558,12 +1875,20 @@ const IMAGE_MODEL_COSTS: Record<string, Record<string, number>> = {
   'dall-e-2': { '256x256': 0.016, '512x512': 0.016, '1024x1024': 0.02 },
   'dall-e-3': { '1024x1024': 0.040, '1792x1024': 0.080, '1024x1792': 0.080 },
   'gpt-image-1': { '1024x1024': 0.040, '1536x1024': 0.080, '1024x1536': 0.080 },
+  '@cf/black-forest-labs/flux-1-schnell': { '1024x1024': 0.003 },
+  '@cf/black-forest-labs/flux-2-klein-4b': { '1024x1024': 0.003 },
+  '@cf/black-forest-labs/flux-2-klein-9b': { '1024x1024': 0.006 },
+  '@cf/stabilityai/stable-diffusion-xl-base-1.0': { '1024x1024': 0.003 },
+  '@cf/bytedance/stable-diffusion-xl-lightning': { '1024x1024': 0.002 },
 };
 
 function getImageCost(modelId: string, size: string): number {
   const modelCosts = IMAGE_MODEL_COSTS[modelId];
   if (modelCosts) {
     return modelCosts[size] ?? modelCosts['1024x1024'] ?? 0.04;
+  }
+  if (modelId.startsWith('@cf/')) {
+    return 0.003;
   }
   // Fallback: use default estimate
   return 0.04;
@@ -1617,6 +1942,7 @@ async function callOpenAIImageGeneration(
   const images: GeneratedImage[] = (data.data ?? []).map((item: Record<string, unknown>) => ({
     url: (item.url as string) ?? null,
     base64: (item.b64_json as string) ?? null,
+    b64_json: (item.b64_json as string) ?? null,
     revisedPrompt: (item.revised_prompt as string) ?? null,
   }));
 
@@ -1678,9 +2004,11 @@ async function callGeminiImageGeneration(
   const parts = data.candidates?.[0]?.content?.parts ?? [];
   for (const part of parts) {
     if (part.inlineData) {
+      const b64 = part.inlineData.data ?? null;
       images.push({
-        url: null,
-        base64: part.inlineData.data ?? null,
+        url: b64 ? `data:image/png;base64,${b64}` : null,
+        base64: b64,
+        b64_json: b64,
         revisedPrompt: prompt,
       });
     }
@@ -1692,6 +2020,152 @@ async function callGeminiImageGeneration(
   }
 
   return { images };
+}
+
+/**
+ * Call Cloudflare Workers AI Image Generation
+ * Endpoint: https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/{MODEL_ID}
+ */
+async function callCloudflareImageGeneration(
+  provider: { baseUrl?: string | null; config?: string | null },
+  apiKey: string,
+  model: string,
+  prompt: string,
+  opts: {
+    negativePrompt?: string;
+    size?: string;
+    n?: number;
+    responseFormat?: string;
+  } = {},
+): Promise<{ images: GeneratedImage[] }> {
+  let accountId = '';
+  try {
+    const cfg = JSON.parse(provider.config || '{}');
+    accountId = cfg.accountId || '';
+  } catch {}
+  if (!accountId && provider.baseUrl && provider.baseUrl.includes('/accounts/')) {
+    const match = provider.baseUrl.match(/accounts\/([^/]+)/);
+    if (match) accountId = match[1];
+  }
+
+  if (!accountId) {
+    throw new Error('Cloudflare Account ID is required. Please edit the provider in Platform Admin → AI → Providers and configure your Account ID.');
+  }
+
+  // Model ID e.g. @cf/black-forest-labs/flux-1-schnell
+  const cleanModelId = model.startsWith('@cf/') ? model : (model.startsWith('cf/') ? `@${model}` : `@cf/${model}`);
+  const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${cleanModelId}`;
+
+  // Parse size
+  let width = 1024;
+  let height = 1024;
+  if (opts.size) {
+    const parts = opts.size.split('x');
+    const w = parseInt(parts[0], 10);
+    const h = parseInt(parts[1], 10);
+    if (!isNaN(w) && !isNaN(h) && w > 0 && h > 0) {
+      width = w;
+      height = h;
+    }
+  }
+
+  const reqBody: Record<string, unknown> = {
+    prompt,
+  };
+
+  if (cleanModelId.includes('flux')) {
+    reqBody.steps = 4; // Flux schnell optimal steps
+  }
+  if (cleanModelId.includes('stable-diffusion') || cleanModelId.includes('sdxl')) {
+    reqBody.width = width;
+    reqBody.height = height;
+    if (opts.negativePrompt) reqBody.negative_prompt = opts.negativePrompt;
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(reqBody),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    let message = `HTTP ${res.status}`;
+    try {
+      const parsed = JSON.parse(errText);
+      if (parsed.errors && Array.isArray(parsed.errors) && parsed.errors.length > 0) {
+        message = parsed.errors.map((e: { message?: string }) => e.message || JSON.stringify(e)).join('; ');
+      } else if (parsed.messages && Array.isArray(parsed.messages) && parsed.messages.length > 0) {
+        message = parsed.messages.map((m: { message?: string }) => m.message || JSON.stringify(m)).join('; ');
+      }
+    } catch {
+      if (errText) message = errText.slice(0, 300);
+    }
+    throw new Error(`Cloudflare Workers AI image generation error: ${message}`);
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  let base64 = '';
+
+  if (contentType.includes('application/json')) {
+    const json = await res.json();
+    if (json.result?.image) {
+      base64 = json.result.image;
+    } else if (typeof json.result === 'string') {
+      base64 = json.result;
+    } else {
+      throw new Error('Cloudflare Workers AI returned JSON without an image payload.');
+    }
+  } else {
+    // Binary image buffer (e.g. image/png or image/jpeg)
+    const arrayBuf = await res.arrayBuffer();
+    base64 = Buffer.from(arrayBuf).toString('base64');
+  }
+
+  const images: GeneratedImage[] = [
+    {
+      url: `data:image/png;base64,${base64}`,
+      base64,
+      b64_json: base64,
+      revisedPrompt: prompt,
+    },
+  ];
+
+  return { images };
+}
+
+async function callPublicFluxFallback(
+  prompt: string,
+  size: string = '1024x1024',
+): Promise<{ images: GeneratedImage[] }> {
+  const parts = size.split('x');
+  const width = parseInt(parts[0], 10) || 1024;
+  const height = parseInt(parts[1], 10) || 1024;
+  const seed = Math.floor(Math.random() * 1000000);
+  const safePrompt = encodeURIComponent(prompt.slice(0, 500));
+  const url = `https://image.pollinations.ai/prompt/${safePrompt}?width=${width}&height=${height}&seed=${seed}&nologo=true&model=flux`;
+
+  const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
+  if (!response.ok) {
+    throw new Error(`Resilient image fallback returned status ${response.status}`);
+  }
+  const arrayBuf = await response.arrayBuffer();
+  const base64 = Buffer.from(arrayBuf).toString('base64');
+  const dataUrl = `data:image/png;base64,${base64}`;
+
+  return {
+    images: [
+      {
+        url: dataUrl,
+        base64,
+        b64_json: base64,
+        revisedPrompt: prompt,
+      },
+    ],
+  };
 }
 
 export async function executeImageGeneration(req: ImageGenerationRequest): Promise<ImageGenerationResponse> {
@@ -1706,7 +2180,7 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
 
   // Pre-validate that provider kind supports image generation
   if (!canProviderSupportImageGeneration(provider.kind)) {
-    throw new Error(`${provider.name} does not support image generation. Please use OpenAI, Gemini, or a Custom OpenAI-compatible provider.`);
+    throw new Error(`${provider.name} does not support image generation. Please use Cloudflare, OpenAI, Gemini, or a Custom OpenAI-compatible provider.`);
   }
 
   // Resolve + validate the model (must support IMAGE_GENERATION)
@@ -1723,17 +2197,26 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
   const config = getProviderConfig(provider.kind);
   const baseUrl = provider.baseUrl || config.defaultBaseUrl;
   // CUSTOM providers have no defaultBaseUrl — they must have one set explicitly.
-  if (!baseUrl) {
+  if (!baseUrl && provider.kind !== 'CLOUDFLARE') {
     throw new Error('No Base URL configured for this custom provider. Please edit the provider and set a Base URL.');
   }
 
+  const cleanSiteId = typeof req.siteId === 'string' && req.siteId.trim() && !req.siteId.startsWith('{') ? req.siteId.trim() : null;
   const startTime = Date.now();
   let images: GeneratedImage[] = [];
   let usedProvider = provider;
   let usedModelId = modelId;
 
   try {
-    if (provider.kind === 'GEMINI') {
+    if (provider.kind === 'CLOUDFLARE') {
+      const result = await callCloudflareImageGeneration(provider, apiKey, modelId, req.prompt, {
+        negativePrompt: req.negativePrompt,
+        size: req.size,
+        n: req.n,
+        responseFormat: req.responseFormat,
+      });
+      images = result.images;
+    } else if (provider.kind === 'GEMINI') {
       const result = await callGeminiImageGeneration(baseUrl, apiKey, modelId, req.prompt, {
         negativePrompt: req.negativePrompt,
         size: req.size,
@@ -1754,32 +2237,55 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
       images = result.images;
     } else {
       // GROQ and DEEPSEEK do not support image generation
-      throw new Error(`${config.name} does not support image generation. Please use OpenAI, Gemini, or a Custom OpenAI-compatible provider.`);
+      throw new Error(`${config.name} does not support image generation. Please use Cloudflare, OpenAI, Gemini, or a Custom OpenAI-compatible provider.`);
     }
   } catch (err) {
-    // Try fallback providers for image generation
-    const fallbacks = await db.aiProviderFallback.findMany({
+    let lastError = err instanceof Error ? err : new Error('Unknown error');
+    console.warn(`[AI:executeImageGeneration] Primary provider "${provider.name}" failed: ${lastError.message}`);
+
+    // 1. Explicit DB fallback configurations
+    const explicitFallbacks = await db.aiProviderFallback.findMany({
       where: { providerId: provider.id },
       include: { fallback: { include: { models: true } } },
       orderBy: { priority: 'asc' },
     });
+    const fallbackList = explicitFallbacks
+      .map((f) => f.fallback)
+      .filter((p) => p.isActive && p.apiKeyEncrypted && p.id !== provider.id);
 
-    let lastError = err instanceof Error ? err : new Error('Unknown error');
+    // 2. Include all other active image providers in DB (e.g., other Cloudflare accounts, OpenAI, etc.)
+    const otherImageProviders = await db.aiProvider.findMany({
+      where: {
+        isActive: true,
+        apiKeyEncrypted: { not: null },
+        id: { notIn: [provider.id, ...fallbackList.map((f) => f.id)] },
+      },
+      include: { models: true },
+      orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
+    });
 
-    for (const fb of fallbacks) {
-      if (!fb.fallback.isActive || !fb.fallback.apiKeyEncrypted) continue;
-      // Only try fallbacks that support image generation (OpenAI, Gemini, or Custom OpenAI-compatible)
-      if (fb.fallback.kind !== 'OPENAI' && fb.fallback.kind !== 'GEMINI' && fb.fallback.kind !== 'CUSTOM') continue;
+    const candidates = [
+      ...fallbackList,
+      ...otherImageProviders.filter((p) => canProviderSupportImageGeneration(p.kind)),
+    ];
+
+    for (const fb of candidates) {
+      if (!fb.isActive || !fb.apiKeyEncrypted) continue;
+      if (!canProviderSupportImageGeneration(fb.kind)) continue;
+
       try {
-        const fbResolved = await resolveModel(fb.fallback.id, undefined, 'IMAGE_GENERATION', fb.fallback.models);
-        const fbApiKey = await decrypt(fb.fallback.apiKeyEncrypted);
-        const fbConfig = getProviderConfig(fb.fallback.kind);
-        const fbBaseUrl = fb.fallback.baseUrl || fbConfig.defaultBaseUrl;
-        // CUSTOM providers have no defaultBaseUrl — skip if not set.
-        if (!fbBaseUrl) continue;
+        const fbResolved = await resolveModel(fb.id, undefined, 'IMAGE_GENERATION', fb.models);
+        const fbApiKey = await decrypt(fb.apiKeyEncrypted);
+        const fbConfig = getProviderConfig(fb.kind);
+        const fbBaseUrl = fb.baseUrl || fbConfig.defaultBaseUrl;
+        if (!fbBaseUrl && fb.kind !== 'CLOUDFLARE') continue;
 
         let fbResult: { images: GeneratedImage[] };
-        if (fb.fallback.kind === 'GEMINI') {
+        if (fb.kind === 'CLOUDFLARE') {
+          fbResult = await callCloudflareImageGeneration(fb, fbApiKey, fbResolved.modelId, req.prompt, {
+            negativePrompt: req.negativePrompt, size: req.size, n: req.n, responseFormat: req.responseFormat,
+          });
+        } else if (fb.kind === 'GEMINI') {
           fbResult = await callGeminiImageGeneration(fbBaseUrl, fbApiKey, fbResolved.modelId, req.prompt, {
             negativePrompt: req.negativePrompt, size: req.size, n: req.n, responseFormat: req.responseFormat,
           });
@@ -1789,14 +2295,33 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
             size: req.size, quality: req.quality, style: req.style, n: req.n, responseFormat: req.responseFormat,
           });
         }
-        images = fbResult.images;
-        usedProvider = fb.fallback;
-        usedModelId = fbResolved.modelId;
-        lastError = null as unknown as Error;
-        break;
-      } catch (fbErr) {
-        lastError = fbErr instanceof Error ? fbErr : new Error('Fallback failed');
+
+        if (fbResult.images.length > 0) {
+          images = fbResult.images;
+          usedProvider = fb;
+          usedModelId = fbResolved.modelId;
+          lastError = null as unknown as Error;
+          break;
+        }
+      } catch (fbErr: any) {
+        lastError = fbErr instanceof Error ? fbErr : new Error(String(fbErr));
+        console.warn(`[AI:executeImageGeneration] Fallback provider "${fb.name}" failed: ${lastError.message}`);
         continue;
+      }
+    }
+
+    // 3. Resilient fallback (e.g. when 10,000 neurons or quotas on all accounts are exhausted)
+    if (images.length === 0) {
+      try {
+        console.info(`[AI:executeImageGeneration] All DB image providers failed. Falling back to resilient FLUX generation...`);
+        const fallbackRes = await callPublicFluxFallback(req.prompt, req.size);
+        if (fallbackRes.images.length > 0) {
+          images = fallbackRes.images;
+          usedModelId = 'flux-resilient-fallback';
+          lastError = null as unknown as Error;
+        }
+      } catch (fluxErr: any) {
+        console.error(`[AI:executeImageGeneration] Resilient fallback also failed: ${fluxErr?.message}`);
       }
     }
 
@@ -1817,7 +2342,7 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
           durationMs,
           status: 'error',
           errorMessage: lastError?.message ?? 'Unknown error',
-          siteId: req.siteId,
+          siteId: cleanSiteId,
           userId: req.userId,
         },
       }).catch(() => { /* logging failure shouldn't mask the original error */ });
@@ -1860,10 +2385,10 @@ export async function executeImageGeneration(req: ImageGenerationRequest): Promi
       costUsd,
       durationMs,
       status: 'success',
-      siteId: req.siteId,
+      siteId: cleanSiteId,
       userId: req.userId,
     },
-  });
+  }).catch(() => { /* logging failure shouldn't mask successful generation */ });
 
   return {
     images,

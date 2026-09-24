@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Download, Trash2, Loader2, Sparkles, X, Plus,
   Image as ImageIcon, FileText, Film, Music, File,
-  Copy, ExternalLink,
+  Copy, Maximize2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -120,6 +120,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
   const [seoEdits, setSeoEdits] = useState<SeoForm | null>(null);
   const [isSavingSeo, setIsSavingSeo] = useState(false);
   const [isGeneratingSeo, setIsGeneratingSeo] = useState(false);
+  const [showLightbox, setShowLightbox] = useState(false);
 
   // ---- Folder edit (separate from SEO) ----
   const [folderEdits, setFolderEdits] = useState<FolderForm | null>(null);
@@ -272,7 +273,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
   // ---- Loading State ----
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 px-6 pb-6 pt-4">
         <Button variant="ghost" size="sm" disabled><ArrowLeft className="h-4 w-4 mr-2" />{t('media.backToMediaLibrary')}</Button>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2"><Skeleton className="aspect-video w-full rounded-lg" /></div>
@@ -284,7 +285,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
 
   if (!media) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
+      <div className="flex flex-col items-center justify-center py-20 text-center px-6">
         <p className="text-lg font-medium">{t('media.notFound')}</p>
         <Button variant="outline" className="mt-4" onClick={() => navigate('media')}><ArrowLeft className="h-4 w-4 mr-2" />{t('media.backToMediaLibrary')}</Button>
       </div>
@@ -302,7 +303,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-6 pb-6 pt-4">
       <Button variant="ghost" size="sm" onClick={() => navigate('media')}>
         <ArrowLeft className="h-4 w-4 mr-2" />{t('media.backToMediaLibrary')}
       </Button>
@@ -311,8 +312,21 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
         {/* ==================== Image Preview (reduced height) ==================== */}
         <div className="rounded-lg border bg-card overflow-hidden">
           {showImage ? (
-            <div className="relative bg-[repeating-conic-gradient(#e5e7eb_0%_25%,transparent_0%_50%)] dark:bg-[repeating-conic-gradient(#374151_0%_25%,transparent_0%_50%)] bg-[length:20px_20px]">
-              <img src={media.url} alt={media.alt || media.originalName} className="w-full h-auto max-h-[350px] object-contain" />
+            <div
+              className="relative bg-[repeating-conic-gradient(#e5e7eb_0%_25%,transparent_0%_50%)] dark:bg-[repeating-conic-gradient(#374151_0%_25%,transparent_0%_50%)] bg-[length:20px_20px] cursor-pointer group"
+              onClick={() => setShowLightbox(true)}
+              title={t('common.view') || 'Click to view full image'}
+            >
+              <img
+                src={media.url}
+                alt={media.alt || media.originalName}
+                className="w-full h-auto max-h-[350px] object-contain transition-transform duration-200 group-hover:scale-[1.01]"
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
+                <span className="rounded-full bg-black/60 text-white p-2.5 shadow-lg backdrop-blur-sm">
+                  <Maximize2 className="h-5 w-5" />
+                </span>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-16 gap-4 bg-muted/30">
@@ -328,7 +342,6 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
         {/* ==================== Media Action Buttons + Folder selector ==================== */}
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild><a href={media.url} download={media.originalName}><Download className="h-4 w-4 mr-2" />{t('media.download')}</a></Button>
-          <Button variant="outline" size="sm" asChild><a href={media.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 mr-2" />{t('media.openInNewTab')}</a></Button>
           <Select
             value={folderId || 'root'}
             onValueChange={(v) => setFolderEdits({ folderId: v === 'root' ? '' : v })}
@@ -474,6 +487,29 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
           )}
         </div>
       </div>
+
+      {/* Lightbox / Solo image view */}
+      {showLightbox && showImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => setShowLightbox(false)}
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 rounded-full bg-black/60 p-2.5 text-white hover:bg-black/90 transition shadow-lg z-10"
+            onClick={() => setShowLightbox(false)}
+            aria-label="Close"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <img
+            src={media.url}
+            alt={media.alt || media.originalName}
+            className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       <ConfirmDialog
         open={showDeleteDialog}

@@ -6,6 +6,7 @@ import { encrypt, maskSecret } from '@/lib/encryption';
 import { z } from 'zod/v4';
 import type { ApiResponse, ApiError } from '@/shared/types';
 import { requireFeatureAllowStaff, isPlatformStaff } from '@/lib/platform/platform-auth';
+import { syncModels } from '@/lib/ai/ai-service';
 
 // ============================================================
 // AI PROVIDERS — two distinct experiences, strictly separated:
@@ -36,7 +37,7 @@ function err(message: string, status = 400, code = 'VALIDATION_ERROR') {
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200).trim(),
-  kind: z.enum(['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK', 'CUSTOM']),
+  kind: z.enum(['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK', 'CLOUDFLARE', 'CUSTOM']),
   baseUrl: z.string().max(2048).optional().or(z.literal('')),
   apiKey: z.string().max(1000).optional().or(z.literal('')),
   apiVersion: z.string().max(100).optional().or(z.literal('')),
@@ -111,21 +112,23 @@ export async function GET(request: NextRequest) {
       db.aiProvider.count({ where }),
     ]);
 
-    // Mask API keys — strip the encrypted ciphertext, return only the masked version
+    // Mask API keys — strip the encrypted ciphertext, return decrypted apiKey for admin and masked version
     const masked = await Promise.all(items.map(async (item) => {
       let maskedKey: string | null = null;
+      let rawKey: string | null = null;
       if (item.apiKeyEncrypted) {
         try {
           const { decrypt } = await import('@/lib/encryption');
           const raw = await decrypt(item.apiKeyEncrypted);
           maskedKey = maskSecret(raw);
+          rawKey = raw;
         } catch {
           maskedKey = '••••••••';
         }
       }
       // Strip apiKeyEncrypted — never send the ciphertext to the client
       const { apiKeyEncrypted, ...rest } = item;
-      return { ...rest, apiKeyMasked: maskedKey };
+      return { ...rest, apiKey: rawKey, apiKeyMasked: maskedKey };
     }));
 
     return NextResponse.json({
@@ -233,6 +236,12 @@ export async function POST(request: NextRequest) {
         createdById: creator.id,
       },
     });
+
+    if (encryptedKey) {
+      syncModels(item.id).catch((err) => {
+        console.warn(`[AI/PROVIDERS:CREATE] Background model sync failed for ${item.id}:`, err);
+      });
+    }
 
     // Strip apiKeyEncrypted from the response — never send ciphertext to client
     const { apiKeyEncrypted: _stripped, ...safeItem } = item;

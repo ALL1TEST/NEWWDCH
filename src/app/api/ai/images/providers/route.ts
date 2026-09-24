@@ -25,9 +25,13 @@ export async function GET(request: NextRequest) {
       isActive: true,
       apiKeyEncrypted: { not: null },
     };
-    // Non-staff callers (Client's Own AI API) only ever see their own
-    // provider connections.
-    if (!staff) where.createdById = featureAuth.user.id;
+    if (staff) {
+      const { getPlatformStaffUserIds } = await import('@/lib/ai/platform-ai');
+      const staffIds = await getPlatformStaffUserIds();
+      where.createdById = { in: staffIds.length > 0 ? staffIds : ['__none__'] };
+    } else {
+      where.createdById = featureAuth.user.id;
+    }
 
     const providers = await db.aiProvider.findMany({
       where,

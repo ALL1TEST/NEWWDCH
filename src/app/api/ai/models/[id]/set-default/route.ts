@@ -6,7 +6,9 @@ import type { ApiResponse, ApiError } from '@/shared/types';
 import { requireFeatureAllowStaff, isPlatformStaff } from '@/lib/platform/platform-auth';
 import {
   canProviderSupportImageGeneration,
+  canProviderSupportTextGeneration,
   isModelForbiddenForImageGeneration,
+  isModelForbiddenForTextGeneration,
   parseCapabilities,
 } from '@/lib/ai/providers';
 
@@ -87,6 +89,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     } else {
       if (!caps.includes('TEXT_GENERATION')) {
         return err('This model does not support text generation.', 400, 'UNSUPPORTED_CAPABILITY');
+      }
+      if (!canProviderSupportTextGeneration(model.provider.kind)) {
+        return err('This provider does not support text generation.', 400, 'UNSUPPORTED_CAPABILITY');
+      }
+      const forbiddenText = isModelForbiddenForTextGeneration(model.provider.kind, model.modelId);
+      if (forbiddenText.forbidden) {
+        return err(forbiddenText.reason || 'This model does not support text generation.', 400, 'FORBIDDEN_CAPABILITY');
       }
     }
 

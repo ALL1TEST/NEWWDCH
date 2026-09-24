@@ -195,7 +195,13 @@ export const useNavigationStore = create<NavigationState>((set) => ({
 
     // Update browser hash without triggering a page reload
     const hash = buildHash(targetMod, targetItemId, targetSubPage);
-    window.history.replaceState(null, '', hash);
+    if (typeof window !== 'undefined') {
+      if (window.location.hash !== hash) {
+        window.history.pushState(null, '', hash);
+      } else {
+        window.history.replaceState(null, '', hash);
+      }
+    }
   },
 
   readFromHash: () => {

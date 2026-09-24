@@ -27,6 +27,11 @@ import {
   AlignLeft,
   List,
   Square,
+  Check,
+  Plus,
+  PenLine,
+  Tag,
+  Clock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -61,17 +66,22 @@ import { TiptapEditor, type TiptapEditorRef } from '@/components/editor/tiptap-e
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { CategoriesTagsDialog } from './categories-tags-dialog';
+import { KeywordsDialog } from './keywords-dialog';
+import { isImageGenerationIntent, buildImagePrompt } from '@/lib/ai/ai-intent-detector';
 import { markdownToEditorHtml } from '@/lib/pipeline/markdown-to-html';
 import { useAiWorkspace } from '@/hooks/use-ai-workspace';
+import { PublishDatePicker, PublishTimePicker } from './publishing-datetime-pickers';
 import { useT } from '@/lib/i18n';
-import { cn, normalizeContentToHtml, truncate } from '@/lib/utils';
+import { cn, truncate } from '@/lib/utils';
+import { normalizeContentForEditor, sanitizeContentForStorage } from '@/lib/pipeline/content-item-pipeline';
 import { toast } from 'sonner';
 import type { PostStatus } from '@/shared/types';
 
 // -------------------- Types --------------------
 
 interface ContentAuthor { id: string; name: string; avatar?: string; }
-interface ContentTypeOption { id: string; name: string; }
+interface ContentTypeOption { id: string; name: string; slug?: string; }
 interface CategoryOption { id: string; name: string; }
 interface TagOption { id: string; name: string; }
 interface MediaItem { id: string; filename: string; url: string; thumbnailUrl?: string; alt?: string; }
@@ -106,7 +116,7 @@ const contentEditSchema = z.object({
   excerpt: z.string().max(300).optional().or(z.literal('')),
   content: z.string().optional().or(z.literal('')),
   status: z.enum(['DRAFT', 'IN_REVIEW', 'APPROVED', 'PUBLISHED', 'UNPUBLISHED', 'ARCHIVED']),
-  contentTypeId: z.string().min(1, 'Content type is required'),
+  contentTypeId: z.string().optional().or(z.literal('')),
   categoryId: z.string().optional().or(z.literal('')),
   tagIds: z.array(z.string()),
   seoTitle: z.string().max(60).optional().or(z.literal('')),
@@ -451,8 +461,9 @@ function AIAssistDialog({
 
 // -------------------- Main Component --------------------
 
-export function ContentEditPage({ contentId }: { contentId: string }) {
+export function ContentEditPage({ contentId, isPage: isPageProp }: { contentId: string; isPage?: boolean }) {
   const navigate = useNavigationStore((s) => s.navigate);
+  const currentModule = useNavigationStore((s) => s.currentModule);
   const queryClient = useQueryClient();
   const { t } = useT();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -471,20 +482,61 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
   const [selectedText, setSelectedText] = useState('');
   const [generatedSeoReport, setGeneratedSeoReport] = useState<any>(null);
   const [savedSelectedText, setSavedSelectedText] = useState(''); // Fix #2: persistent saved selection context for AI bar
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  // Fix #2: onSelectionChange handler — set transient selectedText AND persistent savedSelectedText when non-empty
+  // Restore AI input draft for this article on mount
+  useEffect(() => {
+    if (!contentId) return;
+    try {
+      const saved = window.localStorage.getItem(`cms_article_edit_ai_${contentId}`);
+      if (saved) setAiInput(saved);
+    } catch {}
+  }, [contentId]);
+
+  // Persist AI input draft for this article
+  useEffect(() => {
+    if (!contentId) return;
+    try {
+      if (aiInput.trim()) {
+        window.localStorage.setItem(`cms_article_edit_ai_${contentId}`, aiInput);
+      } else {
+        window.localStorage.removeItem(`cms_article_edit_ai_${contentId}`);
+      }
+    } catch {}
+  }, [contentId, aiInput]);
+
+  const aiBoxRef = useRef<HTMLDivElement>(null);
+
+  // Fix #2: onSelectionChange handler — update transient and saved selection
   const handleEditorSelectionChange = useCallback((text: string) => {
     setSelectedText(text);
-    if (text) {
-      setSavedSelectedText(text);
-    }
-    // Do NOT clear savedSelectedText when text is empty (focus may have moved to AI bar)
+    setSavedSelectedText(text);
   }, []);
 
   const clearSavedSelection = useCallback(() => {
     setSavedSelectedText('');
     setSelectedText('');
+  }, []);
+
+  // Clear selection when clicking anywhere on empty space outside the AI input container
+  useEffect(() => {
+    const handleDocumentMouseDown = (e: MouseEvent) => {
+      // If clicking inside the AI box, don't clear (user might be focusing input)
+      if (aiBoxRef.current && aiBoxRef.current.contains(e.target as Node)) {
+        return;
+      }
+      // Small timeout to allow DOM selection to settle
+      setTimeout(() => {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+          setSavedSelectedText('');
+          setSelectedText('');
+        }
+      }, 50);
+    };
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    return () => document.removeEventListener('mousedown', handleDocumentMouseDown);
   }, []);
 
   // Dialog states
@@ -494,6 +546,43 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
   const [aiAssistOpen, setAiAssistOpen] = useState(false);
   const [aiImageDialogOpen, setAiImageDialogOpen] = useState(false);
   const [aiImagePrompt, setAiImagePrompt] = useState('');
+  const [featuredAspectRatio, setFeaturedAspectRatio] = useState<string>('1:1');
+
+  // Publishing Schedule states (matching Image 2)
+  const [scheduledDate, setScheduledDate] = useState<string>(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+  const [scheduledTime, setScheduledTime] = useState<string>(() => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  });
+
+  const formatDisplayDate = (dateStr: string) => {
+    if (!dateStr) {
+      const now = new Date();
+      return now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    try {
+      const d = new Date(dateStr.includes('T') ? dateStr : `${dateStr}T00:00:00`);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatDisplayTime = (timeStr: string) => {
+    if (!timeStr) return '--:-- --';
+    try {
+      const [h, m] = timeStr.split(':').map(Number);
+      if (isNaN(h) || isNaN(m)) return timeStr;
+      const period = h >= 12 ? 'PM' : 'AM';
+      const hours = h % 12 || 12;
+      return `${hours}:${m.toString().padStart(2, '0')} ${period}`;
+    } catch {
+      return timeStr;
+    }
+  };
 
   // Fetch the article
   const { data: content, isLoading: isLoadingContent } = useQuery({
@@ -503,12 +592,20 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
     enabled: !!contentId,
   });
 
+  const isPage = Boolean(
+    isPageProp ||
+    currentModule === 'pages' ||
+    (content as any)?.type === 'PAGE' ||
+    content?.contentType?.slug?.toLowerCase() === 'page' ||
+    content?.contentType?.name?.toLowerCase() === 'page'
+  );
+
   const { data: contentTypes } = useQuery({
     queryKey: queryKeys.contentTypes.all,
     queryFn: () => getApi<ContentTypeOption[]>('/api/content-types?pageSize=100'),
     staleTime: 60_000,
   });
-  const { data: categories } = useQuery({
+  const { data: categories, refetch: refetchCategories } = useQuery({
     queryKey: queryKeys.categories.all,
     queryFn: () => getApi<CategoryOption[]>('/api/categories?pageSize=200'),
     staleTime: 60_000,
@@ -518,6 +615,11 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
     queryFn: () => getApi<TagOption[]>('/api/tags?pageSize=200'),
     staleTime: 60_000,
   });
+
+  const [catTagsOpen, setCatTagsOpen] = useState(false);
+  const [catTagsInitialTab, setCatTagsInitialTab] = useState<'categories' | 'tags'>('categories');
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [isSeoGenerating, setIsSeoGenerating] = useState(false);
 
   const filteredTags = useMemo(() => {
     if (!allTags) return [];
@@ -530,15 +632,19 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
     defaultValues: { title: '', excerpt: '', content: '', status: 'DRAFT', contentTypeId: '', categoryId: '', tagIds: [], seoTitle: '', seoDescription: '' },
   });
 
-  // Normalize content to HTML (handles legacy ProseMirror JSON stored in DB)
+  // Normalize content to HTML (handles legacy ProseMirror JSON, Markdown, and strips editor artifacts)
   const normalizedContent = useMemo(
-    () => (content?.content ? normalizeContentToHtml(content.content) : ''),
+    () => (content?.content ? normalizeContentForEditor(content.content) : ''),
     [content?.content],
   );
 
+  // Track initialization per contentId so background refetches don't overwrite user edits
+  const initializedContentIdRef = useRef<string | null>(null);
+
   // Populate form + editor + featured image once content loads
   useEffect(() => {
-    if (content) {
+    if (content && initializedContentIdRef.current !== content.id) {
+      initializedContentIdRef.current = content.id;
       reset({
         title: content.title ?? '',
         excerpt: content.excerpt ?? '',
@@ -552,10 +658,22 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
       });
       setSlugValue(content.slug ?? '');
       setEditorContent(normalizedContent);
-      if (content.featuredImage) {
-        setFeaturedImage(content.featuredImage);
+      setFeaturedImage(content.featuredImage || null);
+      const pubDate = (content as any)?.publishedAt || (content as any)?.scheduledAt || content?.createdAt;
+      if (pubDate) {
+        const d = new Date(pubDate);
+        if (!isNaN(d.getTime())) {
+          setScheduledDate(d.toISOString().split('T')[0]);
+          const hh = String(d.getHours()).padStart(2, '0');
+          const mm = String(d.getMinutes()).padStart(2, '0');
+          setScheduledTime(`${hh}:${mm}`);
+        }
       } else {
-        setFeaturedImage(null);
+        const now = new Date();
+        setScheduledDate(now.toISOString().split('T')[0]);
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        setScheduledTime(`${hh}:${mm}`);
       }
     }
   }, [content, normalizedContent, reset]);
@@ -565,27 +683,216 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
   const watchedExcerpt = watch('excerpt');
   const watchedSeoTitle = watch('seoTitle');
   const watchedSeoDescription = watch('seoDescription');
+  const watchedStatus = watch('status');
+  const currentStatus = watchedStatus || content?.status || 'DRAFT';
+  const isPublished = currentStatus === 'PUBLISHED';
+
+
+  const [keywordsDialogOpen, setKeywordsDialogOpen] = useState(false);
+  const [isTagsGenerating, setIsTagsGenerating] = useState(false);
+
+  const handleGenerateTags = useCallback(async () => {
+    const currentTitle = watchedTitle?.trim() || getValues('title')?.trim() || content?.title;
+    const currentSeoTitle = watchedSeoTitle?.trim() || getValues('seoTitle')?.trim();
+    const currentSeoDescription = watchedSeoDescription?.trim() || getValues('seoDescription')?.trim();
+    const currentContent = editorContent || content?.content || watchedExcerpt || aiInput || '';
+    if (!currentTitle && !currentContent && !currentSeoTitle) {
+      toast.error(t('articles.titleRequired') || 'Please enter an article title or SEO information first.');
+      return;
+    }
+
+    setIsTagsGenerating(true);
+    try {
+      const existingNames = allTags?.map((t) => t.name) || [];
+      const res = await postApi<any>('/api/content/generate-taxonomy', {
+        type: 'tags',
+        title: currentTitle || undefined,
+        seoTitle: currentSeoTitle || undefined,
+        seoDescription: currentSeoDescription || undefined,
+        content: currentContent || undefined,
+        existing: existingNames,
+        count: 8,
+      });
+
+      let items: string[] =
+        res?.items ||
+        res?.data?.items ||
+        (Array.isArray(res) ? res : []) ||
+        [];
+
+      // Local fallback from aiInput keywords if any
+      if (items.length === 0 && (aiInput || currentContent)) {
+        const text = `${aiInput} ${currentContent}`;
+        const kwMatch = text.match(/Keywords:\s*([^\n\r]+)/i);
+        if (kwMatch && kwMatch[1]) {
+          items = kwMatch[1].split(',').map((s) => s.trim()).filter(Boolean);
+        }
+      }
+
+      if (items.length === 0 && currentTitle) {
+        items = currentTitle
+          .replace(/[:\-–—\(\)\?!]/g, ' ')
+          .split(/\s+/)
+          .map((w) => w.trim())
+          .filter((w) => w.length > 3)
+          .slice(0, 6);
+      }
+
+      if (items.length === 0) {
+        toast.info('No tags suggested by AI.');
+        return;
+      }
+
+      const generatedTagIds: string[] = [];
+      for (const item of items) {
+        try {
+          const createRes = await postApi<{ id: string; name: string }>('/api/tags', { name: item });
+          if (createRes?.id) {
+            generatedTagIds.push(createRes.id);
+          }
+        } catch {
+          // If exists
+        }
+      }
+
+      await queryClient.invalidateQueries({ queryKey: queryKeys.tags.all });
+      const refreshed = await refetchTags();
+      const updatedTags = refreshed.data ?? allTags ?? [];
+
+      for (const item of items) {
+        const found = updatedTags.find((t) => t.name.toLowerCase() === item.toLowerCase());
+        if (found && !generatedTagIds.includes(found.id)) {
+          generatedTagIds.push(found.id);
+        }
+      }
+
+      const currentTagIds = getValues('tagIds') || selectedTagIds || [];
+      const mergedIds = Array.from(new Set([...currentTagIds, ...generatedTagIds]));
+      setValue('tagIds', mergedIds, { shouldDirty: true, shouldValidate: true });
+      toast.success(`Generated ${generatedTagIds.length} SEO keywords and tags with AI!`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to generate tags');
+    } finally {
+      setIsTagsGenerating(false);
+    }
+  }, [watchedTitle, watchedSeoTitle, watchedSeoDescription, getValues, content, editorContent, watchedExcerpt, aiInput, allTags, queryClient, refetchTags, selectedTagIds, setValue, t]);
+
+  const handleGenerateSeo = useCallback(async () => {
+    const currentTitle = watchedTitle?.trim() || getValues('title')?.trim();
+    if (!currentTitle) {
+      toast.error(t('articles.titleRequired') || 'Please enter an article title first.');
+      return;
+    }
+    setIsSeoGenerating(true);
+    try {
+      const editorText =
+        (typeof editorRef.current?.getMarkdown === 'function' ? editorRef.current.getMarkdown() : '') ||
+        editorContent ||
+        getValues('content') ||
+        '';
+      const currentExcerpt = getValues('excerpt') || '';
+      const res = await postApi<{ data?: { seoTitle?: string; seoDescription?: string }; seoTitle?: string; seoDescription?: string }>('/api/content/generate-seo', {
+        title: currentTitle,
+        content: editorText,
+        excerpt: currentExcerpt,
+      });
+      const data = (res as any)?.data || res;
+      if (data?.seoTitle) {
+        setValue('seoTitle', data.seoTitle, { shouldDirty: true, shouldValidate: true });
+      }
+      if (data?.seoDescription) {
+        setValue('seoDescription', data.seoDescription, { shouldDirty: true, shouldValidate: true });
+      }
+      toast.success(t('articles.seoGenerated') || 'SEO metadata generated successfully');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to generate SEO metadata');
+    } finally {
+      setIsSeoGenerating(false);
+    }
+  }, [watchedTitle, getValues, editorContent, setValue, t]);
+
+  // Create tag mutation
+  const createTagMutation = useMutation({
+    mutationFn: (name: string) => postApi<TagOption>('/api/tags', { name }),
+    onSuccess: (newTag) => {
+      refetchTags();
+      if (!selectedTagIds.includes(newTag.id)) {
+        setValue('tagIds', [...selectedTagIds, newTag.id], { shouldValidate: true });
+      }
+      toast.success(`${t('articles.tagCreatedToast') || 'Tag created:'} ${newTag.name}`);
+    },
+    onError: (err: Error) => toast.error(err.message || t('articles.tagCreateFailedToast') || 'Failed to create tag'),
+  });
+
+  // Handle tag input: Enter or comma creates new tag(s), splitting on commas
+  const handleTagKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        const raw = tagSearch.trim();
+        if (!raw) return;
+
+        const parts = raw.split(',').map((s) => s.trim()).filter(Boolean);
+        for (const part of parts) {
+          const existingTag = allTags?.find(
+            (t) => t.name.toLowerCase() === part.toLowerCase(),
+          );
+          if (existingTag) {
+            if (!selectedTagIds.includes(existingTag.id)) {
+              setValue('tagIds', [...selectedTagIds, existingTag.id], { shouldValidate: true });
+            }
+            continue;
+          }
+          if (selectedTagIds.some((id) => allTags?.find((t) => t.id === id)?.name.toLowerCase() === part.toLowerCase())) {
+            continue;
+          }
+          createTagMutation.mutate(part);
+        }
+        setTagSearch('');
+      }
+    },
+    [tagSearch, allTags, selectedTagIds, setValue, createTagMutation],
+  );
 
   // Save mutation
   const saveMutation = useMutation({
-    mutationFn: (data: ContentEditFormValues & { scheduledAt?: string; featuredImageId?: string }) =>
+    mutationFn: (data: ContentEditFormValues & { scheduledAt?: string; featuredImageId?: string | null }) =>
       patchApi<ContentDetail>(`/api/content/${contentId}`, {
         title: data.title,
-        excerpt: data.excerpt || undefined,
-        content: editorContent || undefined,
+        excerpt: isPage ? '' : (data.excerpt !== undefined ? data.excerpt : ''),
+        content: editorContent !== undefined ? sanitizeContentForStorage(editorContent) : (data.content || ''),
         status: data.status,
         contentTypeId: data.contentTypeId,
-        categoryId: data.categoryId || undefined,
-        tagIds: data.tagIds,
-        seoTitle: data.seoTitle || undefined,
-        seoDescription: data.seoDescription || undefined,
-        featuredImageId: featuredImage?.id || undefined,
-        scheduledAt: data.scheduledAt || undefined,
+        categoryId: isPage ? null : (data.categoryId ? data.categoryId : null),
+        tagIds: isPage ? [] : data.tagIds,
+        seoTitle: data.seoTitle ? data.seoTitle : null,
+        seoDescription: data.seoDescription ? data.seoDescription : null,
+        featuredImageId: isPage ? null : (featuredImage ? featuredImage.id : null),
+        scheduledAt: data.scheduledAt ? data.scheduledAt : null,
       } as Record<string, unknown>),
-    onSuccess: () => {
+    onSuccess: (savedItem) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.content.detail(contentId) });
+      if (savedItem) {
+        setFeaturedImage(savedItem.featuredImage || null);
+        const normContent = savedItem.content ? normalizeContentForEditor(savedItem.content) : '';
+        setEditorContent(normContent);
+        reset({
+          title: savedItem.title ?? '',
+          excerpt: savedItem.excerpt ?? '',
+          content: normContent,
+          status: savedItem.status,
+          contentTypeId: savedItem.contentTypeId ?? '',
+          categoryId: savedItem.categoryId ?? '',
+          tagIds: savedItem.tags?.map((t) => t.id) ?? [],
+          seoTitle: savedItem.seoTitle ?? '',
+          seoDescription: savedItem.seoDescription ?? '',
+        });
+      }
       toast.success(t('articles.savedToast'));
+      try {
+        window.localStorage.removeItem(`cms_article_edit_ai_${contentId}`);
+      } catch {}
     },
     onError: (err: Error) => toast.error(err.message || t('articles.saveFailedToast')),
   });
@@ -596,7 +903,7 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
       toast.success(t('articles.deletedToast'));
-      navigate('content');
+      navigate(isPage || currentModule === 'pages' ? 'pages' : 'content');
     },
     onError: () => toast.error(t('articles.deleteFailedToast')),
   });
@@ -626,10 +933,10 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
 
   // Generate featured image with AI mutation
   const aiImageGenerateMutation = useMutation({
-    mutationFn: async (promptText: string) => {
+    mutationFn: async ({ promptText, aspectRatio = '1:1' }: { promptText: string; aspectRatio?: string }) => {
       const res = await postApi<any>('/api/media/generate', {
         prompt: promptText,
-        aspectRatio: '16:9',
+        aspectRatio,
         count: 1,
       });
       const items = Array.isArray(res) ? res : (res as any)?.data;
@@ -662,6 +969,8 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    setIsGeneratingImage(false);
+    setIsAiStreaming(false);
   }, []);
 
   useEffect(() => {
@@ -756,6 +1065,7 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
                   setValue('seoDescription', seo.metaDescription, { shouldDirty: true });
                 }
               }
+              clearSavedSelection();
               toast.success(t('articles.aiGeneratedToast'));
             } else if (eventType === 'error') {
               throw new Error(parsed.message || 'Generation failed');
@@ -780,8 +1090,9 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
     } finally {
       setIsAiStreaming(false);
       abortControllerRef.current = null;
+      clearSavedSelection();
     }
-  }, [watchedTitle, t, getValues, setValue]);
+  }, [watchedTitle, t, getValues, setValue, clearSavedSelection]);
 
   // AI edit selected text
   const aiEditSelectionMutation = useMutation({
@@ -795,6 +1106,7 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
     },
     onSuccess: (result) => {
       abortControllerRef.current = null;
+      clearSavedSelection();
       // postApi unwraps the ApiResponse envelope → result IS the data object.
       const editedText = result?.editedText;
       if (editedText) {
@@ -804,6 +1116,7 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
     },
     onError: (err: Error) => {
       abortControllerRef.current = null;
+      clearSavedSelection();
       if (
         err.name === 'AbortError' ||
         err.message?.toLowerCase().includes('cancel') ||
@@ -816,11 +1129,74 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
     },
   });
 
-  const isAiGenerating = isAiStreaming || aiEditSelectionMutation.isPending;
+  const isAiGenerating = isAiStreaming || aiEditSelectionMutation.isPending || isGeneratingImage;
+
+  // Generate Image directly into the editor
+  const handleAiImageGenerate = useCallback(
+    async (promptText: string, contextText?: string) => {
+      const effectivePrompt = buildImagePrompt(promptText, contextText, watchedTitle);
+      setIsGeneratingImage(true);
+      abortControllerRef.current = new AbortController();
+
+      try {
+        const genMsg = t('articles.generatingImage');
+        toast.info(genMsg && genMsg !== 'articles.generatingImage' ? genMsg : 'Generating image with AI...');
+        const res = await postApi<any>(
+          '/api/media/generate',
+          {
+            prompt: effectivePrompt,
+            aspectRatio: '16:9',
+            count: 1,
+          },
+          { signal: abortControllerRef.current.signal },
+        );
+
+        const items = Array.isArray(res) ? res : (res as any)?.data;
+        const media = items?.[0];
+
+        if (media && media.url) {
+          editorRef.current?.insertImage(media.url, effectivePrompt);
+
+          setFeaturedImage((prev) => {
+            if (!prev) {
+              return {
+                id: media.id,
+                filename: media.filename || 'ai-generated-image.png',
+                url: media.url,
+                alt: media.alt || effectivePrompt,
+              };
+            }
+            return prev;
+          });
+
+          const succMsg = t('articles.imageGeneratedToast');
+          toast.success(succMsg && succMsg !== 'articles.imageGeneratedToast' ? succMsg : 'Image generated and inserted successfully');
+        } else {
+          toast.error(t('media.generateFailed') || 'Failed to generate image');
+        }
+      } catch (err: any) {
+        if (
+          err?.name === 'AbortError' ||
+          err?.message?.toLowerCase().includes('cancel') ||
+          err?.message?.toLowerCase().includes('abort')
+        ) {
+          toast.info(t('articles.generationStopped') || 'Generation stopped');
+          return;
+        }
+        toast.error(err?.message || t('media.generateFailed') || 'Failed to generate image');
+      } finally {
+        setIsGeneratingImage(false);
+        abortControllerRef.current = null;
+        clearSavedSelection();
+      }
+    },
+    [clearSavedSelection, watchedTitle, t],
+  );
 
   // Selection-aware action handler
   const captureAndHandleQuickAction = useCallback((action: string) => {
-    const savedText = editorRef.current?.saveSelectionForReplace() || '';
+    const savedText = editorRef.current?.saveSelectionForReplace() || savedSelectedText || '';
+    clearSavedSelection();
 
     if (action === 'Duplicate') {
       if (savedText) {
@@ -837,7 +1213,7 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
     } else {
       generateAiArticleStream(action);
     }
-  }, [aiEditSelectionMutation, generateAiArticleStream, t]);
+  }, [aiEditSelectionMutation, generateAiArticleStream, savedSelectedText, clearSavedSelection, t]);
 
   const captureSelectionOnMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -845,16 +1221,27 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
   }, []);
 
   const handleAiSubmit = useCallback((prompt: string) => {
-    const sel = editorRef.current?.saveSelectionForReplace() || '';
+    const sel = editorRef.current?.saveSelectionForReplace() || savedSelectedText || '';
+    const shouldGenerateImage = isImageGenerationIntent(prompt);
+
+    // Clear saved selection so pill disappears immediately on submit
+    clearSavedSelection();
+
+    if (shouldGenerateImage) {
+      handleAiImageGenerate(prompt, sel);
+      return;
+    }
+
     if (sel) {
       aiEditSelectionMutation.mutate({ text: sel, action: prompt });
     } else {
       generateAiArticleStream(prompt);
     }
-  }, [aiEditSelectionMutation, generateAiArticleStream]);
+  }, [savedSelectedText, clearSavedSelection, handleAiImageGenerate, aiEditSelectionMutation, generateAiArticleStream]);
 
   const submitWithStatus = useCallback(
     (status: string, scheduledAt?: string) => {
+      setValue('status', status as any, { shouldDirty: true });
       const values = getValues();
       const title = values.title?.trim() || t('articles.untitled');
       if (!values.title?.trim()) setValue('title', title);
@@ -902,7 +1289,7 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
     setFeaturedImage(media);
   }, []);
 
-  const goBack = useCallback(() => navigate('content'), [navigate]);
+  const goBack = useCallback(() => navigate(isPage || currentModule === 'pages' ? 'pages' : 'content'), [navigate, isPage, currentModule]);
 
   const addTag = useCallback((tagId: string) => {
     if (!selectedTagIds.includes(tagId)) {
@@ -974,9 +1361,6 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
               <h1 className="text-xl font-semibold truncate max-w-[280px] lg:max-w-[400px]">
                 {content?.title ?? t('articles.editArticle')}
               </h1>
-              {content && (
-                <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0">v{content.version}</Badge>
-              )}
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -1052,6 +1436,7 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
             {/* Tiptap Rich Text Editor — internal vertical scroll */}
             <div className="flex-1 min-h-0 flex flex-col h-full">
               <TiptapEditor
+                key={contentId}
                 ref={editorRef}
                 content={editorContent}
                 onChange={setEditorContent}
@@ -1060,33 +1445,46 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
                 footer={
                   <div className="w-full">
                     <div className="w-full max-w-3xl mx-auto">
-                      {/* Persistent saved selection indicator */}
-                      {savedSelectedText && (
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="flex items-center gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 px-2.5 py-1 min-w-0 flex-1">
-                            <Sparkles className="h-3 w-3 text-amber-500 shrink-0" />
-                            <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium shrink-0">{t('articles.selectedPrefix')}</span>
-                            <span className="text-[11px] text-amber-800 dark:text-amber-300 truncate max-w-[280px]">&ldquo;{savedSelectedText}&rdquo;</span>
+                      {/* AI Box: matching Image 4 */}
+                      <div ref={aiBoxRef} className="border border-border/80 rounded-2xl overflow-hidden bg-background shadow-2xs transition-all">
+                        {savedSelectedText && (
+                          <div className="bg-[#fef9ee] dark:bg-amber-950/30 border-b border-amber-200/70 dark:border-amber-900/40 px-3.5 py-2 flex items-center justify-between gap-2 animate-in fade-in duration-150">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <PenLine className="h-3.5 w-3.5 text-zinc-700 dark:text-zinc-300 shrink-0" />
+                              <span className="text-xs text-zinc-800 dark:text-zinc-200 font-normal truncate select-none">
+                                {savedSelectedText}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={clearSavedSelection}
+                              className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 p-0.5 shrink-0 transition-colors cursor-pointer"
+                              title="Clear selection"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={clearSavedSelection}
-                            className="text-[10px] text-muted-foreground hover:text-foreground shrink-0 transition-colors"
-                            title={t('articles.clearSelectionContext')}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      )}
+                        )}
 
-                      {/* AI Box: matching Image 1 with full rounded border */}
-                      <div className="border border-border/80 rounded-2xl p-2.5 bg-background shadow-2xs">
-                        <div className="flex items-center gap-2 px-1">
-                          <div className="flex size-7 items-center justify-center rounded-full bg-amber-500 text-white shrink-0">
-                            <Sparkles className="size-3.5" />
-                          </div>
-                          <div className="relative flex-1">
+                        <div className="p-2.5">
+                          <div className="flex items-center gap-2 px-1">
+                            <div
+                              className={cn(
+                                'flex size-7 items-center justify-center rounded-full text-white shrink-0 transition-colors shadow-xs',
+                                isGeneratingImage
+                                  ? 'bg-purple-600'
+                                  : 'bg-amber-500'
+                              )}
+                            >
+                              {isGeneratingImage ? (
+                                <ImageIcon className="size-3.5" />
+                              ) : (
+                                <Sparkles className="size-3.5" />
+                              )}
+                            </div>
+
+                          <div className="relative flex-1 min-w-0">
                             <textarea
                               value={aiInput}
                               onChange={(e) => setAiInput(e.target.value)}
@@ -1105,16 +1503,19 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
                               }}
                               placeholder={
                                 isAiGenerating
-                                  ? t('articles.generatingPlaceholder')
+                                  ? (isGeneratingImage
+                                      ? (t('articles.generatingImage') === 'articles.generatingImage' ? 'Generating image with AI...' : t('articles.generatingImage'))
+                                      : t('articles.generatingPlaceholder'))
                                   : savedSelectedText
                                   ? t('articles.editSelectedTextPlaceholder')
                                   : t('articles.askAiPlaceholder')
                               }
                               disabled={isAiGenerating}
-                              rows={1}
-                              className="flex-1 resize-none bg-transparent text-sm leading-normal placeholder:text-muted-foreground/60 focus:outline-none w-full py-0.5 disabled:opacity-60"
+                              rows={aiInput.includes('\n') ? 3 : 1}
+                              className="flex-1 resize-none bg-transparent text-sm leading-normal placeholder:text-muted-foreground/60 focus:outline-none w-full py-0.5 max-h-32 overflow-y-auto disabled:opacity-60"
                             />
                           </div>
+
                           <button
                             type="button"
                             onMouseDown={isAiGenerating ? undefined : captureSelectionOnMouseDown}
@@ -1144,7 +1545,8 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
                       </div>
                     </div>
                   </div>
-                }
+                </div>
+              }
               />
             </div>
           </div>
@@ -1153,128 +1555,185 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
         {/* RIGHT: Sidebar — height matching the editor with internal scroll */}
         <div className="col-span-1 lg:col-span-3 xl:col-span-3 2xl:col-span-3 h-full min-h-0">
           <div className="h-full overflow-y-auto rounded-lg border bg-card">
-              <Accordion type="multiple" defaultValue={['featured-image', 'publishing', 'title-slug', 'excerpt']} className="px-4">
+              <Accordion
+                type="multiple"
+                defaultValue={isPage ? ['title-slug', 'seo'] : ['featured-image', 'publishing', 'categories', 'title-slug', 'excerpt']}
+                className="px-4"
+              >
                 {/* 1. Featured Image */}
-                <AccordionItem value="featured-image">
-                  <AccordionTrigger className="py-3 text-sm">
-                    <span className="flex items-center gap-2">
-                      <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                      {t('articles.section.featuredImage')}
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="pb-4 space-y-2.5">
-                      {featuredImage ? (
-                        <div className="relative aspect-video rounded-md overflow-hidden border">
-                          <img src={featuredImage.url} alt={featuredImage.alt || t('articles.section.featuredImage')} className="h-full w-full object-cover" />
-                          <button
-                            type="button"
-                            onClick={() => setFeaturedImage(null)}
-                            className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+                {!isPage && (
+                  <AccordionItem value="featured-image">
+                    <AccordionTrigger className="py-3 text-sm">
+                      <span className="flex items-center gap-2">
+                        <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        {t('articles.section.featuredImage')}
+                      </span>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="pb-4 space-y-2.5">
+                        {featuredImage ? (
+                          <div
+                            className="relative aspect-video rounded-md overflow-hidden border group cursor-pointer"
+                            onClick={() => setLightboxOpen(true)}
+                            title={t('articles.clickToEnlarge') || 'Click to view full image'}
                           >
-                            <X className="h-3 w-3" />
-                          </button>
+                            <img src={featuredImage.url} alt={featuredImage.alt || t('articles.section.featuredImage')} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                              <Eye className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFeaturedImage(null);
+                              }}
+                              className="absolute top-1.5 right-1.5 z-10 h-6 w-6 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="relative aspect-video rounded-md overflow-hidden bg-slate-800 border flex items-center justify-center">
+                            <span className="text-slate-400 text-sm">{t('articles.noImage')}</span>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-3 gap-1.5 w-full">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs gap-1 px-1 font-medium min-w-0"
+                            onClick={handleFileUpload}
+                            disabled={uploadMutation.isPending}
+                          >
+                            {uploadMutation.isPending ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <Upload className="h-3.5 w-3.5 shrink-0" />}
+                            <span className="truncate">{t('media.upload')}</span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs gap-1 px-1 font-medium min-w-0"
+                            onClick={() => setMediaLibraryOpen(true)}
+                          >
+                            <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">{t('articles.library')}</span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs gap-1 px-1 font-medium min-w-0 border-amber-400/40 text-amber-600 hover:bg-amber-400/10 dark:text-amber-400 dark:border-amber-400/40 dark:hover:bg-amber-400/10"
+                            onClick={() => {
+                              if (!aiImagePrompt && watchedTitle) {
+                                setAiImagePrompt(watchedTitle);
+                              }
+                              setAiImageDialogOpen(true);
+                            }}
+                            disabled={aiImageGenerateMutation.isPending}
+                          >
+                            {aiImageGenerateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 shrink-0" />}
+                            <span>AI</span>
+                          </Button>
                         </div>
-                      ) : (
-                        <div className="relative aspect-video rounded-md overflow-hidden bg-slate-800 border flex items-center justify-center">
-                          <span className="text-slate-400 text-sm">{t('articles.noImage')}</span>
-                        </div>
-                      )}
-                      <div className="grid grid-cols-3 gap-1.5 w-full">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs gap-1 px-1 font-medium min-w-0"
-                          onClick={handleFileUpload}
-                          disabled={uploadMutation.isPending}
-                        >
-                          {uploadMutation.isPending ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <Upload className="h-3.5 w-3.5 shrink-0" />}
-                          <span className="truncate">{t('media.upload')}</span>
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs gap-1 px-1 font-medium min-w-0"
-                          onClick={() => setMediaLibraryOpen(true)}
-                        >
-                          <ImageIcon className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{t('articles.library')}</span>
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs gap-1 px-1 font-medium min-w-0 border-amber-400/40 text-amber-600 hover:bg-amber-400/10 dark:text-amber-400 dark:border-amber-400/40 dark:hover:bg-amber-400/10"
-                          onClick={() => {
-                            if (!aiImagePrompt && watchedTitle) {
-                              setAiImagePrompt(watchedTitle);
-                            }
-                            setAiImageDialogOpen(true);
-                          }}
-                          disabled={aiImageGenerateMutation.isPending}
-                        >
-                          {aiImageGenerateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 shrink-0" />}
-                          <span>AI</span>
-                        </Button>
                       </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
+                    </AccordionContent>
+                  </AccordionItem>
+                )}
 
-                {/* 2. Publishing (Status + Content Type + Category) — specific to Edit */}
-                <AccordionItem value="publishing">
-                  <AccordionTrigger className="py-3 text-sm">
-                    <span className="flex items-center gap-2">
-                      <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                      {t('articles.section.publishing')}
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="pb-4 space-y-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">{t('common.status')}</Label>
-                        <Controller control={control} name="status" render={({ field }) => (
-                          <Select value={field.value} onValueChange={field.onChange}>
-                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="DRAFT">{t('articles.status.draft')}</SelectItem>
-                              <SelectItem value="IN_REVIEW">{t('articles.status.inReview')}</SelectItem>
-                              <SelectItem value="APPROVED">{t('articles.status.approved')}</SelectItem>
-                              <SelectItem value="PUBLISHED">{t('articles.status.published')}</SelectItem>
-                              <SelectItem value="UNPUBLISHED">{t('articles.status.unpublished')}</SelectItem>
-                              <SelectItem value="ARCHIVED">{t('articles.status.archived')}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )} />
+                {/* 2. Publishing (Date & Time Schedule) — matches Image 2 */}
+                {!isPage && (
+                  <AccordionItem value="publishing">
+                    <AccordionTrigger className="py-3 text-sm">
+                      <span className="flex items-center gap-2">
+                        <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                        {t('articles.section.publishing')}
+                      </span>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="pb-4 space-y-2.5">
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* Date (matches Image 1 popup) */}
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground font-normal">
+                              Date
+                            </Label>
+                            <PublishDatePicker
+                              value={scheduledDate}
+                              onChange={(val) => {
+                                setScheduledDate(val);
+                                const timePart = scheduledTime || '10:00';
+                                const iso = new Date(`${val}T${timePart}:00`).toISOString();
+                                setValue('scheduledAt' as any, iso, { shouldDirty: true });
+                              }}
+                            />
+                          </div>
+
+                          {/* Time (matches Image 2 popup) */}
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground font-normal flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-muted-foreground" />
+                              <span>Time</span>
+                            </Label>
+                            <PublishTimePicker
+                              value={scheduledTime}
+                              onChange={(val) => {
+                                setScheduledTime(val);
+                                if (scheduledDate) {
+                                  const iso = new Date(`${scheduledDate}T${val}:00`).toISOString();
+                                  setValue('scheduledAt' as any, iso, { shouldDirty: true });
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <p className="text-[11px] text-muted-foreground pt-0.5">
+                          Auto-publish on schedule
+                        </p>
                       </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">{t('articles.section.contentType')} <span className="text-destructive">*</span></Label>
-                        <Controller control={control} name="contentTypeId" render={({ field }) => (
-                          <Select value={field.value} onValueChange={field.onChange}>
-                            <SelectTrigger className="h-9"><SelectValue placeholder={t('articles.selectTypePlaceholder')} /></SelectTrigger>
-                            <SelectContent>
-                              {(contentTypes ?? []).map((ct) => <SelectItem key={ct.id} value={ct.id}>{ct.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        )} />
-                        {errors.contentTypeId && <p className="text-xs text-destructive">{errors.contentTypeId.message}</p>}
+                    </AccordionContent>
+                  </AccordionItem>
+                )}
+
+                {/* 3. Category — Separated in its own section */}
+                {!isPage && (
+                  <AccordionItem value="categories">
+                    <AccordionTrigger className="py-3 text-sm">
+                      <span className="flex items-center gap-2">
+                        <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                        {t('articles.category')}
+                      </span>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="pb-4 space-y-2">
+                        <Controller
+                          control={control}
+                          name="categoryId"
+                          render={({ field }) => (
+                            <Select value={field.value ?? ''} onValueChange={field.onChange}>
+                              <SelectTrigger className="h-9">
+                                <SelectValue placeholder={t('articles.selectCategoryPlaceholder')} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(categories ?? []).map((cat) => (
+                                  <SelectItem key={cat.id} value={cat.id}>
+                                    {cat.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                        {(!categories || categories.length === 0) && (
+                          <p className="text-xs text-muted-foreground">
+                            {t('articles.noCategories') || 'No categories yet.'}
+                          </p>
+                        )}
                       </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">{t('articles.category')}</Label>
-                        <Controller control={control} name="categoryId" render={({ field }) => (
-                          <Select value={field.value ?? ''} onValueChange={field.onChange}>
-                            <SelectTrigger className="h-9"><SelectValue placeholder={t('articles.selectCategoryPlaceholder')} /></SelectTrigger>
-                            <SelectContent>
-                              {(categories ?? []).map((cat) => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        )} />
-                      </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
+                    </AccordionContent>
+                  </AccordionItem>
+                )}
 
                 {/* 3. Title & Slug */}
                 <AccordionItem value="title-slug">
@@ -1309,81 +1768,161 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
                 </AccordionItem>
 
                 {/* 4. Excerpt */}
-                <AccordionItem value="excerpt">
-                  <AccordionTrigger className="py-3 text-sm">
-                    <span className="flex items-center gap-2">
-                      <AlignLeft className="h-3.5 w-3.5 text-muted-foreground" />
-                      {t('articles.section.excerpt')}
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="pb-4">
-                      <Textarea
-                        {...register('excerpt')}
-                        placeholder={t('articles.excerptPlaceholder')}
-                        rows={2}
-                        className="text-sm resize-none"
-                      />
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                {/* 5. Tags */}
-                <AccordionItem value="tags">
-                  <AccordionTrigger className="py-3 text-sm">
-                    <span className="flex items-center gap-2">
-                      <List className="h-3.5 w-3.5 text-muted-foreground" />
-                      {t('articles.section.tags')}
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="pb-4 space-y-3">
-                      <div className="flex flex-wrap gap-1.5">
-                        {selectedTagIds.map((tagId) => {
-                          const tag = allTags?.find((t) => t.id === tagId);
-                          return (
-                            <span
-                              key={tagId}
-                              className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium"
-                            >
-                              {tag?.name ?? tagId}
-                              <button type="button" onClick={() => removeTag(tagId)} className="hover:text-destructive">
-                                <X className="h-3 w-3" />
-                              </button>
-                            </span>
-                          );
-                        })}
-                      </div>
-                      <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                        <Input
-                          value={tagSearch}
-                          onChange={(e) => setTagSearch(e.target.value)}
-                          placeholder={t('articles.searchTagsPlaceholder')}
-                          className="pl-8 h-8 text-sm"
+                {!isPage && (
+                  <AccordionItem value="excerpt">
+                    <AccordionTrigger className="py-3 text-sm">
+                      <span className="flex items-center gap-2">
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                        {t('articles.section.excerpt')}
+                      </span>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="pb-4">
+                        <Textarea
+                          {...register('excerpt')}
+                          placeholder={t('articles.excerptPlaceholder')}
+                          rows={2}
+                          className="text-sm resize-none"
                         />
                       </div>
-                      {tagSearch && filteredTags.length > 0 && (
-                        <div className="max-h-32 overflow-y-auto rounded-md border bg-popover p-1 space-y-0.5">
-                          {filteredTags.map((tag) => (
-                            <button key={tag.id} type="button" onClick={() => addTag(tag.id)} className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-accent transition-colors">
-                              {tag.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                )}
+
+                {/* 5. Tags */}
+                {!isPage && (
+                  <AccordionItem value="tags">
+                    <div className="flex items-center justify-between pr-4">
+                      <AccordionTrigger className="py-3 text-sm flex-1">
+                        <span className="flex items-center gap-2">
+                          <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                          {t('articles.section.tags')}
+                        </span>
+                      </AccordionTrigger>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleGenerateTags();
+                        }}
+                        disabled={isTagsGenerating}
+                        className="h-6 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 gap-1 px-1.5"
+                      >
+                        {isTagsGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                        Generate Tags
+                      </Button>
                     </div>
-                  </AccordionContent>
-                </AccordionItem>
+                    <AccordionContent>
+                      <div className="pb-4 space-y-3">
+                        {selectedTagIds.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {selectedTagIds.map((tagId) => {
+                              const tag = allTags?.find((t) => t.id === tagId);
+                              return (
+                                <span
+                                  key={tagId}
+                                  className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-900 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+                                >
+                                  {tag?.name ?? tagId}
+                                  <button type="button" onClick={() => removeTag(tagId)} className="hover:text-destructive">
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                          <Input
+                            value={tagSearch}
+                            onChange={(e) => setTagSearch(e.target.value)}
+                            onKeyDown={handleTagKeyDown}
+                            placeholder={t('articles.searchTagsPlaceholder') || 'Search or type tag + Enter...'}
+                            className="pl-8 h-8 text-sm"
+                          />
+                        </div>
+                        {tagSearch && filteredTags.length > 0 && (
+                          <div className="max-h-32 overflow-y-auto rounded-md border bg-popover p-1 space-y-0.5 shadow-sm">
+                            {filteredTags.map((tag) => {
+                              const isSelected = selectedTagIds.includes(tag.id);
+                              return (
+                                <button
+                                  key={tag.id}
+                                  type="button"
+                                  onClick={() => isSelected ? removeTag(tag.id) : addTag(tag.id)}
+                                  className={cn(
+                                    "w-full text-left px-2 py-1.5 text-xs rounded flex items-center justify-between transition-colors",
+                                    isSelected ? "bg-amber-50 text-amber-900 font-medium dark:bg-amber-950/40 dark:text-amber-300" : "hover:bg-accent text-foreground"
+                                  )}
+                                >
+                                  <span>{tag.name}</span>
+                                  {isSelected && <Check className="h-3 w-3 text-amber-600 dark:text-amber-400" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Button to open Keywords Dialog (alert modal for selecting keywords) */}
+                        <div className="pt-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setKeywordsDialogOpen(true)}
+                            className="w-full text-xs gap-2 h-8 border-dashed hover:border-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-950/20 text-muted-foreground hover:text-foreground justify-center"
+                          >
+                            <Upload className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                            <span>Select / Upload Keywords</span>
+                            {allTags && allTags.length > 0 && (
+                              <span className="ml-1 text-[10px] bg-muted px-1.5 py-0.5 rounded-full font-mono">
+                                {allTags.length}
+                              </span>
+                            )}
+                          </Button>
+                        </div>
+
+                        {/* Small Alert Dialog for Keywords selection */}
+                        <KeywordsDialog
+                          open={keywordsDialogOpen}
+                          onOpenChange={setKeywordsDialogOpen}
+                          allTags={allTags || []}
+                          selectedTagIds={selectedTagIds}
+                          onToggleTag={(id) => selectedTagIds.includes(id) ? removeTag(id) : addTag(id)}
+                          onTagCreated={() => refetchTags()}
+                        />
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                )}
 
                 {/* 7. SEO */}
                 <AccordionItem value="seo">
-                  <AccordionTrigger className="py-3 text-sm">
-                    <span className="flex items-center gap-2">
-                      <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                      {t('articles.section.seo')}
-                    </span>
-                  </AccordionTrigger>
+                  <div className="flex items-center justify-between pr-4">
+                    <AccordionTrigger className="py-3 text-sm flex-1">
+                      <span className="flex items-center gap-2">
+                        <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                        {t('articles.section.seo')}
+                      </span>
+                    </AccordionTrigger>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleGenerateSeo();
+                      }}
+                      disabled={isSeoGenerating}
+                      className="h-6 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 gap-1 px-1.5"
+                    >
+                      {isSeoGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                      Generate SEO
+                    </Button>
+                  </div>
                   <AccordionContent>
                     <div className="pb-4 space-y-3">
                       <div className="space-y-1.5">
@@ -1394,7 +1933,6 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
                         <Label className="text-xs text-muted-foreground">{t('articles.metaDescription')}</Label>
                         <Textarea {...register('seoDescription')} placeholder={t('articles.metaDescriptionPlaceholder')} rows={2} className="text-sm" />
                       </div>
-
                     </div>
                   </AccordionContent>
                 </AccordionItem>
@@ -1438,7 +1976,7 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
               {t('media.generateDescription') || 'Describe the image you want to generate for this article.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-2">
+          <div className="space-y-4 py-2">
             <Textarea
               value={aiImagePrompt}
               onChange={(e) => setAiImagePrompt(e.target.value)}
@@ -1446,43 +1984,82 @@ export function ContentEditPage({ contentId }: { contentId: string }) {
               rows={3}
               className="text-sm"
             />
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground block">
+                Aspect Ratio
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {(['1:1', '16:9', '9:16', '4:3', '3:4'] as const).map((ratio) => (
+                  <button
+                    key={ratio}
+                    type="button"
+                    onClick={() => setFeaturedAspectRatio(ratio)}
+                    className={cn(
+                      'px-4 py-2 rounded-xl text-sm font-semibold transition-all border cursor-pointer select-none',
+                      featuredAspectRatio === ratio
+                        ? 'bg-amber-400 text-zinc-950 border-amber-400 shadow-sm'
+                        : 'bg-background hover:bg-muted text-muted-foreground border-border/80'
+                    )}
+                  >
+                    {ratio}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-          <DialogFooter className="flex items-center justify-between sm:justify-between">
+          <DialogFooter className="flex items-center justify-end gap-2">
             <Button
               type="button"
-              variant="ghost"
-              size="sm"
-              className="text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                setAiImageDialogOpen(false);
-                setAiAssistOpen(true);
-              }}
+              variant="outline"
+              onClick={() => setAiImageDialogOpen(false)}
             >
-              {t('articles.aiAssistantTitle') || 'AI Content Assistant'} &rarr;
+              {t('common.cancel')}
             </Button>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setAiImageDialogOpen(false)}
-              >
-                {t('common.cancel')}
-              </Button>
-              <Button
-                type="button"
-                className="gap-1.5 bg-amber-400 text-zinc-900 hover:bg-amber-500 font-semibold"
-                onClick={() => aiImageGenerateMutation.mutate(aiImagePrompt.trim() || watchedTitle || 'Featured article image')}
-                disabled={aiImageGenerateMutation.isPending || (!aiImagePrompt.trim() && !watchedTitle?.trim())}
-              >
-                {aiImageGenerateMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
-                {t('common.generate') || 'Generate'}
-              </Button>
-            </div>
+            <Button
+              type="button"
+              className="gap-1.5 bg-amber-400 text-zinc-900 hover:bg-amber-500 font-semibold"
+              onClick={() =>
+                aiImageGenerateMutation.mutate({
+                  promptText: aiImagePrompt.trim() || watchedTitle || 'Featured article image',
+                  aspectRatio: featuredAspectRatio,
+                })
+              }
+              disabled={aiImageGenerateMutation.isPending || (!aiImagePrompt.trim() && !watchedTitle?.trim())}
+            >
+              {aiImageGenerateMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Generate
+            </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Categories & Tags Management Dialog */}
+      <CategoriesTagsDialog
+        open={catTagsOpen}
+        onOpenChange={setCatTagsOpen}
+        initialTab={catTagsInitialTab}
+        title={watchedTitle || content?.title || ''}
+        content={editorContent || content?.content || watchedExcerpt || aiInput || ''}
+        onCategoryCreated={() => refetchCategories()}
+        onTagCreated={() => refetchTags()}
+      />
+
+      {/* Lightbox Preview Modal for Featured Image */}
+      <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] p-2 bg-black/95 border-zinc-800 text-white flex flex-col items-center justify-center">
+          <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+            {featuredImage?.url && (
+              <img
+                src={featuredImage.url}
+                alt={featuredImage.alt || 'Featured Preview'}
+                className="max-h-[80vh] max-w-full object-contain rounded"
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 

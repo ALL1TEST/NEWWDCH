@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
+import { publishArticleToConnectedSite } from '@/lib/connection/site-publisher';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -57,8 +58,21 @@ export async function POST(request: NextRequest) {
 
     const count = await db.contentItem.updateMany({
       where: { id: { in: ids }, deletedAt: null },
-      data: { status },
+      data: {
+        status,
+        ...(status === 'PUBLISHED' ? { publishedAt: new Date() } : {}),
+      },
     });
+
+    if (status === 'PUBLISHED') {
+      for (const contentId of ids) {
+        try {
+          await publishArticleToConnectedSite(contentId);
+        } catch (publishErr) {
+          console.warn(`[CONTENT:BULK_STATUS:PUBLISH] Failed to sync ${contentId}:`, publishErr);
+        }
+      }
+    }
 
     return NextResponse.json({ data: { updatedCount: count.count }, meta: { requestId: id } });
   } catch (error) {

@@ -10,6 +10,7 @@ import { slugify } from '@/lib/utils';
 import { z } from 'zod/v4';
 import { getSiteWhere, getSiteFromRequest, getActivePlanSiteId } from '@/lib/site-context';
 import { getAuthUser } from '@/lib/platform/platform-auth';
+import { publishArticleToConnectedSite } from '@/lib/connection/site-publisher';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -38,7 +39,7 @@ const createSchema = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
     .trim()
     .optional(),
-  contentTypeId: z.string().min(1, 'Content type is required'),
+  contentTypeId: z.string().optional().or(z.literal('')),
   authorId: z.string().min(1, 'Author ID is required').optional(),
   categoryId: z.string().optional().or(z.literal('')),
   featuredImageId: z.string().optional().or(z.literal('')),
@@ -84,7 +85,16 @@ export async function GET(request: NextRequest) {
     const siteFilter = await getSiteWhere(request);
     const where: Record<string, unknown> = { ...siteFilter, deletedAt: null };
     if (status) where.status = status;
-    if (contentTypeId) where.contentTypeId = contentTypeId;
+    const typeParam = sp.get('type') || sp.get('contentType');
+    if (typeParam) {
+      const ct = await db.contentType.findFirst({
+        where: { slug: typeParam.toLowerCase() },
+        select: { id: true },
+      });
+      if (ct) where.contentTypeId = ct.id;
+    } else if (contentTypeId) {
+      where.contentTypeId = contentTypeId;
+    }
     if (authorId) where.authorId = authorId;
     if (categoryId) where.categoryId = categoryId;
     if (search) {
@@ -94,7 +104,10 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    const orderBy: Record<string, string> = { [sort]: order };
+    const orderBy: Array<Record<string, string>> = [
+      { [sort]: order },
+      { id: order },
+    ];
 
     const [items, total] = await Promise.all([
       db.contentItem.findMany({
@@ -172,9 +185,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Resolve contentTypeId — default to Post if not provided
+    let contentTypeId = d.contentTypeId;
+    if (!contentTypeId) {
+      const postType = await db.contentType.findFirst({
+        where: { slug: 'post' },
+        select: { id: true },
+      });
+      contentTypeId = postType?.id;
+      if (!contentTypeId) {
+        const firstType = await db.contentType.findFirst({ select: { id: true } });
+        contentTypeId = firstType?.id;
+      }
+    }
+
+    if (!contentTypeId) {
+      return NextResponse.json(
+        { error: { code: 'VALIDATION_ERROR', message: 'No content types exist. Create a content type first.' }, meta: { requestId: id } },
+        { status: 400 },
+      );
+    }
+
     // Ensure slug uniqueness within the content type
     const existing = await db.contentItem.findFirst({
-      where: { slug, contentTypeId: d.contentTypeId, deletedAt: null },
+      where: { slug, contentTypeId, deletedAt: null },
     });
     const finalSlug = existing ? `${slug}-${nanoid(4)}` : slug;
 
@@ -192,7 +226,7 @@ export async function POST(request: NextRequest) {
         title: d.title,
         slug: finalSlug,
         siteId: siteId || undefined,
-        contentTypeId: d.contentTypeId,
+        contentTypeId,
         authorId,
         categoryId: d.categoryId === '' ? null : d.categoryId ?? null,
         featuredImageId: d.featuredImageId === '' ? null : d.featuredImageId ?? null,
@@ -212,6 +246,25 @@ export async function POST(request: NextRequest) {
       },
       include: contentIncludes,
     });
+
+    if (d.status === 'PUBLISHED' && siteId) {
+      try {
+        await publishArticleToConnectedSite(item.id, siteId);
+      } catch (publishErr: any) {
+        console.error(`[CONTENT:CREATE:EXTERNAL_PUBLISH_FAILED] ${id} —`, publishErr);
+        return NextResponse.json(
+          {
+            error: {
+              code: 'EXTERNAL_PUBLISH_FAILED',
+              message: publishErr.message || 'Failed to publish article to connected external site',
+            },
+            data: item,
+            meta: { requestId: id },
+          },
+          { status: 502 },
+        );
+      }
+    }
 
     return NextResponse.json({ data: item, meta: { requestId: id } }, { status: 201 });
   } catch (error) {

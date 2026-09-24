@@ -24,16 +24,20 @@ import {
   addDays,
   addMonths,
   addWeeks,
+  addYears,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
+  endOfYear,
   format,
+  getYear,
   isSameDay,
   isSameMonth,
   isToday as isDateToday,
   parseISO,
   startOfMonth,
   startOfWeek,
+  startOfYear,
 } from 'date-fns';
 import {
   CalendarDays,
@@ -49,6 +53,14 @@ import {
   Sparkles,
   Trash2,
   Calendar as CalendarIcon,
+  Search,
+  X,
+  RotateCcw,
+  Filter,
+  Layers,
+  Layout,
+  LayoutGrid,
+  CheckSquare,
   type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -57,6 +69,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -65,12 +85,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { StatusBadge, EmptyState } from '@/components/patterns';
 import { getApi } from '@/lib/api-client';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
@@ -83,21 +97,12 @@ import type { PaginatedResponse, PostStatus, CampaignStatus } from '@/shared/typ
 
 // -------------------- Types --------------------
 
-type CalendarView = 'month' | 'week' | 'day';
-
-type FilterKey =
-  | 'all'
-  | 'articles'
-  | 'campaigns'
-  | 'drafts'
-  | 'scheduled'
-  | 'published'
-  | 'cancelled';
+type CalendarView = 'year' | 'month' | 'week' | 'day';
 
 interface CalendarEvent {
   id: string;
   title: string;
-  type: 'article' | 'campaign' | 'idea';
+  type: 'article' | 'page' | 'campaign' | 'idea' | 'task';
   status: string;
   date: Date;
   raw: any;
@@ -111,6 +116,7 @@ interface ArticleRow {
   publishedAt?: string | null;
   scheduledAt?: string | null;
   createdAt: string;
+  contentType?: { id: string; name: string; slug: string } | null;
 }
 
 interface CampaignRow {
@@ -139,26 +145,17 @@ const WEEKDAYS = [
 ];
 
 const VIEW_OPTIONS: { value: CalendarView; labelKey: string; icon: LucideIcon }[] = [
+  { value: 'year', labelKey: 'calendar.viewYear', icon: LayoutGrid },
   { value: 'month', labelKey: 'calendar.viewMonth', icon: CalendarDays },
   { value: 'week', labelKey: 'calendar.viewWeek', icon: CalendarRange },
   { value: 'day', labelKey: 'calendar.viewDay', icon: CalendarIcon },
 ];
 
-const FILTER_OPTIONS: { value: FilterKey; labelKey: string }[] = [
-  { value: 'all', labelKey: 'calendar.filterAll' },
-  { value: 'articles', labelKey: 'title.articles' },
-  { value: 'campaigns', labelKey: 'calendar.filterCampaigns' },
-  { value: 'drafts', labelKey: 'calendar.filterDrafts' },
-  { value: 'scheduled', labelKey: 'calendar.filterScheduled' },
-  { value: 'published', labelKey: 'calendar.filterPublished' },
-  { value: 'cancelled', labelKey: 'calendar.filterCancelled' },
-];
-
-// Week / Day view time grid
-const START_HOUR = 6; // 6am
+// Week / Day view time grid (12 AM to 11 PM)
+const START_HOUR = 0; // 12am (midnight)
 const END_HOUR = 23; // 11pm (inclusive)
 const HOUR_HEIGHT = 64; // h-16
-const TOTAL_HOURS = END_HOUR - START_HOUR + 1;
+const TOTAL_HOURS = END_HOUR - START_HOUR + 1; // 24 hours
 const EVENT_HEIGHT = 48; // visual height for a 1-hour block
 
 // -------------------- Event styling helpers --------------------
@@ -167,8 +164,14 @@ function eventColorClasses(type: CalendarEvent['type']) {
   if (type === 'article') {
     return 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700';
   }
-  if (type === 'idea') {
+  if (type === 'page') {
+    return 'bg-sky-100 text-sky-800 border-sky-300 hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-300 dark:border-sky-700';
+  }
+  if (type === 'task') {
     return 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700';
+  }
+  if (type === 'idea') {
+    return 'bg-indigo-100 text-indigo-800 border-indigo-300 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700';
   }
   return 'bg-violet-100 text-violet-800 border-violet-300 hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700';
 }
@@ -180,20 +183,31 @@ function EventTypeIcon({
   type: CalendarEvent['type'];
   className?: string;
 }) {
-  const Icon = type === 'article' ? FileText : type === 'idea' ? Sparkles : Mail;
+  const Icon =
+    type === 'article'
+      ? FileText
+      : type === 'page'
+      ? Layout
+      : type === 'task'
+      ? CheckSquare
+      : type === 'idea'
+      ? Sparkles
+      : Mail;
   return <Icon className={className} />;
 }
 
 // Returns an i18n key — resolve with t() at the call sites.
 function eventTypeLabel(type: CalendarEvent['type']) {
   if (type === 'article') return 'calendar.eventTypeArticle';
+  if (type === 'page') return 'title.pages';
+  if (type === 'task') return 'nav.tasks';
   if (type === 'idea') return 'articles.aiIdeas';
   return 'calendar.eventTypeCampaign';
 }
 
 // -------------------- Data mapping --------------------
 
-function mapArticles(rows: ArticleRow[] | undefined): CalendarEvent[] {
+function mapContent(rows: ArticleRow[] | undefined): CalendarEvent[] {
   if (!rows) return [];
   const events: CalendarEvent[] = [];
   for (const a of rows) {
@@ -201,10 +215,11 @@ function mapArticles(rows: ArticleRow[] | undefined): CalendarEvent[] {
     if (!iso) continue;
     const date = parseISO(iso);
     if (Number.isNaN(date.getTime())) continue;
+    const isPage = a.contentType?.slug === 'page' || a.contentType?.name?.toLowerCase() === 'page';
     events.push({
-      id: `article-${a.id}`,
+      id: `${isPage ? 'page' : 'article'}-${a.id}`,
       title: a.title,
-      type: 'article',
+      type: isPage ? 'page' : 'article',
       status: a.status,
       date,
       raw: a,
@@ -254,30 +269,23 @@ function mapIdeas(rows: ArticleIdea[] | undefined): CalendarEvent[] {
   return events;
 }
 
-// -------------------- Filter logic --------------------
-
-function eventMatchesFilter(ev: CalendarEvent, filter: FilterKey): boolean {
-  switch (filter) {
-    case 'all':
-      return true;
-    case 'articles':
-      return ev.type === 'article' || ev.type === 'idea';
-    case 'campaigns':
-      return ev.type === 'campaign';
-    case 'drafts':
-      return ev.status === 'DRAFT';
-    case 'scheduled':
-      // Campaigns with SCHEDULED status, or articles/ideas whose date came from scheduledAt/targetDate
-      if (ev.type === 'campaign') return ev.status === 'SCHEDULED';
-      if (ev.type === 'idea') return true;
-      return Boolean(ev.raw?.scheduledAt);
-    case 'published':
-      return ev.status === 'PUBLISHED' || ev.status === 'SENT';
-    case 'cancelled':
-      return ev.status === 'CANCELLED' || ev.status === 'ARCHIVED';
-    default:
-      return true;
+function mapTasks(rows: any[] | undefined): CalendarEvent[] {
+  if (!rows || !Array.isArray(rows)) return [];
+  const events: CalendarEvent[] = [];
+  for (const task of rows) {
+    if (!task.dueDate) continue;
+    const date = parseISO(task.dueDate);
+    if (Number.isNaN(date.getTime())) continue;
+    events.push({
+      id: `task-${task.id}`,
+      title: task.title,
+      type: 'task',
+      status: task.status,
+      date,
+      raw: task,
+    });
   }
+  return events;
 }
 
 // ============================================================
@@ -291,7 +299,9 @@ export function CalendarPage() {
 
   const [view, setView] = useState<CalendarView>('month');
   const [referenceDate, setReferenceDate] = useState<Date>(new Date());
-  const [filter, setFilter] = useState<FilterKey>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'articles' | 'pages' | 'campaigns' | 'tasks'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'DRAFT' | 'SCHEDULED' | 'PUBLISHED'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
   const isAllSites = useSiteStore((s) => s.isAllSites());
@@ -319,6 +329,16 @@ export function CalendarPage() {
     queryFn: () =>
       getApi<CampaignRow[]>('/api/campaigns', {
         pageSize: 100,
+        ...(!isAllSites && activeSiteDbId ? { siteId: activeSiteDbId } : {}),
+      }),
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+
+  const { data: tasksData, isLoading: tasksLoading } = useQuery({
+    queryKey: ['calendar', 'tasks', isAllSites ? 'all' : activeSiteDbId, currentPlanId],
+    queryFn: () =>
+      getApi<any[]>('/api/tasks', {
         ...(!isAllSites && activeSiteDbId ? { siteId: activeSiteDbId } : {}),
       }),
     staleTime: 0,
@@ -404,16 +424,25 @@ export function CalendarPage() {
     () => (Array.isArray(campaignsData) ? campaignsData : []),
     [campaignsData],
   );
+  const tasks = useMemo<any[]>(() => {
+    return Array.isArray(tasksData) ? tasksData : (tasksData as any)?.data ?? [];
+  }, [tasksData]);
 
   const allEvents = useMemo<CalendarEvent[]>(() => {
     return [
-      ...mapArticles(articles),
+      ...mapContent(articles),
       ...mapCampaigns(campaigns),
       ...mapIdeas(savedIdeas),
+      ...mapTasks(tasks),
     ].sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [articles, campaigns, savedIdeas]);
+  }, [articles, campaigns, savedIdeas, tasks]);
 
   const currentPeriodEvents = useMemo(() => {
+    if (view === 'year') {
+      const yearStart = startOfYear(referenceDate);
+      const yearEnd = endOfYear(referenceDate);
+      return allEvents.filter((ev) => ev.date >= yearStart && ev.date <= yearEnd);
+    }
     if (view === 'month') {
       const monthStart = startOfMonth(referenceDate);
       const monthEnd = endOfMonth(referenceDate);
@@ -432,10 +461,52 @@ export function CalendarPage() {
     return allEvents;
   }, [allEvents, view, referenceDate]);
 
-  const filteredEvents = useMemo(
-    () => allEvents.filter((ev) => eventMatchesFilter(ev, filter)),
-    [allEvents, filter],
-  );
+  const filteredEvents = useMemo(() => {
+    return allEvents.filter((ev) => {
+      // Type match
+      if (typeFilter === 'articles' && ev.type !== 'article' && ev.type !== 'idea') return false;
+      if (typeFilter === 'pages' && ev.type !== 'page') return false;
+      if (typeFilter === 'campaigns' && ev.type !== 'campaign') return false;
+      if (typeFilter === 'tasks' && ev.type !== 'task') return false;
+
+      // Status match
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'DRAFT') {
+          if (ev.type === 'task') {
+            if (ev.status !== 'BACKLOG' && ev.status !== 'TODO' && ev.status !== 'IN_PROGRESS') return false;
+          } else {
+            if (ev.status !== 'DRAFT') return false;
+          }
+        } else if (statusFilter === 'SCHEDULED') {
+          if (ev.type === 'task') {
+            if (ev.status === 'DONE') return false;
+          } else if (ev.type === 'campaign') {
+            if (ev.status !== 'SCHEDULED') return false;
+          } else if (ev.type === 'idea') {
+            // idea is scheduled
+          } else {
+            if (!ev.raw?.scheduledAt) return false;
+          }
+        } else if (statusFilter === 'PUBLISHED') {
+          if (ev.type === 'task') {
+            if (ev.status !== 'DONE') return false;
+          } else {
+            if (ev.status !== 'PUBLISHED' && ev.status !== 'SENT') return false;
+          }
+        }
+      }
+
+      // Search match
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        const titleMatch = ev.title?.toLowerCase().includes(query);
+        const typeMatch = ev.type?.toLowerCase().includes(query);
+        if (!titleMatch && !typeMatch) return false;
+      }
+
+      return true;
+    });
+  }, [allEvents, typeFilter, statusFilter, searchQuery]);
 
   const handleRemoveIdeaFromCalendar = useCallback((ideaTitle: string) => {
     try {
@@ -487,12 +558,13 @@ export function CalendarPage() {
     [navigate],
   );
 
-  const isLoading = articlesLoading || campaignsLoading;
+  const isLoading = articlesLoading || campaignsLoading || tasksLoading;
 
   // -------- Navigation --------
 
   const goPrev = useCallback(() => {
     setReferenceDate((d) => {
+      if (view === 'year') return addYears(d, -1);
       if (view === 'month') return addMonths(d, -1);
       if (view === 'week') return addWeeks(d, -1);
       return addDays(d, -1); // day
@@ -501,6 +573,7 @@ export function CalendarPage() {
 
   const goNext = useCallback(() => {
     setReferenceDate((d) => {
+      if (view === 'year') return addYears(d, 1);
       if (view === 'month') return addMonths(d, 1);
       if (view === 'week') return addWeeks(d, 1);
       return addDays(d, 1); // day
@@ -512,6 +585,7 @@ export function CalendarPage() {
   // -------- Header label --------
 
   const periodLabel = useMemo(() => {
+    if (view === 'year') return format(referenceDate, 'yyyy');
     if (view === 'month') return format(referenceDate, 'MMMM yyyy');
     if (view === 'week') {
       const ws = startOfWeek(referenceDate, { weekStartsOn: 0 });
@@ -525,18 +599,6 @@ export function CalendarPage() {
     return format(referenceDate, 'MMMM yyyy');
   }, [view, referenceDate]);
 
-  // -------- Schedule Content actions --------
-
-  const handleNewArticle = useCallback(() => {
-    if (isAllSites) return;
-    navigate('content', null, 'create');
-  }, [navigate, isAllSites]);
-
-  const handleNewCampaign = useCallback(() => {
-    if (isAllSites) return;
-    navigate('newsletter', null, 'campaigns');
-  }, [navigate, isAllSites]);
-
   // -------- Event selection --------
 
   const handleSelectEvent = useCallback((ev: CalendarEvent) => {
@@ -548,7 +610,7 @@ export function CalendarPage() {
   // -------- Render --------
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Header */}
       <CalendarHeader
         periodLabel={periodLabel}
@@ -557,12 +619,37 @@ export function CalendarPage() {
         onNext={goNext}
         onToday={goToday}
         onViewChange={setView}
-        onNewArticle={handleNewArticle}
-        onNewCampaign={handleNewCampaign}
       />
 
       {/* Filter bar */}
-      <FilterBar value={filter} onChange={setFilter} counts={currentPeriodEvents} />
+      <CalendarFilterBar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        typeFilter={typeFilter}
+        onTypeChange={setTypeFilter}
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
+        counts={{
+          total: currentPeriodEvents.length,
+          articles: currentPeriodEvents.filter((ev) => ev.type === 'article' || ev.type === 'idea').length,
+          pages: currentPeriodEvents.filter((ev) => ev.type === 'page').length,
+          campaigns: currentPeriodEvents.filter((ev) => ev.type === 'campaign').length,
+          tasks: currentPeriodEvents.filter((ev) => ev.type === 'task').length,
+          scheduled: currentPeriodEvents.filter((ev) =>
+            ev.type === 'task'
+              ? ev.status !== 'DONE'
+              : ev.type === 'campaign'
+              ? ev.status === 'SCHEDULED'
+              : ev.type === 'idea' || Boolean(ev.raw?.scheduledAt)
+          ).length,
+          published: currentPeriodEvents.filter((ev) =>
+            ev.type === 'task' ? ev.status === 'DONE' : ev.status === 'PUBLISHED' || ev.status === 'SENT'
+          ).length,
+          drafts: currentPeriodEvents.filter((ev) =>
+            ev.type === 'task' ? ev.status === 'TODO' || ev.status === 'BACKLOG' || ev.status === 'IN_PROGRESS' : ev.status === 'DRAFT'
+          ).length,
+        }}
+      />
 
       {/* Calendar body */}
       <div className="rounded-xl border border-border bg-card shadow-sm">
@@ -574,6 +661,16 @@ export function CalendarPage() {
             title={t('calendar.noScheduled')}
             description={t('calendar.noScheduledDescription')}
             className="py-20"
+          />
+        ) : view === 'year' ? (
+          <YearView
+            referenceDate={referenceDate}
+            events={filteredEvents}
+            onSelectMonth={(monthDate) => {
+              setReferenceDate(monthDate);
+              setView('month');
+            }}
+            onSelectEvent={handleSelectEvent}
           />
         ) : view === 'month' ? (
           <MonthView
@@ -619,8 +716,6 @@ interface CalendarHeaderProps {
   onNext: () => void;
   onToday: () => void;
   onViewChange: (v: CalendarView) => void;
-  onNewArticle: () => void;
-  onNewCampaign: () => void;
 }
 
 function CalendarHeader({
@@ -630,11 +725,8 @@ function CalendarHeader({
   onNext,
   onToday,
   onViewChange,
-  onNewArticle,
-  onNewCampaign,
 }: CalendarHeaderProps) {
   const { t } = useT();
-  const isAllSites = useSiteStore((s) => s.isAllSites());
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -711,28 +803,6 @@ function CalendarHeader({
             );
           })}
         </div>
-
-        {/* Schedule Content dropdown — placed right after the view switcher */}
-        {!isAllSites && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" className="bg-amber-500 text-white hover:bg-amber-600">
-                <Plus className="h-4 w-4" />
-                {t('calendar.scheduleContent')}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={onNewArticle}>
-                <FileText className="mr-2 h-4 w-4" />
-                {t('calendar.newArticle')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onNewCampaign}>
-                <Mail className="mr-2 h-4 w-4" />
-                {t('calendar.newCampaign')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
       </div>
     </div>
   );
@@ -742,52 +812,173 @@ function CalendarHeader({
 // Filter Bar
 // ============================================================
 
-interface FilterBarProps {
-  value: FilterKey;
-  onChange: (v: FilterKey) => void;
-  counts: CalendarEvent[];
+interface CalendarFilterBarProps {
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
+  typeFilter: 'all' | 'articles' | 'pages' | 'campaigns' | 'tasks';
+  onTypeChange: (v: 'all' | 'articles' | 'pages' | 'campaigns' | 'tasks') => void;
+  statusFilter: 'all' | 'DRAFT' | 'SCHEDULED' | 'PUBLISHED';
+  onStatusChange: (v: 'all' | 'DRAFT' | 'SCHEDULED' | 'PUBLISHED') => void;
+  counts: {
+    total: number;
+    articles: number;
+    pages: number;
+    campaigns: number;
+    tasks: number;
+    scheduled: number;
+    published: number;
+    drafts: number;
+  };
 }
 
-function FilterBar({ value, onChange, counts }: FilterBarProps) {
+function CalendarFilterBar({
+  searchQuery,
+  onSearchChange,
+  typeFilter,
+  onTypeChange,
+  statusFilter,
+  onStatusChange,
+  counts,
+}: CalendarFilterBarProps) {
   const { t } = useT();
+  const hasFilters = typeFilter !== 'all' || statusFilter !== 'all' || searchQuery.trim().length > 0;
 
-  const countFor = useCallback(
-    (key: FilterKey) => counts.filter((ev) => eventMatchesFilter(ev, key)).length,
-    [counts],
-  );
+  const handleReset = () => {
+    onTypeChange('all');
+    onStatusChange('all');
+    onSearchChange('');
+  };
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {FILTER_OPTIONS.map((opt) => {
-        const active = value === opt.value;
-        const count = countFor(opt.value);
-        return (
+    <div className="flex flex-wrap items-center gap-2.5">
+      {/* Search Input */}
+      <div className="relative flex-1 min-w-[220px]">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <Input
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder={t('common.search') || 'Search events...'}
+          className="h-8 pl-8 pr-7 text-xs bg-background rounded-lg border-border w-full"
+        />
+        {searchQuery && (
           <button
-            key={opt.value}
             type="button"
-            onClick={() => onChange(opt.value)}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-              active
-                ? 'border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
-            )}
-            aria-pressed={active}
+            onClick={() => onSearchChange('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
           >
-            {t(opt.labelKey)}
-            <span
-              className={cn(
-                'rounded-full px-1.5 text-[10px] font-semibold leading-4',
-                active
-                  ? 'bg-amber-200/70 text-amber-900 dark:bg-amber-800/50 dark:text-amber-200'
-                  : 'bg-muted text-muted-foreground',
-              )}
-            >
-              {count}
-            </span>
+            <X className="h-3 w-3" />
           </button>
-        );
-      })}
+        )}
+      </div>
+
+      {/* Reset Filter Button */}
+      {hasFilters && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleReset}
+          className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground gap-1.5 shrink-0"
+        >
+          <RotateCcw className="h-3 w-3" />
+          Reset
+        </Button>
+      )}
+
+      {/* Content Type Filter */}
+      <Select value={typeFilter} onValueChange={(v: any) => onTypeChange(v)}>
+        <SelectTrigger size="sm" className="h-8 text-xs bg-background rounded-lg border-border min-w-[145px] shrink-0">
+          <div className="flex items-center gap-1.5 truncate">
+            <Layers className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span>
+              {typeFilter === 'all'
+                ? 'All Content'
+                : typeFilter === 'articles'
+                ? (t('title.articles') || 'Articles')
+                : typeFilter === 'pages'
+                ? (t('title.pages') || 'Pages')
+                : typeFilter === 'campaigns'
+                ? (t('calendar.filterCampaigns') || 'Newsletter')
+                : (t('nav.tasks') || 'Tasks')}
+            </span>
+          </div>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">
+            <span className="flex items-center justify-between w-full gap-4">
+              <span>All Content</span>
+              <span className="text-[11px] text-muted-foreground font-mono">{counts.total}</span>
+            </span>
+          </SelectItem>
+          <SelectItem value="articles">
+            <span className="flex items-center justify-between w-full gap-4">
+              <span>{t('title.articles') || 'Articles'}</span>
+              <span className="text-[11px] text-muted-foreground font-mono">{counts.articles}</span>
+            </span>
+          </SelectItem>
+          <SelectItem value="pages">
+            <span className="flex items-center justify-between w-full gap-4">
+              <span>{t('title.pages') || 'Pages'}</span>
+              <span className="text-[11px] text-muted-foreground font-mono">{counts.pages}</span>
+            </span>
+          </SelectItem>
+          <SelectItem value="campaigns">
+            <span className="flex items-center justify-between w-full gap-4">
+              <span>{t('calendar.filterCampaigns') || 'Newsletter'}</span>
+              <span className="text-[11px] text-muted-foreground font-mono">{counts.campaigns}</span>
+            </span>
+          </SelectItem>
+          <SelectItem value="tasks">
+            <span className="flex items-center justify-between w-full gap-4">
+              <span>{t('nav.tasks') || 'Tasks'}</span>
+              <span className="text-[11px] text-muted-foreground font-mono">{counts.tasks}</span>
+            </span>
+          </SelectItem>
+        </SelectContent>
+      </Select>
+
+      {/* Status Filter */}
+      <Select value={statusFilter} onValueChange={(v: any) => onStatusChange(v)}>
+        <SelectTrigger size="sm" className="h-8 text-xs bg-background rounded-lg border-border min-w-[145px] shrink-0">
+          <div className="flex items-center gap-1.5 truncate">
+            <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span>
+              {statusFilter === 'all'
+                ? 'All Statuses'
+                : statusFilter === 'SCHEDULED'
+                ? (t('calendar.filterScheduled') || 'Scheduled')
+                : statusFilter === 'PUBLISHED'
+                ? (t('calendar.filterPublished') || 'Published')
+                : (t('calendar.filterDrafts') || 'Drafts')}
+            </span>
+          </div>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">
+            <span className="flex items-center justify-between w-full gap-4">
+              <span>All Statuses</span>
+              <span className="text-[11px] text-muted-foreground font-mono">{counts.total}</span>
+            </span>
+          </SelectItem>
+          <SelectItem value="SCHEDULED">
+            <span className="flex items-center justify-between w-full gap-4">
+              <span>{t('calendar.filterScheduled') || 'Scheduled'}</span>
+              <span className="text-[11px] text-muted-foreground font-mono">{counts.scheduled}</span>
+            </span>
+          </SelectItem>
+          <SelectItem value="PUBLISHED">
+            <span className="flex items-center justify-between w-full gap-4">
+              <span>{t('calendar.filterPublished') || 'Published'}</span>
+              <span className="text-[11px] text-muted-foreground font-mono">{counts.published}</span>
+            </span>
+          </SelectItem>
+          <SelectItem value="DRAFT">
+            <span className="flex items-center justify-between w-full gap-4">
+              <span>{t('calendar.filterDrafts') || 'Drafts'}</span>
+              <span className="text-[11px] text-muted-foreground font-mono">{counts.drafts}</span>
+            </span>
+          </SelectItem>
+        </SelectContent>
+      </Select>
     </div>
   );
 }
@@ -825,6 +1016,125 @@ function EventPill({ event, onClick, compact = false }: EventPillProps) {
         </span>
       )}
     </button>
+  );
+}
+
+// ============================================================
+// Year View
+// ============================================================
+
+interface YearViewProps {
+  referenceDate: Date;
+  events: CalendarEvent[];
+  onSelectMonth: (monthDate: Date) => void;
+  onSelectEvent: (ev: CalendarEvent) => void;
+}
+
+function YearView({ referenceDate, events, onSelectMonth, onSelectEvent }: YearViewProps) {
+  const currentYear = getYear(referenceDate);
+
+  // Group events by yyyy-MM-dd
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, CalendarEvent[]>();
+    for (const ev of events) {
+      const key = format(ev.date, 'yyyy-MM-dd');
+      const arr = map.get(key) ?? [];
+      arr.push(ev);
+      map.set(key, arr);
+    }
+    return map;
+  }, [events]);
+
+  const months = useMemo(() => {
+    return Array.from({ length: 12 }, (_, i) => new Date(currentYear, i, 1));
+  }, [currentYear]);
+
+  const miniWeekdays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-8 p-6">
+      {months.map((monthDate) => {
+        const monthStart = startOfMonth(monthDate);
+        const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+        // Exactly 42 days (6 rows x 7 days) like Google Calendar
+        const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
+
+        // Count events in this month
+        const monthEventsCount = events.filter((ev) => isSameMonth(ev.date, monthDate)).length;
+
+        return (
+          <div key={monthDate.getMonth()} className="flex flex-col">
+            {/* Month Header */}
+            <div className="flex items-center justify-between pb-2 mb-1">
+              <button
+                type="button"
+                onClick={() => onSelectMonth(monthDate)}
+                className="text-sm font-semibold text-foreground hover:text-amber-500 transition-colors"
+              >
+                {format(monthDate, 'MMMM')}
+              </button>
+              {monthEventsCount > 0 && (
+                <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full">
+                  {monthEventsCount}
+                </span>
+              )}
+            </div>
+
+            {/* Weekday headers */}
+            <div className="grid grid-cols-7 text-center mb-1">
+              {miniWeekdays.map((w, idx) => (
+                <span key={idx} className="text-[11px] font-medium text-muted-foreground">
+                  {w}
+                </span>
+              ))}
+            </div>
+
+            {/* Days grid - exactly 6 rows of 7 */}
+            <div className="grid grid-cols-7 gap-y-1 text-center">
+              {days.map((day) => {
+                const inMonth = isSameMonth(day, monthDate);
+                const today = isDateToday(day);
+                const key = format(day, 'yyyy-MM-dd');
+                const dayEvents = eventsByDay.get(key) ?? [];
+                const hasEvents = dayEvents.length > 0;
+
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      if (dayEvents.length > 0) {
+                        onSelectEvent(dayEvents[0]);
+                      } else {
+                        onSelectMonth(day);
+                      }
+                    }}
+                    className={cn(
+                      'relative flex flex-col items-center justify-center h-6 w-6 mx-auto rounded-full text-[11px] transition-colors',
+                      today
+                        ? 'bg-amber-500 text-white font-bold shadow-xs'
+                        : inMonth
+                        ? 'text-foreground hover:bg-muted/80 font-normal'
+                        : 'text-muted-foreground/35 hover:bg-muted/40 font-normal',
+                    )}
+                    title={
+                      hasEvents
+                        ? `${format(day, 'MMM d')}: ${dayEvents.length} event(s)`
+                        : format(day, 'MMM d')
+                    }
+                  >
+                    <span>{format(day, 'd')}</span>
+                    {hasEvents && !today && (
+                      <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-amber-500" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -894,7 +1204,7 @@ function MonthView({ referenceDate, events, onSelectEvent }: MonthViewProps) {
               <div className="mb-1 flex items-center justify-between">
                 <span
                   className={cn(
-                    'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium',
+                    'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold',
                     today
                       ? 'bg-amber-500 text-white'
                       : inMonth
@@ -1104,31 +1414,33 @@ function DayView({ referenceDate, events, onSelectEvent }: DayViewProps) {
   return (
     <div className="flex flex-col">
       {/* Day header */}
-      <div className="border-b border-border bg-muted/30 px-4 py-3">
-        <div className="flex items-center gap-3">
+      <div className="grid grid-cols-[72px_minmax(0,1fr)] border-b border-border bg-muted/30">
+        <div className="flex items-center justify-center border-r border-border py-2">
           <div
             className={cn(
-              'inline-flex h-10 w-10 flex-col items-center justify-center rounded-lg',
+              'inline-flex h-11 w-11 flex-col items-center justify-center rounded-lg shadow-xs',
               isDateToday(referenceDate)
                 ? 'bg-amber-500 text-white'
                 : 'bg-background text-foreground border border-border',
             )}
           >
-            <span className="text-[10px] font-semibold uppercase leading-none">
+            <span
+              className={cn(
+                'text-[10px] font-bold uppercase leading-none',
+                isDateToday(referenceDate) ? 'text-white/90' : 'text-muted-foreground',
+              )}
+            >
               {format(referenceDate, 'EEE')}
             </span>
-            <span className="text-base font-bold leading-none mt-0.5">
+            <span className="text-base font-extrabold leading-none mt-0.5">
               {format(referenceDate, 'd')}
             </span>
           </div>
-          <div>
-            <div className="text-sm font-semibold text-foreground">
-              {format(referenceDate, 'EEEE, MMMM d, yyyy')}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {dayEvents.length} {t(dayEvents.length === 1 ? 'calendar.scheduledItemOne' : 'calendar.scheduledItemsMany')}
-            </div>
-          </div>
+        </div>
+        <div className="flex items-center px-4">
+          <span className="text-xs text-muted-foreground font-medium">
+            {dayEvents.length} {t(dayEvents.length === 1 ? 'calendar.scheduledItemOne' : 'calendar.scheduledItemsMany')}
+          </span>
         </div>
       </div>
 
@@ -1228,30 +1540,40 @@ function EventDetailsModal({
   const { t } = useT();
 
   const isArticle = event?.type === 'article';
+  const isPage = event?.type === 'page';
   const isCampaign = event?.type === 'campaign';
+  const isTask = event?.type === 'task';
   const isIdea = event?.type === 'idea';
 
   const handleView = useCallback(() => {
     if (!event) return;
     if (isArticle) {
       onNavigate('content', event.raw.id, null);
+    } else if (isPage) {
+      onNavigate('pages', event.raw.id, null);
     } else if (isCampaign) {
       // Open the newsletter campaigns tab and let the page surface this campaign
       onNavigate('newsletter', null, 'campaigns');
+    } else if (isTask) {
+      onNavigate('tasks');
     }
     onClose();
-  }, [event, isArticle, isCampaign, onNavigate, onClose]);
+  }, [event, isArticle, isPage, isCampaign, isTask, onNavigate, onClose]);
 
   const handleEdit = useCallback(() => {
     if (!event) return;
     if (isArticle) {
       onNavigate('content', event.raw.id, 'edit');
+    } else if (isPage) {
+      onNavigate('pages', event.raw.id, 'edit');
     } else if (isCampaign) {
       // Campaigns are edited in-place inside the newsletter campaigns tab
       onNavigate('newsletter', null, 'campaigns');
+    } else if (isTask) {
+      onNavigate('tasks');
     }
     onClose();
-  }, [event, isArticle, isCampaign, onNavigate, onClose]);
+  }, [event, isArticle, isPage, isCampaign, isTask, onNavigate, onClose]);
 
   const formatKeywords = (raw: any): string => {
     if (!raw) return '';
@@ -1338,8 +1660,7 @@ function EventDetailsModal({
               </div>
             </div>
 
-            {/* Type-specific info */}
-            {isArticle && event.raw && (
+            {(isArticle || isPage) && event.raw && (
               <div className="space-y-2.5 text-sm">
                 <DetailRow label={t('calendar.slug') || 'Slug'} value={event.raw.slug ?? '—'} />
                 {event.raw.excerpt && (
@@ -1354,6 +1675,16 @@ function EventDetailsModal({
                   label={t('calendar.template') || 'Template'}
                   value={event.raw.template?.name ?? '—'}
                 />
+              </div>
+            )}
+            {isTask && event.raw && (
+              <div className="space-y-2.5 text-sm">
+                {event.raw.priority && (
+                  <DetailRow label="Priority" value={event.raw.priority} />
+                )}
+                {event.raw.description && (
+                  <DetailRow label={t('calendar.descriptionLabel') || 'Description'} value={event.raw.description} />
+                )}
               </div>
             )}
             {isIdea && event.raw && (
@@ -1444,6 +1775,15 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 // ============================================================
 
 function CalendarSkeleton({ view }: { view: CalendarView }) {
+  if (view === 'year') {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
+        {Array.from({ length: 12 }).map((_, i) => (
+          <Skeleton key={i} className="h-44 w-full rounded-xl" />
+        ))}
+      </div>
+    );
+  }
   if (view === 'day') {
     return (
       <div className="space-y-2 p-4">

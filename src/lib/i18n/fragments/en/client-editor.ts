@@ -200,11 +200,17 @@ export const clientEditorEn: Record<string, string> = {
   'editor.deleteTable': 'Delete Table',
   'editor.borderAll': 'All Borders',
   'editor.borderOutside': 'Outside Borders',
+  'editor.borderInside': 'Inside Borders',
+  'editor.borderInsideHorizontal': 'Inside Horizontal Border',
+  'editor.borderInsideVertical': 'Inside Vertical Border',
+  'editor.borderDiagonalDown': 'Diagonal Down Border',
+  'editor.borderDiagonalUp': 'Diagonal Up Border',
   'editor.borderNone': 'No Border',
   'editor.borderTop': 'Top Border',
   'editor.borderBottom': 'Bottom Border',
   'editor.borderLeft': 'Left Border',
   'editor.borderRight': 'Right Border',
+  'editor.borderStyle': 'Border Style',
 
   // ---- Drag handle ----
   'editor.dragToReorder': 'Drag to reorder block',

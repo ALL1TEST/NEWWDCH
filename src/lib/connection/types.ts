@@ -70,3 +70,63 @@ export interface VerificationResponse {
     [key: string]: unknown;
   };
 }
+
+export interface NormalizedSyncItem {
+  externalId: string;
+  title: string;
+  slug: string;
+  contentType: 'post' | 'page';
+  content: string;
+  excerpt?: string;
+  status: 'PUBLISHED' | 'DRAFT';
+  publishedAt?: string | Date;
+  authorName?: string;
+  authorAvatar?: string;
+  authorRole?: string;
+  authorBio?: string;
+  categorySlug?: string;
+  categoryName?: string;
+  tagNames?: string[];
+  featuredImageUrl?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  canonicalUrl?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface NormalizedTaxonomyCategory {
+  id?: string | number;
+  name: string;
+  slug: string;
+  description?: string;
+}
+
+export interface NormalizedTaxonomyTag {
+  id?: string | number;
+  name: string;
+  slug: string;
+}
+
+export interface DiscoveredSiteContent {
+  posts: NormalizedSyncItem[];
+  pages: NormalizedSyncItem[];
+  categories: NormalizedTaxonomyCategory[];
+  tags: NormalizedTaxonomyTag[];
+  siteMetadata?: Record<string, unknown>;
+}
+
+export interface SyncReport {
+  siteId: string;
+  siteName: string;
+  platform: string;
+  postsDiscovered: number;
+  pagesDiscovered: number;
+  categoriesDiscovered: number;
+  tagsDiscovered: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+  failed: number;
+  errors?: string[];
+  syncedAt: string;
+}

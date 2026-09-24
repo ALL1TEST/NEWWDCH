@@ -47,6 +47,7 @@ export const clientAiEn: Record<string, string> = {
   'ai.editProvider': 'Edit Provider',
   'ai.deleteProvider': 'Delete Provider',
   'ai.providerKind': 'Provider Kind',
+  'ai.kindLockedHint': 'Provider kind cannot be changed for an existing provider. Use "Add Provider" to add another provider.',
   'ai.searchProviders': 'Search providers...',
   'ai.allKinds': 'All Kinds',
   'ai.allStatus': 'All Status',

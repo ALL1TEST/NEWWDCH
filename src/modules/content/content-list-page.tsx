@@ -12,6 +12,8 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  ArrowLeft,
+  ArrowRight,
   Save,
   FileText,
   ChevronDown,
@@ -26,6 +28,9 @@ import {
   AlertCircle,
   TrendingUp,
   Bookmark,
+  RefreshCw,
+  Check,
+  CheckCircle2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -68,6 +73,7 @@ import { AvatarWithFallback } from '@/components/shared';
 import { getApi, postApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { CategoriesTagsDialog } from './categories-tags-dialog';
 import { useSiteStore } from '@/lib/stores/site-store';
 import { useSubscriptionStore } from '@/lib/stores/subscription-store';
 import { useT } from '@/lib/i18n';
@@ -140,7 +146,6 @@ const STATUS_TABS: { labelKey: string; value: string }[] = [
   { labelKey: 'articles.tabAll', value: 'all' },
   { labelKey: 'articles.tabPublished', value: 'PUBLISHED' },
   { labelKey: 'articles.tabDrafts', value: 'DRAFT' },
-  { labelKey: 'articles.tabInReview', value: 'IN_REVIEW' },
   { labelKey: 'articles.tabScheduled', value: 'APPROVED' },
 ];
 
@@ -385,242 +390,11 @@ function IdeaCard({
   );
 }
 
-// -------------------- Categories & Tags Management Dialog --------------------
-
-function CategoriesTagsDialog({
-  open,
-  onOpenChange,
-  initialTab = 'categories',
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  initialTab?: 'categories' | 'tags';
-}) {
-  const { t } = useT();
-
-  const queryClient = useQueryClient();
-  const [newCategory, setNewCategory] = useState('');
-  const [newTag, setNewTag] = useState('');
-  const [activeTab, setActiveTab] = useState<'categories' | 'tags'>(initialTab);
-
-  useEffect(() => {
-    if (open && initialTab) {
-      setActiveTab(initialTab);
-    }
-  }, [open, initialTab]);
-
-  const { data: categoriesData, isLoading: catLoading } = useQuery({
-    queryKey: queryKeys.categories.all,
-    queryFn: () => getApi<{ data: { id: string; name: string; slug?: string }[] } | { id: string; name: string; slug?: string }[]>('/api/categories?pageSize=200'),
-    enabled: open,
-    staleTime: 30_000,
-  });
-  const { data: tagsData, isLoading: tagsLoading } = useQuery({
-    queryKey: queryKeys.tags.all,
-    queryFn: () => getApi<{ data: { id: string; name: string; slug?: string; color?: string }[] } | { id: string; name: string; slug?: string; color?: string }[]>('/api/tags?pageSize=200'),
-    enabled: open,
-    staleTime: 30_000,
-  });
-
-  // Normalize responses — API may return either an array or { data: [...] }
-  const categories = useMemo(() => {
-    const d = categoriesData as unknown;
-    if (Array.isArray(d)) return d as { id: string; name: string; slug?: string }[];
-    if (d && typeof d === 'object' && 'data' in (d as Record<string, unknown>)) {
-      return (d as { data: { id: string; name: string; slug?: string }[] }).data;
-    }
-    return [];
-  }, [categoriesData]);
-  const tags = useMemo(() => {
-    const d = tagsData as unknown;
-    if (Array.isArray(d)) return d as { id: string; name: string; slug?: string; color?: string }[];
-    if (d && typeof d === 'object' && 'data' in (d as Record<string, unknown>)) {
-      return (d as { data: { id: string; name: string; slug?: string; color?: string }[] }).data;
-    }
-    return [];
-  }, [tagsData]);
-
-  const createCategoryMutation = useMutation({
-    mutationFn: (name: string) => postApi('/api/categories', { name }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.categories.all }); toast.success(t('articles.categoryCreated')); },
-    onError: (err: Error) => toast.error(err.message || t('articles.categoryCreateFailed')),
-  });
-  const createTagMutation = useMutation({
-    mutationFn: (name: string) => postApi('/api/tags', { name }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }); toast.success(t('articles.tagCreated')); },
-    onError: (err: Error) => toast.error(err.message || t('articles.tagCreateFailed')),
-  });
-  const deleteCategoryMutation = useMutation({
-    mutationFn: (id: string) => deleteApi(`/api/categories/${id}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.categories.all }); toast.success(t('articles.categoryDeleted')); },
-    onError: (err: Error) => toast.error(err.message || t('articles.categoryDeleteFailed')),
-  });
-  const deleteTagMutation = useMutation({
-    mutationFn: (id: string) => deleteApi(`/api/tags/${id}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }); toast.success(t('articles.tagDeleted')); },
-    onError: (err: Error) => toast.error(err.message || t('articles.tagDeleteFailed')),
-  });
-
-  const handleAddCategory = useCallback(() => {
-    const v = newCategory.trim();
-    if (!v) return;
-    createCategoryMutation.mutate(v);
-    setNewCategory('');
-  }, [newCategory, createCategoryMutation]);
-  const handleAddTag = useCallback(() => {
-    const v = newTag.trim();
-    if (!v) return;
-    createTagMutation.mutate(v);
-    setNewTag('');
-  }, [newTag, createTagMutation]);
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FolderOpen className="h-5 w-5" />
-            {t('articles.categoriesTags')}
-          </DialogTitle>
-          <DialogDescription>
-            {t('articles.categoriesTagsDescription')}
-          </DialogDescription>
-        </DialogHeader>
-
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'categories' | 'tags')}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="categories">
-              <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
-              {`${t('articles.categoriesLabel')} (${categories.length})`}
-            </TabsTrigger>
-            <TabsTrigger value="tags">
-              <Tag className="h-3.5 w-3.5 mr-1.5" />
-              {`${t('articles.tags')} (${tags.length})`}
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Categories Tab */}
-          <TabsContent value="categories" className="mt-4 space-y-3">
-            <div className="flex gap-2">
-              <Input
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCategory(); } }}
-                placeholder={t('articles.newCategoryPlaceholder')}
-                className="h-9 text-sm"
-              />
-              <Button
-                size="sm"
-                className="h-9 gap-1.5"
-                onClick={handleAddCategory}
-                disabled={createCategoryMutation.isPending || !newCategory.trim()}
-              >
-                {createCategoryMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                {t('articles.add')}
-              </Button>
-            </div>
-            <div className="max-h-72 overflow-y-auto rounded-md border">
-              {catLoading ? (
-                <div className="p-4 space-y-2">
-                  {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
-                </div>
-              ) : categories.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <FolderOpen className="h-8 w-8 text-muted-foreground/40 mb-2" />
-                  <p className="text-sm text-muted-foreground">{t('articles.noCategories')}</p>
-                </div>
-              ) : (
-                <ul className="divide-y">
-                  {categories.map((cat) => (
-                    <li key={cat.id} className="flex items-center justify-between px-3 py-2 hover:bg-muted/30 transition-colors">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{cat.name}</p>
-                        {cat.slug && <p className="text-[10px] text-muted-foreground font-mono truncate">{cat.slug}</p>}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
-                        onClick={() => deleteCategoryMutation.mutate(cat.id)}
-                        disabled={deleteCategoryMutation.isPending}
-                        title={t('common.delete')}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </TabsContent>
-
-          {/* Tags Tab */}
-          <TabsContent value="tags" className="mt-4 space-y-3">
-            <div className="flex gap-2">
-              <Input
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
-                placeholder={t('articles.newTagPlaceholder')}
-                className="h-9 text-sm"
-              />
-              <Button
-                size="sm"
-                className="h-9 gap-1.5"
-                onClick={handleAddTag}
-                disabled={createTagMutation.isPending || !newTag.trim()}
-              >
-                {createTagMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                {t('articles.add')}
-              </Button>
-            </div>
-            <div className="max-h-72 overflow-y-auto rounded-md border">
-              {tagsLoading ? (
-                <div className="p-4 space-y-2">
-                  {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
-                </div>
-              ) : tags.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Tag className="h-8 w-8 text-muted-foreground/40 mb-2" />
-                  <p className="text-sm text-muted-foreground">{t('articles.noTags')}</p>
-                </div>
-              ) : (
-                <ul className="divide-y">
-                  {tags.map((tag) => (
-                    <li key={tag.id} className="flex items-center justify-between px-3 py-2 hover:bg-muted/30 transition-colors">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{tag.name}</p>
-                        {tag.slug && <p className="text-[10px] text-muted-foreground font-mono truncate">{tag.slug}</p>}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
-                        onClick={() => deleteTagMutation.mutate(tag.id)}
-                        disabled={deleteTagMutation.isPending}
-                        title={t('common.delete')}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('articles.done')}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// CategoriesTagsDialog imported from ./categories-tags-dialog
 
 // -------------------- Main Component --------------------
 
-export function ContentListPage() {
+export function ContentListPage({ contentType = 'post' }: { contentType?: 'post' | 'page' } = {}) {
   const { t } = useT();
 
   const navigate = useNavigationStore((s) => s.navigate);
@@ -632,7 +406,7 @@ export function ContentListPage() {
   const [sortField, setSortField] = useState('updatedAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [pageSize, setPageSize] = useState(10);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // AI Ideas state
@@ -651,15 +425,40 @@ export function ContentListPage() {
   const [catTagOpen, setCatTagOpen] = useState(false);
   const [catTagTab, setCatTagTab] = useState<'categories' | 'tags'>('categories');
 
+  // External Site Content Synchronization
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncReport, setSyncReport] = useState<any | null>(null);
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+
+  const handleSyncFromSite = useCallback(async () => {
+    if (!activeSiteDbId) return;
+    setIsSyncing(true);
+    try {
+      const res = await postApi<any>(`/api/sites/${activeSiteDbId}/sync`);
+      if (res && res.data) {
+        setSyncReport(res.data);
+        setSyncDialogOpen(true);
+        queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.categories.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.tags.all });
+        toast.success(`Successfully synchronized content from ${res.data.siteName || 'site'}`);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to sync content from site');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [activeSiteDbId, queryClient]);
+
   useEffect(() => {
     if (isAllSites) {
       if (aiIdeasOpen) setAiIdeasOpen(false);
       if (catTagOpen) setCatTagOpen(false);
       if (currentSubPage === 'categories' || currentSubPage === 'tags' || currentSubPage === 'create' || currentSubPage === 'new') {
-        navigate('content');
+        navigate(contentType === 'page' ? 'pages' : 'content');
       }
     }
-  }, [isAllSites, aiIdeasOpen, catTagOpen, currentSubPage, navigate]);
+  }, [isAllSites, aiIdeasOpen, catTagOpen, currentSubPage, navigate, contentType]);
 
   useEffect(() => {
     if (!isAllSites && (currentSubPage === 'categories' || currentSubPage === 'tags')) {
@@ -671,9 +470,9 @@ export function ContentListPage() {
   const handleCatTagOpenChange = useCallback((open: boolean) => {
     setCatTagOpen(open);
     if (!open && (currentSubPage === 'categories' || currentSubPage === 'tags')) {
-      navigate('content');
+      navigate(contentType === 'page' ? 'pages' : 'content');
     }
-  }, [currentSubPage, navigate]);
+  }, [currentSubPage, navigate, contentType]);
 
   // Saved ideas — strictly isolated by active plan and active site, persisted to localStorage.
   const [savedTitles, setSavedTitles] = useState<Set<string>>(() => {
@@ -820,10 +619,11 @@ export function ContentListPage() {
       sort: sortField,
       order: sortOrder,
       search: search || undefined,
+      type: contentType,
       ...(statusTab !== 'all' ? { status: statusTab } : {}),
       ...(!isAllSites && activeSiteDbId ? { siteId: activeSiteDbId } : {}),
     }),
-    [page, pageSize, sortField, sortOrder, search, statusTab, isAllSites, activeSiteDbId],
+    [page, pageSize, sortField, sortOrder, search, contentType, statusTab, isAllSites, activeSiteDbId],
   );
 
   // Fetch content list
@@ -924,9 +724,10 @@ export function ContentListPage() {
   });
 
   // Navigation
-  const goToDetail = useCallback((id: string) => navigate('content', id), [navigate]);
-  const goToEdit = useCallback((id: string) => navigate('content', id, 'edit'), [navigate]);
-  const goToCreate = useCallback(() => navigate('content', null, 'create'), [navigate]);
+  const moduleName = contentType === 'page' ? 'pages' : 'content';
+  const goToDetail = useCallback((id: string) => navigate(moduleName, id), [navigate, moduleName]);
+  const goToEdit = useCallback((id: string) => navigate(moduleName, id, 'edit'), [navigate, moduleName]);
+  const goToCreate = useCallback(() => navigate(moduleName, null, 'create'), [navigate, moduleName]);
 
   // Selection
   const toggleSelect = useCallback((id: string) => {
@@ -985,18 +786,21 @@ export function ContentListPage() {
     navigate('content', null, 'create');
   }, [navigate]);
 
-  // Pagination range
+  // Pagination range - sliding window of 5 pages matching design
   const pageNumbers = useMemo(() => {
-    const pages: (number | '...')[] = [];
-    if (totalPages <= 7) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      pages.push(1);
-      if (page > 3) pages.push('...');
-      for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pages.push(i);
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
     }
-    if (page < totalPages - 2) pages.push('...');
-    if (totalPages > 1) pages.push(totalPages);
+    let start = Math.max(1, page - 2);
+    let end = start + 4;
+    if (end > totalPages) {
+      end = totalPages;
+      start = Math.max(1, end - 4);
+    }
+    const pages: number[] = [];
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
     return pages;
   }, [totalPages, page]);
 
@@ -1008,9 +812,13 @@ export function ContentListPage() {
       {/* Top Header Row — spans full width */}
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl font-bold tracking-tight text-foreground">{t('title.articles')}</h1>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">
+            {contentType === 'page' ? 'Pages' : t('title.articles')}
+          </h1>
           <p className="mt-1 truncate text-sm text-muted-foreground">
-            {!isAllSites && (activeSite?.name || activeSiteSlug)
+            {contentType === 'page'
+              ? 'Create and manage static website pages such as About, Contact, Privacy Policy, and Terms'
+              : !isAllSites && (activeSite?.name || activeSiteSlug)
               ? `Manage your blog articles for ${activeSite?.name ?? activeSiteSlug}`
               : isAllSites
               ? 'Manage blog articles across all connected sites'
@@ -1019,34 +827,50 @@ export function ContentListPage() {
         </div>
         {!isAllSites && (
           <div className="flex items-center gap-2">
-            {/* AI Ideas — button (visible when sidebar is closed) */}
-            {!aiIdeasOpen && (
+            {contentType !== 'page' && (
+              <>
+                {/* AI Ideas — button (visible when sidebar is closed) */}
+                {!aiIdeasOpen && (
+                  <Button
+                    variant="outline"
+                    className="h-9 px-4 gap-2 border-amber-400/40 text-amber-700 hover:bg-amber-400/10 hover:text-amber-700"
+                    onClick={() => setAiIdeasOpen(true)}
+                    title={t('articles.generateAiIdeas')}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {t('articles.aiIdeas')}
+                  </Button>
+                )}
+                {/* Categories & Tags manager */}
+                <Button
+                  variant="outline"
+                  className="h-9 px-4 gap-2"
+                  onClick={() => {
+                    setCatTagTab('categories');
+                    setCatTagOpen(true);
+                  }}
+                  title={t('articles.manageCategoriesTags')}
+                >
+                  <FolderOpen className="h-4 w-4" />
+                  {t('articles.categoriesTags')}
+                </Button>
+              </>
+            )}
+            {!isAllSites && activeSiteDbId && (
               <Button
                 variant="outline"
-                className="h-9 px-4 gap-2 border-amber-400/40 text-amber-700 hover:bg-amber-400/10 hover:text-amber-700"
-                onClick={() => setAiIdeasOpen(true)}
-                title={t('articles.generateAiIdeas')}
+                className="h-9 px-3 gap-2 border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400"
+                onClick={handleSyncFromSite}
+                disabled={isSyncing}
+                title="Sync content from connected site"
               >
-                <Sparkles className="h-4 w-4" />
-                {t('articles.aiIdeas')}
+                <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
+                {isSyncing ? "Syncing..." : "Sync from Site"}
               </Button>
             )}
-            {/* Categories & Tags manager */}
-            <Button
-              variant="outline"
-              className="h-9 px-4 gap-2"
-              onClick={() => {
-                setCatTagTab('categories');
-                setCatTagOpen(true);
-              }}
-              title={t('articles.manageCategoriesTags')}
-            >
-              <FolderOpen className="h-4 w-4" />
-              {t('articles.categoriesTags')}
-            </Button>
             <Button className="h-9 px-4 gap-2" onClick={goToCreate}>
               <Plus className="h-4 w-4" />
-              {t('articles.createNew')}
+              {contentType === 'page' ? 'Create Page' : t('articles.createNew')}
             </Button>
           </div>
         )}
@@ -1079,37 +903,15 @@ export function ContentListPage() {
               ))}
             </div>
 
-            {/* Search + Sort */}
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <div className="relative w-full sm:w-56">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder={t('articles.searchPlaceholder')}
-                  value={search}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  className="h-9 w-full rounded-lg pl-9 pr-3"
-                />
-              </div>
-              <Select
-                value={`${sortField}-${sortOrder}`}
-                onValueChange={(v) => {
-                  const [f, o] = v.split('-');
-                  setSortField(f);
-                  setSortOrder(o as 'asc' | 'desc');
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className="h-9 w-[150px] shrink-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="updatedAt-desc">{t('articles.sortNewestFirst')}</SelectItem>
-                  <SelectItem value="updatedAt-asc">{t('articles.sortOldestFirst')}</SelectItem>
-                  <SelectItem value="createdAt-desc">{t('articles.sortNewestCreated')}</SelectItem>
-                  <SelectItem value="title-asc">{t('articles.sortTitleAsc')}</SelectItem>
-                  <SelectItem value="title-desc">{t('articles.sortTitleDesc')}</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Search */}
+            <div className="relative w-full sm:w-64 shrink-0">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder={t('articles.searchPlaceholder')}
+                value={search}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="h-9 w-full rounded-lg pl-9 pr-3"
+              />
             </div>
           </div>
 
@@ -1138,8 +940,12 @@ export function ContentListPage() {
                   <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/60 text-muted-foreground/60">
                     <FileText className="h-7 w-7" />
                   </div>
-                  <h3 className="text-base font-semibold text-foreground">{t('articles.noArticles')}</h3>
-                  <p className="text-xs text-muted-foreground">{t('articles.createFirst')}</p>
+                  <h3 className="text-base font-semibold text-foreground">
+                    {contentType === 'page' ? 'No pages found' : t('articles.noArticles')}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {contentType === 'page' ? 'Create your first static page to get started' : t('articles.createFirst')}
+                  </p>
                 </div>
               </div>
             ) : (
@@ -1159,20 +965,127 @@ export function ContentListPage() {
                           />
                         </th>
                         <th className="text-left px-3 py-3">
-                          <button
-                            className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            {t('articles.title')} <ArrowUpDown className="inline h-3 w-3 ml-1 opacity-40" />
-                          </button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none group"
+                                title="Sort options (Newest, Oldest, Title)"
+                              >
+                                <span>{t('articles.title')}</span>
+                                <ArrowUpDown className="h-3.5 w-3.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-56">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSortField('updatedAt');
+                                  setSortOrder('desc');
+                                  setPage(1);
+                                }}
+                                className="flex items-center justify-between cursor-pointer py-2"
+                              >
+                                <span className="flex items-center gap-2">
+                                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                  <span>{t('articles.sortNewestFirst')}</span>
+                                </span>
+                                {sortField === 'updatedAt' && sortOrder === 'desc' && (
+                                  <Check className="h-4 w-4 text-amber-500" />
+                                )}
+                              </DropdownMenuItem>
+
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSortField('updatedAt');
+                                  setSortOrder('asc');
+                                  setPage(1);
+                                }}
+                                className="flex items-center justify-between cursor-pointer py-2"
+                              >
+                                <span className="flex items-center gap-2">
+                                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                  <span>{t('articles.sortOldestFirst')}</span>
+                                </span>
+                                {sortField === 'updatedAt' && sortOrder === 'asc' && (
+                                  <Check className="h-4 w-4 text-amber-500" />
+                                )}
+                              </DropdownMenuItem>
+
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSortField('title');
+                                  setSortOrder('asc');
+                                  setPage(1);
+                                }}
+                                className="flex items-center justify-between cursor-pointer py-2"
+                              >
+                                <span className="flex items-center gap-2">
+                                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                  <span>{t('articles.sortTitleAsc')} (A → Z)</span>
+                                </span>
+                                {sortField === 'title' && sortOrder === 'asc' && (
+                                  <Check className="h-4 w-4 text-amber-500" />
+                                )}
+                              </DropdownMenuItem>
+
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSortField('title');
+                                  setSortOrder('desc');
+                                  setPage(1);
+                                }}
+                                className="flex items-center justify-between cursor-pointer py-2"
+                              >
+                                <span className="flex items-center gap-2">
+                                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                  <span>{t('articles.sortTitleDesc')} (Z → A)</span>
+                                </span>
+                                {sortField === 'title' && sortOrder === 'desc' && (
+                                  <Check className="h-4 w-4 text-amber-500" />
+                                )}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </th>
-                        <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          {t('common.status')}
+                        <th className="text-left px-3 py-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (sortField === 'status') {
+                                setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                              } else {
+                                setSortField('status');
+                                setSortOrder('asc');
+                              }
+                              setPage(1);
+                            }}
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none group"
+                          >
+                            <span>{t('common.status')}</span>
+                            <ArrowUpDown className="h-3.5 w-3.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                          </button>
                         </th>
                         <th className="text-left px-3 py-3 hidden md:table-cell text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                           {t('articles.author')}
                         </th>
-                        <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          {t('articles.updated')}
+                        <th className="text-left px-3 py-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (sortField === 'updatedAt') {
+                                setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
+                              } else {
+                                setSortField('updatedAt');
+                                setSortOrder('desc');
+                              }
+                              setPage(1);
+                            }}
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none group"
+                            title={sortField === 'updatedAt' && sortOrder === 'desc' ? 'Sorted newest first' : 'Click to sort by date'}
+                          >
+                            <span>{t('articles.updated')}</span>
+                            <ArrowUpDown className="h-3.5 w-3.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                          </button>
                         </th>
                         <th className="w-28 px-3 py-3"></th>
                       </tr>
@@ -1197,9 +1110,6 @@ export function ContentListPage() {
                             </td>
                             <td className="px-3 py-3">
                               <p className="text-sm font-medium leading-tight line-clamp-1">{item.title}</p>
-                              {item.contentType && (
-                                <p className="text-xs text-muted-foreground mt-0.5">{item.contentType.name}</p>
-                              )}
                             </td>
                             <td className="px-3 py-3">
                               <span
@@ -1241,15 +1151,6 @@ export function ContentListPage() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8"
-                                  onClick={() => goToDetail(item.id)}
-                                  title={t('common.view')}
-                                >
-                                  <Eye className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
                                   className="h-8 w-8 text-destructive hover:text-destructive"
                                   onClick={() => setDeleteTarget(item)}
                                   title={t('common.delete')}
@@ -1266,51 +1167,71 @@ export function ContentListPage() {
                 </div>
 
                 {/* Pagination */}
-                <div className="flex items-center justify-between px-5 py-3.5 border-t border-border/70 bg-muted/10">
-                  <span className="text-xs sm:text-sm text-muted-foreground">
-                    {`${t('common.showing')} ${fromItem} ${t('articles.paginationTo')} ${toItem} ${t('common.of')} ${totalItems} ${t('articles.articles')}`}
-                  </span>
-                  <div className="flex items-center gap-1.5">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 border-t border-border/70 bg-muted/10">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs sm:text-sm text-muted-foreground">
+                      {`${t('common.showing')} ${fromItem} ${t('articles.paginationTo')} ${toItem} ${t('common.of')} ${totalItems} ${t('articles.articles')}`}
+                    </span>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className="hidden sm:inline">Per page:</span>
+                      <Select
+                        value={String(pageSize)}
+                        onValueChange={(val) => {
+                          setPageSize(Number(val));
+                          setPage(1);
+                        }}
+                      >
+                        <SelectTrigger className="h-7 w-[68px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="25">25</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 sm:gap-2">
                     {/* Previous page button */}
                     <button
                       type="button"
                       onClick={() => setPage((p) => Math.max(1, p - 1))}
                       disabled={page === 1}
-                      className="h-8 w-8 rounded-full border border-border/70 bg-background hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                      className="h-9 w-9 rounded-full bg-zinc-100 hover:bg-zinc-200 hover:border-2 hover:border-zinc-900 active:border-2 active:border-zinc-900 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:hover:border-white text-zinc-700 dark:text-zinc-300 flex items-center justify-center transition-all disabled:opacity-30 disabled:pointer-events-none border-2 border-transparent"
                       aria-label={t('common.previous') || 'Previous'}
                     >
-                      <ChevronLeft className="h-4 w-4" />
+                      <ArrowLeft className="h-4 w-4" />
                     </button>
 
-                    {pageNumbers.map((p, i) =>
-                      p === '...' ? (
-                        <span key={`dot-${i}`} className="px-1 text-muted-foreground text-xs">...</span>
-                      ) : (
+                    {pageNumbers.map((p) => {
+                      const isActive = page === p;
+                      return (
                         <button
                           key={p}
                           type="button"
-                          onClick={() => setPage(p as number)}
+                          onClick={() => setPage(p)}
                           className={cn(
-                            'h-8 w-8 rounded-full text-xs sm:text-sm font-semibold transition-all flex items-center justify-center',
-                            page === p
-                              ? 'bg-amber-400 text-zinc-950 shadow-xs'
-                              : 'border border-transparent hover:bg-muted text-muted-foreground hover:text-foreground',
+                            'h-9 w-9 rounded-full text-sm font-medium transition-all flex items-center justify-center',
+                            isActive
+                              ? 'border-2 border-zinc-900 dark:border-white bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white font-semibold'
+                              : 'bg-zinc-100 hover:bg-zinc-200 hover:border-2 hover:border-zinc-900/40 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 border-2 border-transparent',
                           )}
                         >
                           {p}
                         </button>
-                      ),
-                    )}
+                      );
+                    })}
 
                     {/* Next page button */}
                     <button
                       type="button"
                       onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                       disabled={page === totalPages}
-                      className="h-8 w-8 rounded-full border border-border/70 bg-background hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                      className="h-9 w-9 rounded-full bg-zinc-100 hover:bg-zinc-200 hover:border-2 hover:border-zinc-900 active:border-2 active:border-zinc-900 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:hover:border-white text-zinc-700 dark:text-zinc-300 flex items-center justify-center transition-all disabled:opacity-30 disabled:pointer-events-none border-2 border-transparent"
                       aria-label={t('common.next') || 'Next'}
                     >
-                      <ChevronRight className="h-4 w-4" />
+                      <ArrowRight className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
@@ -1569,6 +1490,100 @@ export function ContentListPage() {
         }}
         isLoading={deleteMutation.isPending}
       />
+
+      {/* External Site Sync Report Modal */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-full bg-emerald-100 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg">Site Content Synchronized</DialogTitle>
+                <DialogDescription>
+                  {syncReport?.siteName || 'Connected Site'} — {syncReport?.platform?.toUpperCase()}
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {syncReport && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Discovered from External Site
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex justify-between p-2 rounded bg-background border">
+                    <span className="text-muted-foreground">Articles/Posts:</span>
+                    <span className="font-semibold">{syncReport.postsDiscovered}</span>
+                  </div>
+                  <div className="flex justify-between p-2 rounded bg-background border">
+                    <span className="text-muted-foreground">Static Pages:</span>
+                    <span className="font-semibold">{syncReport.pagesDiscovered}</span>
+                  </div>
+                  <div className="flex justify-between p-2 rounded bg-background border">
+                    <span className="text-muted-foreground">Categories:</span>
+                    <span className="font-semibold">{syncReport.categoriesDiscovered}</span>
+                  </div>
+                  <div className="flex justify-between p-2 rounded bg-background border">
+                    <span className="text-muted-foreground">Tags:</span>
+                    <span className="font-semibold">{syncReport.tagsDiscovered}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Sync Outcomes
+                </p>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div className="p-2 rounded bg-background border border-emerald-500/20">
+                    <p className="text-xs text-muted-foreground">Created</p>
+                    <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                      {syncReport.created}
+                    </p>
+                  </div>
+                  <div className="p-2 rounded bg-background border border-blue-500/20">
+                    <p className="text-xs text-muted-foreground">Updated</p>
+                    <p className="text-base font-bold text-blue-600 dark:text-blue-400">
+                      {syncReport.updated}
+                    </p>
+                  </div>
+                  <div className="p-2 rounded bg-background border border-slate-500/20">
+                    <p className="text-xs text-muted-foreground">Unchanged</p>
+                    <p className="text-base font-bold text-muted-foreground">
+                      {syncReport.unchanged}
+                    </p>
+                  </div>
+                  <div className="p-2 rounded bg-background border border-destructive/20">
+                    <p className="text-xs text-muted-foreground">Failed</p>
+                    <p className="text-base font-bold text-destructive">
+                      {syncReport.failed}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {syncReport.errors && syncReport.errors.length > 0 && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+                  <p className="text-xs font-semibold text-destructive mb-1">Errors</p>
+                  <ul className="text-xs space-y-1 text-destructive">
+                    {syncReport.errors.map((e: string, i: number) => (
+                      <li key={i}>{e}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setSyncDialogOpen(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

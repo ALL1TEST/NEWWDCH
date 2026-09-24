@@ -25,13 +25,16 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  Search, Star, RefreshCw, Boxes, ChevronLeft, ChevronRight, Loader2, Plus, Pencil, Trash2, Type as TypeIcon, AlertCircle, Sparkles, FileText, Image as ImageIcon,
+  Search, Star, RefreshCw, Boxes, ChevronLeft, ChevronRight, Loader2, Plus, Pencil, Trash2, Type as TypeIcon, AlertCircle, Sparkles, FileText, Image as ImageIcon, Lock,
 } from 'lucide-react';
 import { ConfirmDialog } from '@/components/patterns';
 import { useT } from '@/lib/i18n';
 import {
   canProviderSupportImageGeneration,
+  canProviderSupportTextGeneration,
   isModelForbiddenForImageGeneration,
+  isModelForbiddenForTextGeneration,
+  getModelCapabilitySupport,
   isKnownImageModel,
   parseCapabilities,
   type ModelCapability,
@@ -183,6 +186,18 @@ export function ModelsPage() {
     onError: (err: Error) => toast.error(err.message || t('ai.failedToSetDefault')),
   });
 
+  // Unset default
+  const unsetDefaultMutation = useMutation({
+    mutationFn: (id: string) => patchApi(`/api/ai/models/${id}`, { isDefault: false, isDefaultText: false, isDefaultImage: false }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiModels.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiSettings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiLogs.all });
+      toast.success(t('ai.defaultRemoved') || 'Default model removed');
+    },
+    onError: (err: Error) => toast.error(err.message || t('ai.failedToUpdateModel')),
+  });
+
   // Sync all providers mutation (optional feature)
   const syncAllMutation = useMutation({
     mutationFn: async () => {
@@ -224,7 +239,19 @@ export function ModelsPage() {
 
   const handleEdit = (model: AiModel) => {
     setEditingId(model.id);
-    const caps = parseCapabilities(model.capabilities ?? (model.type?.toUpperCase() === 'IMAGE' ? ['IMAGE_GENERATION'] : ['TEXT_GENERATION']));
+    const targetProvider = providers.find((p) => p.id === model.providerId);
+    const pKind = targetProvider?.kind || '';
+    const support = getModelCapabilitySupport(pKind, model.modelId);
+
+    let caps: ModelCapability[];
+    if (support.isImageOnly) {
+      caps = ['IMAGE_GENERATION'];
+    } else if (support.isTextOnly) {
+      caps = ['TEXT_GENERATION'];
+    } else {
+      caps = parseCapabilities(model.capabilities ?? (model.type?.toUpperCase() === 'IMAGE' ? ['IMAGE_GENERATION'] : ['TEXT_GENERATION']));
+    }
+
     setFormData({
       name: model.name,
       modelId: model.modelId,
@@ -241,14 +268,32 @@ export function ModelsPage() {
       toast.error(t('ai.fillRequiredFields'));
       return;
     }
-    if (formData.capabilities.length === 0) {
+
+    const selectedP = providers.find((p) => p.id === formData.providerId);
+    const pKind = selectedP?.kind || '';
+    const support = getModelCapabilitySupport(pKind, formData.modelId);
+
+    let finalCaps = formData.capabilities;
+    if (support.isImageOnly) {
+      finalCaps = ['IMAGE_GENERATION'];
+    } else if (support.isTextOnly) {
+      finalCaps = ['TEXT_GENERATION'];
+    }
+
+    if (finalCaps.length === 0) {
       toast.error(t('ai.capabilityRequired'));
       return;
     }
+
+    const payload = {
+      ...formData,
+      capabilities: finalCaps,
+    };
+
     if (editingId) {
-      updateMutation.mutate({ id: editingId, data: formData });
+      updateMutation.mutate({ id: editingId, data: payload });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(payload);
     }
   };
 
@@ -307,16 +352,16 @@ export function ModelsPage() {
       {/* Table View */}
       <Card className="overflow-hidden">
         <CardContent className="p-0">
-          <Table>
+          <Table className="w-full table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead>{t('ai.modelName')}</TableHead>
-                <TableHead>{t('ai.modelId')}</TableHead>
-                <TableHead>{t('ai.provider')}</TableHead>
-                <TableHead>{!t('ai.capabilities') || t('ai.capabilities') === 'ai.capabilities' ? 'Capabilities' : t('ai.capabilities')}</TableHead>
-                <TableHead>{t('ai.default')}</TableHead>
-                <TableHead>{t('common.active')}</TableHead>
-                <TableHead className="text-right">{t('common.actions')}</TableHead>
+                <TableHead className="w-[24%]">{t('ai.modelName')}</TableHead>
+                <TableHead className="w-[28%]">{t('ai.modelId')}</TableHead>
+                <TableHead className="w-[14%]">{t('ai.provider')}</TableHead>
+                <TableHead className="w-[12%]">{!t('ai.capabilities') || t('ai.capabilities') === 'ai.capabilities' ? 'Capabilities' : t('ai.capabilities')}</TableHead>
+                <TableHead className="w-[10%]">{t('ai.default')}</TableHead>
+                <TableHead className="w-[6%]">{t('common.active')}</TableHead>
+                <TableHead className="w-[6%] text-right">{t('common.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -342,9 +387,15 @@ export function ModelsPage() {
                 </TableCell></TableRow>
               ) : models.map((model) => (
                 <TableRow key={model.id}>
-                  <TableCell className="font-medium">{model.name}</TableCell>
-                  <TableCell><span className="font-mono text-xs text-muted-foreground">{model.modelId}</span></TableCell>
-                  <TableCell>{model.provider?.name ?? t('ai.unknownProvider')}</TableCell>
+                  <TableCell className="font-medium truncate" title={model.name}>
+                    <span className="truncate block">{model.name}</span>
+                  </TableCell>
+                  <TableCell className="truncate" title={model.modelId}>
+                    <span className="font-mono text-xs text-muted-foreground truncate block">{model.modelId}</span>
+                  </TableCell>
+                  <TableCell className="truncate" title={model.provider?.name ?? t('ai.unknownProvider')}>
+                    <span className="truncate block">{model.provider?.name ?? t('ai.unknownProvider')}</span>
+                  </TableCell>
                   <TableCell>
                     {(() => {
                       const caps = parseCapabilities(model.capabilities ?? (model.type?.toUpperCase() === 'IMAGE' ? ['IMAGE_GENERATION'] : ['TEXT_GENERATION']));
@@ -370,25 +421,21 @@ export function ModelsPage() {
                     })()}
                   </TableCell>
                   <TableCell>
-                    {model.isDefaultText && model.isDefaultImage ? (
-                      <Badge variant="secondary" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                        Default (All)
-                      </Badge>
-                    ) : model.isDefaultText ? (
-                      <Badge variant="secondary" className="bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400">
-                        Default (Text)
-                      </Badge>
-                    ) : model.isDefaultImage ? (
-                      <Badge variant="secondary" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                        Default (Image)
-                      </Badge>
-                    ) : model.isDefault ? (
-                      <Badge variant="secondary" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                        {t('ai.default')}
-                      </Badge>
+                    {model.isDefaultText || model.isDefaultImage || model.isDefault ? (
+                      <button
+                        type="button"
+                        onClick={() => unsetDefaultMutation.mutate(model.id)}
+                        disabled={unsetDefaultMutation.isPending && unsetDefaultMutation.variables === model.id}
+                        title={t('ai.removeDefault') || 'Click to remove default'}
+                        className="inline-flex items-center gap-1 group cursor-pointer"
+                      >
+                        <Badge variant="secondary" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 group-hover:bg-amber-200 transition-colors whitespace-nowrap text-xs">
+                          {t('ai.default') || 'Default'} <span className="ml-1 text-[10px] opacity-70 group-hover:opacity-100">✕</span>
+                        </Badge>
+                      </button>
                     ) : (
                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setDefaultMutation.mutate(model.id)} title={t('ai.setAsDefault')}>
-                        <Star className="h-3.5 w-3.5 text-zinc-400" />
+                        <Star className="h-3.5 w-3.5 text-zinc-400 hover:text-amber-500 transition-colors" />
                       </Button>
                     )}
                   </TableCell>
@@ -460,14 +507,13 @@ export function ModelsPage() {
                     const val = e.target.value;
                     const selectedP = providers.find((p) => p.id === formData.providerId);
                     const pKind = selectedP?.kind || '';
-                    const forbidden = isModelForbiddenForImageGeneration(pKind, val);
-                    const isImg = isKnownImageModel(val);
+                    const support = getModelCapabilitySupport(pKind, val);
 
                     setFormData((p) => {
                       let nextCaps = p.capabilities;
-                      if (isImg) {
+                      if (support.isImageOnly) {
                         nextCaps = ['IMAGE_GENERATION'];
-                      } else if (forbidden.forbidden) {
+                      } else if (support.isTextOnly) {
                         nextCaps = ['TEXT_GENERATION'];
                       }
                       return { ...p, modelId: val, capabilities: nextCaps };
@@ -486,15 +532,21 @@ export function ModelsPage() {
                 value={formData.providerId}
                 onValueChange={(v) => {
                   const targetP = providers.find((p) => p.id === v);
-                  const allowsImg = targetP ? canProviderSupportImageGeneration(targetP.kind) : true;
-                  const forbidden = isModelForbiddenForImageGeneration(targetP?.kind || '', formData.modelId);
-                  setFormData((p) => ({
-                    ...p,
-                    providerId: v,
-                    capabilities: (!allowsImg || forbidden.forbidden)
-                      ? ['TEXT_GENERATION']
-                      : p.capabilities,
-                  }));
+                  const pKind = targetP?.kind || '';
+                  const support = getModelCapabilitySupport(pKind, formData.modelId);
+                  setFormData((p) => {
+                    let nextCaps = p.capabilities;
+                    if (support.isImageOnly) {
+                      nextCaps = ['IMAGE_GENERATION'];
+                    } else if (support.isTextOnly) {
+                      nextCaps = ['TEXT_GENERATION'];
+                    }
+                    return {
+                      ...p,
+                      providerId: v,
+                      capabilities: nextCaps,
+                    };
+                  });
                 }}
               >
                 <SelectTrigger><SelectValue placeholder={t('ai.selectProvider')} /></SelectTrigger>
@@ -509,31 +561,52 @@ export function ModelsPage() {
             {/* Capability Selection: Text only / Image only / Both Text & Image */}
             {(() => {
               const selectedProvider = providers.find((p) => p.id === formData.providerId);
-              const providerAllowsImage = selectedProvider ? canProviderSupportImageGeneration(selectedProvider.kind) : true;
-              const modelForbidden = selectedProvider && formData.modelId
-                ? isModelForbiddenForImageGeneration(selectedProvider.kind, formData.modelId)
-                : { forbidden: false };
-              const imageDisabled = !providerAllowsImage || modelForbidden.forbidden;
+              const pKind = selectedProvider?.kind || '';
+              const support = getModelCapabilitySupport(pKind, formData.modelId);
 
               const isTextOnly = formData.capabilities.includes('TEXT_GENERATION') && !formData.capabilities.includes('IMAGE_GENERATION');
               const isImageOnly = !formData.capabilities.includes('TEXT_GENERATION') && formData.capabilities.includes('IMAGE_GENERATION');
               const isBoth = formData.capabilities.includes('TEXT_GENERATION') && formData.capabilities.includes('IMAGE_GENERATION');
 
+              const isLocked = support.isImageOnly || support.isTextOnly;
+              const textDisabled = !support.supportsText;
+              const imageDisabled = !support.supportsImage;
+              const bothDisabled = !support.supportsBoth;
+
               return (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label>{t('ai.capabilities') || 'Model Capabilities'} <span className="text-destructive">*</span></Label>
-                    <span className="text-xs text-muted-foreground">Select what this model can do</span>
+                    <div className="flex items-center gap-2">
+                      <Label>{t('ai.capabilities') || 'Model Capabilities'} <span className="text-destructive">*</span></Label>
+                      {isLocked && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                          <Lock className="h-3 w-3" /> Locked
+                        </span>
+                      )}
+                      {support.supportsBoth && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                          Editable
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {isLocked ? 'Capabilities are fixed for this model' : 'Select what this model can do'}
+                    </span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {/* Option 1: Text Generation Only */}
                     <div
-                      onClick={() => setFormData((p) => ({ ...p, capabilities: ['TEXT_GENERATION'] }))}
-                      className={`flex flex-col justify-between p-3.5 rounded-lg border-2 transition-all cursor-pointer ${
-                        isTextOnly
-                          ? 'border-primary bg-primary/5 shadow-xs'
-                          : 'border-border hover:border-primary/30 hover:bg-muted/50'
+                      onClick={() => {
+                        if (textDisabled || support.isTextOnly) return;
+                        setFormData((p) => ({ ...p, capabilities: ['TEXT_GENERATION'] }));
+                      }}
+                      className={`flex flex-col justify-between p-3.5 rounded-lg border-2 transition-all ${
+                        textDisabled
+                          ? 'opacity-40 cursor-not-allowed border-border bg-muted/30 pointer-events-none'
+                          : isTextOnly
+                          ? `border-primary bg-primary/5 shadow-xs ${isLocked ? 'cursor-default' : 'cursor-pointer'}`
+                          : 'border-border hover:border-primary/30 hover:bg-muted/50 cursor-pointer'
                       }`}
                     >
                       <div>
@@ -541,7 +614,13 @@ export function ModelsPage() {
                           <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${isTextOnly ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
                             <FileText className="h-4 w-4" />
                           </div>
-                          <span className={`h-4 w-4 rounded-full border-2 transition-colors shrink-0 ${isTextOnly ? 'border-primary bg-primary' : 'border-muted-foreground/30'}`} />
+                          {support.isTextOnly ? (
+                            <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                              <Lock className="h-2.5 w-2.5" /> Locked
+                            </span>
+                          ) : (
+                            <span className={`h-4 w-4 rounded-full border-2 transition-colors shrink-0 ${isTextOnly ? 'border-primary bg-primary' : 'border-muted-foreground/30'}`} />
+                          )}
                         </div>
                         <span className="text-sm font-medium">{t('ai.textType')} Only</span>
                         <p className="text-xs text-muted-foreground mt-1 leading-snug">Articles, chat, prompts, and content generation.</p>
@@ -551,14 +630,14 @@ export function ModelsPage() {
                     {/* Option 2: Image Generation Only */}
                     <div
                       onClick={() => {
-                        if (imageDisabled) return;
+                        if (imageDisabled || support.isImageOnly) return;
                         setFormData((p) => ({ ...p, capabilities: ['IMAGE_GENERATION'] }));
                       }}
                       className={`flex flex-col justify-between p-3.5 rounded-lg border-2 transition-all ${
                         imageDisabled
-                          ? 'opacity-40 cursor-not-allowed border-border bg-muted/30'
+                          ? 'opacity-40 cursor-not-allowed border-border bg-muted/30 pointer-events-none'
                           : isImageOnly
-                          ? 'border-primary bg-primary/5 shadow-xs cursor-pointer'
+                          ? `border-primary bg-primary/5 shadow-xs ${isLocked ? 'cursor-default' : 'cursor-pointer'}`
                           : 'border-border hover:border-primary/30 hover:bg-muted/50 cursor-pointer'
                       }`}
                     >
@@ -567,7 +646,13 @@ export function ModelsPage() {
                           <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${isImageOnly ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
                             <ImageIcon className="h-4 w-4" />
                           </div>
-                          <span className={`h-4 w-4 rounded-full border-2 transition-colors shrink-0 ${isImageOnly ? 'border-primary bg-primary' : 'border-muted-foreground/30'}`} />
+                          {support.isImageOnly ? (
+                            <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                              <Lock className="h-2.5 w-2.5" /> Locked
+                            </span>
+                          ) : (
+                            <span className={`h-4 w-4 rounded-full border-2 transition-colors shrink-0 ${isImageOnly ? 'border-primary bg-primary' : 'border-muted-foreground/30'}`} />
+                          )}
                         </div>
                         <span className="text-sm font-medium">{t('ai.imageType')} Only</span>
                         <p className="text-xs text-muted-foreground mt-1 leading-snug">Image generator models (e.g. DALL-E, Imagen, Flux).</p>
@@ -577,12 +662,12 @@ export function ModelsPage() {
                     {/* Option 3: Both Text & Image Generation */}
                     <div
                       onClick={() => {
-                        if (imageDisabled) return;
+                        if (bothDisabled) return;
                         setFormData((p) => ({ ...p, capabilities: ['TEXT_GENERATION', 'IMAGE_GENERATION'] }));
                       }}
                       className={`flex flex-col justify-between p-3.5 rounded-lg border-2 transition-all ${
-                        imageDisabled
-                          ? 'opacity-40 cursor-not-allowed border-border bg-muted/30'
+                        bothDisabled
+                          ? 'opacity-40 cursor-not-allowed border-border bg-muted/30 pointer-events-none'
                           : isBoth
                           ? 'border-primary bg-primary/5 shadow-xs cursor-pointer'
                           : 'border-border hover:border-primary/30 hover:bg-muted/50 cursor-pointer'
@@ -601,15 +686,33 @@ export function ModelsPage() {
                     </div>
                   </div>
 
-                  {/* Explanatory guardrail message when image is disabled */}
-                  {imageDisabled && (
-                    <div className="flex items-start gap-2 p-2.5 rounded-md bg-muted/50 border border-border text-xs text-muted-foreground mt-1">
-                      <AlertCircle className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
+                  {/* Explanatory notes based on model capability support */}
+                  {support.isImageOnly && (
+                    <div className="flex items-start gap-2 p-2.5 rounded-md bg-muted/40 border border-border text-xs text-muted-foreground mt-1">
+                      <Lock className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
                       <div>
-                        <span className="font-semibold">Image generation disabled: </span>
-                        {modelForbidden.forbidden
-                          ? (modelForbidden.reason || 'This model does not support image generation.')
-                          : (selectedProvider && !providerAllowsImage ? `${selectedProvider.name} does not support image generation.` : 'Selected provider cannot generate images.')}
+                        <span className="font-semibold text-foreground">Capabilities locked: </span>
+                        {support.reason || 'This model is dedicated exclusively to Image Generation.'}
+                      </div>
+                    </div>
+                  )}
+
+                  {support.isTextOnly && (
+                    <div className="flex items-start gap-2 p-2.5 rounded-md bg-muted/40 border border-border text-xs text-muted-foreground mt-1">
+                      <Lock className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
+                      <div>
+                        <span className="font-semibold text-foreground">Capabilities locked: </span>
+                        {support.reason || 'This model is dedicated exclusively to Text Generation.'}
+                      </div>
+                    </div>
+                  )}
+
+                  {support.supportsBoth && (
+                    <div className="flex items-start gap-2 p-2.5 rounded-md bg-emerald-500/5 border border-emerald-500/20 text-xs text-muted-foreground mt-1">
+                      <Sparkles className="h-4 w-4 shrink-0 text-emerald-500 mt-0.5" />
+                      <div>
+                        <span className="font-semibold text-foreground">Multimodal model: </span>
+                        This model supports both text and image generation. You can choose which capabilities to activate.
                       </div>
                     </div>
                   )}

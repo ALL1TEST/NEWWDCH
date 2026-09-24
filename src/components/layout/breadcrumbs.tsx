@@ -26,6 +26,7 @@ import {
   CreditCard,
   LayoutGrid,
   Calendar,
+  Files,
   type LucideIcon,
 } from 'lucide-react';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
@@ -46,6 +47,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   'all-sites': LayoutGrid,
   content: FileText,
+  pages: Files,
   media: Image,
   users: Users,
   categories: Tag,
@@ -76,6 +78,7 @@ const MODULE_TITLE_KEYS: Record<string, string> = {
   dashboard: 'title.dashboard',
   'all-sites': 'title.executiveDashboard',
   content: 'title.articles',
+  pages: 'title.pages',
   media: 'title.media',
   users: 'title.users',
   categories: 'title.categories',
@@ -105,6 +108,7 @@ const MODULE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   'all-sites': 'Executive Dashboard',
   content: 'Articles',
+  pages: 'Pages',
   media: 'Media',
   users: 'Users',
   categories: 'Categories',
@@ -190,7 +194,7 @@ const SUBPAGE_LABELS: Record<string, Record<string, string>> = {
 const NO_BREADCRUMB_MODULES = new Set([
   'dashboard', 'calendar', 'tasks', 'users', 'comments', 'settings', 'media',
   'email-templates', 'notifications',
-  'backups', 'content', 'seo', 'ai', 'automation', 'newsletter',
+  'backups', 'content', 'pages', 'seo', 'ai', 'automation', 'newsletter',
   // Client account pages — no breadcrumb, topbar hidden on desktop so the
   // page content sits flush against the top (same as the modules above).
   'profile', 'billing',

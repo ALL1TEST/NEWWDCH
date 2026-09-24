@@ -1,8 +1,10 @@
 'use client';
 
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState, useRef } from 'react';
-import { useEditor, EditorContent, type Editor } from '@tiptap/react';
+import { useEditor, EditorContent, type Editor, NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
 import { DOMSerializer } from 'prosemirror-model';
+import { closeHistory } from 'prosemirror-history';
+import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import { Underline } from '@tiptap/extension-underline';
 import { TextAlign } from '@tiptap/extension-text-align';
@@ -10,10 +12,11 @@ import { TextStyleKit } from '@tiptap/extension-text-style';
 import { Highlight } from '@tiptap/extension-highlight';
 import { Image } from '@tiptap/extension-image';
 import { Link } from '@tiptap/extension-link';
-import { Table } from '@tiptap/extension-table';
+import { Table, TableView } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
+import { CellSelection, TableMap, selectedRect } from '@tiptap/pm/tables';
 import { Placeholder } from '@tiptap/extension-placeholder';
 import { CharacterCount } from '@tiptap/extension-character-count';
 import { Typography } from '@tiptap/extension-typography';
@@ -26,7 +29,7 @@ import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
 import OrderedList from '@tiptap/extension-ordered-list';
 import BulletList from '@tiptap/extension-bullet-list';
-import { Extension, Mark, Node } from '@tiptap/core';
+import { Extension, Mark, Node, mergeAttributes } from '@tiptap/core';
 
 const lowlight = createLowlight(common);
 
@@ -160,24 +163,571 @@ const ToggleBlock = Node.create({
 });
 
 // -------------------- Table border styles --------------------
-export type TableBorder = 'all' | 'none' | 'outside' | 'top' | 'right' | 'bottom' | 'left';
-export const TABLE_BORDERS: { label: string; value: TableBorder }[] = [
+export type TableBorder =
+  | 'none'
+  | 'all'
+  | 'outside'
+  | 'inside'
+  | 'inside-horizontal'
+  | 'inside-vertical'
+  | 'diagonal-down'
+  | 'diagonal-up'
+  | 'top'
+  | 'bottom'
+  | 'left'
+  | 'right';
+
+export interface TableBorderItem {
+  label: string;
+  value: TableBorder;
+  dividerBefore?: boolean;
+}
+
+export const TABLE_BORDERS: TableBorderItem[] = [
+  { label: 'No Border', value: 'none' },
   { label: 'All Borders', value: 'all' },
   { label: 'Outside Borders', value: 'outside' },
-  { label: 'No Border', value: 'none' },
-  { label: 'Top Border', value: 'top' },
+  { label: 'Inside Borders', value: 'inside' },
+  { label: 'Inside Horizontal Border', value: 'inside-horizontal', dividerBefore: true },
+  { label: 'Inside Vertical Border', value: 'inside-vertical' },
+  { label: 'Diagonal Down Border', value: 'diagonal-down' },
+  { label: 'Diagonal Up Border', value: 'diagonal-up' },
+  { label: 'Top Border', value: 'top', dividerBefore: true },
   { label: 'Bottom Border', value: 'bottom' },
   { label: 'Left Border', value: 'left' },
   { label: 'Right Border', value: 'right' },
 ];
 
+// 10 columns x 8 rows color matrix matching Google Docs / table styling (Image 2)
+export const TABLE_COLORS: string[][] = [
+  ['#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#efefef', '#f3f3f3', '#ffffff'],
+  ['#980000', '#ff0000', '#ff9900', '#ffff00', '#00ff00', '#00ffff', '#4a86e8', '#0000ff', '#9900ff', '#ff00ff'],
+  ['#e6b8af', '#f4cccc', '#fce5cd', '#fff2cc', '#d9ead3', '#d0e0e3', '#c9daf8', '#cfe2f3', '#d9d2e9', '#ead1dc'],
+  ['#dd7e6b', '#ea9999', '#f9cb9c', '#ffe599', '#b6d7a8', '#a2c4c9', '#a4c2f4', '#9fc5e8', '#b4a7d6', '#d5a6bd'],
+  ['#cc4125', '#e06666', '#f6b26b', '#ffd966', '#93c47d', '#76a5af', '#6d9eeb', '#6fa8dc', '#8e7cc3', '#c27ba0'],
+  ['#a61c1c', '#cc0000', '#e69138', '#f1c232', '#6aa84f', '#45818e', '#3c78d8', '#3d85c6', '#674ea7', '#a64d79'],
+  ['#85200c', '#990000', '#b45f06', '#bf9000', '#38761d', '#134f5c', '#1155cc', '#0b5394', '#351c75', '#741b47'],
+  ['#5b0f00', '#660000', '#783f04', '#7f6000', '#274e13', '#0c343d', '#1c4587', '#073763', '#20124d', '#4c1130'],
+];
+
+export interface BorderWidthOption {
+  label: string;
+  value: string;
+  heightPx: number;
+}
+
+export const TABLE_BORDER_WIDTHS: BorderWidthOption[] = [
+  { label: '¼ pt', value: '0.25pt', heightPx: 0.5 },
+  { label: '½ pt', value: '0.5pt', heightPx: 1 },
+  { label: '¾ pt', value: '0.75pt', heightPx: 1.5 },
+  { label: '1 pt', value: '1pt', heightPx: 2 },
+  { label: '1 ½ pt', value: '1.5pt', heightPx: 2.5 },
+  { label: '2 ¼ pt', value: '2.25pt', heightPx: 3 },
+  { label: '3 pt', value: '3pt', heightPx: 4 },
+  { label: '4 ½ pt', value: '4.5pt', heightPx: 5.5 },
+  { label: '6 pt', value: '6pt', heightPx: 7 },
+];
+
+// Table Border Line Styles (Images 2 & 3)
+export interface TableBorderStyleOption {
+  id: string;
+  label: string;
+  cssStyle: 'solid' | 'dotted' | 'dashed' | 'double' | 'groove';
+}
+
+export const TABLE_BORDER_STYLES: TableBorderStyleOption[] = [
+  { id: 'solid', label: 'Solid', cssStyle: 'solid' },
+  { id: 'dotted', label: 'Dotted', cssStyle: 'dotted' },
+  { id: 'dashed', label: 'Dashed', cssStyle: 'dashed' },
+  { id: 'double', label: 'Double', cssStyle: 'double' },
+  { id: 'shaded', label: 'Shaded', cssStyle: 'groove' },
+  { id: 'wavy', label: 'Wavy', cssStyle: 'dashed' },
+  { id: 'double-wavy', label: 'Double Wavy', cssStyle: 'dashed' },
+  { id: 'striped', label: 'Striped', cssStyle: 'dashed' },
+];
+
+export function TableLineStylePreview({ styleId, className }: { styleId: string; className?: string }) {
+  return (
+    <svg width="100%" height="16" viewBox="0 0 120 16" preserveAspectRatio="none" className={cn('shrink-0', className)}>
+      {styleId === 'solid' && (
+        <line x1="0" y1="8" x2="120" y2="8" stroke="currentColor" strokeWidth="1.5" />
+      )}
+      {styleId === 'dotted' && (
+        <line x1="0" y1="8" x2="120" y2="8" stroke="currentColor" strokeWidth="2" strokeDasharray="1.5 3.5" strokeLinecap="round" />
+      )}
+      {styleId === 'dashed' && (
+        <line x1="0" y1="8" x2="120" y2="8" stroke="currentColor" strokeWidth="1.5" strokeDasharray="8 4" />
+      )}
+      {styleId === 'double' && (
+        <>
+          <line x1="0" y1="6" x2="120" y2="6" stroke="currentColor" strokeWidth="1" />
+          <line x1="0" y1="10" x2="120" y2="10" stroke="currentColor" strokeWidth="1" />
+        </>
+      )}
+      {styleId === 'shaded' && (
+        <>
+          <line x1="0" y1="7" x2="120" y2="7" stroke="currentColor" strokeWidth="1.5" />
+          <line x1="0" y1="9.5" x2="120" y2="9.5" stroke="#9ca3af" strokeWidth="1.5" />
+        </>
+      )}
+      {styleId === 'wavy' && (
+        <path
+          d="M 0 8 Q 3 4, 6 8 T 12 8 T 18 8 T 24 8 T 30 8 T 36 8 T 42 8 T 48 8 T 54 8 T 60 8 T 66 8 T 72 8 T 78 8 T 84 8 T 90 8 T 96 8 T 102 8 T 108 8 T 114 8 T 120 8"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+        />
+      )}
+      {styleId === 'double-wavy' && (
+        <>
+          <path
+            d="M 0 5 Q 3 2.5, 6 5 T 12 5 T 18 5 T 24 5 T 30 5 T 36 5 T 42 5 T 48 5 T 54 5 T 60 5 T 66 5 T 72 5 T 78 5 T 84 5 T 90 5 T 96 5 T 102 5 T 108 5 T 114 5 T 120 5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1"
+          />
+          <path
+            d="M 0 10 Q 3 7.5, 6 10 T 12 10 T 18 10 T 24 10 T 30 10 T 36 10 T 42 10 T 48 10 T 54 10 T 60 10 T 66 10 T 72 10 T 78 10 T 84 10 T 90 10 T 96 10 T 102 10 T 108 10 T 114 10 T 120 10"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1"
+          />
+        </>
+      )}
+      {styleId === 'striped' && (
+        <g stroke="currentColor" strokeWidth="1.5">
+          {Array.from({ length: 24 }).map((_, i) => (
+            <line key={i} x1={i * 5} y1="12" x2={i * 5 + 4} y2="4" />
+          ))}
+        </g>
+      )}
+    </svg>
+  );
+}
+
+export function getCssBorderStyle(styleId: string): string {
+  const opt = TABLE_BORDER_STYLES.find(s => s.id === styleId);
+  return opt?.cssStyle || 'solid';
+}
+
+export function isCustomBorderStyle(styleId: string): boolean {
+  return styleId === 'wavy' || styleId === 'double-wavy' || styleId === 'striped';
+}
+
+export function parseBorderWidthPx(widthStr: string): number {
+  if (widthStr.endsWith('pt')) {
+    const pt = parseFloat(widthStr);
+    return Math.max(0.75, (pt * 4) / 3);
+  }
+  if (widthStr.endsWith('px')) {
+    return parseFloat(widthStr);
+  }
+  return 1.33;
+}
+
+export function formatSvgColor(color: string): string {
+  if (!color || color.includes('var')) return '#000000';
+  return color.trim();
+}
+
+export function getCssBorderValue(styleId: string, width: string, color: string): string {
+  const cssStyle = getCssBorderStyle(styleId);
+  let effectiveWidth = width;
+  if (cssStyle === 'double') {
+    if (width === '0.25pt' || width === '0.5pt' || width === '0.75pt' || width === '1pt' || width === '1.5pt') {
+      effectiveWidth = '3px';
+    }
+  } else if (cssStyle === 'groove') {
+    if (width === '0.25pt' || width === '0.5pt' || width === '0.75pt' || width === '1pt') {
+      effectiveWidth = '2.5px';
+    }
+  }
+  return `${effectiveWidth} ${cssStyle} ${color} !important`;
+}
+
+export type BgDecorationKey = 'diag-down' | 'diag-up' | 'edge-top' | 'edge-bottom' | 'edge-left' | 'edge-right';
+
+export interface BgDecorationLayer {
+  key: BgDecorationKey;
+  url: string;
+  position: string;
+  repeat: string;
+  size: string;
+}
+
+export function getDiagonalSvgDataUri(direction: 'down' | 'up', styleId: string, width: string, color: string): string {
+  const c = formatSvgColor(color);
+  const w = parseBorderWidthPx(width);
+  const id = direction === 'down' ? 'cell-diag-down' : 'cell-diag-up';
+
+  let inner = '';
+  if (styleId === 'dotted') {
+    const dotW = Math.max(w, 2);
+    const gap = Math.max(dotW * 2.5, 6);
+    inner = direction === 'down'
+      ? `<line x1='0' y1='0' x2='100' y2='100' stroke='${c}' stroke-width='${dotW}' stroke-linecap='round' stroke-dasharray='0.1 ${gap}' vector-effect='non-scaling-stroke' />`
+      : `<line x1='0' y1='100' x2='100' y2='0' stroke='${c}' stroke-width='${dotW}' stroke-linecap='round' stroke-dasharray='0.1 ${gap}' vector-effect='non-scaling-stroke' />`;
+  } else if (styleId === 'dashed') {
+    const dash = Math.max(w * 3, 8);
+    const gap = Math.max(w * 2, 5);
+    inner = direction === 'down'
+      ? `<line x1='0' y1='0' x2='100' y2='100' stroke='${c}' stroke-width='${w}' stroke-dasharray='${dash} ${gap}' vector-effect='non-scaling-stroke' />`
+      : `<line x1='0' y1='100' x2='100' y2='0' stroke='${c}' stroke-width='${w}' stroke-dasharray='${dash} ${gap}' vector-effect='non-scaling-stroke' />`;
+  } else if (styleId === 'double') {
+    const lw = Math.max(1, w * 0.7);
+    const off = Math.max(1.5, w * 0.9);
+    inner = direction === 'down'
+      ? `<g transform='translate(-${off}, ${off})'><line x1='0' y1='0' x2='100' y2='100' stroke='${c}' stroke-width='${lw}' vector-effect='non-scaling-stroke' /></g><g transform='translate(${off}, -${off})'><line x1='0' y1='0' x2='100' y2='100' stroke='${c}' stroke-width='${lw}' vector-effect='non-scaling-stroke' /></g>`
+      : `<g transform='translate(${off}, ${off})'><line x1='0' y1='100' x2='100' y2='0' stroke='${c}' stroke-width='${lw}' vector-effect='non-scaling-stroke' /></g><g transform='translate(-${off}, -${off})'><line x1='0' y1='100' x2='100' y2='0' stroke='${c}' stroke-width='${lw}' vector-effect='non-scaling-stroke' /></g>`;
+  } else if (styleId === 'shaded') {
+    inner = direction === 'down'
+      ? `<line x1='0' y1='0' x2='100' y2='100' stroke='${c}' stroke-width='${w}' vector-effect='non-scaling-stroke' /><g transform='translate(1.5, 1.5)'><line x1='0' y1='0' x2='100' y2='100' stroke='%239ca3af' stroke-width='${w}' vector-effect='non-scaling-stroke' /></g>`
+      : `<line x1='0' y1='100' x2='100' y2='0' stroke='${c}' stroke-width='${w}' vector-effect='non-scaling-stroke' /><g transform='translate(1.5, 1.5)'><line x1='0' y1='100' x2='100' y2='0' stroke='%239ca3af' stroke-width='${w}' vector-effect='non-scaling-stroke' /></g>`;
+  } else if (styleId === 'wavy') {
+    const pathD = direction === 'down'
+      ? 'M 0 0 Q 2 6, 5 5 T 10 10 T 15 15 T 20 20 T 25 25 T 30 30 T 35 35 T 40 40 T 45 45 T 50 50 T 55 55 T 60 60 T 65 65 T 70 70 T 75 75 T 80 80 T 85 85 T 90 90 T 95 95 T 100 100'
+      : 'M 0 100 Q 2 94, 5 95 T 10 90 T 15 85 T 20 80 T 25 75 T 30 70 T 35 65 T 40 60 T 45 55 T 50 50 T 55 45 T 60 40 T 65 35 T 70 30 T 75 25 T 80 20 T 85 15 T 90 10 T 95 5 T 100 0';
+    inner = `<path d='${pathD}' fill='none' stroke='${c}' stroke-width='${w}' vector-effect='non-scaling-stroke' />`;
+  } else if (styleId === 'double-wavy') {
+    const pathD = direction === 'down'
+      ? 'M 0 0 Q 2 6, 5 5 T 10 10 T 15 15 T 20 20 T 25 25 T 30 30 T 35 35 T 40 40 T 45 45 T 50 50 T 55 55 T 60 60 T 65 65 T 70 70 T 75 75 T 80 80 T 85 85 T 90 90 T 95 95 T 100 100'
+      : 'M 0 100 Q 2 94, 5 95 T 10 90 T 15 85 T 20 80 T 25 75 T 30 70 T 35 65 T 40 60 T 45 55 T 50 50 T 55 45 T 60 40 T 65 35 T 70 30 T 75 25 T 80 20 T 85 15 T 90 10 T 95 5 T 100 0';
+    const lw = Math.max(1, w * 0.75);
+    const off = Math.max(1.5, w * 0.9);
+    inner = `<g transform='translate(-${off}, ${off})'><path d='${pathD}' fill='none' stroke='${c}' stroke-width='${lw}' vector-effect='non-scaling-stroke' /></g><g transform='translate(${off}, -${off})'><path d='${pathD}' fill='none' stroke='${c}' stroke-width='${lw}' vector-effect='non-scaling-stroke' /></g>`;
+  } else if (styleId === 'striped') {
+    let slashes = '';
+    for (let p = 2; p <= 98; p += 4) {
+      if (direction === 'down') {
+        slashes += `<line x1='${p - 2.5}' y1='${p + 2.5}' x2='${p + 2.5}' y2='${p - 2.5}' vector-effect='non-scaling-stroke' stroke='${c}' stroke-width='${w}' />`;
+      } else {
+        slashes += `<line x1='${p - 2.5}' y1='${100 - p - 2.5}' x2='${p + 2.5}' y2='${100 - p + 2.5}' vector-effect='non-scaling-stroke' stroke='${c}' stroke-width='${w}' />`;
+      }
+    }
+    inner = slashes;
+  } else {
+    // solid
+    inner = direction === 'down'
+      ? `<line x1='0' y1='0' x2='100' y2='100' stroke='${c}' stroke-width='${w}' vector-effect='non-scaling-stroke' />`
+      : `<line x1='0' y1='100' x2='100' y2='0' stroke='${c}' stroke-width='${w}' vector-effect='non-scaling-stroke' />`;
+  }
+
+  const rawSvg = `<svg id='${id}' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'>${inner}</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(rawSvg)}")`;
+}
+
+export function getEdgeDecorationLayer(side: 'top' | 'bottom' | 'left' | 'right', styleId: string, width: string, color: string): BgDecorationLayer {
+  const c = formatSvgColor(color);
+  const w = parseBorderWidthPx(width);
+  const key: BgDecorationKey = `edge-${side}`;
+  const id = `cell-edge-${side}`;
+
+  if (side === 'top' || side === 'bottom') {
+    const pos = side === 'top' ? 'top left' : 'bottom left';
+    if (styleId === 'double-wavy') {
+      const lw = Math.max(1, w * 0.75);
+      const svg = `<svg id='${id}' xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M 0 2.5 Q 3 0.5, 6 2.5 T 12 2.5' fill='none' stroke='${c}' stroke-width='${lw}' stroke-linecap='round' /><path d='M 0 5.5 Q 3 3.5, 6 5.5 T 12 5.5' fill='none' stroke='${c}' stroke-width='${lw}' stroke-linecap='round' /></svg>`;
+      return {
+        key,
+        url: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+        position: pos,
+        repeat: 'repeat-x',
+        size: `12px ${Math.max(8, w * 4)}px`,
+      };
+    }
+    if (styleId === 'striped') {
+      const svg = `<svg id='${id}' xmlns='http://www.w3.org/2000/svg' width='8' height='6' viewBox='0 0 8 6'><line x1='-1' y1='6' x2='5' y2='0' stroke='${c}' stroke-width='${w}' /><line x1='3' y1='6' x2='9' y2='0' stroke='${c}' stroke-width='${w}' /></svg>`;
+      return {
+        key,
+        url: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+        position: pos,
+        repeat: 'repeat-x',
+        size: `8px ${Math.max(6, w * 3)}px`,
+      };
+    }
+    // 'wavy'
+    const svg = `<svg id='${id}' xmlns='http://www.w3.org/2000/svg' width='12' height='6' viewBox='0 0 12 6'><path d='M 0 3 Q 3 0.5, 6 3 T 12 3' fill='none' stroke='${c}' stroke-width='${w}' stroke-linecap='round' /></svg>`;
+    return {
+      key,
+      url: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+      position: pos,
+      repeat: 'repeat-x',
+      size: `12px ${Math.max(6, w * 3)}px`,
+    };
+  } else {
+    // left or right
+    const pos = side === 'left' ? 'top left' : 'top right';
+    if (styleId === 'double-wavy') {
+      const lw = Math.max(1, w * 0.75);
+      const svg = `<svg id='${id}' xmlns='http://www.w3.org/2000/svg' width='8' height='12' viewBox='0 0 8 12'><path d='M 2.5 0 Q 0.5 3, 2.5 6 T 2.5 12' fill='none' stroke='${c}' stroke-width='${lw}' stroke-linecap='round' /><path d='M 5.5 0 Q 3.5 3, 5.5 6 T 5.5 12' fill='none' stroke='${c}' stroke-width='${lw}' stroke-linecap='round' /></svg>`;
+      return {
+        key,
+        url: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+        position: pos,
+        repeat: 'repeat-y',
+        size: `${Math.max(8, w * 4)}px 12px`,
+      };
+    }
+    if (styleId === 'striped') {
+      const svg = `<svg id='${id}' xmlns='http://www.w3.org/2000/svg' width='6' height='8' viewBox='0 0 6 8'><line x1='0' y1='-1' x2='6' y2='5' stroke='${c}' stroke-width='${w}' /><line x1='0' y1='3' x2='6' y2='9' stroke='${c}' stroke-width='${w}' /></svg>`;
+      return {
+        key,
+        url: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+        position: pos,
+        repeat: 'repeat-y',
+        size: `${Math.max(6, w * 3)}px 8px`,
+      };
+    }
+    // 'wavy'
+    const svg = `<svg id='${id}' xmlns='http://www.w3.org/2000/svg' width='6' height='12' viewBox='0 0 6 12'><path d='M 3 0 Q 0.5 3, 3 6 T 3 12' fill='none' stroke='${c}' stroke-width='${w}' stroke-linecap='round' /></svg>`;
+    return {
+      key,
+      url: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+      position: pos,
+      repeat: 'repeat-y',
+      size: `${Math.max(6, w * 3)}px 12px`,
+    };
+  }
+}
+
+export function parseStyleString(styleStr: string | null | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!styleStr) return map;
+
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inParen = 0;
+  let currentToken = '';
+
+  const declarations: string[] = [];
+
+  for (let i = 0; i < styleStr.length; i++) {
+    const ch = styleStr[i];
+    if (ch === "'" && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+      currentToken += ch;
+    } else if (ch === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      currentToken += ch;
+    } else if (ch === '(' && !inSingleQuote && !inDoubleQuote) {
+      inParen++;
+      currentToken += ch;
+    } else if (ch === ')' && !inSingleQuote && !inDoubleQuote) {
+      if (inParen > 0) inParen--;
+      currentToken += ch;
+    } else if (ch === ';' && !inSingleQuote && !inDoubleQuote && inParen === 0) {
+      declarations.push(currentToken.trim());
+      currentToken = '';
+    } else {
+      currentToken += ch;
+    }
+  }
+  if (currentToken.trim()) {
+    declarations.push(currentToken.trim());
+  }
+
+  for (const decl of declarations) {
+    const colonIdx = decl.indexOf(':');
+    if (colonIdx > 0) {
+      const key = decl.slice(0, colonIdx).trim().toLowerCase();
+      const val = decl.slice(colonIdx + 1).trim();
+      if (key && val) map.set(key, val);
+    }
+  }
+
+  return map;
+}
+
+export function extractBgLayers(style: string | null | undefined): Map<BgDecorationKey, BgDecorationLayer> {
+  const map = new Map<BgDecorationKey, BgDecorationLayer>();
+  if (!style) return map;
+
+  const styleMap = parseStyleString(style);
+  const bgVal = styleMap.get('background-image') || '';
+  if (!bgVal) return map;
+
+  if (bgVal.includes('cell-diag-down') || bgVal.includes('to bottom right')) {
+    map.set('diag-down', { key: 'diag-down', url: '', position: 'center', repeat: 'no-repeat', size: '100% 100%' });
+  }
+  if (bgVal.includes('cell-diag-up') || bgVal.includes('to top right')) {
+    map.set('diag-up', { key: 'diag-up', url: '', position: 'center', repeat: 'no-repeat', size: '100% 100%' });
+  }
+  if (bgVal.includes('cell-edge-top')) {
+    map.set('edge-top', { key: 'edge-top', url: '', position: 'top left', repeat: 'repeat-x', size: '12px 6px' });
+  }
+  if (bgVal.includes('cell-edge-bottom')) {
+    map.set('edge-bottom', { key: 'edge-bottom', url: '', position: 'bottom left', repeat: 'repeat-x', size: '12px 6px' });
+  }
+  if (bgVal.includes('cell-edge-left')) {
+    map.set('edge-left', { key: 'edge-left', url: '', position: 'top left', repeat: 'repeat-y', size: '6px 12px' });
+  }
+  if (bgVal.includes('cell-edge-right')) {
+    map.set('edge-right', { key: 'edge-right', url: '', position: 'top right', repeat: 'repeat-y', size: '6px 12px' });
+  }
+
+  return map;
+}
+
+export function buildCellDecorationStyles(layers: Map<BgDecorationKey, BgDecorationLayer>, styleId: string, width: string, color: string): Record<string, string | null> {
+  if (layers.size === 0) {
+    return {
+      'background-image': null,
+      'background-position': null,
+      'background-repeat': null,
+      'background-size': null,
+      'background-origin': null,
+    };
+  }
+
+  const items: BgDecorationLayer[] = [];
+  layers.forEach((_, key) => {
+    if (key === 'diag-down' || key === 'diag-up') {
+      const dir = key === 'diag-down' ? 'down' : 'up';
+      items.push({
+        key,
+        url: getDiagonalSvgDataUri(dir, styleId, width, color),
+        position: 'center',
+        repeat: 'no-repeat',
+        size: '100% 100%',
+      });
+    } else {
+      const side = key.replace('edge-', '') as 'top' | 'bottom' | 'left' | 'right';
+      items.push(getEdgeDecorationLayer(side, styleId, width, color));
+    }
+  });
+
+  return {
+    'background-image': `${items.map(i => i.url).join(', ')} !important`,
+    'background-position': `${items.map(i => i.position).join(', ')} !important`,
+    'background-repeat': `${items.map(i => i.repeat).join(', ')} !important`,
+    'background-size': `${items.map(i => i.size).join(', ')} !important`,
+    'background-origin': 'border-box !important',
+  };
+}
+
+export function modifyCellBorderAndDecorations(
+  currentStyle: string | null | undefined,
+  options: {
+    sideActions?: Partial<Record<'top' | 'right' | 'bottom' | 'left', 'turn-on' | 'turn-off'>>;
+    toggleDiag?: 'down' | 'up';
+    clearDiag?: boolean;
+    styleId: string;
+    width: string;
+    color: string;
+    syncExisting?: boolean;
+  }
+): Record<string, string | null> {
+  const { sideActions, toggleDiag, clearDiag, styleId, width, color, syncExisting } = options;
+  const isCustom = isCustomBorderStyle(styleId);
+  const layers = extractBgLayers(currentStyle);
+  const result: Record<string, string | null> = {};
+
+  if (clearDiag) {
+    layers.delete('diag-down');
+    layers.delete('diag-up');
+  } else if (toggleDiag === 'down') {
+    if (layers.has('diag-down')) {
+      layers.delete('diag-down');
+    } else {
+      layers.set('diag-down', { key: 'diag-down', url: '', position: 'center', repeat: 'no-repeat', size: '100% 100%' });
+    }
+  } else if (toggleDiag === 'up') {
+    if (layers.has('diag-up')) {
+      layers.delete('diag-up');
+    } else {
+      layers.set('diag-up', { key: 'diag-up', url: '', position: 'center', repeat: 'no-repeat', size: '100% 100%' });
+    }
+  }
+
+  const sides: ('top' | 'right' | 'bottom' | 'left')[] = ['top', 'right', 'bottom', 'left'];
+  for (const side of sides) {
+    const action = sideActions?.[side];
+    const edgeKey = `edge-${side}` as BgDecorationKey;
+
+    if (action === 'turn-off') {
+      result[`border-${side}`] = '0 hidden transparent !important';
+      layers.delete(edgeKey);
+    } else if (action === 'turn-on') {
+      if (isCustom) {
+        result[`border-${side}`] = `${width} solid transparent !important`;
+        layers.set(edgeKey, { key: edgeKey, url: '', position: '', repeat: '', size: '' });
+      } else {
+        result[`border-${side}`] = getCssBorderValue(styleId, width, color);
+        layers.delete(edgeKey);
+      }
+    } else if (syncExisting) {
+      const isHidden = isCellBorderHidden(currentStyle, side);
+      if (!isHidden) {
+        if (isCustom) {
+          result[`border-${side}`] = `${width} solid transparent !important`;
+          layers.set(edgeKey, { key: edgeKey, url: '', position: '', repeat: '', size: '' });
+        } else {
+          result[`border-${side}`] = getCssBorderValue(styleId, width, color);
+          layers.delete(edgeKey);
+        }
+      }
+    }
+  }
+
+  const bgStyles = buildCellDecorationStyles(layers, styleId, width, color);
+  Object.assign(result, bgStyles);
+
+  return result;
+}
+
+function TableBorderDiagram({ type, className }: { type: TableBorder; className?: string }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className={cn('shrink-0', className)}>
+      <rect x="2" y="2" width="14" height="14" stroke="#a1a1aa" strokeWidth="1" strokeDasharray="1.5 1.5" />
+      <line x1="9" y1="2" x2="9" y2="16" stroke="#a1a1aa" strokeWidth="1" strokeDasharray="1.5 1.5" />
+      <line x1="2" y1="9" x2="16" y2="9" stroke="#a1a1aa" strokeWidth="1" strokeDasharray="1.5 1.5" />
+
+      {type === 'top' && <line x1="1" y1="2" x2="17" y2="2" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />}
+      {type === 'right' && <line x1="16" y1="1" x2="16" y2="17" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />}
+      {type === 'bottom' && <line x1="1" y1="16" x2="17" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />}
+      {type === 'left' && <line x1="2" y1="1" x2="2" y2="17" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />}
+      {type === 'outside' && <rect x="2" y="2" width="14" height="14" stroke="currentColor" strokeWidth="2" />}
+      {type === 'all' && (
+        <>
+          <rect x="2" y="2" width="14" height="14" stroke="currentColor" strokeWidth="2" />
+          <line x1="9" y1="2" x2="9" y2="16" stroke="currentColor" strokeWidth="1.5" />
+          <line x1="2" y1="9" x2="16" y2="9" stroke="currentColor" strokeWidth="1.5" />
+        </>
+      )}
+      {type === 'inside' && (
+        <>
+          <line x1="9" y1="2" x2="9" y2="16" stroke="currentColor" strokeWidth="2" />
+          <line x1="2" y1="9" x2="16" y2="9" stroke="currentColor" strokeWidth="2" />
+        </>
+      )}
+      {type === 'inside-horizontal' && (
+        <line x1="2" y1="9" x2="16" y2="9" stroke="currentColor" strokeWidth="2" />
+      )}
+      {type === 'inside-vertical' && (
+        <line x1="9" y1="2" x2="9" y2="16" stroke="currentColor" strokeWidth="2" />
+      )}
+      {type === 'diagonal-down' && (
+        <line x1="2" y1="2" x2="16" y2="16" stroke="currentColor" strokeWidth="1.8" />
+      )}
+      {type === 'diagonal-up' && (
+        <line x1="2" y1="16" x2="16" y2="2" stroke="currentColor" strokeWidth="1.8" />
+      )}
+    </svg>
+  );
+}
+
 // i18n — map the stable border / list-style VALUES above to dictionary
 // keys. The English `label` fields stay as data; render sites resolve
 // them through t() so every locale gets translated labels.
 const TABLE_BORDER_I18N_KEYS: Record<TableBorder, string> = {
+  none: 'editor.borderNone',
   all: 'editor.borderAll',
   outside: 'editor.borderOutside',
-  none: 'editor.borderNone',
+  inside: 'editor.borderInside',
+  'inside-horizontal': 'editor.borderInsideHorizontal',
+  'inside-vertical': 'editor.borderInsideVertical',
+  'diagonal-down': 'editor.borderDiagonalDown',
+  'diagonal-up': 'editor.borderDiagonalUp',
   top: 'editor.borderTop',
   bottom: 'editor.borderBottom',
   left: 'editor.borderLeft',
@@ -198,21 +748,234 @@ const BULLET_LIST_STYLE_I18N_KEYS: Record<BulletListStyle, string> = {
   square: 'editor.listStyleSquare',
 };
 
+export function parseActiveBorders(bordersStr: string | null | undefined): Set<'top' | 'right' | 'bottom' | 'left'> {
+  if (!bordersStr || bordersStr === 'all' || bordersStr === 'outside') {
+    return new Set(['top', 'right', 'bottom', 'left']);
+  }
+  if (bordersStr === 'none') {
+    return new Set();
+  }
+  const parts = bordersStr.split(',').map((s) => s.trim().toLowerCase()) as ('top' | 'right' | 'bottom' | 'left')[];
+  return new Set(parts.filter((p) => p === 'top' || p === 'right' || p === 'bottom' || p === 'left'));
+}
+
+export function mergeStyles(
+  existingStyle: string | null | undefined,
+  newStyles: Record<string, string | null | undefined>
+): string {
+  const styleMap = parseStyleString(existingStyle);
+
+  for (const [key, val] of Object.entries(newStyles)) {
+    const k = key.toLowerCase();
+    if (val === null || val === undefined) {
+      styleMap.delete(k);
+    } else {
+      styleMap.set(k, val);
+    }
+  }
+
+  return Array.from(styleMap.entries())
+    .map(([k, v]) => `${k}: ${v}`)
+    .join('; ');
+}
+
+export interface SelectedTableCellsInfo {
+  tablePos: number;
+  tableStart: number;
+  tableNode: any;
+  map: any;
+  rect: { left: number; right: number; top: number; bottom: number };
+  cells: Array<{
+    pos: number;
+    node: any;
+    col: number;
+    row: number;
+    colspan: number;
+    rowspan: number;
+  }>;
+  isEntireTable: boolean;
+}
+
+export function isCellBorderHidden(style: string | null | undefined, side: 'top' | 'right' | 'bottom' | 'left'): boolean {
+  if (!style) return false;
+  if (style.includes(`cell-edge-${side}`)) return false;
+  const styleMap = parseStyleString(style);
+  const val = (styleMap.get(`border-${side}`) || '').toLowerCase();
+  if (!val) return false;
+  return val.includes('hidden') || val.includes('none') || val.trim().startsWith('0');
+}
+
+export function getSelectedTableCells(state: any, fallbackTablePos?: number): SelectedTableCellsInfo | null {
+  if (!state) return null;
+
+  let rect: any = null;
+  try {
+    rect = selectedRect(state);
+  } catch {}
+
+  if (!rect || !rect.map || !rect.table) {
+    try {
+      const { selection } = state;
+      const $pos = selection.$from;
+      let tablePos = -1;
+      let cellPos = -1;
+      for (let d = $pos.depth; d > 0; d--) {
+        const n = $pos.node(d);
+        if (n.type.name === 'tableCell' || n.type.name === 'tableHeader') {
+          cellPos = $pos.before(d);
+        }
+        if (n.type.name === 'table') {
+          tablePos = $pos.before(d);
+          break;
+        }
+      }
+      if (tablePos < 0 && fallbackTablePos != null && fallbackTablePos >= 0) {
+        tablePos = fallbackTablePos;
+      }
+      if (tablePos >= 0) {
+        const table = state.doc.nodeAt(tablePos);
+        if (table && table.type.name === 'table') {
+          const map = TableMap.get(table);
+          const tableStart = tablePos + 1;
+          if (cellPos >= 0) {
+            const cellOffset = cellPos - tableStart;
+            const cellBox = map.findCell(cellOffset);
+            rect = {
+              ...cellBox,
+              tableStart,
+              map,
+              table,
+            };
+          } else {
+            rect = {
+              left: 0,
+              top: 0,
+              right: map.width,
+              bottom: map.height,
+              tableStart,
+              map,
+              table,
+            };
+          }
+        }
+      }
+    } catch {}
+  }
+
+  if (!rect || !rect.map || !rect.table) return null;
+
+  const { map, table, tableStart } = rect;
+  const tablePos = tableStart - 1;
+  const cellOffsets: number[] = map.cellsInRect(rect);
+  const cells: Array<{
+    pos: number;
+    node: any;
+    col: number;
+    row: number;
+    colspan: number;
+    rowspan: number;
+  }> = [];
+
+  for (const offset of cellOffsets) {
+    const pos = tableStart + offset;
+    const node = state.doc.nodeAt(pos);
+    if (node && (node.type.name === 'tableCell' || node.type.name === 'tableHeader')) {
+      const cellBox = map.findCell(offset);
+      cells.push({
+        pos,
+        node,
+        col: cellBox.left,
+        row: cellBox.top,
+        colspan: cellBox.right - cellBox.left,
+        rowspan: cellBox.bottom - cellBox.top,
+      });
+    }
+  }
+
+  if (cells.length === 0) return null;
+
+  const isEntireTable =
+    rect.left === 0 &&
+    rect.right === map.width &&
+    rect.top === 0 &&
+    rect.bottom === map.height;
+
+  return {
+    tablePos,
+    tableStart,
+    tableNode: table,
+    map,
+    rect: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom },
+    cells,
+    isEntireTable,
+  };
+}
+
+class CustomTableView extends TableView {
+  declare table: HTMLTableElement;
+
+  constructor(node: any, cellMinWidth: any, view: any, HTMLAttributes: any = {}) {
+    super(node, cellMinWidth, view, HTMLAttributes);
+    this.syncBorderAttributes(node);
+  }
+
+  update(node: any) {
+    let res = false;
+    try {
+      res = super.update(node);
+    } catch {
+      res = true;
+    }
+    if (res) {
+      this.syncBorderAttributes(node);
+    }
+    return res;
+  }
+
+  syncBorderAttributes(node: any) {
+    const tableEl = this.table || (this.dom ? (this.dom.querySelector('table') as HTMLTableElement | null) : null);
+    if (!tableEl) return;
+    const borders = node?.attrs?.borders || 'all';
+    const active = parseActiveBorders(borders);
+    tableEl.setAttribute('data-borders', borders);
+    tableEl.setAttribute('data-border-top', active.has('top') ? 'true' : 'false');
+    tableEl.setAttribute('data-border-right', active.has('right') ? 'true' : 'false');
+    tableEl.setAttribute('data-border-bottom', active.has('bottom') ? 'true' : 'false');
+    tableEl.setAttribute('data-border-left', active.has('left') ? 'true' : 'false');
+  }
+}
+
 const StyledTable = Table.extend({
+  addNodeView() {
+    return ({ node, view, HTMLAttributes }) => {
+      const mergedAttributes = mergeAttributes(this.options.HTMLAttributes, HTMLAttributes);
+      return new CustomTableView(node, this.options.cellMinWidth, view, mergedAttributes);
+    };
+  },
   addAttributes() {
     return {
       ...this.parent?.(),
       borders: {
         default: 'all',
-        parseHTML: (element) => (element.getAttribute('data-borders') as TableBorder) || 'all',
-        renderHTML: (attributes) => ({ 'data-borders': attributes.borders || 'all' }),
+        parseHTML: (element) => (element.getAttribute('data-borders') as string) || 'all',
+        renderHTML: (attributes) => {
+          const borders = attributes.borders || 'all';
+          const activeSet = parseActiveBorders(borders);
+          return {
+            'data-borders': borders,
+            'data-border-top': activeSet.has('top') ? 'true' : 'false',
+            'data-border-right': activeSet.has('right') ? 'true' : 'false',
+            'data-border-bottom': activeSet.has('bottom') ? 'true' : 'false',
+            'data-border-left': activeSet.has('left') ? 'true' : 'false',
+          };
+        },
       },
     };
   },
   addCommands() {
     return {
       ...this.parent?.(),
-      setTableBorders: (value: TableBorder) => ({ tr, state, dispatch }) => {
+      setTableBorders: (value: string) => ({ tr, state, dispatch }) => {
         const { selection } = state;
         let pos = -1;
         state.doc.nodesBetween(selection.from, selection.to, (node, p) => {
@@ -223,6 +986,13 @@ const StyledTable = Table.extend({
           const $from = state.doc.resolve(selection.from);
           for (let d = $from.depth; d > 0; d--) {
             if ($from.node(d).type.name === 'table') { pos = $from.before(d); break; }
+          }
+        }
+        if (pos < 0 && typeof window !== 'undefined' && (window as any).__lastActiveTablePos >= 0) {
+          const fallbackPos = (window as any).__lastActiveTablePos;
+          const node = state.doc.nodeAt(fallbackPos);
+          if (node && node.type.name === 'table') {
+            pos = fallbackPos;
           }
         }
         if (pos >= 0) {
@@ -242,6 +1012,45 @@ const StyledTable = Table.extend({
         return moveTableImpl(state, tr, dispatch, 'down');
       },
     } as any;
+  },
+});
+
+const CustomTableRow = TableRow.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      style: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('style'),
+        renderHTML: (attributes) => (attributes.style ? { style: attributes.style } : {}),
+      },
+    };
+  },
+});
+
+const CustomTableCell = TableCell.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      style: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('style'),
+        renderHTML: (attributes) => (attributes.style ? { style: attributes.style } : {}),
+      },
+    };
+  },
+});
+
+const CustomTableHeader = TableHeader.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      style: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('style'),
+        renderHTML: (attributes) => (attributes.style ? { style: attributes.style } : {}),
+      },
+    };
   },
 });
 
@@ -352,7 +1161,7 @@ const DraggableBlocks = Extension.create({
           draggable: {
             default: null,
             parseHTML: () => null,
-            renderHTML: () => ({ draggable: 'true' }),
+            renderHTML: () => ({}),
           },
         },
       },
@@ -377,7 +1186,11 @@ import {
   Video, MessageSquare, MoreHorizontal, ImagePlus,
   Pencil, Lightbulb, Ruler, Keyboard,
   Paintbrush, GripVertical, ArrowUp, ArrowDown, Check,
+  Sparkles, Trash2, Loader2,
+  PaintBucket, Grid2X2, Eraser, ArrowLeft, ArrowRight, X,
 } from 'lucide-react';
+import { postApi } from '@/lib/api-client';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -396,6 +1209,227 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import './editor-styles.css';
+
+// -------------------- Custom Image NodeView --------------------
+
+function ImageNodeView({ node, updateAttributes, deleteNode, selected, editor, getPos }: NodeViewProps) {
+  const [isHovered, setIsHovered] = useState(false);
+  const [isLocalSelected, setIsLocalSelected] = useState(false);
+  const [isRegenerateOpen, setIsRegenerateOpen] = useState(false);
+  const [prompt, setPrompt] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const isEditable = editor?.isEditable;
+
+  const src = node.attrs.src;
+  const alt = node.attrs.alt || '';
+
+  // Synchronize selection state
+  const isCurrentlySelected = (selected || isLocalSelected) && Boolean(isEditable);
+
+  useEffect(() => {
+    if (!selected) {
+      setIsLocalSelected(false);
+      setIsRegenerateOpen(false);
+    }
+  }, [selected]);
+
+  // Close popup on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsRegenerateOpen(false);
+        setIsLocalSelected(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleImageClick = (e: React.MouseEvent) => {
+    if (!isEditable) return;
+    e.stopPropagation();
+    if (typeof getPos === 'function' && editor) {
+      const pos = getPos();
+      if (typeof pos === 'number') {
+        editor.commands.setNodeSelection(pos);
+      }
+    }
+    setIsLocalSelected(true);
+  };
+
+  const handleOpenRegenerate = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsRegenerateOpen(true);
+    if (!prompt && alt) {
+      setPrompt(alt);
+    }
+  };
+
+  const handleGenerate = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    e?.preventDefault();
+    if (!prompt.trim() || isGenerating) return;
+
+    setIsGenerating(true);
+    try {
+      const res = await postApi<any>('/api/media/generate', {
+        prompt: prompt.trim(),
+        aspectRatio: '16:9',
+        count: 1,
+      });
+      const items = Array.isArray(res) ? res : res?.data;
+      const item = items?.[0];
+      if (item && item.url) {
+        updateAttributes({ src: item.url, alt: prompt.trim() });
+        setIsRegenerateOpen(false);
+        toast.success('Image regenerated successfully');
+      } else {
+        toast.error('Failed to regenerate image: No image returned');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to regenerate image');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (typeof deleteNode === 'function') {
+      deleteNode();
+    }
+    toast.success('Image deleted');
+  };
+
+  return (
+    <NodeViewWrapper
+      as="div"
+      data-image-wrapper=""
+      className="relative my-4 block w-full max-w-full select-none"
+      onMouseEnter={() => isEditable && setIsHovered(true)}
+      onMouseLeave={() => isEditable && setIsHovered(false)}
+    >
+      <div className="relative inline-block w-full text-center">
+        {/* Hover bar handles beside the image (Left & Right) - matches Screenshot 4 */}
+        {isEditable && isHovered && !isRegenerateOpen && (
+          <>
+            <div
+              className="absolute -left-3.5 top-1/2 -translate-y-1/2 w-1.5 h-16 bg-zinc-600 dark:bg-zinc-300 rounded-full opacity-90 shadow-sm pointer-events-none z-20 transition-all duration-200"
+              aria-hidden="true"
+            />
+            <div
+              className="absolute -right-3.5 top-1/2 -translate-y-1/2 w-1.5 h-16 bg-zinc-600 dark:bg-zinc-300 rounded-full opacity-90 shadow-sm pointer-events-none z-20 transition-all duration-200"
+              aria-hidden="true"
+            />
+          </>
+        )}
+
+        {/* The Image itself */}
+        <img
+          src={src}
+          alt={alt}
+          onClick={handleImageClick}
+          className={cn(
+            'inline-block max-w-full h-auto rounded-lg transition-all duration-200 cursor-pointer',
+            isCurrentlySelected
+              ? 'ring-2 ring-yellow-400 dark:ring-yellow-400 shadow-xs'
+              : isHovered
+              ? 'ring-1 ring-yellow-300/60 dark:ring-yellow-400/40'
+              : 'border border-border/40'
+          )}
+        />
+
+        {/* Floating action pill on click/selected (Regenerate & Delete) - matches Screenshot 2 */}
+        {isCurrentlySelected && (
+          <div
+            className="absolute top-3 left-3 z-30 flex items-center gap-3 rounded-full bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 shadow-lg px-3.5 py-1.5 text-xs select-none"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={handleOpenRegenerate}
+              className="flex items-center gap-1.5 font-medium text-zinc-900 dark:text-zinc-100 hover:text-amber-500 dark:hover:text-amber-400 transition-colors cursor-pointer"
+              title="Regenerate image"
+            >
+              <Sparkles className="h-4 w-4" />
+              <span>Regenerate</span>
+            </button>
+
+            <div className="h-3.5 w-px bg-zinc-200 dark:bg-zinc-700" />
+
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="text-zinc-600 dark:text-zinc-400 hover:text-destructive transition-colors p-0.5 cursor-pointer"
+              title="Delete image"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Regenerate Prompt Dialog Card - matches Screenshot 3 */}
+        {isCurrentlySelected && isRegenerateOpen && (
+          <div
+            className="absolute top-14 left-3 z-40 w-[350px] sm:w-[380px] p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl space-y-3 text-left"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Describe the image you want (e.g. minimalist isometric illustration of a server rack, blue palette)"
+              rows={3}
+              className="w-full text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-background text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/50 leading-relaxed"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  handleGenerate();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setIsRegenerateOpen(false);
+                }
+              }}
+            />
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsRegenerateOpen(false)}
+                className="text-xs font-medium px-3 py-1.5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                disabled={isGenerating}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={isGenerating || !prompt.trim()}
+                className="flex items-center gap-1.5 text-xs font-semibold px-4 py-1.5 rounded-full bg-zinc-600 hover:bg-zinc-700 text-white dark:bg-zinc-500 dark:hover:bg-zinc-400 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                <span>Generate</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </NodeViewWrapper>
+  );
+}
+
+const CustomImage = Image.extend({
+  addNodeView() {
+    return ReactNodeViewRenderer(ImageNodeView);
+  },
+});
 
 // -------------------- Types --------------------
 
@@ -417,10 +1451,15 @@ export interface TiptapEditorRef {
   editor: Editor | null;
   getSelectedText: () => string;
   getSelectedHtml: () => string;
+  getMarkdown: () => string;
+  getHTML: () => string;
+  getText: () => string;
   /** Replace the current selection with HTML. If a saved range exists (from saveSelectionForReplace), uses that instead. */
   replaceSelection: (html: string) => void;
   /** Insert HTML right after the current (or saved) selection. */
   insertAfterSelection: (html: string) => void;
+  /** Insert an image at current position or after the saved selection. */
+  insertImage: (url: string, alt?: string, afterSelection?: boolean) => void;
   hasSelection: () => boolean;
   /** Save the current selection range so it can be used after focus is lost (e.g., clicking an external button). Returns the saved text. */
   saveSelectionForReplace: () => string;
@@ -951,8 +1990,32 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
   const [dragHandle, setDragHandle] = useState<{ show: boolean; top: number; left: number; pos: number }>({
     show: false, top: 0, left: 0, pos: 0,
   });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragState, setDragState] = useState<{
+    isDragging: boolean;
+    cursorX: number;
+    cursorY: number;
+    ghostHtml: string;
+    ghostWidth: number;
+  } | null>(null);
+  const dragSessionRef = useRef<{
+    active: boolean;
+    hasStarted: boolean;
+    srcPos: number;
+    startX: number;
+    startY: number;
+    ghostHtml: string;
+    ghostWidth: number;
+    targetInsertPos: number | null;
+  } | null>(null);
   const dragSourcePosRef = useRef<number | null>(null);
-  const [dropIndicator, setDropIndicator] = useState<{ show: boolean; top: number }>({ show: false, top: 0 });
+  const dragSelectionRef = useRef<{ from: number; to: number; pos: number } | null>(null);
+  const dragHandleRef = useRef<HTMLDivElement>(null);
+  const editorScrollContainerRef = useRef<HTMLDivElement>(null);
+  const draggedDomElRef = useRef<HTMLElement | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<{ show: boolean; top: number; left: number; width: number }>({
+    show: false, top: 0, left: 0, width: 0,
+  });
 
   // Table context menu state (right-click on table)
   const [tableCtxMenu, setTableCtxMenu] = useState<{
@@ -962,6 +2025,75 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
     activeSubmenu: string | null;
   }>({ show: false, x: 0, y: 0, activeSubmenu: null });
   const tableCtxMenuRef = useRef<HTMLDivElement>(null);
+
+  // Table border resize hover and drag tracking
+  const tableHoverBorderRef = useRef<{
+    active: boolean;
+    type: 'col' | 'row';
+    table: HTMLTableElement;
+    cell: HTMLTableCellElement;
+    targetColIndex?: number;
+    targetRowIndex?: number;
+  } | null>(null);
+  const tableHoveredCellRef = useRef<HTMLTableCellElement | null>(null);
+  const isResizingTableRef = useRef(false);
+
+  // Column resize indicator state
+  const [colResizeIndicator, setColResizeIndicator] = useState<{
+    show: boolean;
+    left: number;
+    top: number;
+    height: number;
+    isDragging: boolean;
+  }>({
+    show: false,
+    left: 0,
+    top: 0,
+    height: 0,
+    isDragging: false,
+  });
+  const colResizeIndicatorRef = useRef<HTMLDivElement>(null);
+
+  // Row resize indicator state
+  const [rowResizeIndicator, setRowResizeIndicator] = useState<{
+    show: boolean;
+    top: number;
+    left: number;
+    width: number;
+    isDragging: boolean;
+  }>({
+    show: false,
+    top: 0,
+    left: 0,
+    width: 0,
+    isDragging: false,
+  });
+  const rowResizeIndicatorRef = useRef<HTMLDivElement>(null);
+
+  // Floating Table Action Toolbar (matches user screenshots)
+  const [tableFloatingToolbar, setTableFloatingToolbar] = useState<{
+    show: boolean;
+    top: number;
+    left: number;
+  }>({ show: false, top: 0, left: 0 });
+  const [showTableColorPopover, setShowTableColorPopover] = useState(false);
+  const [showTableBordersPopover, setShowTableBordersPopover] = useState(false);
+  const [showTableBorderColorPopover, setShowTableBorderColorPopover] = useState(false);
+  const [showTableBorderWidthPopover, setShowTableBorderWidthPopover] = useState(false);
+  const [showTableBorderStylePopover, setShowTableBorderStylePopover] = useState(false);
+  const [tableBorderColor, setTableBorderColor] = useState<string>('#000000');
+  const [tableBorderWidth, setTableBorderWidth] = useState<string>('1pt');
+  const [tableBorderStyle, setTableBorderStyle] = useState<string>('solid');
+  const tableColorContainerRef = useRef<HTMLDivElement>(null);
+  const tableBordersContainerRef = useRef<HTMLDivElement>(null);
+  const tableBorderColorContainerRef = useRef<HTMLDivElement>(null);
+  const tableBorderWidthContainerRef = useRef<HTMLDivElement>(null);
+  const tableBorderStyleContainerRef = useRef<HTMLDivElement>(null);
+  const [tableToolbarTooltip, setTableToolbarTooltip] = useState<string | null>(null);
+  const tableFloatingToolbarRef = useRef<HTMLDivElement>(null);
+  const lastActiveTableDomRef = useRef<HTMLTableElement | null>(null);
+  const lastActiveTablePosRef = useRef<number>(-1);
+  const [tableBordersVersion, setTableBordersVersion] = useState(0);
 
   const closeTableCtxMenu = useCallback(() => {
     setTableCtxMenu((prev) => ({ ...prev, show: false, activeSubmenu: null }));
@@ -1056,28 +2188,73 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
     },
   }), []);
 
+  // Granular undo: separates typing into word-by-word, punctuation, and clause undo steps
+  // so pressing Ctrl+Z never deletes an entire sentence or paragraph at once
+  const GranularUndo = useMemo(() => Extension.create({
+    name: 'granularUndo',
+    addProseMirrorPlugins() {
+      let charCount = 0;
+      return [
+        new Plugin({
+          key: new PluginKey('granularUndoPlugin'),
+          props: {
+            handleTextInput(view, from, to, text) {
+              charCount += text.length;
+              // Close history on space, punctuation, or every ~8 characters
+              const isBoundary = /[\s.,!?;:()\[\]{}"'—–\/\\]/.test(text);
+              if (isBoundary || charCount >= 8) {
+                charCount = 0;
+                try {
+                  view.dispatch(closeHistory(view.state.tr));
+                } catch {}
+              }
+              return false;
+            },
+            handleKeyDown(view, event) {
+              if (event.key === 'Enter') {
+                charCount = 0;
+                try {
+                  view.dispatch(closeHistory(view.state.tr));
+                } catch {}
+              } else if (event.key === 'Backspace' || event.key === 'Delete') {
+                if (charCount > 0) {
+                  charCount = 0;
+                  try {
+                    view.dispatch(closeHistory(view.state.tr));
+                  } catch {}
+                }
+              }
+              return false;
+            },
+          },
+        }),
+      ];
+    },
+  }), []);
+
   const editor = useEditor({
     extensions: [
-      // Fix #10: Configure History with depth + newGroupDelay for per-action undo
+      // Configure History with depth + granular grouping delay for word-by-word undo
       StarterKit.configure({
         codeBlock: false,
         orderedList: false,
         bulletList: false,
         heading: { levels: [1, 2, 3, 4, 5, 6] },
-        history: { depth: 200, newGroupDelay: 400 },
+        history: { depth: 300, newGroupDelay: 250 },
       }),
+      GranularUndo,
       StyledOrderedList,
       StyledBulletList,
       Underline,
       TextStyleKit,
       Highlight.configure({ multicolor: true }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      Image.configure({ inline: false, allowBase64: true }),
+      CustomImage.configure({ inline: false, allowBase64: true }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'editor-link' } }),
-      StyledTable.configure({ resizable: true, HTMLAttributes: { class: 'editor-table' } }),
-      TableRow,
-      TableCell,
-      TableHeader,
+      StyledTable.configure({ resizable: false, HTMLAttributes: { class: 'editor-table' } }),
+      CustomTableRow,
+      CustomTableCell,
+      CustomTableHeader,
       Placeholder.configure({ placeholder }),
       CharacterCount,
       Typography,
@@ -1137,6 +2314,42 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
         }
         return false;
       },
+      handleKeyDown: (view, event) => {
+        // When Space or Escape is pressed, dismiss table popovers
+        if (event.key === ' ' || event.code === 'Space' || event.key === 'Escape') {
+          setShowTableColorPopover(false);
+          setShowTableBordersPopover(false);
+          setShowTableBorderColorPopover(false);
+          setShowTableBorderWidthPopover(false);
+          setShowTableBorderStylePopover(false);
+        }
+
+        // When table cells are selected, pressing Space dismisses the cell selection
+        if (event.key === ' ' || event.code === 'Space') {
+          const { selection } = view.state;
+          const isCellSelection =
+            selection instanceof CellSelection ||
+            '$anchorCell' in selection ||
+            selection.constructor.name === 'CellSelection';
+
+          if (isCellSelection) {
+            event.preventDefault();
+            const head = (selection as any).$headCell
+              ? (selection as any).$headCell.pos + 1
+              : selection.from + 1;
+            try {
+              const tr = view.state.tr.setSelection(
+                TextSelection.near(view.state.doc.resolve(head))
+              );
+              view.dispatch(tr);
+              return true;
+            } catch {
+              return false;
+            }
+          }
+        }
+        return false;
+      },
     },
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
@@ -1144,10 +2357,368 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
       onChange(html);
     },
     onSelectionUpdate: () => {
-      // handled via dedicated effect below
+      setTableBordersVersion((v) => v + 1);
     },
     immediatelyRender: false,
   });
+
+  // Query current table border mode
+  const getTableBorders = useCallback((): TableBorder => {
+    if (!editor) return 'all';
+    const { state } = editor;
+    const { selection } = state;
+    let borders: TableBorder | null = null;
+    const $from = state.doc.resolve(selection.from);
+    for (let d = $from.depth; d > 0; d--) {
+      const node = $from.node(d);
+      if (node.type.name === 'table') {
+        borders = (node.attrs.borders as TableBorder) || 'all';
+        break;
+      }
+    }
+    if (borders) return borders;
+
+    if (lastActiveTablePosRef.current >= 0) {
+      try {
+        const node = state.doc.nodeAt(lastActiveTablePosRef.current);
+        if (node && node.type.name === 'table') {
+          return (node.attrs.borders as TableBorder) || 'all';
+        }
+      } catch {}
+    }
+
+    if (lastActiveTableDomRef.current) {
+      const attr = lastActiveTableDomRef.current.getAttribute('data-borders');
+      if (attr) return attr as TableBorder;
+    }
+
+    return 'all';
+  }, [editor]);
+
+  // Selection-aware border check evaluation
+  const isBorderChecked = useCallback((borderType: TableBorder): boolean => {
+    if (!editor) return false;
+    const info = getSelectedTableCells(editor.state, lastActiveTablePosRef.current);
+    if (!info || info.cells.length === 0) {
+      const current = getTableBorders();
+      const active = parseActiveBorders(current);
+      if (borderType === 'none') return active.size === 0;
+      if (borderType === 'all') return active.size === 4;
+      if (borderType === 'outside') return active.size === 4;
+      if (borderType === 'top' || borderType === 'right' || borderType === 'bottom' || borderType === 'left') {
+        return active.has(borderType);
+      }
+      return false;
+    }
+
+    const { cells, rect } = info;
+
+    if (borderType === 'none') {
+      return cells.every(c =>
+        isCellBorderHidden(c.node.attrs.style, 'top') &&
+        isCellBorderHidden(c.node.attrs.style, 'bottom') &&
+        isCellBorderHidden(c.node.attrs.style, 'left') &&
+        isCellBorderHidden(c.node.attrs.style, 'right')
+      );
+    }
+
+    if (borderType === 'all') {
+      return cells.every(c =>
+        !isCellBorderHidden(c.node.attrs.style, 'top') &&
+        !isCellBorderHidden(c.node.attrs.style, 'bottom') &&
+        !isCellBorderHidden(c.node.attrs.style, 'left') &&
+        !isCellBorderHidden(c.node.attrs.style, 'right')
+      );
+    }
+
+    if (borderType === 'outside') {
+      return cells.every(c => {
+        if (c.row === rect.top && isCellBorderHidden(c.node.attrs.style, 'top')) return false;
+        if (c.row + c.rowspan === rect.bottom && isCellBorderHidden(c.node.attrs.style, 'bottom')) return false;
+        if (c.col === rect.left && isCellBorderHidden(c.node.attrs.style, 'left')) return false;
+        if (c.col + c.colspan === rect.right && isCellBorderHidden(c.node.attrs.style, 'right')) return false;
+        return true;
+      });
+    }
+
+    if (borderType === 'inside') {
+      if (rect.bottom - rect.top <= 1 && rect.right - rect.left <= 1) return false;
+      return cells.every(c => {
+        if (c.row + c.rowspan < rect.bottom && isCellBorderHidden(c.node.attrs.style, 'bottom')) return false;
+        if (c.col + c.colspan < rect.right && isCellBorderHidden(c.node.attrs.style, 'right')) return false;
+        return true;
+      });
+    }
+
+    if (borderType === 'inside-horizontal') {
+      if (rect.bottom - rect.top <= 1) return false;
+      return cells.every(c => {
+        if (c.row + c.rowspan < rect.bottom && isCellBorderHidden(c.node.attrs.style, 'bottom')) return false;
+        return true;
+      });
+    }
+
+    if (borderType === 'inside-vertical') {
+      if (rect.right - rect.left <= 1) return false;
+      return cells.every(c => {
+        if (c.col + c.colspan < rect.right && isCellBorderHidden(c.node.attrs.style, 'right')) return false;
+        return true;
+      });
+    }
+
+    if (borderType === 'diagonal-down') {
+      if (cells.length === 0) return false;
+      return cells.every(c => {
+        const s = c.node.attrs.style || '';
+        return s.includes('cell-diag-down') || s.includes('to bottom right');
+      });
+    }
+
+    if (borderType === 'diagonal-up') {
+      if (cells.length === 0) return false;
+      return cells.every(c => {
+        const s = c.node.attrs.style || '';
+        return s.includes('cell-diag-up') || s.includes('to top right');
+      });
+    }
+
+    const side = borderType as 'top' | 'right' | 'bottom' | 'left';
+    const targetCells = cells.filter(c => {
+      if (side === 'top') return c.row === rect.top;
+      if (side === 'bottom') return c.row + c.rowspan === rect.bottom;
+      if (side === 'left') return c.col === rect.left;
+      if (side === 'right') return c.col + c.colspan === rect.right;
+      return true;
+    });
+    if (targetCells.length === 0) return false;
+    return targetCells.every(c => !isCellBorderHidden(c.node.attrs.style, side));
+  }, [editor, getTableBorders, tableBordersVersion]);
+
+  // Set cell background color (Image 2) preserving other styles
+  const handleSetCellBackgroundColor = useCallback((color: string | null) => {
+    if (!editor) return;
+    const { state, dispatch } = editor.view;
+    const { selection } = state;
+    let tr = state.tr;
+    let modified = false;
+
+    state.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
+        const newStyle = mergeStyles(node.attrs.style, {
+          'background-color': color ? `${color} !important` : null,
+        });
+
+        tr = tr.setNodeMarkup(pos, undefined, {
+          ...node.attrs,
+          style: newStyle || null,
+        });
+        modified = true;
+      }
+    });
+
+    if (!modified) {
+      const $from = state.doc.resolve(selection.from);
+      for (let d = $from.depth; d > 0; d--) {
+        const node = $from.node(d);
+        if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
+          const pos = $from.before(d);
+          const newStyle = mergeStyles(node.attrs.style, {
+            'background-color': color ? `${color} !important` : null,
+          });
+
+          tr = tr.setNodeMarkup(pos, undefined, {
+            ...node.attrs,
+            style: newStyle || null,
+          });
+          modified = true;
+          break;
+        }
+      }
+    }
+
+    if (modified && dispatch) {
+      if (selection) {
+        try {
+          tr = tr.setSelection(selection);
+        } catch {}
+      }
+      dispatch(tr);
+      editor.view.focus();
+    }
+
+    // Direct DOM sync for instant visual confirmation
+    const sel = window.getSelection();
+    if (sel && sel.anchorNode) {
+      const target = sel.anchorNode instanceof HTMLElement ? sel.anchorNode : sel.anchorNode.parentElement;
+      const cellEl = target?.closest('td, th') as HTMLElement | null;
+      if (cellEl) {
+        if (color) {
+          cellEl.style.setProperty('background-color', color, 'important');
+        } else {
+          cellEl.style.removeProperty('background-color');
+        }
+      }
+    }
+  }, [editor]);
+
+  // Floating Table Toolbar position updater (matches user screenshots)
+  const updateTableFloatingToolbar = useCallback(() => {
+    if (!editor || editor.isDestroyed || !isEditable) {
+      setTableFloatingToolbar((prev) => (prev.show ? { ...prev, show: false } : prev));
+      setShowTableColorPopover(false);
+      setShowTableBordersPopover(false);
+      setShowTableBorderColorPopover(false);
+      setShowTableBorderWidthPopover(false);
+      setShowTableBorderStylePopover(false);
+      return;
+    }
+
+    if (!editor.isActive('table')) {
+      setTableFloatingToolbar((prev) => (prev.show ? { ...prev, show: false } : prev));
+      setShowTableColorPopover(false);
+      setShowTableBordersPopover(false);
+      setShowTableBorderColorPopover(false);
+      setShowTableBorderWidthPopover(false);
+      setShowTableBorderStylePopover(false);
+      return;
+    }
+
+    let tableDom: HTMLTableElement | null = null;
+    const { selection } = editor.state;
+    const $from = editor.state.doc.resolve(selection.from);
+    let tablePos = -1;
+    for (let d = $from.depth; d > 0; d--) {
+      if ($from.node(d).type.name === 'table') {
+        tablePos = $from.before(d);
+        break;
+      }
+    }
+
+    if (tablePos >= 0) {
+      try {
+        const dom = editor.view.nodeDOM(tablePos);
+        if (dom instanceof HTMLTableElement) {
+          tableDom = dom;
+        } else if (dom instanceof HTMLElement) {
+          tableDom = dom.querySelector('table') || (dom.closest('table') as HTMLTableElement | null);
+        }
+      } catch {
+        tableDom = null;
+      }
+    }
+
+    if (!tableDom) {
+      const sel = window.getSelection();
+      if (sel && sel.anchorNode) {
+        const el = sel.anchorNode instanceof HTMLElement ? sel.anchorNode : sel.anchorNode.parentElement;
+        tableDom = el?.closest('table') || null;
+      }
+    }
+
+    if (!tableDom && editorScrollContainerRef.current) {
+      tableDom = editorScrollContainerRef.current.querySelector('table');
+    }
+
+    if (!tableDom) {
+      setTableFloatingToolbar((prev) => (prev.show ? { ...prev, show: false } : prev));
+      return;
+    }
+
+    lastActiveTableDomRef.current = tableDom;
+    if (tablePos >= 0) {
+      lastActiveTablePosRef.current = tablePos;
+      if (typeof window !== 'undefined') {
+        (window as any).__lastActiveTablePos = tablePos;
+      }
+    }
+
+    const tableRect = tableDom.getBoundingClientRect();
+    const containerRect = editorScrollContainerRef.current?.getBoundingClientRect();
+
+    if (containerRect) {
+      if (tableRect.bottom < containerRect.top + 10 || tableRect.top > containerRect.bottom - 10) {
+        setTableFloatingToolbar((prev) => (prev.show ? { ...prev, show: false } : prev));
+        return;
+      }
+    }
+
+    const left = tableRect.left + tableRect.width / 2;
+    let top = tableRect.bottom + 12;
+    if (containerRect && top > containerRect.bottom - 48) {
+      top = containerRect.bottom - 48;
+    }
+
+    setTableFloatingToolbar({
+      show: true,
+      top,
+      left,
+    });
+  }, [editor, isEditable]);
+
+  // Click outside to dismiss floating table popovers/toolbar
+  useEffect(() => {
+    if (
+      !tableFloatingToolbar.show &&
+      !showTableColorPopover &&
+      !showTableBordersPopover &&
+      !showTableBorderColorPopover &&
+      !showTableBorderWidthPopover &&
+      !showTableBorderStylePopover
+    ) return;
+
+    const handlePointerDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+
+      // Close individual popovers if click is outside their trigger/container
+      if (showTableColorPopover && tableColorContainerRef.current && !tableColorContainerRef.current.contains(target)) {
+        setShowTableColorPopover(false);
+      }
+      if (showTableBordersPopover && tableBordersContainerRef.current && !tableBordersContainerRef.current.contains(target)) {
+        setShowTableBordersPopover(false);
+      }
+      if (showTableBorderColorPopover && tableBorderColorContainerRef.current && !tableBorderColorContainerRef.current.contains(target)) {
+        setShowTableBorderColorPopover(false);
+      }
+      if (showTableBorderWidthPopover && tableBorderWidthContainerRef.current && !tableBorderWidthContainerRef.current.contains(target)) {
+        setShowTableBorderWidthPopover(false);
+      }
+      if (showTableBorderStylePopover && tableBorderStyleContainerRef.current && !tableBorderStyleContainerRef.current.contains(target)) {
+        setShowTableBorderStylePopover(false);
+      }
+
+      // Close table floating toolbar if click is completely outside table and toolbar
+      const inToolbar = tableFloatingToolbarRef.current?.contains(target);
+      const inTable = (target as HTMLElement)?.closest?.('table');
+      if (!inToolbar && !inTable) {
+        setShowTableColorPopover(false);
+        setShowTableBordersPopover(false);
+        setShowTableBorderColorPopover(false);
+        setShowTableBorderWidthPopover(false);
+        setShowTableBorderStylePopover(false);
+        setTableFloatingToolbar((prev) => (prev.show ? { ...prev, show: false } : prev));
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [
+    tableFloatingToolbar.show,
+    showTableColorPopover,
+    showTableBordersPopover,
+    showTableBorderColorPopover,
+    showTableBorderWidthPopover,
+    showTableBorderStylePopover,
+  ]);
+
+  // Re-position table toolbar on window resize
+  useEffect(() => {
+    window.addEventListener('resize', updateTableFloatingToolbar);
+    return () => {
+      window.removeEventListener('resize', updateTableFloatingToolbar);
+    };
+  }, [updateTableFloatingToolbar]);
 
   // ---- Floating toolbar: listen to selection changes ----
   useEffect(() => {
@@ -1156,7 +2727,42 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
     const handleSelectionUpdate = () => {
       const { from, to, empty } = editor.state.selection;
 
-      if (empty) {
+      // Check if selection was initiated via Drag to move
+      const isDragSession = isDragging || (dragSessionRef.current && dragSessionRef.current.active) || dragSourcePosRef.current !== null;
+      const isDragSelection = dragSelectionRef.current && (
+        (dragSelectionRef.current.from === from && dragSelectionRef.current.to === to) ||
+        isDragSession
+      );
+
+      // If user changed selection away from the drag handle selection, clear the ref
+      if (dragSelectionRef.current && (dragSelectionRef.current.from !== from || dragSelectionRef.current.to !== to) && !isDragSession) {
+        dragSelectionRef.current = null;
+        if (draggedDomElRef.current) {
+          draggedDomElRef.current.removeAttribute('data-drag-source');
+          draggedDomElRef.current = null;
+        }
+      }
+
+      if (isDragSelection || isDragSession) {
+        setFloatingToolbar((ft) => (ft.show ? { ...ft, show: false } : ft));
+        setShowFloatingLinkPopover(false);
+        onSelectionChangeRef.current?.('');
+        return;
+      }
+
+      // Never show the text formatting floating toolbar when an image or table cells are selected
+      const isCellSelection =
+        editor.state.selection instanceof CellSelection ||
+        '$anchorCell' in editor.state.selection ||
+        editor.state.selection.constructor.name === 'CellSelection';
+
+      const isImageSelected =
+        editor.isActive('image') ||
+        editor.state.selection.constructor.name === 'NodeSelection' ||
+        ('node' in editor.state.selection && (editor.state.selection as any).node?.type?.name === 'image') ||
+        editor.state.doc.nodeAt(from)?.type?.name === 'image';
+
+      if (empty || isImageSelected || isCellSelection) {
         setFloatingToolbar((ft) => (ft.show ? { ...ft, show: false } : ft));
         setShowFloatingLinkPopover(false);
         onSelectionChangeRef.current?.('');
@@ -1191,19 +2797,23 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
       // Small delay so onMouseDown e.preventDefault() on toolbar buttons can fire first
       setTimeout(() => {
         setFloatingToolbar((ft) => ({ ...ft, show: false }));
-        // Note: do NOT clear onSelectionChange here — the parent uses a persistent savedSelectedText
-        onSelectionChangeRef.current?.('');
       }, 120);
     };
 
     editor.on('selectionUpdate', handleSelectionUpdate);
+    editor.on('selectionUpdate', updateTableFloatingToolbar);
+    editor.on('transaction', updateTableFloatingToolbar);
+    editor.on('focus', updateTableFloatingToolbar);
     editor.on('blur', handleBlur);
 
     return () => {
       editor.off('selectionUpdate', handleSelectionUpdate);
+      editor.off('selectionUpdate', updateTableFloatingToolbar);
+      editor.off('transaction', updateTableFloatingToolbar);
+      editor.off('focus', updateTableFloatingToolbar);
       editor.off('blur', handleBlur);
     };
-  }, [editor]);
+  }, [editor, updateTableFloatingToolbar]);
 
   // ---- Sync editable state ----
   useEffect(() => {
@@ -1212,176 +2822,767 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
     }
   }, [editor, isEditable]);
 
-  // Fix #1: Drag handle — track hovered top-level block via mousemove
-  useEffect(() => {
+  // Helper to accurately get physical table bounds clamped to editor container
+  const getTableBounds = useCallback((table: HTMLTableElement) => {
+    const container = editorScrollContainerRef.current;
+    const rows = Array.from(table.querySelectorAll('tr'));
+    const firstRow = rows[0];
+    const lastRow = rows[rows.length - 1];
+    const tableRect = table.getBoundingClientRect();
+    const rawTop = firstRow ? firstRow.getBoundingClientRect().top : tableRect.top;
+    const rawBottom = lastRow ? lastRow.getBoundingClientRect().bottom : tableRect.bottom;
+    const rawLeft = tableRect.left;
+    const rawRight = tableRect.right;
+
+    if (container) {
+      const cRect = container.getBoundingClientRect();
+      const clampedTop = Math.max(cRect.top, rawTop);
+      const clampedBottom = Math.min(cRect.bottom, rawBottom);
+      const clampedHeight = Math.max(0, clampedBottom - clampedTop);
+
+      const clampedLeft = Math.max(cRect.left, rawLeft);
+      const clampedRight = Math.min(cRect.right, rawRight);
+      const clampedWidth = Math.max(0, clampedRight - clampedLeft);
+
+      return {
+        top: clampedTop,
+        bottom: clampedBottom,
+        left: clampedLeft,
+        right: clampedRight,
+        height: clampedHeight,
+        width: clampedWidth,
+      };
+    }
+
+    return {
+      top: rawTop,
+      bottom: rawBottom,
+      left: rawLeft,
+      right: rawRight,
+      height: Math.max(0, rawBottom - rawTop),
+      width: Math.max(0, rawRight - rawLeft),
+    };
+  }, []);
+
+  // Drag handle — track hovered top-level block via container onMouseMove
+  const handleContainerMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (isDragging || !editor) return;
+
+    const target = e.target as HTMLElement;
+    if (!target) return;
+
+    // If actively resizing table, do not perform drag handle / hover updates
+    if (isResizingTableRef.current) return;
+
+    // Table border resize hover detection
+    if (isEditable) {
+      const container = editorScrollContainerRef.current;
+      const { selection } = editor.state;
+      const isCellSelection =
+        selection instanceof CellSelection ||
+        '$anchorCell' in selection ||
+        selection.constructor.name === 'CellSelection';
+
+      // When table cells are selected, do not activate resize hover, preserving cell selection
+      if (isCellSelection) {
+        if (!isResizingTableRef.current) {
+          setColResizeIndicator((prev) => (prev.show ? { ...prev, show: false } : prev));
+          setRowResizeIndicator((prev) => (prev.show ? { ...prev, show: false } : prev));
+        }
+        if (tableHoverBorderRef.current?.active) {
+          tableHoverBorderRef.current = null;
+        }
+        if (container && (container.style.cursor === 'col-resize' || container.style.cursor === 'row-resize')) {
+          container.style.cursor = '';
+        }
+        return;
+      }
+
+      const cell = target.closest('td, th') as HTMLTableCellElement | null;
+      if (cell) {
+        const table = cell.closest('table') as HTMLTableElement | null;
+        const tr = cell.closest('tr') as HTMLTableRowElement | null;
+        if (table && tr) {
+          const rect = cell.getBoundingClientRect();
+          const THRESHOLD = 8;
+          const distBottom = Math.abs(e.clientY - rect.bottom);
+          const distTop = Math.abs(e.clientY - rect.top);
+          const distRight = Math.abs(e.clientX - rect.right);
+          const distLeft = Math.abs(e.clientX - rect.left);
+
+          const minVert = Math.min(distRight, distLeft);
+          const minHoriz = Math.min(distBottom, distTop);
+
+          if (minVert <= THRESHOLD && minVert <= minHoriz) {
+            // COLUMN BORDER -> Column Width Resize
+            const rowCells = Array.from(tr.children) as HTMLElement[];
+            let colIndex = rowCells.indexOf(cell);
+            let borderX = rect.right;
+            if (minVert === distLeft) {
+              if (cell.previousElementSibling) {
+                colIndex = rowCells.indexOf(cell.previousElementSibling as HTMLElement);
+                borderX = rect.left;
+              } else {
+                colIndex = -1; // Outer left edge of table
+              }
+            }
+            if (colIndex >= 0) {
+              setRowResizeIndicator((prev) => (prev.show ? { ...prev, show: false } : prev));
+              if (container) container.style.cursor = 'col-resize';
+              tableHoveredCellRef.current = cell;
+              tableHoverBorderRef.current = {
+                active: true,
+                type: 'col',
+                table,
+                cell,
+                targetColIndex: colIndex,
+              };
+              const bounds = getTableBounds(table);
+              setColResizeIndicator({
+                show: true,
+                left: borderX,
+                top: bounds.top,
+                height: bounds.height,
+                isDragging: false,
+              });
+              setDragHandle((dh) => (dh.show ? { ...dh, show: false } : dh));
+              return;
+            }
+          } else if (minHoriz <= THRESHOLD && minHoriz < minVert) {
+            // ROW BORDER -> Row Height Resize
+            setColResizeIndicator((prev) => (prev.show ? { ...prev, show: false } : prev));
+            const allRows = Array.from(table.querySelectorAll('tr'));
+            let rowIndex = allRows.indexOf(tr);
+            let borderY = rect.bottom;
+            if (minHoriz === distTop && tr.previousElementSibling) {
+              rowIndex = allRows.indexOf(tr.previousElementSibling as HTMLTableRowElement);
+              borderY = rect.top;
+            }
+            if (rowIndex >= 0) {
+              if (container) container.style.cursor = 'row-resize';
+              tableHoveredCellRef.current = cell;
+              tableHoverBorderRef.current = {
+                active: true,
+                type: 'row',
+                table,
+                cell,
+                targetRowIndex: rowIndex,
+              };
+              const bounds = getTableBounds(table);
+              setRowResizeIndicator({
+                show: true,
+                top: borderY,
+                left: bounds.left,
+                width: bounds.width,
+                isDragging: false,
+              });
+              setDragHandle((dh) => (dh.show ? { ...dh, show: false } : dh));
+              return;
+            }
+          }
+        }
+      }
+
+      // Not near any border
+      if (!isResizingTableRef.current) {
+        setColResizeIndicator((prev) => (prev.show ? { ...prev, show: false } : prev));
+        setRowResizeIndicator((prev) => (prev.show ? { ...prev, show: false } : prev));
+      }
+      if (tableHoverBorderRef.current?.active) {
+        tableHoverBorderRef.current = null;
+        if (container && (container.style.cursor === 'col-resize' || container.style.cursor === 'row-resize')) {
+          container.style.cursor = '';
+        }
+        tableHoveredCellRef.current = null;
+      }
+    }
+
+    // If mouse is over the drag handle itself, keep it visible and in place
+    if (dragHandleRef.current && (dragHandleRef.current === target || dragHandleRef.current.contains(target))) {
+      return;
+    }
+
+    const container = editorScrollContainerRef.current;
+    const editorDom = editor.view.dom as HTMLElement | null;
+    if (!container || !editorDom || !editorDom.children || editorDom.children.length === 0) {
+      setDragHandle((dh) => (dh.show ? { ...dh, show: false } : dh));
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const contentRect = editorDom.getBoundingClientRect();
+
+    // Strictly confine handle to content area: hide if cursor is in toolbar, footer, or sidebars
+    if (
+      e.clientY < containerRect.top ||
+      e.clientY > containerRect.bottom ||
+      e.clientY < contentRect.top - 4 ||
+      e.clientY > contentRect.bottom + 4 ||
+      e.clientX < Math.max(containerRect.left + 4, contentRect.left - 48) ||
+      e.clientX > Math.min(containerRect.right - 4, contentRect.right + 30)
+    ) {
+      setDragHandle((dh) => (dh.show ? { ...dh, show: false } : dh));
+      return;
+    }
+
+    // Find which top-level block corresponds to the mouse vertical position
+    const children = Array.from(editorDom.children) as HTMLElement[];
+    let matchedBlock: { index: number; el: HTMLElement; rect: DOMRect } | null = null;
+
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      const rect = child.getBoundingClientRect();
+      // Block must be visible within container (not scrolled behind toolbar or footer)
+      if (rect.bottom < containerRect.top || rect.top > containerRect.bottom) {
+        continue;
+      }
+      if (e.clientY >= rect.top - 4 && e.clientY <= rect.bottom + 4) {
+        matchedBlock = { index: i, el: child, rect };
+        break;
+      }
+    }
+
+    // If in vertical gap between blocks, find closest block
+    if (!matchedBlock) {
+      let minGapDist = Infinity;
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        const rect = child.getBoundingClientRect();
+        if (rect.bottom < containerRect.top || rect.top > containerRect.bottom) {
+          continue;
+        }
+        const dist = Math.min(Math.abs(e.clientY - rect.top), Math.abs(e.clientY - rect.bottom));
+        if (dist < minGapDist && dist <= 28) {
+          minGapDist = dist;
+          matchedBlock = { index: i, el: child, rect };
+        }
+      }
+    }
+
+    if (matchedBlock) {
+      const { rect, index } = matchedBlock;
+      // Show handle if mouse is near block and within content bounds
+      const minLeft = Math.max(containerRect.left + 4, rect.left - 60);
+      if (e.clientX >= minLeft && e.clientX <= Math.min(containerRect.right - 10, rect.right + 40)) {
+        if (rect.top + 2 >= containerRect.top && rect.top + 2 <= containerRect.bottom - 24) {
+          let pos = 0;
+          for (let k = 0; k < index && k < editor.state.doc.childCount; k++) {
+            pos += editor.state.doc.child(k).nodeSize;
+          }
+
+          setDragHandle({
+            show: true,
+            top: rect.top + 2,
+            left: Math.max(containerRect.left + 8, rect.left - 26),
+            pos,
+          });
+          return;
+        }
+      }
+    }
+
+    // If outside, check if mouse is within 25px of handle before hiding
+    setDragHandle((dh) => {
+      if (!dh.show) return dh;
+      const dx = Math.abs(e.clientX - (dh.left + 10));
+      const dy = Math.abs(e.clientY - (dh.top + 10));
+      if (dx < 25 && dy < 25 && e.clientY >= containerRect.top && e.clientY <= containerRect.bottom) return dh;
+      return { ...dh, show: false };
+    });
+  }, [editor, isDragging]);
+
+  const handleContainerMouseLeave = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (dragSourcePosRef.current !== null || isDragging) return;
+    const related = e.relatedTarget as HTMLElement | null;
+    if (dragHandleRef.current && related && dragHandleRef.current.contains(related)) {
+      return;
+    }
+    setDragHandle((dh) => (dh.show ? { ...dh, show: false } : dh));
+    if (!isResizingTableRef.current) {
+      setColResizeIndicator((prev) => (prev.show ? { ...prev, show: false } : prev));
+      setRowResizeIndicator((prev) => (prev.show ? { ...prev, show: false } : prev));
+      if (tableHoverBorderRef.current?.active) {
+        tableHoverBorderRef.current = null;
+      }
+      if (editorScrollContainerRef.current && (editorScrollContainerRef.current.style.cursor === 'col-resize' || editorScrollContainerRef.current.style.cursor === 'row-resize')) {
+        editorScrollContainerRef.current.style.cursor = '';
+      }
+      if (tableHoveredCellRef.current) {
+        tableHoveredCellRef.current.style.cursor = '';
+        tableHoveredCellRef.current = null;
+      }
+    }
+  }, [isDragging]);
+
+  const handleContainerScroll = useCallback(() => {
+    updateTableFloatingToolbar();
+    if (dragSourcePosRef.current !== null || isDragging) return;
+    setDragHandle((dh) => (dh.show ? { ...dh, show: false } : dh));
+    if (!isResizingTableRef.current) {
+      setColResizeIndicator((prev) => (prev.show ? { ...prev, show: false } : prev));
+      setRowResizeIndicator((prev) => (prev.show ? { ...prev, show: false } : prev));
+    }
+  }, [isDragging, updateTableFloatingToolbar]);
+
+  // Click or press down on drag handle selects the text inside the block and starts drag tracking
+  const handleDragHandleMouseDown = useCallback((e: React.MouseEvent) => {
     if (!editor) return;
-    const editorDom = editor.view.dom as HTMLElement;
-    const scrollContainer = editorDom.parentElement?.parentElement as HTMLElement; // .max-w-4xl > .flex-1.overflow-y-auto
+    const srcPos = dragHandle.pos;
+    const node = editor.state.doc.nodeAt(srcPos);
+    if (!node) return;
 
-    const findTopLevelBlockInfo = (target: HTMLElement): { pos: number; rectTop: number; rectLeft: number } | null => {
-      // Walk up until we find a direct child of the editor dom
-      let el: HTMLElement | null = target;
-      while (el && el.parentElement !== editorDom) {
-        el = el.parentElement;
-      }
-      if (!el) return null;
+    const from = srcPos + 1;
+    const to = Math.max(from, srcPos + node.nodeSize - 1);
+
+    // Track that selection is initiated by Drag to move (keeps yellow background, suppresses img 2 & img 3)
+    dragSelectionRef.current = { from, to, pos: srcPos };
+    dragSourcePosRef.current = srcPos;
+
+    // Suppress floating formatting toolbar (img 2) and AI selected text bar (img 3)
+    setFloatingToolbar((ft) => (ft.show ? { ...ft, show: false } : ft));
+    setShowFloatingLinkPopover(false);
+    onSelectionChangeRef.current?.('');
+
+    // Select text in editor to trigger the yellow selection highlight
+    try {
+      editor.chain().focus().setTextSelection({ from, to }).run();
+    } catch {
       try {
-        const pos = editor.view.posAtDOM(el, 0);
-        // Ensure pos is at the start of a top-level block (depth 0)
-        const $pos = editor.state.doc.resolve(pos);
-        // If pos is inside a deeper block, get the top-level block start
-        const topLevelStart = $pos.before(1);
-        const realPos = topLevelStart >= 0 ? topLevelStart : pos;
-        const node = editor.state.doc.nodeAt(realPos);
-        if (!node) return null;
-        const dom = editor.view.nodeDOM(realPos) as HTMLElement | null;
-        if (!dom) return null;
-        const rect = dom.getBoundingClientRect();
-        return { pos: realPos, rectTop: rect.top, rectLeft: rect.left };
-      } catch {
-        return null;
+        editor.chain().focus().setNodeSelection(srcPos).run();
+      } catch {}
+    }
+
+    // Visually highlight the block background with yellow data-drag-source
+    const editorDom = editor.view.dom as HTMLElement | null;
+    let targetDomChild: HTMLElement | null = null;
+    if (editorDom && editorDom.children) {
+      editorDom.querySelectorAll('[data-drag-source="true"]').forEach((n) => n.removeAttribute('data-drag-source'));
+      let currentPos = 0;
+      for (let i = 0; i < editorDom.children.length; i++) {
+        const child = editorDom.children[i] as HTMLElement;
+        if (i < editor.state.doc.childCount) {
+          if (currentPos === srcPos) {
+            targetDomChild = child;
+            child.setAttribute('data-drag-source', 'true');
+            draggedDomElRef.current = child;
+            break;
+          }
+          currentPos += editor.state.doc.child(i).nodeSize;
+        }
       }
+    }
+
+    const rect = targetDomChild ? targetDomChild.getBoundingClientRect() : null;
+    const ghostHtml = targetDomChild ? targetDomChild.innerHTML : (node.textContent || '');
+    const ghostWidth = rect ? rect.width : 500;
+
+    dragSourcePosRef.current = srcPos;
+    dragSessionRef.current = {
+      active: true,
+      hasStarted: false,
+      srcPos,
+      startX: e.clientX,
+      startY: e.clientY,
+      ghostHtml,
+      ghostWidth,
+      targetInsertPos: null,
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target || !editorDom.contains(target)) {
-        setDragHandle((dh) => (dh.show ? { ...dh, show: false } : dh));
+    const handleWindowMouseMove = (moveEvent: MouseEvent) => {
+      const session = dragSessionRef.current;
+      if (!session || !session.active || !editor) return;
+
+      const dx = moveEvent.clientX - session.startX;
+      const dy = moveEvent.clientY - session.startY;
+
+      // Start drag after 4px of movement
+      if (!session.hasStarted && Math.hypot(dx, dy) > 4) {
+        session.hasStarted = true;
+        setIsDragging(true);
+      }
+
+      if (!session.hasStarted) return;
+
+      const container = editorScrollContainerRef.current;
+      const currentEditorDom = editor.view.dom as HTMLElement | null;
+      if (!container || !currentEditorDom || !currentEditorDom.children) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const contentRect = currentEditorDom.getBoundingClientRect();
+
+      // Clamp floating drag preview and handle strictly inside the editor content boundaries
+      // This strictly prevents the drag handle and preview from escaping into the toolbar or sidebars
+      const previewWidth = Math.min(session.ghostWidth, 500);
+      const minX = Math.max(containerRect.left + 16, contentRect.left - 24);
+      const maxX = Math.min(containerRect.right - previewWidth - 24, contentRect.right - 40);
+      const minY = containerRect.top + 14;
+      const maxY = containerRect.bottom - 70;
+
+      const clampedCursorX = Math.max(minX, Math.min(Math.max(minX, maxX), moveEvent.clientX));
+      const clampedCursorY = Math.max(minY, Math.min(Math.max(minY, maxY), moveEvent.clientY));
+
+      // Update dragging state so floating preview renders and stays confined to content bounds
+      setDragState({
+        isDragging: true,
+        cursorX: clampedCursorX,
+        cursorY: clampedCursorY,
+        ghostHtml: session.ghostHtml,
+        ghostWidth: session.ghostWidth,
+      });
+
+      // If mouse cursor is outside content bounds, do not display drop line or select target
+      const isOutsideContent =
+        moveEvent.clientY < containerRect.top ||
+        moveEvent.clientY > containerRect.bottom ||
+        moveEvent.clientX < contentRect.left - 48 ||
+        moveEvent.clientX > contentRect.right + 48;
+
+      if (isOutsideContent) {
+        session.targetInsertPos = null;
+        setDropIndicator({ show: false, top: 0, left: 0, width: 0 });
         return;
       }
-      const info = findTopLevelBlockInfo(target);
-      if (!info) {
-        setDragHandle((dh) => (dh.show ? { ...dh, show: false } : dh));
+
+      const children = Array.from(currentEditorDom.children) as HTMLElement[];
+      let matchedBlock: { index: number; el: HTMLElement; rect: DOMRect } | null = null;
+
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        const childRect = child.getBoundingClientRect();
+        // Skip blocks scrolled out of view behind toolbar or footer
+        if (childRect.bottom < containerRect.top || childRect.top > containerRect.bottom) {
+          continue;
+        }
+        if (moveEvent.clientY >= childRect.top - 8 && moveEvent.clientY <= childRect.bottom + 8) {
+          matchedBlock = { index: i, el: child, rect: childRect };
+          break;
+        }
+      }
+
+      if (!matchedBlock) {
+        session.targetInsertPos = null;
+        setDropIndicator({ show: false, top: 0, left: 0, width: 0 });
         return;
       }
-      // Only show if mouse is in the left margin area (within 60px of block left edge)
-      const blockLeft = info.rectLeft;
-      if (e.clientX > blockLeft + 40) {
-        // Still hide if cursor moved away from left margin
-        setDragHandle((dh) => (dh.show ? { ...dh, show: false } : dh));
+
+      let targetBlockPos = 0;
+      for (let k = 0; k < matchedBlock.index && k < editor.state.doc.childCount; k++) {
+        targetBlockPos += editor.state.doc.child(k).nodeSize;
+      }
+
+      // If hovering over the source block itself, don't show drop indicator
+      if (targetBlockPos === session.srcPos) {
+        session.targetInsertPos = null;
+        setDropIndicator({ show: false, top: 0, left: 0, width: 0 });
         return;
       }
-      setDragHandle({ show: true, top: info.rectTop, left: blockLeft - 28, pos: info.pos });
+
+      const { rect: childRect } = matchedBlock;
+      const targetNode = editor.state.doc.nodeAt(targetBlockPos);
+      if (!targetNode) return;
+
+      const isLowerHalf = moveEvent.clientY > childRect.top + childRect.height / 2;
+      const targetTop = isLowerHalf ? childRect.bottom : childRect.top;
+
+      // Drop indicator line must be strictly within visible content container
+      if (targetTop < containerRect.top || targetTop > containerRect.bottom) {
+        session.targetInsertPos = null;
+        setDropIndicator({ show: false, top: 0, left: 0, width: 0 });
+        return;
+      }
+
+      const insertBefore = isLowerHalf ? targetBlockPos + targetNode.nodeSize : targetBlockPos;
+      session.targetInsertPos = insertBefore;
+
+      setDropIndicator({
+        show: true,
+        top: targetTop,
+        left: childRect.left,
+        width: childRect.width,
+      });
     };
 
-    const handleMouseLeave = () => {
-      setDragHandle({ show: false, top: 0, left: 0, pos: 0 });
+    const handleWindowMouseUp = () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+
+      const session = dragSessionRef.current;
+      dragSessionRef.current = null;
+      dragSourcePosRef.current = null;
+      setIsDragging(false);
+      setDragState(null);
+      setDropIndicator({ show: false, top: 0, left: 0, width: 0 });
+
+      // If drag session actually moved, cleanup drag source attribute and dragSelectionRef
+      if (session && session.hasStarted && session.targetInsertPos != null) {
+        dragSelectionRef.current = null;
+        if (draggedDomElRef.current) {
+          draggedDomElRef.current.removeAttribute('data-drag-source');
+          draggedDomElRef.current = null;
+        }
+      } else {
+        // If user just clicked without dragging, keep the visual yellow highlight on the selected text!
+        return;
+      }
+
+      const { srcPos, targetInsertPos } = session;
+      const srcNode = editor.state.doc.nodeAt(srcPos);
+      if (!srcNode || targetInsertPos === srcPos || targetInsertPos === srcPos + srcNode.nodeSize) {
+        return;
+      }
+
+      try {
+        const tr = editor.state.tr;
+        tr.delete(srcPos, srcPos + srcNode.nodeSize);
+        const adjustedInsertPos = targetInsertPos > srcPos ? targetInsertPos - srcNode.nodeSize : targetInsertPos;
+        tr.insert(adjustedInsertPos, srcNode);
+        editor.view.dispatch(tr);
+
+        // Place cursor without selecting text range so floating toolbar and AI bar do not appear
+        setTimeout(() => {
+          try {
+            editor.chain().focus().setTextSelection(adjustedInsertPos).run();
+          } catch {}
+          setFloatingToolbar((ft) => (ft.show ? { ...ft, show: false } : ft));
+          onSelectionChangeRef.current?.('');
+        }, 30);
+      } catch (err) {
+        console.error('Reorder error on mouseup:', err);
+      }
     };
 
-    editorDom.addEventListener('mousemove', handleMouseMove);
-    editorDom.addEventListener('mouseleave', handleMouseLeave);
-    return () => {
-      editorDom.removeEventListener('mousemove', handleMouseMove);
-      editorDom.removeEventListener('mouseleave', handleMouseLeave);
-    };
-  }, [editor]);
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+  }, [editor, dragHandle.pos]);
 
-  // Fix #1: Drag handle drag/drop handlers
+  // Drag handle drag/drop handlers
   const handleDragHandleDragStart = useCallback((e: React.DragEvent) => {
     if (!editor) return;
-    dragSourcePosRef.current = dragHandle.pos;
-    if (e.dataTransfer) {
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', 'drag-block');
+    const srcPos = dragHandle.pos;
+    dragSourcePosRef.current = srcPos;
+    setIsDragging(true);
+
+    const node = editor.state.doc.nodeAt(srcPos);
+    if (node) {
+      const from = srcPos + 1;
+      const to = Math.max(from, srcPos + node.nodeSize - 1);
+      dragSelectionRef.current = { from, to, pos: srcPos };
+      try {
+        editor.chain().focus().setTextSelection({ from, to }).run();
+      } catch {}
     }
-    // Hide the drag handle during drag
-    setDragHandle((dh) => ({ ...dh, show: false }));
+
+    // Suppress floating formatting toolbar (img 2) and AI selected text bar (img 3)
+    setFloatingToolbar((ft) => (ft.show ? { ...ft, show: false } : ft));
+    setShowFloatingLinkPopover(false);
+    onSelectionChangeRef.current?.('');
+
+    // 2. Find the top-level block DOM element
+    const editorDom = editor.view.dom as HTMLElement | null;
+    let targetDomChild: HTMLElement | null = null;
+    if (editorDom && editorDom.children) {
+      let currentPos = 0;
+      for (let i = 0; i < editorDom.children.length; i++) {
+        const child = editorDom.children[i] as HTMLElement;
+        if (i < editor.state.doc.childCount) {
+          if (currentPos === srcPos) {
+            targetDomChild = child;
+            break;
+          }
+          currentPos += editor.state.doc.child(i).nodeSize;
+        }
+      }
+    }
+
+    if (targetDomChild) {
+      targetDomChild.setAttribute('data-drag-source', 'true');
+      draggedDomElRef.current = targetDomChild;
+
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', `pm-block:${srcPos}`);
+
+        // 3. Make the actual text block float with the mouse cursor while dragging!
+        try {
+          e.dataTransfer.setDragImage(targetDomChild, 16, 16);
+        } catch {
+          // fallback
+        }
+      }
+    }
+
+    // DO NOT unmount the dragHandle DOM node here; unmounting aborts HTML5 drag!
   }, [editor, dragHandle.pos]);
 
   const handleEditorDragOver = useCallback((e: React.DragEvent) => {
-    if (dragSourcePosRef.current == null) return;
+    if (dragSourcePosRef.current == null || !editor) return;
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-    const target = e.target as HTMLElement;
-    if (!editor) return;
-    const editorDom = editor.view.dom as HTMLElement;
-    if (!editorDom.contains(target)) return;
-    // Find the hovered top-level block
-    let el: HTMLElement | null = target;
-    while (el && el.parentElement !== editorDom) {
-      el = el.parentElement;
+
+    const container = editorScrollContainerRef.current;
+    const editorDom = editor.view.dom as HTMLElement | null;
+    if (!container || !editorDom || !editorDom.children || editorDom.children.length === 0) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const contentRect = editorDom.getBoundingClientRect();
+
+    // Do not show drop indicator if outside content bounds
+    if (
+      e.clientY < containerRect.top ||
+      e.clientY > containerRect.bottom ||
+      e.clientX < contentRect.left - 48 ||
+      e.clientX > contentRect.right + 48
+    ) {
+      setDropIndicator({ show: false, top: 0, left: 0, width: 0 });
+      return;
     }
-    if (!el) return;
-    try {
-      const pos = editor.view.posAtDOM(el, 0);
-      const $pos = editor.state.doc.resolve(pos);
-      const topLevelStart = $pos.before(1);
-      const realPos = topLevelStart >= 0 ? topLevelStart : pos;
-      if (realPos === dragSourcePosRef.current) {
-        setDropIndicator({ show: false, top: 0 });
-        return;
+
+    const children = Array.from(editorDom.children) as HTMLElement[];
+    let matchedBlock: { index: number; el: HTMLElement; rect: DOMRect } | null = null;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      const rect = child.getBoundingClientRect();
+      if (rect.bottom < containerRect.top || rect.top > containerRect.bottom) {
+        continue;
       }
-      const rect = el.getBoundingClientRect();
-      // Show drop indicator at the top of the hovered block (or bottom if cursor is in lower half)
-      const isLowerHalf = e.clientY > rect.top + rect.height / 2;
-      setDropIndicator({ show: true, top: isLowerHalf ? rect.bottom : rect.top });
-    } catch {
-      // ignore
+      if (e.clientY >= rect.top - 8 && e.clientY <= rect.bottom + 8) {
+        matchedBlock = { index: i, el: child, rect };
+        break;
+      }
     }
+
+    if (!matchedBlock) return;
+
+    let targetBlockPos = 0;
+    for (let k = 0; k < matchedBlock.index && k < editor.state.doc.childCount; k++) {
+      targetBlockPos += editor.state.doc.child(k).nodeSize;
+    }
+
+    if (targetBlockPos === dragSourcePosRef.current) {
+      setDropIndicator({ show: false, top: 0, left: 0, width: 0 });
+      return;
+    }
+
+    const { rect } = matchedBlock;
+    const isLowerHalf = e.clientY > rect.top + rect.height / 2;
+    const targetTop = isLowerHalf ? rect.bottom : rect.top;
+
+    if (targetTop < containerRect.top || targetTop > containerRect.bottom) {
+      setDropIndicator({ show: false, top: 0, left: 0, width: 0 });
+      return;
+    }
+
+    setDropIndicator({
+      show: true,
+      top: targetTop,
+      left: rect.left,
+      width: rect.width,
+    });
   }, [editor]);
 
   const handleEditorDrop = useCallback((e: React.DragEvent) => {
-    if (dragSourcePosRef.current == null || !editor) return;
+    const cleanupDrag = () => {
+      dragSourcePosRef.current = null;
+      setIsDragging(false);
+      setDropIndicator({ show: false, top: 0, left: 0, width: 0 });
+      if (draggedDomElRef.current) {
+        draggedDomElRef.current.removeAttribute('data-drag-source');
+        draggedDomElRef.current = null;
+      }
+      if (editor) {
+        const editorDom = editor.view.dom as HTMLElement;
+        editorDom?.querySelectorAll('[data-drag-source="true"]').forEach((node) => {
+          node.removeAttribute('data-drag-source');
+        });
+      }
+    };
+
+    if (dragSourcePosRef.current == null || !editor) {
+      cleanupDrag();
+      return;
+    }
     e.preventDefault();
     const srcPos = dragSourcePosRef.current;
-    const target = e.target as HTMLElement;
-    const editorDom = editor.view.dom as HTMLElement;
-    if (!editorDom.contains(target)) {
-      dragSourcePosRef.current = null;
-      setDropIndicator({ show: false, top: 0 });
+    const editorDom = editor.view.dom as HTMLElement | null;
+    if (!editorDom || !editorDom.children || editorDom.children.length === 0) {
+      cleanupDrag();
       return;
     }
-    let el: HTMLElement | null = target;
-    while (el && el.parentElement !== editorDom) {
-      el = el.parentElement;
+
+    const children = Array.from(editorDom.children) as HTMLElement[];
+    let matchedBlock: { index: number; el: HTMLElement; rect: DOMRect } | null = null;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      const rect = child.getBoundingClientRect();
+      if (e.clientY >= rect.top - 16 && e.clientY <= rect.bottom + 16) {
+        matchedBlock = { index: i, el: child, rect };
+        break;
+      }
     }
-    if (!el) {
-      dragSourcePosRef.current = null;
-      setDropIndicator({ show: false, top: 0 });
+
+    if (!matchedBlock) {
+      cleanupDrag();
       return;
     }
+
+    let targetBlockPos = 0;
+    for (let k = 0; k < matchedBlock.index && k < editor.state.doc.childCount; k++) {
+      targetBlockPos += editor.state.doc.child(k).nodeSize;
+    }
+
+    const srcNode = editor.state.doc.nodeAt(srcPos);
+    const targetNode = editor.state.doc.nodeAt(targetBlockPos);
+    if (!srcNode || !targetNode || targetBlockPos === srcPos) {
+      cleanupDrag();
+      return;
+    }
+
+    const { rect } = matchedBlock;
+    const isLowerHalf = e.clientY > rect.top + rect.height / 2;
+    const insertBefore = isLowerHalf ? targetBlockPos + targetNode.nodeSize : targetBlockPos;
+
+    if (insertBefore === srcPos || insertBefore === srcPos + srcNode.nodeSize) {
+      cleanupDrag();
+      return;
+    }
+
     try {
-      const pos = editor.view.posAtDOM(el, 0);
-      const $pos = editor.state.doc.resolve(pos);
-      const topLevelStart = $pos.before(1);
-      let targetPos = topLevelStart >= 0 ? topLevelStart : pos;
-      const srcNode = editor.state.doc.nodeAt(srcPos);
-      if (!srcNode) return;
-      const rect = el.getBoundingClientRect();
-      const isLowerHalf = e.clientY > rect.top + rect.height / 2;
-      const targetNode = editor.state.doc.nodeAt(targetPos);
-      if (!targetNode) return;
-      if (isLowerHalf) {
-        targetPos = targetPos + targetNode.nodeSize;
-      }
-      if (targetPos === srcPos || targetPos === srcPos + srcNode.nodeSize) {
-        dragSourcePosRef.current = null;
-        setDropIndicator({ show: false, top: 0 });
-        return;
-      }
-      // Perform the reorder transaction
       const tr = editor.state.tr;
-      const srcNodeCopy = srcNode.toJSON();
       tr.delete(srcPos, srcPos + srcNode.nodeSize);
-      // Adjust targetPos if we deleted before it
-      let adjustedTarget = targetPos;
-      if (targetPos > srcPos) {
-        adjustedTarget -= srcNode.nodeSize;
-      }
-      tr.insert(adjustedTarget, editor.state.schema.nodeFromJSON(srcNodeCopy));
+      const adjustedInsertPos = insertBefore > srcPos ? insertBefore - srcNode.nodeSize : insertBefore;
+      tr.insert(adjustedInsertPos, srcNode);
       editor.view.dispatch(tr);
+
+      // Focus without selecting text range so floating toolbar and AI bar do not appear
+      setTimeout(() => {
+        try {
+          editor.chain().focus().setTextSelection(adjustedInsertPos).run();
+        } catch {}
+        setFloatingToolbar((ft) => (ft.show ? { ...ft, show: false } : ft));
+        onSelectionChangeRef.current?.('');
+      }, 20);
     } catch (err) {
-      // ignore
+      console.error('Drag and drop reorder error:', err);
     } finally {
-      dragSourcePosRef.current = null;
-      setDropIndicator({ show: false, top: 0 });
+      cleanupDrag();
     }
   }, [editor]);
 
   const handleEditorDragEnd = useCallback(() => {
     dragSourcePosRef.current = null;
-    setDropIndicator({ show: false, top: 0 });
-  }, []);
+    setIsDragging(false);
+    setDropIndicator({ show: false, top: 0, left: 0, width: 0 });
+    if (draggedDomElRef.current) {
+      draggedDomElRef.current.removeAttribute('data-drag-source');
+      draggedDomElRef.current = null;
+    }
+    if (editor) {
+      const editorDom = editor.view.dom as HTMLElement;
+      editorDom?.querySelectorAll('[data-drag-source="true"]').forEach((node) => {
+        node.removeAttribute('data-drag-source');
+      });
+    }
+  }, [editor]);
 
   // Expose editor instance and selection helpers to parent via ref
   useImperativeHandle(ref, () => ({
@@ -1401,6 +3602,18 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
       const fragment = DOMSerializer.fromSchema(editor.state.schema).serializeFragment(slice.content);
       tmp.appendChild(fragment);
       return tmp.innerHTML;
+    },
+    getHTML: () => {
+      if (!editor) return '';
+      return editor.getHTML();
+    },
+    getText: () => {
+      if (!editor) return '';
+      return editor.getText();
+    },
+    getMarkdown: () => {
+      if (!editor) return '';
+      return editor.getText() || editor.getHTML();
     },
     saveSelectionForReplace: () => {
       if (!editor) return '';
@@ -1440,6 +3653,26 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
         .insertContentAt(range.to, `<p>${html}</p>`)
         .run();
     },
+    insertImage: (url: string, alt: string = '', afterSelection = true) => {
+      if (!editor) return;
+      const range = savedSelectionRef.current;
+      const safeAlt = (alt || '').replace(/"/g, '&quot;');
+      const imgHtml = `<p><img src="${url}" alt="${safeAlt}" class="rounded-xl max-w-full my-4 shadow-sm" /></p>`;
+      if (range && afterSelection) {
+        savedSelectionRef.current = null;
+        editor
+          .chain()
+          .focus()
+          .insertContentAt(range.to, imgHtml)
+          .run();
+      } else {
+        editor
+          .chain()
+          .focus()
+          .insertContent(imgHtml)
+          .run();
+      }
+    },
     hasSelection: () => {
       if (!editor) return false;
       const { empty } = editor.state.selection;
@@ -1461,11 +3694,14 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
   const lastEmittedHtmlRef = useRef(initialContent);
   useEffect(() => {
     if (!editor) return;
-    if (initialContent !== lastEmittedHtmlRef.current) {
-      editor.commands.setContent(initialContent || '', false);
-      lastEmittedHtmlRef.current = initialContent || '';
+    if (initialContent !== undefined && initialContent !== lastEmittedHtmlRef.current) {
+      const currentHtml = editor.getHTML();
+      if (initialContent.trim() !== currentHtml.trim()) {
+        editor.commands.setContent(initialContent || '', false);
+      }
+      lastEmittedHtmlRef.current = initialContent;
     }
-  });
+  }, [initialContent, editor]);
 
   // ---- Computed stats ----
   const stats = useMemo(() => {
@@ -1687,30 +3923,590 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
   // Fix #4: Insert table with specified size
   const handleInsertTableSize = useCallback((rows: number, cols: number) => {
     if (!editor) return;
-    editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+    editor.chain().focus().insertTable({ rows, cols, withHeaderRow: false }).run();
   }, [editor]);
 
   const handleInsertTable = useCallback(() => {
     if (!editor) return;
-    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: false }).run();
   }, [editor]);
 
-  const handleAddColumnBefore = useCallback(() => { editor?.chain().focus().addColumnBefore().run(); closeTableCtxMenu(); }, [editor, closeTableCtxMenu]);
-  const handleAddColumnAfter = useCallback(() => { editor?.chain().focus().addColumnAfter().run(); closeTableCtxMenu(); }, [editor, closeTableCtxMenu]);
-  const handleDeleteColumn = useCallback(() => { editor?.chain().focus().deleteColumn().run(); closeTableCtxMenu(); }, [editor, closeTableCtxMenu]);
-  const handleAddRowBefore = useCallback(() => { editor?.chain().focus().addRowBefore().run(); closeTableCtxMenu(); }, [editor, closeTableCtxMenu]);
-  const handleAddRowAfter = useCallback(() => { editor?.chain().focus().addRowAfter().run(); closeTableCtxMenu(); }, [editor, closeTableCtxMenu]);
-  const handleDeleteRow = useCallback(() => { editor?.chain().focus().deleteRow().run(); closeTableCtxMenu(); }, [editor, closeTableCtxMenu]);
-  const handleDeleteTable = useCallback(() => { editor?.chain().focus().deleteTable().run(); closeTableCtxMenu(); }, [editor, closeTableCtxMenu]);
+  const handleAddColumnBefore = useCallback(() => { editor?.chain().focus().addColumnBefore().run(); closeTableCtxMenu(); setTimeout(updateTableFloatingToolbar, 60); }, [editor, closeTableCtxMenu, updateTableFloatingToolbar]);
+  const handleAddColumnAfter = useCallback(() => { editor?.chain().focus().addColumnAfter().run(); closeTableCtxMenu(); setTimeout(updateTableFloatingToolbar, 60); }, [editor, closeTableCtxMenu, updateTableFloatingToolbar]);
+  const handleDeleteColumn = useCallback(() => { editor?.chain().focus().deleteColumn().run(); closeTableCtxMenu(); setTimeout(updateTableFloatingToolbar, 60); }, [editor, closeTableCtxMenu, updateTableFloatingToolbar]);
+  const handleAddRowBefore = useCallback(() => { editor?.chain().focus().addRowBefore().run(); closeTableCtxMenu(); setTimeout(updateTableFloatingToolbar, 60); }, [editor, closeTableCtxMenu, updateTableFloatingToolbar]);
+  const handleAddRowAfter = useCallback(() => { editor?.chain().focus().addRowAfter().run(); closeTableCtxMenu(); setTimeout(updateTableFloatingToolbar, 60); }, [editor, closeTableCtxMenu, updateTableFloatingToolbar]);
+  const handleDeleteRow = useCallback(() => { editor?.chain().focus().deleteRow().run(); closeTableCtxMenu(); setTimeout(updateTableFloatingToolbar, 60); }, [editor, closeTableCtxMenu, updateTableFloatingToolbar]);
+  const handleDeleteTable = useCallback(() => {
+    editor?.chain().focus().deleteTable().run();
+    closeTableCtxMenu();
+    setTableFloatingToolbar((p) => ({ ...p, show: false }));
+    setShowTableColorPopover(false);
+    setShowTableBordersPopover(false);
+  }, [editor, closeTableCtxMenu]);
   const handleMergeCells = useCallback(() => { editor?.chain().focus().mergeCells().run(); closeTableCtxMenu(); }, [editor, closeTableCtxMenu]);
   const handleSplitCell = useCallback(() => { editor?.chain().focus().splitCell().run(); closeTableCtxMenu(); }, [editor, closeTableCtxMenu]);
 
-  // Fix #4: Table border + move up/down handlers
+  // Selection-aware Table border handler
   const handleSetTableBorders = useCallback((value: TableBorder) => {
     if (!editor) return;
-    (editor.chain().focus() as any).setTableBorders(value).run();
-    closeTableCtxMenu();
-  }, [editor, closeTableCtxMenu]);
+    const { state } = editor;
+    const info = getSelectedTableCells(state, lastActiveTablePosRef.current);
+    if (!info || info.cells.length === 0) return;
+
+    const { cells, map, tableStart, rect } = info;
+    let tr = state.tr;
+
+    const cellMap = new Map<number, any>();
+    cells.forEach(c => cellMap.set(c.pos, c.node));
+
+    const updateCellStyle = (pos: number, styleMods: Record<string, string | null>) => {
+      let node = cellMap.get(pos);
+      if (!node) {
+        node = tr.doc.nodeAt(pos);
+        if (!node) return;
+      }
+      const newStyle = mergeStyles(node.attrs.style, styleMods);
+      const updatedNodeAttrs = {
+        ...node.attrs,
+        style: newStyle || null,
+      };
+      tr = tr.setNodeMarkup(pos, undefined, updatedNodeAttrs);
+      cellMap.set(pos, { ...node, attrs: updatedNodeAttrs });
+
+      // Immediate DOM styling for instantaneous visual feedback
+      try {
+        const dom = editor.view.nodeDOM(pos) as HTMLElement | null;
+        if (dom && dom.style) {
+          dom.style.cssText = newStyle || '';
+        }
+      } catch {}
+    };
+
+    const getNeighborPos = (row: number, col: number): number | null => {
+      if (row < 0 || row >= map.height || col < 0 || col >= map.width) return null;
+      const offset = map.map[row * map.width + col];
+      if (offset == null) return null;
+      return tableStart + offset;
+    };
+
+    const BORDER_SOLID = getCssBorderValue(tableBorderStyle, tableBorderWidth, tableBorderColor);
+    const BORDER_NONE = '0 hidden transparent !important';
+
+    if (value === 'none') {
+      // NO BORDER: Toggle all borders on selected cells
+      const isCurrentlyNone = cells.every(c =>
+        isCellBorderHidden(c.node.attrs.style, 'top') &&
+        isCellBorderHidden(c.node.attrs.style, 'right') &&
+        isCellBorderHidden(c.node.attrs.style, 'bottom') &&
+        isCellBorderHidden(c.node.attrs.style, 'left')
+      );
+      const action = isCurrentlyNone ? 'turn-on' : 'turn-off';
+
+      for (const c of cells) {
+        const node = cellMap.get(c.pos) || c.node;
+        const mods = modifyCellBorderAndDecorations(node.attrs.style, {
+          sideActions: { top: action, right: action, bottom: action, left: action },
+          clearDiag: action === 'turn-off',
+          styleId: tableBorderStyle,
+          width: tableBorderWidth,
+          color: tableBorderColor,
+        });
+        updateCellStyle(c.pos, mods);
+
+        if (c.row === rect.top && c.row > 0) {
+          const nb = getNeighborPos(c.row - 1, c.col);
+          if (nb != null) {
+            const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+            if (nbNode) {
+              updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, {
+                sideActions: { bottom: action },
+                styleId: tableBorderStyle,
+                width: tableBorderWidth,
+                color: tableBorderColor,
+              }));
+            }
+          }
+        }
+        if (c.row + c.rowspan === rect.bottom && c.row + c.rowspan < map.height) {
+          const nb = getNeighborPos(c.row + c.rowspan, c.col);
+          if (nb != null) {
+            const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+            if (nbNode) {
+              updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, {
+                sideActions: { top: action },
+                styleId: tableBorderStyle,
+                width: tableBorderWidth,
+                color: tableBorderColor,
+              }));
+            }
+          }
+        }
+        if (c.col === rect.left && c.col > 0) {
+          const nb = getNeighborPos(c.row, c.col - 1);
+          if (nb != null) {
+            const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+            if (nbNode) {
+              updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, {
+                sideActions: { right: action },
+                styleId: tableBorderStyle,
+                width: tableBorderWidth,
+                color: tableBorderColor,
+              }));
+            }
+          }
+        }
+        if (c.col + c.colspan === rect.right && c.col + c.colspan < map.width) {
+          const nb = getNeighborPos(c.row, c.col + c.colspan);
+          if (nb != null) {
+            const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+            if (nbNode) {
+              updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, {
+                sideActions: { left: action },
+                styleId: tableBorderStyle,
+                width: tableBorderWidth,
+                color: tableBorderColor,
+              }));
+            }
+          }
+        }
+      }
+      if (info.isEntireTable) {
+        const targetTable = lastActiveTableDomRef.current || (editor.view.dom as HTMLElement)?.querySelector('table');
+        if (targetTable) targetTable.setAttribute('data-borders', action === 'turn-on' ? 'all' : 'none');
+      }
+    } else if (value === 'all') {
+      // ALL BORDERS: Apply border to all outer and inner edges of selected cells
+      const turnOn = !isBorderChecked('all');
+      const action = turnOn ? 'turn-on' : 'turn-off';
+
+      for (const c of cells) {
+        const node = cellMap.get(c.pos) || c.node;
+        const mods = modifyCellBorderAndDecorations(node.attrs.style, {
+          sideActions: { top: action, right: action, bottom: action, left: action },
+          styleId: tableBorderStyle,
+          width: tableBorderWidth,
+          color: tableBorderColor,
+        });
+        updateCellStyle(c.pos, mods);
+
+        if (c.row === rect.top && c.row > 0) {
+          const nb = getNeighborPos(c.row - 1, c.col);
+          if (nb != null) {
+            const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+            if (nbNode) {
+              updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, {
+                sideActions: { bottom: action },
+                styleId: tableBorderStyle,
+                width: tableBorderWidth,
+                color: tableBorderColor,
+              }));
+            }
+          }
+        }
+        if (c.row + c.rowspan === rect.bottom && c.row + c.rowspan < map.height) {
+          const nb = getNeighborPos(c.row + c.rowspan, c.col);
+          if (nb != null) {
+            const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+            if (nbNode) {
+              updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, {
+                sideActions: { top: action },
+                styleId: tableBorderStyle,
+                width: tableBorderWidth,
+                color: tableBorderColor,
+              }));
+            }
+          }
+        }
+        if (c.col === rect.left && c.col > 0) {
+          const nb = getNeighborPos(c.row, c.col - 1);
+          if (nb != null) {
+            const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+            if (nbNode) {
+              updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, {
+                sideActions: { right: action },
+                styleId: tableBorderStyle,
+                width: tableBorderWidth,
+                color: tableBorderColor,
+              }));
+            }
+          }
+        }
+        if (c.col + c.colspan === rect.right && c.col + c.colspan < map.width) {
+          const nb = getNeighborPos(c.row, c.col + c.colspan);
+          if (nb != null) {
+            const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+            if (nbNode) {
+              updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, {
+                sideActions: { left: action },
+                styleId: tableBorderStyle,
+                width: tableBorderWidth,
+                color: tableBorderColor,
+              }));
+            }
+          }
+        }
+      }
+      if (info.isEntireTable) {
+        const targetTable = lastActiveTableDomRef.current || (editor.view.dom as HTMLElement)?.querySelector('table');
+        if (targetTable) targetTable.setAttribute('data-borders', turnOn ? 'all' : 'none');
+      }
+    } else if (value === 'outside') {
+      // OUTSIDE BORDERS: Apply only to the outer edges of the current selection
+      const areOutsideBordersOn = cells.every(c => {
+        if (c.row === rect.top && isCellBorderHidden(c.node.attrs.style, 'top')) return false;
+        if (c.row + c.rowspan === rect.bottom && isCellBorderHidden(c.node.attrs.style, 'bottom')) return false;
+        if (c.col === rect.left && isCellBorderHidden(c.node.attrs.style, 'left')) return false;
+        if (c.col + c.colspan === rect.right && isCellBorderHidden(c.node.attrs.style, 'right')) return false;
+        return true;
+      });
+
+      const turnOn = !areOutsideBordersOn;
+      const action = turnOn ? 'turn-on' : 'turn-off';
+
+      for (const c of cells) {
+        const node = cellMap.get(c.pos) || c.node;
+        const sideActions: Partial<Record<'top' | 'right' | 'bottom' | 'left', 'turn-on' | 'turn-off'>> = {};
+        if (c.row === rect.top) {
+          sideActions.top = action;
+          if (c.row > 0) {
+            const nb = getNeighborPos(c.row - 1, c.col);
+            if (nb != null) {
+              const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+              if (nbNode) updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, { sideActions: { bottom: action }, styleId: tableBorderStyle, width: tableBorderWidth, color: tableBorderColor }));
+            }
+          }
+        }
+        if (c.row + c.rowspan === rect.bottom) {
+          sideActions.bottom = action;
+          if (c.row + c.rowspan < map.height) {
+            const nb = getNeighborPos(c.row + c.rowspan, c.col);
+            if (nb != null) {
+              const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+              if (nbNode) updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, { sideActions: { top: action }, styleId: tableBorderStyle, width: tableBorderWidth, color: tableBorderColor }));
+            }
+          }
+        }
+        if (c.col === rect.left) {
+          sideActions.left = action;
+          if (c.col > 0) {
+            const nb = getNeighborPos(c.row, c.col - 1);
+            if (nb != null) {
+              const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+              if (nbNode) updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, { sideActions: { right: action }, styleId: tableBorderStyle, width: tableBorderWidth, color: tableBorderColor }));
+            }
+          }
+        }
+        if (c.col + c.colspan === rect.right) {
+          sideActions.right = action;
+          if (c.col + c.colspan < map.width) {
+            const nb = getNeighborPos(c.row, c.col + c.colspan);
+            if (nb != null) {
+              const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+              if (nbNode) updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, { sideActions: { left: action }, styleId: tableBorderStyle, width: tableBorderWidth, color: tableBorderColor }));
+            }
+          }
+        }
+        if (Object.keys(sideActions).length > 0) {
+          updateCellStyle(c.pos, modifyCellBorderAndDecorations(node.attrs.style, { sideActions, styleId: tableBorderStyle, width: tableBorderWidth, color: tableBorderColor }));
+        }
+      }
+    } else if (value === 'inside') {
+      // INSIDE BORDERS: Apply to inner dividers between cells in selection
+      if (rect.bottom - rect.top <= 1 && rect.right - rect.left <= 1) return;
+      const turnOn = !isBorderChecked('inside');
+      const action = turnOn ? 'turn-on' : 'turn-off';
+
+      for (const c of cells) {
+        const node = cellMap.get(c.pos) || c.node;
+        const sideActions: Partial<Record<'top' | 'right' | 'bottom' | 'left', 'turn-on' | 'turn-off'>> = {};
+        if (c.row + c.rowspan < rect.bottom) {
+          sideActions.bottom = action;
+          const nb = getNeighborPos(c.row + c.rowspan, c.col);
+          if (nb != null) {
+            const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+            if (nbNode) updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, { sideActions: { top: action }, styleId: tableBorderStyle, width: tableBorderWidth, color: tableBorderColor }));
+          }
+        }
+        if (c.col + c.colspan < rect.right) {
+          sideActions.right = action;
+          const nb = getNeighborPos(c.row, c.col + c.colspan);
+          if (nb != null) {
+            const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+            if (nbNode) updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, { sideActions: { left: action }, styleId: tableBorderStyle, width: tableBorderWidth, color: tableBorderColor }));
+          }
+        }
+        if (Object.keys(sideActions).length > 0) {
+          updateCellStyle(c.pos, modifyCellBorderAndDecorations(node.attrs.style, { sideActions, styleId: tableBorderStyle, width: tableBorderWidth, color: tableBorderColor }));
+        }
+      }
+    } else if (value === 'inside-horizontal') {
+      // INSIDE HORIZONTAL BORDER
+      if (rect.bottom - rect.top <= 1) return;
+      const turnOn = !isBorderChecked('inside-horizontal');
+      const action = turnOn ? 'turn-on' : 'turn-off';
+
+      for (const c of cells) {
+        if (c.row + c.rowspan < rect.bottom) {
+          const node = cellMap.get(c.pos) || c.node;
+          updateCellStyle(c.pos, modifyCellBorderAndDecorations(node.attrs.style, { sideActions: { bottom: action }, styleId: tableBorderStyle, width: tableBorderWidth, color: tableBorderColor }));
+          const nb = getNeighborPos(c.row + c.rowspan, c.col);
+          if (nb != null) {
+            const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+            if (nbNode) updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, { sideActions: { top: action }, styleId: tableBorderStyle, width: tableBorderWidth, color: tableBorderColor }));
+          }
+        }
+      }
+    } else if (value === 'inside-vertical') {
+      // INSIDE VERTICAL BORDER
+      if (rect.right - rect.left <= 1) return;
+      const turnOn = !isBorderChecked('inside-vertical');
+      const action = turnOn ? 'turn-on' : 'turn-off';
+
+      for (const c of cells) {
+        if (c.col + c.colspan < rect.right) {
+          const node = cellMap.get(c.pos) || c.node;
+          updateCellStyle(c.pos, modifyCellBorderAndDecorations(node.attrs.style, { sideActions: { right: action }, styleId: tableBorderStyle, width: tableBorderWidth, color: tableBorderColor }));
+          const nb = getNeighborPos(c.row, c.col + c.colspan);
+          if (nb != null) {
+            const nbNode = cellMap.get(nb) || tr.doc.nodeAt(nb);
+            if (nbNode) updateCellStyle(nb, modifyCellBorderAndDecorations(nbNode.attrs.style, { sideActions: { left: action }, styleId: tableBorderStyle, width: tableBorderWidth, color: tableBorderColor }));
+          }
+        }
+      }
+    } else if (value === 'diagonal-down') {
+      // DIAGONAL DOWN BORDER (\)
+      for (const c of cells) {
+        const node = cellMap.get(c.pos) || tr.doc.nodeAt(c.pos);
+        if (!node) continue;
+        const mods = modifyCellBorderAndDecorations(node.attrs.style, {
+          toggleDiag: 'down',
+          styleId: tableBorderStyle,
+          width: tableBorderWidth,
+          color: tableBorderColor,
+        });
+        updateCellStyle(c.pos, mods);
+      }
+    } else if (value === 'diagonal-up') {
+      // DIAGONAL UP BORDER (/)
+      for (const c of cells) {
+        const node = cellMap.get(c.pos) || tr.doc.nodeAt(c.pos);
+        if (!node) continue;
+        const mods = modifyCellBorderAndDecorations(node.attrs.style, {
+          toggleDiag: 'up',
+          styleId: tableBorderStyle,
+          width: tableBorderWidth,
+          color: tableBorderColor,
+        });
+        updateCellStyle(c.pos, mods);
+      }
+    } else {
+      // SINGLE OR MULTIPLE SELECTED CELLS: 'top' | 'right' | 'bottom' | 'left'
+      const side = value as 'top' | 'right' | 'bottom' | 'left';
+      const targetCells = cells.filter(c => {
+        if (side === 'top') return c.row === rect.top;
+        if (side === 'bottom') return c.row + c.rowspan === rect.bottom;
+        if (side === 'left') return c.col === rect.left;
+        if (side === 'right') return c.col + c.colspan === rect.right;
+        return true;
+      });
+
+      const isCurrentlyOn = targetCells.every(c => !isCellBorderHidden(c.node.attrs.style, side));
+      const action = isCurrentlyOn ? 'turn-off' : 'turn-on';
+
+      const oppositeSide: Record<'top' | 'right' | 'bottom' | 'left', 'top' | 'right' | 'bottom' | 'left'> = {
+        top: 'bottom',
+        bottom: 'top',
+        left: 'right',
+        right: 'left',
+      };
+      const oppSide = oppositeSide[side];
+
+      for (const c of targetCells) {
+        const node = cellMap.get(c.pos) || c.node;
+        updateCellStyle(c.pos, modifyCellBorderAndDecorations(node.attrs.style, {
+          sideActions: { [side]: action },
+          styleId: tableBorderStyle,
+          width: tableBorderWidth,
+          color: tableBorderColor,
+        }));
+
+        let nbRow = c.row;
+        let nbCol = c.col;
+        if (side === 'top') nbRow = c.row - 1;
+        else if (side === 'bottom') nbRow = c.row + c.rowspan;
+        else if (side === 'left') nbCol = c.col - 1;
+        else if (side === 'right') nbCol = c.col + c.colspan;
+
+        const nbPos = getNeighborPos(nbRow, nbCol);
+        if (nbPos != null) {
+          const nbNode = cellMap.get(nbPos) || tr.doc.nodeAt(nbPos);
+          if (nbNode) {
+            updateCellStyle(nbPos, modifyCellBorderAndDecorations(nbNode.attrs.style, {
+              sideActions: { [oppSide]: action },
+              styleId: tableBorderStyle,
+              width: tableBorderWidth,
+              color: tableBorderColor,
+            }));
+          }
+        }
+      }
+    }
+
+    if (state.selection) {
+      try {
+        tr = tr.setSelection(state.selection);
+      } catch {}
+    }
+
+    editor.view.dispatch(tr);
+    setTableBordersVersion(v => v + 1);
+    editor.view.focus();
+    if (tableCtxMenu.show) closeTableCtxMenu();
+  }, [editor, tableCtxMenu.show, closeTableCtxMenu, tableBorderStyle, tableBorderWidth, tableBorderColor, isBorderChecked]);
+
+  const currentWidthOption = useMemo(() => {
+    return TABLE_BORDER_WIDTHS.find((w) => w.value === tableBorderWidth) || TABLE_BORDER_WIDTHS[3];
+  }, [tableBorderWidth]);
+
+  const handleSetTableBorderWidth = useCallback((width: string) => {
+    setTableBorderWidth(width);
+    if (!editor) return;
+    const { state } = editor;
+    const info = getSelectedTableCells(state, lastActiveTablePosRef.current);
+    if (!info || info.cells.length === 0) return;
+
+    let tr = state.tr;
+    const cellMap = new Map<number, any>();
+    info.cells.forEach(c => cellMap.set(c.pos, c.node));
+
+    const updateCellStyle = (pos: number, styleMods: Record<string, string | null>) => {
+      let node = cellMap.get(pos);
+      if (!node) {
+        node = tr.doc.nodeAt(pos);
+        if (!node) return;
+      }
+      const newStyle = mergeStyles(node.attrs.style, styleMods);
+      const updatedNodeAttrs = { ...node.attrs, style: newStyle || null };
+      tr = tr.setNodeMarkup(pos, undefined, updatedNodeAttrs);
+      cellMap.set(pos, { ...node, attrs: updatedNodeAttrs });
+      try {
+        const dom = editor.view.nodeDOM(pos) as HTMLElement | null;
+        if (dom && dom.style) dom.style.cssText = newStyle || '';
+      } catch {}
+    };
+
+    for (const c of info.cells) {
+      const node = cellMap.get(c.pos) || c.node;
+      const mods = modifyCellBorderAndDecorations(node.attrs.style, {
+        syncExisting: true,
+        styleId: tableBorderStyle,
+        width,
+        color: tableBorderColor,
+      });
+      updateCellStyle(c.pos, mods);
+    }
+
+    if (state.selection) {
+      try { tr = tr.setSelection(state.selection); } catch {}
+    }
+    editor.view.dispatch(tr);
+    setTableBordersVersion(v => v + 1);
+    editor.view.focus();
+  }, [editor, tableBorderStyle, tableBorderColor]);
+
+  const handleSetTableBorderColor = useCallback((color: string) => {
+    setTableBorderColor(color);
+    if (!editor) return;
+    const { state } = editor;
+    const info = getSelectedTableCells(state, lastActiveTablePosRef.current);
+    if (!info || info.cells.length === 0) return;
+
+    let tr = state.tr;
+    const cellMap = new Map<number, any>();
+    info.cells.forEach(c => cellMap.set(c.pos, c.node));
+
+    const updateCellStyle = (pos: number, styleMods: Record<string, string | null>) => {
+      let node = cellMap.get(pos);
+      if (!node) {
+        node = tr.doc.nodeAt(pos);
+        if (!node) return;
+      }
+      const newStyle = mergeStyles(node.attrs.style, styleMods);
+      const updatedNodeAttrs = { ...node.attrs, style: newStyle || null };
+      tr = tr.setNodeMarkup(pos, undefined, updatedNodeAttrs);
+      cellMap.set(pos, { ...node, attrs: updatedNodeAttrs });
+      try {
+        const dom = editor.view.nodeDOM(pos) as HTMLElement | null;
+        if (dom && dom.style) dom.style.cssText = newStyle || '';
+      } catch {}
+    };
+
+    for (const c of info.cells) {
+      const node = cellMap.get(c.pos) || c.node;
+      const mods = modifyCellBorderAndDecorations(node.attrs.style, {
+        syncExisting: true,
+        styleId: tableBorderStyle,
+        width: tableBorderWidth,
+        color,
+      });
+      updateCellStyle(c.pos, mods);
+    }
+
+    if (state.selection) {
+      try { tr = tr.setSelection(state.selection); } catch {}
+    }
+    editor.view.dispatch(tr);
+    setTableBordersVersion(v => v + 1);
+    editor.view.focus();
+  }, [editor, tableBorderStyle, tableBorderWidth]);
+
+  // Handle Border Line Style change (Images 2 & 3)
+  const handleSetTableBorderStyle = useCallback((styleId: string) => {
+    setTableBorderStyle(styleId);
+    if (!editor) return;
+    const { state } = editor;
+    const info = getSelectedTableCells(state, lastActiveTablePosRef.current);
+    if (!info || info.cells.length === 0) return;
+
+    let tr = state.tr;
+    const cellMap = new Map<number, any>();
+    info.cells.forEach(c => cellMap.set(c.pos, c.node));
+
+    const updateCellStyle = (pos: number, styleMods: Record<string, string | null>) => {
+      let node = cellMap.get(pos);
+      if (!node) {
+        node = tr.doc.nodeAt(pos);
+        if (!node) return;
+      }
+      const newStyle = mergeStyles(node.attrs.style, styleMods);
+      const updatedNodeAttrs = { ...node.attrs, style: newStyle || null };
+      tr = tr.setNodeMarkup(pos, undefined, updatedNodeAttrs);
+      cellMap.set(pos, { ...node, attrs: updatedNodeAttrs });
+      try {
+        const dom = editor.view.nodeDOM(pos) as HTMLElement | null;
+        if (dom && dom.style) dom.style.cssText = newStyle || '';
+      } catch {}
+    };
+
+    for (const c of info.cells) {
+      const node = cellMap.get(c.pos) || c.node;
+      const mods = modifyCellBorderAndDecorations(node.attrs.style, {
+        syncExisting: true,
+        styleId,
+        width: tableBorderWidth,
+        color: tableBorderColor,
+      });
+      updateCellStyle(c.pos, mods);
+    }
+
+    if (state.selection) {
+      try { tr = tr.setSelection(state.selection); } catch {}
+    }
+    editor.view.dispatch(tr);
+    setTableBordersVersion(v => v + 1);
+    editor.view.focus();
+  }, [editor, tableBorderWidth, tableBorderColor]);
 
   const handleMoveTableUp = useCallback(() => {
     if (!editor) return;
@@ -1723,6 +4519,387 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
     (editor.chain().focus() as any).moveTableDown().run();
     closeTableCtxMenu();
   }, [editor, closeTableCtxMenu]);
+
+  // Interactive table border resize handler
+  const startTableResize = useCallback((
+    hoverInfo: {
+      active: boolean;
+      type: 'col' | 'row';
+      table: HTMLTableElement;
+      cell: HTMLTableCellElement;
+      targetColIndex?: number;
+      targetRowIndex?: number;
+    },
+    startX: number,
+    startY: number
+  ) => {
+    isResizingTableRef.current = true;
+    const isCol = hoverInfo.type === 'col';
+    document.body.style.cursor = isCol ? 'col-resize' : 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const table = hoverInfo.table;
+    lastActiveTableDomRef.current = table;
+    const rows = Array.from(table.querySelectorAll('tr'));
+    if (rows.length === 0) {
+      isResizingTableRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      return;
+    }
+
+    if (isCol) {
+      const colIndex = hoverInfo.targetColIndex ?? -1;
+      const firstRowCells = Array.from(rows[0].children) as HTMLElement[];
+      const numCols = firstRowCells.length;
+      if (colIndex < 0 || colIndex >= numCols) {
+        isResizingTableRef.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        setColResizeIndicator((prev) => (prev.show ? { ...prev, show: false } : prev));
+        return;
+      }
+
+      setColResizeIndicator((prev) => ({ ...prev, show: true, isDragging: true }));
+
+      // Ensure colgroup exists with accurate cols
+      let colgroup = table.querySelector('colgroup');
+      if (!colgroup) {
+        colgroup = document.createElement('colgroup');
+        table.insertBefore(colgroup, table.firstChild);
+      }
+      let cols = Array.from(colgroup.querySelectorAll('col'));
+      if (cols.length !== numCols) {
+        colgroup.innerHTML = '';
+        cols = [];
+        for (let i = 0; i < numCols; i++) {
+          const col = document.createElement('col');
+          colgroup.appendChild(col);
+          cols.push(col);
+        }
+      }
+
+      // ALWAYS measure actual rendered pixel widths of every column right now
+      const initialColWidths = firstRowCells.map((cell) => Math.round(cell.getBoundingClientRect().width));
+      const initialTableWidth = initialColWidths.reduce((a, b) => a + b, 0);
+
+      // Lock current widths on all cols, cells, and table to prevent layout jumps
+      table.style.width = `${initialTableWidth}px`;
+      table.style.minWidth = '0px';
+      cols.forEach((col, idx) => {
+        col.style.width = `${initialColWidths[idx]}px`;
+        col.style.minWidth = `${initialColWidths[idx]}px`;
+        col.style.maxWidth = `${initialColWidths[idx]}px`;
+        col.setAttribute('width', `${initialColWidths[idx]}`);
+      });
+      rows.forEach((r) => {
+        Array.from(r.children).forEach((cell, idx) => {
+          const el = cell as HTMLElement;
+          el.style.width = `${initialColWidths[idx]}px`;
+          el.style.minWidth = `${initialColWidths[idx]}px`;
+          el.style.maxWidth = `${initialColWidths[idx]}px`;
+        });
+      });
+
+      const startColWidth = initialColWidths[colIndex];
+      const hasNext = colIndex < numCols - 1;
+      const startNextWidth = hasNext ? initialColWidths[colIndex + 1] : 0;
+      const minWidth = 45;
+      const startBorderX = firstRowCells[colIndex].getBoundingClientRect().right;
+      const initialBounds = getTableBounds(table);
+
+      setColResizeIndicator({
+        show: true,
+        left: startBorderX,
+        top: initialBounds.top,
+        height: initialBounds.height,
+        isDragging: true,
+      });
+
+      let finalColWidth = startColWidth;
+      let finalNextWidth = startNextWidth;
+
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        const deltaX = moveEvent.clientX - startX;
+
+        if (hasNext) {
+          if (deltaX >= 0) {
+            // Dragging right -> Expanding colIndex (border moves right with mouse)
+            finalColWidth = startColWidth + deltaX;
+            const availableToShrink = Math.max(0, startNextWidth - minWidth);
+            if (deltaX <= availableToShrink) {
+              finalNextWidth = startNextWidth - deltaX;
+              table.style.width = `${initialTableWidth}px`;
+            } else {
+              finalNextWidth = minWidth;
+              const overflow = deltaX - availableToShrink;
+              table.style.width = `${initialTableWidth + overflow}px`;
+            }
+          } else {
+            // Dragging left -> Shrinking colIndex (border moves left with mouse)
+            finalColWidth = Math.max(minWidth, startColWidth + deltaX);
+            const actualDecrease = startColWidth - finalColWidth;
+            finalNextWidth = startNextWidth + actualDecrease;
+            table.style.width = `${initialTableWidth}px`;
+          }
+
+          cols[colIndex].style.width = `${finalColWidth}px`;
+          cols[colIndex].style.minWidth = `${finalColWidth}px`;
+          cols[colIndex].style.maxWidth = `${finalColWidth}px`;
+          cols[colIndex].setAttribute('width', `${finalColWidth}`);
+
+          cols[colIndex + 1].style.width = `${finalNextWidth}px`;
+          cols[colIndex + 1].style.minWidth = `${finalNextWidth}px`;
+          cols[colIndex + 1].style.maxWidth = `${finalNextWidth}px`;
+          cols[colIndex + 1].setAttribute('width', `${finalNextWidth}`);
+
+          rows.forEach((r) => {
+            const c1 = r.children[colIndex] as HTMLElement | undefined;
+            if (c1) {
+              c1.style.width = `${finalColWidth}px`;
+              c1.style.minWidth = `${finalColWidth}px`;
+              c1.style.maxWidth = `${finalColWidth}px`;
+              c1.setAttribute('colwidth', String(finalColWidth));
+            }
+            const c2 = r.children[colIndex + 1] as HTMLElement | undefined;
+            if (c2) {
+              c2.style.width = `${finalNextWidth}px`;
+              c2.style.minWidth = `${finalNextWidth}px`;
+              c2.style.maxWidth = `${finalNextWidth}px`;
+              c2.setAttribute('colwidth', String(finalNextWidth));
+            }
+          });
+        } else {
+          // Last column -> direct expand/shrink
+          finalColWidth = Math.max(minWidth, startColWidth + deltaX);
+          cols[colIndex].style.width = `${finalColWidth}px`;
+          cols[colIndex].style.minWidth = `${finalColWidth}px`;
+          cols[colIndex].style.maxWidth = `${finalColWidth}px`;
+          cols[colIndex].setAttribute('width', `${finalColWidth}`);
+          rows.forEach((r) => {
+            const c = r.children[colIndex] as HTMLElement | undefined;
+            if (c) {
+              c.style.width = `${finalColWidth}px`;
+              c.style.minWidth = `${finalColWidth}px`;
+              c.style.maxWidth = `${finalColWidth}px`;
+              c.setAttribute('colwidth', String(finalColWidth));
+            }
+          });
+          table.style.width = `${Math.round(initialTableWidth + (finalColWidth - startColWidth))}px`;
+        }
+
+        // Continuously update visible vertical resize indicator line to follow mouse strictly within table bounds
+        if (colResizeIndicatorRef.current) {
+          const currentIndicatorX = startBorderX + (finalColWidth - startColWidth);
+          const currentBounds = getTableBounds(table);
+          colResizeIndicatorRef.current.style.left = `${currentIndicatorX - 2.5}px`;
+          colResizeIndicatorRef.current.style.top = `${currentBounds.top}px`;
+          colResizeIndicatorRef.current.style.height = `${currentBounds.height}px`;
+        }
+      };
+
+      const onMouseUp = () => {
+        isResizingTableRef.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+
+        setColResizeIndicator({
+          show: false,
+          left: 0,
+          top: 0,
+          height: 0,
+          isDragging: false,
+        });
+
+        table.style.minWidth = '';
+        cols.forEach((col) => {
+          col.style.minWidth = '';
+          col.style.maxWidth = '';
+        });
+        rows.forEach((r) => {
+          Array.from(r.children).forEach((cell) => {
+            const el = cell as HTMLElement;
+            el.style.minWidth = '';
+            el.style.maxWidth = '';
+          });
+        });
+
+        // Persist to ProseMirror
+        if (editor && editor.view) {
+          try {
+            const { state, dispatch } = editor.view;
+            const pos = editor.view.posAtDOM(table, 0);
+            if (pos >= 0) {
+              const $pos = state.doc.resolve(pos);
+              let tablePos = -1;
+              let tableNode: any = null;
+              for (let d = $pos.depth; d >= 0; d--) {
+                if ($pos.node(d).type.name === 'table') {
+                  tablePos = $pos.before(d);
+                  tableNode = $pos.node(d);
+                  break;
+                }
+              }
+
+              if (tablePos >= 0 && tableNode) {
+                let tr = state.tr;
+                tableNode.forEach((rowNode: any, rowOffset: number) => {
+                  const rowPos = tablePos + 1 + rowOffset;
+                  let cIdx = 0;
+                  rowNode.forEach((cellNode: any, cellOffset: number) => {
+                    const cellPos = rowPos + 1 + cellOffset;
+                    let colW = initialColWidths[cIdx] || 100;
+                    if (cIdx === colIndex) colW = finalColWidth;
+                    else if (hasNext && cIdx === colIndex + 1) colW = finalNextWidth;
+
+                    tr = tr.setNodeMarkup(cellPos, undefined, {
+                      ...cellNode.attrs,
+                      colwidth: [colW],
+                      style: mergeStyles(cellNode.attrs.style, { width: `${colW}px` }),
+                    });
+                    cIdx++;
+                  });
+                });
+                dispatch(tr);
+              }
+            }
+          } catch (err) {
+            console.error('Error persisting column resize:', err);
+          }
+          editor.commands.focus();
+        }
+      };
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    } else {
+      // ROW RESIZE
+      const rowIndex = hoverInfo.targetRowIndex ?? -1;
+      const targetRow = rows[rowIndex];
+      if (!targetRow || rowIndex < 0) {
+        isResizingTableRef.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        setRowResizeIndicator((prev) => (prev.show ? { ...prev, show: false } : prev));
+        return;
+      }
+
+      setRowResizeIndicator((prev) => ({ ...prev, show: true, isDragging: true }));
+
+      const startRowHeight = targetRow.getBoundingClientRect().height;
+      const startBorderY = targetRow.getBoundingClientRect().bottom;
+      const initialBounds = getTableBounds(table);
+      const rowCells = Array.from(targetRow.children) as HTMLElement[];
+      const minHeight = 32;
+      let finalRowHeight = startRowHeight;
+
+      setRowResizeIndicator({
+        show: true,
+        top: startBorderY,
+        left: initialBounds.left,
+        width: initialBounds.width,
+        isDragging: true,
+      });
+
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        const deltaY = moveEvent.clientY - startY;
+        finalRowHeight = Math.max(minHeight, Math.round(startRowHeight + deltaY));
+
+        targetRow.style.height = `${finalRowHeight}px`;
+        rowCells.forEach((cell) => {
+          cell.style.height = `${finalRowHeight}px`;
+          cell.style.minHeight = `${finalRowHeight}px`;
+        });
+
+        // Continuously update visible horizontal resize indicator line to follow mouse strictly within table bounds
+        if (rowResizeIndicatorRef.current) {
+          const currentIndicatorY = startBorderY + (finalRowHeight - startRowHeight);
+          const currentBounds = getTableBounds(table);
+          rowResizeIndicatorRef.current.style.top = `${currentIndicatorY - 2.5}px`;
+          rowResizeIndicatorRef.current.style.left = `${currentBounds.left}px`;
+          rowResizeIndicatorRef.current.style.width = `${currentBounds.width}px`;
+        }
+      };
+
+      const onMouseUp = () => {
+        isResizingTableRef.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+
+        setRowResizeIndicator({
+          show: false,
+          top: 0,
+          left: 0,
+          width: 0,
+          isDragging: false,
+        });
+
+        // Persist to ProseMirror
+        if (editor && editor.view) {
+          try {
+            const { state, dispatch } = editor.view;
+            const pos = editor.view.posAtDOM(table, 0);
+            if (pos >= 0) {
+              const $pos = state.doc.resolve(pos);
+              let tablePos = -1;
+              let tableNode: any = null;
+              for (let d = $pos.depth; d >= 0; d--) {
+                if ($pos.node(d).type.name === 'table') {
+                  tablePos = $pos.before(d);
+                  tableNode = $pos.node(d);
+                  break;
+                }
+              }
+
+              if (tablePos >= 0 && tableNode) {
+                let tr = state.tr;
+                let rIdx = 0;
+                tableNode.forEach((rowNode: any, rowOffset: number) => {
+                  if (rIdx === rowIndex) {
+                    const rowPos = tablePos + 1 + rowOffset;
+                    tr = tr.setNodeMarkup(rowPos, undefined, {
+                      ...rowNode.attrs,
+                      style: mergeStyles(rowNode.attrs.style, { height: `${finalRowHeight}px` }),
+                    });
+                    rowNode.forEach((cellNode: any, cellOffset: number) => {
+                      const cellPos = rowPos + 1 + cellOffset;
+                      tr = tr.setNodeMarkup(cellPos, undefined, {
+                        ...cellNode.attrs,
+                        style: mergeStyles(cellNode.attrs.style, {
+                          height: `${finalRowHeight}px`,
+                          'min-height': `${finalRowHeight}px`,
+                        }),
+                      });
+                    });
+                  }
+                  rIdx++;
+                });
+                dispatch(tr);
+              }
+            }
+          } catch (err) {
+            console.error('Error persisting row resize:', err);
+          }
+          editor.commands.focus();
+        }
+      };
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    }
+  }, [editor]);
+
+  const handleContainerMouseDownCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button === 0 && tableHoverBorderRef.current?.active && isEditable) {
+      e.preventDefault();
+      e.stopPropagation();
+      startTableResize(tableHoverBorderRef.current, e.clientX, e.clientY);
+    }
+  }, [isEditable, startTableResize]);
 
   // ---- Export ----
   const handleExportHTML = useCallback(() => {
@@ -2535,13 +5712,6 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
 
         {/* Table dropdown */}
         <TDropdown label={t('editor.table')} icon={<TableIcon className="h-4 w-4" />} active={editor.isActive('table')}>
-          <DropdownMenuItem
-            onClick={handleInsertTable}
-            className="text-xs"
-          >
-            <TableIcon className="h-3.5 w-3.5 mr-1.5" />
-            {t('editor.insertTable')}
-          </DropdownMenuItem>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="text-xs">
               <TableProperties className="h-3.5 w-3.5 mr-1.5" />
@@ -2627,19 +5797,15 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
                 <DropdownMenuItem
                   key={b.value}
                   onClick={() => handleSetTableBorders(b.value)}
-                  className="text-xs"
+                  className="text-xs flex items-center justify-between"
                 >
-                  {t(TABLE_BORDER_I18N_KEYS[b.value])}
+                  <div className="flex items-center gap-2">
+                    <TableBorderDiagram type={b.value} className="text-current" />
+                    <span>{b.label}</span>
+                  </div>
+                  {isBorderChecked(b.value) && <Check className="h-3.5 w-3.5 ml-2 text-primary" />}
                 </DropdownMenuItem>
               ))}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          {/* Fix #4: Move up/down */}
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger className="text-xs"><ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />{t('editor.move')}</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuItem onClick={handleMoveTableUp} className="text-xs"><ArrowUp className="h-3.5 w-3.5 mr-1.5" />{t('editor.moveUp')}</DropdownMenuItem>
-              <DropdownMenuItem onClick={handleMoveTableDown} className="text-xs"><ArrowDown className="h-3.5 w-3.5 mr-1.5" />{t('editor.moveDown')}</DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSeparator />
@@ -3158,10 +6324,14 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
                 {TABLE_BORDERS.map((b) => (
                   <div
                     key={b.value}
-                    className="table-ctx-item"
+                    className="table-ctx-item flex items-center justify-between"
                     onClick={(e) => { e.stopPropagation(); handleSetTableBorders(b.value); }}
                   >
-                    {t(TABLE_BORDER_I18N_KEYS[b.value])}
+                    <div className="flex items-center gap-2">
+                      <TableBorderDiagram type={b.value} className="text-current" />
+                      <span>{t(TABLE_BORDER_I18N_KEYS[b.value])}</span>
+                    </div>
+                    {isBorderChecked(b.value) && <Check className="h-3.5 w-3.5 ml-2" />}
                   </div>
                 ))}
               </div>
@@ -3183,45 +6353,670 @@ export const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(funct
 
       {/* ========== EDITOR CONTENT ========== */}
       <div
+        ref={editorScrollContainerRef}
         className="flex-1 overflow-y-auto min-h-0 relative"
+        onMouseMove={handleContainerMouseMove}
+        onMouseLeave={handleContainerMouseLeave}
+        onMouseDownCapture={handleContainerMouseDownCapture}
+        onScroll={handleContainerScroll}
         onContextMenu={handleTableContextMenu}
         onDragOver={handleEditorDragOver}
         onDrop={handleEditorDrop}
         onDragEnd={handleEditorDragEnd}
       >
-        {/* Fix #1: Drag handle overlay (real DOM, draggable) */}
-        {dragHandle.show && (
+        {/* Table column resize indicator & handle */}
+        {colResizeIndicator.show && (
           <div
-            draggable
-            onDragStart={handleDragHandleDragStart}
+            ref={colResizeIndicatorRef}
             style={{
               position: 'fixed',
-              top: dragHandle.top,
-              left: dragHandle.left,
-              zIndex: 50,
-              cursor: 'grab',
+              top: colResizeIndicator.top,
+              left: colResizeIndicator.left - 2.5,
+              width: 5,
+              height: colResizeIndicator.height,
+              zIndex: 25,
+              cursor: 'col-resize',
+              userSelect: 'none',
             }}
-            className="h-6 w-6 rounded-md bg-popover border border-border/60 shadow-sm flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title={t('editor.dragToReorder')}
+            onMouseDown={(e) => {
+              if (e.button === 0 && tableHoverBorderRef.current?.active && isEditable) {
+                e.preventDefault();
+                e.stopPropagation();
+                startTableResize(tableHoverBorderRef.current, e.clientX, e.clientY);
+              }
+            }}
+            className="flex items-center justify-center pointer-events-auto"
           >
-            <GripVertical className="h-3.5 w-3.5" />
+            {/* Visual vertical line */}
+            <div
+              className={cn(
+                "w-[3px] h-full transition-colors",
+                colResizeIndicator.isDragging
+                  ? "bg-black dark:bg-white shadow-[0_0_8px_rgba(0,0,0,0.7)] dark:shadow-[0_0_8px_rgba(255,255,255,0.7)] opacity-100"
+                  : "bg-black/85 hover:bg-black dark:bg-zinc-300 dark:hover:bg-white opacity-90"
+              )}
+            />
+            {/* Grip handle notch centered on the vertical line */}
+            <div
+              className={cn(
+                "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-6 rounded-md bg-black dark:bg-white text-white dark:text-black shadow-md flex items-center justify-center pointer-events-none transition-transform",
+                colResizeIndicator.isDragging ? "scale-110" : "scale-100"
+              )}
+            >
+              <div className="flex gap-[2px]">
+                <div className="w-[1px] h-3 bg-white dark:bg-black rounded-full" />
+                <div className="w-[1px] h-3 bg-white dark:bg-black rounded-full" />
+              </div>
+            </div>
           </div>
         )}
-        {/* Drop indicator line */}
+
+        {/* Table row resize indicator & handle */}
+        {rowResizeIndicator.show && (
+          <div
+            ref={rowResizeIndicatorRef}
+            style={{
+              position: 'fixed',
+              top: rowResizeIndicator.top - 2.5,
+              left: rowResizeIndicator.left,
+              width: rowResizeIndicator.width,
+              height: 5,
+              zIndex: 25,
+              cursor: 'row-resize',
+              userSelect: 'none',
+            }}
+            onMouseDown={(e) => {
+              if (e.button === 0 && tableHoverBorderRef.current?.active && isEditable) {
+                e.preventDefault();
+                e.stopPropagation();
+                startTableResize(tableHoverBorderRef.current, e.clientX, e.clientY);
+              }
+            }}
+            className="flex items-center justify-center pointer-events-auto"
+          >
+            {/* Visual horizontal line */}
+            <div
+              className={cn(
+                "h-[3px] w-full transition-colors",
+                rowResizeIndicator.isDragging
+                  ? "bg-black dark:bg-white shadow-[0_0_8px_rgba(0,0,0,0.7)] dark:shadow-[0_0_8px_rgba(255,255,255,0.7)] opacity-100"
+                  : "bg-black/85 hover:bg-black dark:bg-zinc-300 dark:hover:bg-white opacity-90"
+              )}
+            />
+            {/* Grip handle notch centered on the horizontal line */}
+            <div
+              className={cn(
+                "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-3.5 rounded-md bg-black dark:bg-white text-white dark:text-black shadow-md flex flex-col items-center justify-center gap-[2px] pointer-events-none transition-transform",
+                rowResizeIndicator.isDragging ? "scale-110" : "scale-100"
+              )}
+            >
+              <div className="w-3 h-[1px] bg-white dark:bg-black rounded-full" />
+              <div className="w-3 h-[1px] bg-white dark:bg-black rounded-full" />
+            </div>
+          </div>
+        )}
+
+        {/* Drag handle overlay (matches Images 1 & 2) */}
+        {dragHandle.show && (
+          <div
+            ref={dragHandleRef}
+            draggable
+            onMouseDown={handleDragHandleMouseDown}
+            onClick={handleDragHandleMouseDown}
+            onDragStart={handleDragHandleDragStart}
+            onDragEnd={handleEditorDragEnd}
+            style={{
+              position: 'fixed',
+              top: dragState?.isDragging ? dragState.cursorY - 12 : dragHandle.top,
+              left: dragState?.isDragging ? dragState.cursorX - 10 : dragHandle.left,
+              zIndex: dragState?.isDragging ? 999999 : 50,
+              width: 20,
+              height: 24,
+              opacity: 1,
+              pointerEvents: dragState?.isDragging ? 'none' : 'auto',
+              cursor: dragState?.isDragging ? 'grabbing' : 'grab',
+            }}
+            className="group/drag flex items-center justify-center cursor-grab active:cursor-grabbing text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200 transition-colors select-none"
+          >
+            <GripVertical className="h-4 w-4" />
+          </div>
+        )}
+        {/* Drop indicator line (matches Image 1) */}
         {dropIndicator.show && (
           <div
             style={{
               position: 'fixed',
               top: dropIndicator.top - 1.5,
-              left: 0,
-              right: 0,
+              left: dropIndicator.left,
+              width: dropIndicator.width,
               height: 3,
-              backgroundColor: 'oklch(0.75 0.18 75)',
-              zIndex: 49,
+              backgroundColor: '#f59e0b',
+              borderRadius: 2,
+              zIndex: 9999,
               pointerEvents: 'none',
+              boxShadow: '0 1px 6px rgba(245, 158, 11, 0.6)',
             }}
           />
         )}
+        {/* Floating text drag preview (matches "imchi m3ah l-txt") */}
+        {dragState?.isDragging && (
+          <div
+            style={{
+              position: 'fixed',
+              left: dragState.cursorX + 16,
+              top: dragState.cursorY + 12,
+              maxWidth: Math.min(dragState.ghostWidth, 600),
+              pointerEvents: 'none',
+              zIndex: 999999,
+              transform: 'rotate(1deg)',
+              boxShadow: '0 12px 28px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.1)',
+            }}
+            className="bg-[#fef9ee] dark:bg-amber-950/90 border border-amber-400/50 rounded-lg p-3 text-neutral-800 dark:text-neutral-100 text-sm opacity-95 select-none overflow-hidden max-h-40"
+            dangerouslySetInnerHTML={{ __html: dragState.ghostHtml }}
+          />
+        )}
+
+        {/* Floating Table Toolbar (matches user screenshots) */}
+        {tableFloatingToolbar.show && editor && isEditable && (
+          <div
+            ref={tableFloatingToolbarRef}
+            className="fixed z-40 flex items-center bg-white dark:bg-zinc-900 border border-neutral-200/90 dark:border-zinc-800 shadow-[0_4px_24px_rgba(0,0,0,0.12)] rounded-2xl px-2.5 py-1.5 -translate-x-1/2 select-none pointer-events-auto gap-0.5 animate-in fade-in zoom-in-95 duration-100"
+            style={{
+              top: tableFloatingToolbar.top,
+              left: tableFloatingToolbar.left,
+            }}
+            onMouseDown={(e) => {
+              // Crucial: prevent stealing editor focus and cell selection
+              e.preventDefault();
+            }}
+          >
+            {/* Group 1: Cell Color, Border Color, Border Width, Table Borders, Delete Table */}
+            {/* 1. Cell Color */}
+            <div className="relative" ref={tableColorContainerRef}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setShowTableColorPopover((p) => !p);
+                  setShowTableBordersPopover(false);
+                  setShowTableBorderColorPopover(false);
+                  setShowTableBorderWidthPopover(false);
+                  setShowTableBorderStylePopover(false);
+                }}
+                onMouseEnter={() => setTableToolbarTooltip('Cell Color')}
+                onMouseLeave={() => setTableToolbarTooltip(null)}
+                className={cn(
+                  "w-8 h-8 rounded-lg flex items-center justify-center transition-colors text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white",
+                  showTableColorPopover && "bg-neutral-100 dark:bg-zinc-800 text-black dark:text-white"
+                )}
+              >
+                <PaintBucket className="h-4 w-4" />
+              </button>
+
+              {tableToolbarTooltip === 'Cell Color' && !showTableColorPopover && !showTableBordersPopover && !showTableBorderColorPopover && !showTableBorderWidthPopover && !showTableBorderStylePopover && (
+                <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-black text-white text-[12px] font-medium px-3 py-1 rounded-full shadow-lg whitespace-nowrap pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-75">
+                  Cell Color
+                </div>
+              )}
+
+              {/* Colors Popover (Image 2) */}
+              {showTableColorPopover && (
+                <div
+                  className="absolute bottom-[calc(100%+12px)] left-0 bg-white dark:bg-zinc-900 border border-neutral-200 dark:border-zinc-800 shadow-[0_8px_30px_rgba(0,0,0,0.18)] rounded-xl p-3.5 z-50 w-[240px] animate-in fade-in zoom-in-95 duration-100"
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  <div className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200 mb-2.5">
+                    Colors
+                  </div>
+                  <div className="grid grid-cols-10 gap-1.5 mb-3">
+                    {TABLE_COLORS.flat().map((col, idx) => (
+                      <button
+                        key={`${col}-${idx}`}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          handleSetCellBackgroundColor(col);
+                          setShowTableColorPopover(false);
+                        }}
+                        className="w-4 h-4 rounded-full border border-black/10 dark:border-white/10 hover:scale-125 transition-transform cursor-pointer focus:outline-none"
+                        style={{ backgroundColor: col }}
+                        title={col}
+                      />
+                    ))}
+                  </div>
+                  <div className="border-t border-neutral-100 dark:border-zinc-800 pt-2">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        handleSetCellBackgroundColor(null);
+                        setShowTableColorPopover(false);
+                      }}
+                      className="flex items-center gap-2 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:text-black dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-zinc-800 px-2 py-1.5 rounded-lg w-full transition-colors cursor-pointer"
+                    >
+                      <Eraser className="h-3.5 w-3.5" />
+                      <span>Clear</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 2. Border Color */}
+            <div className="relative" ref={tableBorderColorContainerRef}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setShowTableBorderColorPopover((p) => !p);
+                  setShowTableColorPopover(false);
+                  setShowTableBordersPopover(false);
+                  setShowTableBorderWidthPopover(false);
+                  setShowTableBorderStylePopover(false);
+                }}
+                onMouseEnter={() => setTableToolbarTooltip('Border Color')}
+                onMouseLeave={() => setTableToolbarTooltip(null)}
+                className={cn(
+                  "w-8 h-8 rounded-lg flex flex-col items-center justify-center transition-colors text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white",
+                  showTableBorderColorPopover && "bg-neutral-100 dark:bg-zinc-800 text-black dark:text-white"
+                )}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                <div
+                  className="w-4 h-[3px] rounded-full mt-0.5 border border-black/10 dark:border-white/10"
+                  style={{ backgroundColor: tableBorderColor.includes('var') ? '#000000' : tableBorderColor }}
+                />
+              </button>
+
+              {tableToolbarTooltip === 'Border Color' && !showTableBorderColorPopover && !showTableColorPopover && !showTableBordersPopover && !showTableBorderWidthPopover && !showTableBorderStylePopover && (
+                <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-black text-white text-[12px] font-medium px-3 py-1 rounded-full shadow-lg whitespace-nowrap pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-75">
+                  Border Color
+                </div>
+              )}
+
+              {showTableBorderColorPopover && (
+                <div
+                  className="absolute bottom-[calc(100%+12px)] left-0 bg-white dark:bg-zinc-900 border border-neutral-200 dark:border-zinc-800 shadow-[0_8px_30px_rgba(0,0,0,0.18)] rounded-xl p-3.5 z-50 w-[240px] animate-in fade-in zoom-in-95 duration-100"
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  <div className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200 mb-2.5">
+                    Border Color
+                  </div>
+                  <div className="grid grid-cols-10 gap-1.5 mb-3">
+                    {TABLE_COLORS.flat().map((col, idx) => (
+                      <button
+                        key={`tbc-${col}-${idx}`}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          handleSetTableBorderColor(col);
+                          setShowTableBorderColorPopover(false);
+                        }}
+                        className={cn(
+                          "w-4 h-4 rounded-full border border-black/10 dark:border-white/10 hover:scale-125 transition-transform cursor-pointer focus:outline-none",
+                          tableBorderColor === col && "ring-2 ring-primary ring-offset-1 scale-110"
+                        )}
+                        style={{ backgroundColor: col }}
+                        title={col}
+                      />
+                    ))}
+                  </div>
+                  <div className="border-t border-neutral-100 dark:border-zinc-800 pt-2">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        handleSetTableBorderColor('var(--table-border-color, #e2e8f0)');
+                        setShowTableBorderColorPopover(false);
+                      }}
+                      className="flex items-center gap-2 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:text-black dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-zinc-800 px-2 py-1.5 rounded-lg w-full transition-colors cursor-pointer"
+                    >
+                      <Eraser className="h-3.5 w-3.5" />
+                      <span>Reset to default</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 3. Border Width (Image 3) */}
+            <div className="relative" ref={tableBorderWidthContainerRef}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setShowTableBorderWidthPopover((p) => !p);
+                  setShowTableColorPopover(false);
+                  setShowTableBordersPopover(false);
+                  setShowTableBorderColorPopover(false);
+                  setShowTableBorderStylePopover(false);
+                }}
+                onMouseEnter={() => setTableToolbarTooltip('Border Width')}
+                onMouseLeave={() => setTableToolbarTooltip(null)}
+                className={cn(
+                  "h-8 px-2 rounded-lg flex items-center gap-1.5 transition-colors text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white border border-neutral-200/80 dark:border-zinc-700 text-xs font-medium",
+                  showTableBorderWidthPopover && "bg-neutral-100 dark:bg-zinc-800 text-black dark:text-white"
+                )}
+              >
+                <span className="text-[11px] leading-none shrink-0">{currentWidthOption?.label || '1 pt'}</span>
+                <div
+                  className="w-5 bg-neutral-900 dark:bg-neutral-100 rounded-full"
+                  style={{ height: `${currentWidthOption?.heightPx ?? 2}px` }}
+                />
+                <ChevronDown className="h-3 w-3 opacity-60 shrink-0" />
+              </button>
+
+              {tableToolbarTooltip === 'Border Width' && !showTableBorderWidthPopover && !showTableColorPopover && !showTableBordersPopover && !showTableBorderColorPopover && !showTableBorderStylePopover && (
+                <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-black text-white text-[12px] font-medium px-3 py-1 rounded-full shadow-lg whitespace-nowrap pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-75">
+                  Border Width
+                </div>
+              )}
+
+              {showTableBorderWidthPopover && (
+                <div
+                  className="absolute bottom-[calc(100%+12px)] left-0 bg-white dark:bg-zinc-900 border border-neutral-200 dark:border-zinc-800 shadow-[0_8px_30px_rgba(0,0,0,0.18)] rounded-xl py-1.5 px-1 z-50 w-[130px] animate-in fade-in zoom-in-95 duration-100"
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  {TABLE_BORDER_WIDTHS.map((item) => {
+                    const isSelected = tableBorderWidth === item.value;
+                    return (
+                      <button
+                        key={item.value}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          handleSetTableBorderWidth(item.value);
+                          setShowTableBorderWidthPopover(false);
+                        }}
+                        className={cn(
+                          "w-full flex items-center justify-between gap-2.5 px-2.5 py-1.5 text-xs text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer text-left",
+                          isSelected && "bg-neutral-100 dark:bg-zinc-800 font-semibold text-black dark:text-white"
+                        )}
+                      >
+                        <span className="w-9 shrink-0 text-left text-[11px]">{item.label}</span>
+                        <div className="flex-1 flex items-center">
+                          <div
+                            className="w-full bg-neutral-900 dark:bg-neutral-100 rounded-full"
+                            style={{ height: `${item.heightPx}px` }}
+                          />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 4. Border Style (Images 2 & 3) */}
+            <div className="relative" ref={tableBorderStyleContainerRef}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setShowTableBorderStylePopover((p) => !p);
+                  setShowTableColorPopover(false);
+                  setShowTableBordersPopover(false);
+                  setShowTableBorderColorPopover(false);
+                  setShowTableBorderWidthPopover(false);
+                }}
+                onMouseEnter={() => setTableToolbarTooltip('Border Style')}
+                onMouseLeave={() => setTableToolbarTooltip(null)}
+                className={cn(
+                  "h-8 px-2 rounded-lg flex items-center gap-1.5 transition-colors text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white border border-neutral-200/80 dark:border-zinc-700 text-xs font-medium min-w-[58px]",
+                  showTableBorderStylePopover && "bg-neutral-100 dark:bg-zinc-800 text-black dark:text-white"
+                )}
+              >
+                <div className="w-8 flex items-center">
+                  <TableLineStylePreview styleId={tableBorderStyle} className="text-neutral-900 dark:text-neutral-100" />
+                </div>
+                <ChevronDown className="h-3 w-3 opacity-60 shrink-0" />
+              </button>
+
+              {tableToolbarTooltip === 'Border Style' && !showTableBorderStylePopover && !showTableBorderWidthPopover && !showTableColorPopover && !showTableBordersPopover && !showTableBorderColorPopover && (
+                <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-black text-white text-[12px] font-medium px-3 py-1 rounded-full shadow-lg whitespace-nowrap pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-75">
+                  {t('editor.borderStyle') || 'Border Style'}
+                </div>
+              )}
+
+              {showTableBorderStylePopover && (
+                <div
+                  className="absolute bottom-[calc(100%+12px)] left-0 bg-white dark:bg-zinc-900 border border-neutral-200 dark:border-zinc-800 shadow-[0_8px_30px_rgba(0,0,0,0.18)] rounded-xl py-1.5 px-1.5 z-50 w-[180px] max-h-[290px] overflow-y-auto animate-in fade-in zoom-in-95 duration-100"
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  <div className="flex flex-col gap-1">
+                    {TABLE_BORDER_STYLES.map((item) => {
+                      const isSelected = tableBorderStyle === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            handleSetTableBorderStyle(item.id);
+                            setShowTableBorderStylePopover(false);
+                          }}
+                          className={cn(
+                            "w-full h-7 flex items-center justify-center px-2 py-1 rounded transition-colors cursor-pointer text-neutral-900 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-zinc-800",
+                            isSelected && "border-2 border-neutral-900 dark:border-white bg-neutral-50 dark:bg-zinc-800/80"
+                          )}
+                        >
+                          <TableLineStylePreview styleId={item.id} className="text-neutral-900 dark:text-neutral-100" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 5. Table Borders dropdown (Images 1 & 3) */}
+            <div className="relative" ref={tableBordersContainerRef}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setShowTableBordersPopover((p) => !p);
+                  setShowTableColorPopover(false);
+                  setShowTableBorderColorPopover(false);
+                  setShowTableBorderWidthPopover(false);
+                  setShowTableBorderStylePopover(false);
+                }}
+                onMouseEnter={() => setTableToolbarTooltip('Table Borders')}
+                onMouseLeave={() => setTableToolbarTooltip(null)}
+                className={cn(
+                  "w-8 h-8 rounded-lg flex items-center justify-center transition-colors text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white",
+                  showTableBordersPopover && "bg-neutral-100 dark:bg-zinc-800 text-black dark:text-white"
+                )}
+              >
+                <Grid2X2 className="h-4 w-4" />
+              </button>
+
+              {tableToolbarTooltip === 'Table Borders' && !showTableColorPopover && !showTableBordersPopover && !showTableBorderColorPopover && !showTableBorderWidthPopover && !showTableBorderStylePopover && (
+                <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-black text-white text-[12px] font-medium px-3 py-1 rounded-full shadow-lg whitespace-nowrap pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-75">
+                  Table Borders
+                </div>
+              )}
+
+              {/* Borders Dropdown Menu (Image 1) */}
+              {showTableBordersPopover && (
+                <div
+                  className="absolute bottom-[calc(100%+12px)] left-0 bg-white dark:bg-zinc-900 border border-neutral-200 dark:border-zinc-800 shadow-[0_8px_30px_rgba(0,0,0,0.18)] rounded-xl py-1.5 px-1 z-50 min-w-[215px] max-h-[350px] overflow-y-auto animate-in fade-in zoom-in-95 duration-100"
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  {TABLE_BORDERS.map((item) => {
+                    const checked = isBorderChecked(item.value);
+                    return (
+                      <React.Fragment key={item.value}>
+                        {item.dividerBefore && (
+                          <div className="h-[1px] bg-neutral-200 dark:bg-zinc-800 my-1 mx-1.5" />
+                        )}
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            handleSetTableBorders(item.value);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-normal text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer text-left"
+                        >
+                          <div className="w-4 h-4 flex items-center justify-center shrink-0">
+                            {checked && <Check className="h-3.5 w-3.5 text-neutral-900 dark:text-neutral-100 stroke-[2.5]" />}
+                          </div>
+                          <TableBorderDiagram type={item.value} className="text-neutral-900 dark:text-neutral-100" />
+                          <span>{t(TABLE_BORDER_I18N_KEYS[item.value]) || item.label}</span>
+                        </button>
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Delete Table */}
+            <div className="relative">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  handleDeleteTable();
+                }}
+                onMouseEnter={() => setTableToolbarTooltip('Delete table')}
+                onMouseLeave={() => setTableToolbarTooltip(null)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors text-neutral-700 dark:text-neutral-300 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 dark:hover:text-red-400"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+
+              {tableToolbarTooltip === 'Delete table' && (
+                <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-black text-white text-[12px] font-medium px-3 py-1 rounded-full shadow-lg whitespace-nowrap pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-75">
+                  Delete table
+                </div>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="w-[1px] h-4 bg-neutral-200 dark:bg-zinc-800 mx-1.5" />
+
+            {/* Group 2: Row Actions (Image 4) */}
+            <div className="relative">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleAddRowBefore}
+                onMouseEnter={() => setTableToolbarTooltip('Insert row before')}
+                onMouseLeave={() => setTableToolbarTooltip(null)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white"
+              >
+                <ArrowUp className="h-4 w-4" />
+              </button>
+
+              {tableToolbarTooltip === 'Insert row before' && (
+                <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-black text-white text-[12px] font-medium px-3 py-1 rounded-full shadow-lg whitespace-nowrap pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-75">
+                  Insert row before
+                </div>
+              )}
+            </div>
+
+            <div className="relative">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleAddRowAfter}
+                onMouseEnter={() => setTableToolbarTooltip('Insert row after')}
+                onMouseLeave={() => setTableToolbarTooltip(null)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white"
+              >
+                <ArrowDown className="h-4 w-4" />
+              </button>
+
+              {tableToolbarTooltip === 'Insert row after' && (
+                <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-black text-white text-[12px] font-medium px-3 py-1 rounded-full shadow-lg whitespace-nowrap pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-75">
+                  Insert row after
+                </div>
+              )}
+            </div>
+
+            <div className="relative">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleDeleteRow}
+                onMouseEnter={() => setTableToolbarTooltip('Delete row')}
+                onMouseLeave={() => setTableToolbarTooltip(null)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              {tableToolbarTooltip === 'Delete row' && (
+                <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-black text-white text-[12px] font-medium px-3 py-1 rounded-full shadow-lg whitespace-nowrap pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-75">
+                  Delete row
+                </div>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="w-[1px] h-4 bg-neutral-200 dark:bg-zinc-800 mx-1.5" />
+
+            {/* Group 3: Column Actions (Image 5) */}
+            <div className="relative">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleAddColumnBefore}
+                onMouseEnter={() => setTableToolbarTooltip('Insert column before')}
+                onMouseLeave={() => setTableToolbarTooltip(null)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+
+              {tableToolbarTooltip === 'Insert column before' && (
+                <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-black text-white text-[12px] font-medium px-3 py-1 rounded-full shadow-lg whitespace-nowrap pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-75">
+                  Insert column before
+                </div>
+              )}
+            </div>
+
+            <div className="relative">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleAddColumnAfter}
+                onMouseEnter={() => setTableToolbarTooltip('Insert column after')}
+                onMouseLeave={() => setTableToolbarTooltip(null)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white"
+              >
+                <ArrowRight className="h-4 w-4" />
+              </button>
+
+              {tableToolbarTooltip === 'Insert column after' && (
+                <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-black text-white text-[12px] font-medium px-3 py-1 rounded-full shadow-lg whitespace-nowrap pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-75">
+                  Insert column after
+                </div>
+              )}
+            </div>
+
+            <div className="relative">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleDeleteColumn}
+                onMouseEnter={() => setTableToolbarTooltip('Delete column')}
+                onMouseLeave={() => setTableToolbarTooltip(null)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              {tableToolbarTooltip === 'Delete column' && (
+                <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-black text-white text-[12px] font-medium px-3 py-1 rounded-full shadow-lg whitespace-nowrap pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-75">
+                  Delete column
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="max-w-4xl mx-auto px-6 md:px-12 lg:px-16 py-8">
           <EditorContent editor={editor} />
         </div>

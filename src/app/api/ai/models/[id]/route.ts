@@ -7,7 +7,9 @@ import type { ApiResponse, ApiError } from '@/shared/types';
 import { requireFeatureAllowStaff, isPlatformStaff } from '@/lib/platform/platform-auth';
 import {
   canProviderSupportImageGeneration,
+  canProviderSupportTextGeneration,
   isModelForbiddenForImageGeneration,
+  isModelForbiddenForTextGeneration,
   parseCapabilities,
   type ModelCapability,
 } from '@/lib/ai/providers';
@@ -160,19 +162,34 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (d.capabilities !== undefined) {
       const targetProviderId = (data.providerId as string | undefined) ?? existing.providerId;
       const targetProvider = await db.aiProvider.findUnique({ where: { id: targetProviderId } });
+      const checkModelId = (data.modelId as string | undefined) ?? existing.modelId;
+      const targetKind = targetProvider?.kind ?? '';
+
       if (d.capabilities.includes('IMAGE_GENERATION')) {
-        if (targetProvider && !canProviderSupportImageGeneration(targetProvider.kind)) {
+        if (targetProvider && !canProviderSupportImageGeneration(targetKind)) {
           return err('This provider does not support image generation.', 400, 'UNSUPPORTED_CAPABILITY');
         }
-        const checkModelId = (data.modelId as string | undefined) ?? existing.modelId;
-        const forbidden = isModelForbiddenForImageGeneration(targetProvider?.kind ?? '', checkModelId);
+        const forbidden = isModelForbiddenForImageGeneration(targetKind, checkModelId);
         if (forbidden.forbidden) {
           return err(forbidden.reason || 'This model does not support image generation.', 400, 'FORBIDDEN_CAPABILITY');
         }
       }
+
+      if (d.capabilities.includes('TEXT_GENERATION')) {
+        if (targetProvider && !canProviderSupportTextGeneration(targetKind)) {
+          return err('This provider does not support text generation.', 400, 'UNSUPPORTED_CAPABILITY');
+        }
+        const forbiddenText = isModelForbiddenForTextGeneration(targetKind, checkModelId);
+        if (forbiddenText.forbidden) {
+          return err(forbiddenText.reason || 'This model does not support text generation.', 400, 'FORBIDDEN_CAPABILITY');
+        }
+      }
+
       data.capabilities = JSON.stringify(d.capabilities);
       data.capabilitySource = 'manual_override';
-      data.type = d.capabilities.includes('TEXT_GENERATION') ? 'TEXT' : 'IMAGE';
+      data.type = d.capabilities.includes('TEXT_GENERATION') && !d.capabilities.includes('IMAGE_GENERATION')
+        ? 'TEXT'
+        : (d.capabilities.includes('IMAGE_GENERATION') && !d.capabilities.includes('TEXT_GENERATION') ? 'IMAGE' : (existing.type || 'TEXT'));
     } else if (d.type !== undefined) {
       data.type = d.type;
     }

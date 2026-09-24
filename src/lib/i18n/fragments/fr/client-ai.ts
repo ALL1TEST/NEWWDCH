@@ -33,6 +33,7 @@ export const clientAiFr: Record<string, string> = {
   "ai.editProvider": "Modifier le fournisseur",
   "ai.deleteProvider": "Supprimer le fournisseur",
   "ai.providerKind": "Type de fournisseur",
+  "ai.kindLockedHint": "Le type de fournisseur ne peut pas être modifié après création. Utilisez « Ajouter un fournisseur » pour un autre fournisseur.",
   "ai.searchProviders": "Rechercher des fournisseurs...",
   "ai.allKinds": "Tous les types",
   "ai.allStatus": "Tous les statuts",

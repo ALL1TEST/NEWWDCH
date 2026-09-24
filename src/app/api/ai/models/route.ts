@@ -7,7 +7,9 @@ import type { ApiResponse, ApiError } from '@/shared/types';
 import { requireFeatureAllowStaff, isPlatformStaff } from '@/lib/platform/platform-auth';
 import {
   canProviderSupportImageGeneration,
+  canProviderSupportTextGeneration,
   isModelForbiddenForImageGeneration,
+  isModelForbiddenForTextGeneration,
   parseCapabilities,
   type ModelCapability,
 } from '@/lib/ai/providers';
@@ -192,7 +194,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const derivedType = caps.includes('TEXT_GENERATION') ? 'TEXT' : 'IMAGE';
+    if (caps.includes('TEXT_GENERATION')) {
+      if (!canProviderSupportTextGeneration(provider.kind)) {
+        return err('This provider does not support text generation.', 400, 'UNSUPPORTED_CAPABILITY');
+      }
+      const forbiddenText = isModelForbiddenForTextGeneration(provider.kind, d.modelId);
+      if (forbiddenText.forbidden) {
+        return err(forbiddenText.reason || 'This model does not support text generation.', 400, 'FORBIDDEN_CAPABILITY');
+      }
+    }
+
+    const derivedType = caps.includes('TEXT_GENERATION') && !caps.includes('IMAGE_GENERATION')
+      ? 'TEXT'
+      : (caps.includes('IMAGE_GENERATION') && !caps.includes('TEXT_GENERATION') ? 'IMAGE' : (d.type || 'TEXT'));
     const isDefaultText = d.isDefaultText ?? (d.isDefault && derivedType === 'TEXT');
     const isDefaultImage = d.isDefaultImage ?? (d.isDefault && derivedType === 'IMAGE');
 

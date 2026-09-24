@@ -86,7 +86,7 @@ export async function platformOwnedProviderFilter(): Promise<Record<string, unkn
  *    - Strictly uses the central Platform AI provider configured in Platform Admin.
  * 3. Returns null if no eligible provider is found.
  */
-export async function resolveAiProviderForUser(userId?: string | null) {
+export async function resolveAiProviderForUser(userId?: string | null, capability: 'TEXT' | 'IMAGE' = 'TEXT') {
   let hasAiClient = false;
   let hasAiPlatform = false;
   let isStaff = false;
@@ -115,9 +115,13 @@ export async function resolveAiProviderForUser(userId?: string | null) {
     }
   }
 
+  const userSettings = userId ? await db.aiSettings.findUnique({ where: { scope: `user:${userId}` } }) : null;
+  const globalSettings = await db.aiSettings.findUnique({ where: { scope: 'global' } });
+  const effectiveSettings = userSettings ?? globalSettings;
+  const configuredTargetModelId = capability === 'TEXT' ? effectiveSettings?.defaultModelId : effectiveSettings?.imageModelId;
+
   // 1. If user has Client's Own AI API, prefer their own configured provider
   if (userId && hasAiClient) {
-    const userSettings = await db.aiSettings.findUnique({ where: { scope: `user:${userId}` } });
     if (userSettings?.defaultProviderId) {
       const configuredProv = await db.aiProvider.findFirst({
         where: { id: userSettings.defaultProviderId, createdById: userId, isActive: true, apiKeyEncrypted: { not: null } },
@@ -126,23 +130,45 @@ export async function resolveAiProviderForUser(userId?: string | null) {
       if (configuredProv) return configuredProv;
     }
 
+    if (configuredTargetModelId) {
+      const provWithModel = await db.aiProvider.findFirst({
+        where: {
+          createdById: userId,
+          isActive: true,
+          apiKeyEncrypted: { not: null },
+          models: { some: { OR: [{ id: configuredTargetModelId }, { modelId: configuredTargetModelId }], isActive: true } },
+        },
+        include: { models: true },
+      });
+      if (provWithModel) return provWithModel;
+    }
+
     const userDefault = await db.aiProvider.findFirst({
       where: { createdById: userId, isActive: true, isDefault: true, apiKeyEncrypted: { not: null } },
       include: { models: true },
     });
     if (userDefault) return userDefault;
 
-    const userActive = await db.aiProvider.findFirst({
+    const userActiveList = await db.aiProvider.findMany({
       where: { createdById: userId, isActive: true, apiKeyEncrypted: { not: null } },
       include: { models: true },
     });
-    if (userActive) return userActive;
+
+    if (capability === 'TEXT') {
+      const userTextProv = userActiveList.find((p) => p.kind !== 'CLOUDFLARE' && p.models.some((m) => m.isActive && m.type?.toUpperCase() === 'TEXT'));
+      if (userTextProv) return userTextProv;
+    } else {
+      const userImgProv = userActiveList.find((p) => p.models.some((m) => m.isActive && m.type?.toUpperCase() === 'IMAGE'));
+      if (userImgProv) return userImgProv;
+    }
+
+    if (userActiveList.length > 0) return userActiveList[0];
   }
 
   // 2. If user has Platform AI (or is staff / no userId specified):
   // Resolve from platform-owned active providers configured in Platform Admin
   if (hasAiPlatform || isStaff || !userId) {
-    const aiSettings = await db.aiSettings.findUnique({ where: { scope: 'global' } });
+    const aiSettings = globalSettings;
     const owned = await platformOwnedProviderFilter();
 
     if (aiSettings?.defaultProviderId) {
@@ -153,17 +179,59 @@ export async function resolveAiProviderForUser(userId?: string | null) {
       if (defaultProv) return defaultProv;
     }
 
+    // Check if the configured default model belongs to an active provider
+    if (configuredTargetModelId) {
+      const provWithModel = await db.aiProvider.findFirst({
+        where: {
+          isActive: true,
+          apiKeyEncrypted: { not: null },
+          models: { some: { OR: [{ id: configuredTargetModelId }, { modelId: configuredTargetModelId }], isActive: true } },
+          ...owned,
+        },
+        include: { models: true },
+      });
+      if (provWithModel) return provWithModel;
+    }
+
     const platformDefault = await db.aiProvider.findFirst({
       where: { isActive: true, isDefault: true, apiKeyEncrypted: { not: null }, ...owned },
       include: { models: true },
     });
     if (platformDefault) return platformDefault;
 
-    const platformActive = await db.aiProvider.findFirst({
+    const platformActiveList = await db.aiProvider.findMany({
       where: { isActive: true, apiKeyEncrypted: { not: null }, ...owned },
       include: { models: true },
     });
-    return platformActive;
+
+    if (capability === 'TEXT') {
+      // Exclude dedicated image providers (CLOUDFLARE) and providers with 0 active text models
+      const textProviders = platformActiveList.filter(
+        (p) => p.kind !== 'CLOUDFLARE' && p.models.some((m) => m.isActive && m.type?.toUpperCase() === 'TEXT')
+      );
+
+      if (textProviders.length > 0) {
+        // Sort: providers that have an explicitly marked default text model first
+        textProviders.sort((a, b) => {
+          const aHasDef = a.models.some((m) => m.isActive && (m.isDefaultText || m.isDefault));
+          const bHasDef = b.models.some((m) => m.isActive && (m.isDefaultText || m.isDefault));
+          if (aHasDef && !bHasDef) return -1;
+          if (!aHasDef && bHasDef) return 1;
+          // Then prefer providers with more active text models
+          const aCount = a.models.filter((m) => m.isActive && m.type?.toUpperCase() === 'TEXT').length;
+          const bCount = b.models.filter((m) => m.isActive && m.type?.toUpperCase() === 'TEXT').length;
+          return bCount - aCount;
+        });
+        return textProviders[0];
+      }
+    } else {
+      const imgProviders = platformActiveList.filter(
+        (p) => p.models.some((m) => m.isActive && m.type?.toUpperCase() === 'IMAGE')
+      );
+      if (imgProviders.length > 0) return imgProviders[0];
+    }
+
+    return platformActiveList[0] || null;
   }
 
   return null;

@@ -15,7 +15,7 @@
 // ============================================================
 
 import { db } from '@/lib/db';
-import { executeChat, type ChatMessage } from '@/lib/ai/ai-service';
+import { executeChat, rankCandidateModels, type ChatMessage } from '@/lib/ai/ai-service';
 import { resolveAiProviderForUser } from '@/lib/ai/platform-ai';
 import { hasFeature } from '@/lib/platform/entitlements';
 import { isPlatformStaff } from '@/lib/platform/platform-auth';
@@ -481,9 +481,9 @@ export async function executeUniversalOperation(
     }
   }
 
-  // If no provider resolved, use normal provider resolution
+  // If no provider resolved, use normal provider resolution (strictly for text generation)
   if (!targetProviderId) {
-    const resolvedProv = await resolveAiProviderForUser(options.userId);
+    const resolvedProv = await resolveAiProviderForUser(options.userId, 'TEXT');
     if (resolvedProv) {
       targetProviderId = resolvedProv.id;
       if (!targetModelId) {
@@ -497,8 +497,10 @@ export async function executeUniversalOperation(
         const mod = cfgModel
           ? resolvedProv.models.find((m) => (m.id === cfgModel || m.modelId === cfgModel) && m.isActive && m.type?.toUpperCase() === 'TEXT')
           : null;
+        const rankedCandidates = rankCandidateModels(resolvedProv.models, 'TEXT_GENERATION');
         targetModelId =
           mod?.id ??
+          rankedCandidates[0]?.id ??
           resolvedProv.models.find((m) => m.isActive && (m.isDefaultText || m.isDefault) && m.type?.toUpperCase() === 'TEXT')?.id ??
           resolvedProv.models.find((m) => m.isActive && m.type?.toUpperCase() === 'TEXT')?.id ??
           null;

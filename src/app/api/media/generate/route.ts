@@ -61,152 +61,223 @@ export async function POST(request: NextRequest) {
     const aiLimit = await checkAiLimit(auth.user, { images: clampedCount });
     if (aiLimit && !aiLimit.ok) return aiLimitExceededResponse(aiLimit);
 
-    const platformPrompt = await resolvePlatformPrompt(
-      'images',
-      { prompt: prompt.trim(), concept: prompt.trim() },
-      { userId: auth.user.id },
-    );
-    const effectivePrompt = platformPrompt?.userPrompt?.trim() || prompt.trim();
+    // Determine if the user explicitly requested text on the image
+    const wantsText =
+      /\b(?:with\s+text|text\s+(?:saying|written|overlay)|written\s+on\s+it|typography|letters|quote|sign|caption|كتابة|مكتوب|نص)\b/i.test(
+        prompt,
+      );
+
+    let effectivePrompt = prompt.trim();
+    if (!wantsText && !/no\s+(?:text|words|letters|typography)/i.test(effectivePrompt)) {
+      effectivePrompt = `${effectivePrompt}, clean photography, high quality, photorealistic, no text, no words, no letters, no typography, no captions, no watermark, no labels`;
+    }
 
     const siteFilter = await getSiteWhere(request);
-    const siteId = (siteFilter.siteId as string) || request.nextUrl.searchParams.get('siteId') || undefined;
+    let resolvedSiteId: string | undefined = undefined;
+    const querySiteId = request.nextUrl.searchParams.get('siteId');
+    if (typeof querySiteId === 'string' && querySiteId.trim() && querySiteId !== 'all') {
+      resolvedSiteId = querySiteId.trim();
+    } else if (typeof siteFilter.siteId === 'string' && !siteFilter.siteId.startsWith('__')) {
+      resolvedSiteId = siteFilter.siteId;
+    } else if (siteFilter.siteId && typeof siteFilter.siteId === 'object' && 'in' in (siteFilter.siteId as any)) {
+      const inArr = (siteFilter.siteId as any).in;
+      if (Array.isArray(inArr) && inArr.length > 0 && typeof inArr[0] === 'string') {
+        resolvedSiteId = inArr[0];
+      }
+    }
+    const siteId = resolvedSiteId;
 
-    // Check configured Image Provider / Model from AI settings
-    const userScope = isPlatformStaff(auth.user) ? 'global' : `user:${auth.user.id}`;
-    const settings = (await db.aiSettings.findUnique({ where: { scope: userScope } }))
-      ?? (await db.aiSettings.findUnique({ where: { scope: 'global' } }));
+    // Resolve Image Provider & Model:
+    // 1. User settings (if client has BYOK / own configured image provider)
+    // 2. Global settings (Platform AI configured in Platform Admin)
+    // 3. System default image model (isDefaultImage: true)
+    // 4. Any active Cloudflare provider with active image models
+    // 5. Any active image provider
+    const isStaff = isPlatformStaff(auth.user);
+    const userScope = isStaff ? 'global' : `user:${auth.user.id}`;
+    const userSettings = await db.aiSettings.findUnique({ where: { scope: userScope } });
+    const globalSettings = await db.aiSettings.findUnique({ where: { scope: 'global' } });
 
-    if (settings?.imageModelId) {
-      const model = await db.aiModel.findUnique({
-        where: { id: settings.imageModelId },
-        include: { provider: true },
+    const isModelValid = (m: { isActive: boolean; capabilities?: string | null; type?: string; modelId: string; provider?: { kind?: string } }) => {
+      if (!m.isActive) return false;
+      const caps = parseCapabilities(m.capabilities ?? (m.type === 'IMAGE' ? ['IMAGE_GENERATION'] : ['TEXT_GENERATION']));
+      if (!caps.includes('IMAGE_GENERATION')) return false;
+      if (m.provider?.kind && !canProviderSupportImageGeneration(m.provider.kind)) return false;
+      const forbidden = isModelForbiddenForImageGeneration(m.provider?.kind ?? '', m.modelId);
+      if (forbidden.forbidden) return false;
+      return true;
+    };
+
+    let targetProviderId: string | null = null;
+    let targetModelId: string | null = null;
+
+    // 1. User settings check (if client BYOK or configured)
+    if (userSettings?.imageProviderId) {
+      const p = await db.aiProvider.findFirst({
+        where: { id: userSettings.imageProviderId, isActive: true, apiKeyEncrypted: { not: null } },
+        include: { models: { where: { isActive: true } } },
       });
-      if (model) {
-        const caps = parseCapabilities(model.capabilities ?? (model.type === 'IMAGE' ? ['IMAGE_GENERATION'] : ['TEXT_GENERATION']));
-        if (!caps.includes('IMAGE_GENERATION')) {
-          return NextResponse.json(
-            { error: { code: 'MODEL_NOT_SUPPORTED', message: 'This model does not support image generation.' }, meta: { requestId: id } },
-            { status: 400 },
-          );
-        }
-        if (model.provider && !canProviderSupportImageGeneration(model.provider.kind)) {
-          return NextResponse.json(
-            { error: { code: 'UNSUPPORTED_PROVIDER', message: 'This provider does not support image generation.' }, meta: { requestId: id } },
-            { status: 400 },
-          );
-        }
-        const forbidden = isModelForbiddenForImageGeneration(model.provider?.kind ?? '', model.modelId);
-        if (forbidden.forbidden) {
-          return NextResponse.json(
-            { error: { code: 'FORBIDDEN_MODEL', message: forbidden.reason || 'This model does not support image generation.' }, meta: { requestId: id } },
-            { status: 400 },
-          );
+      if (p && canProviderSupportImageGeneration(p.kind)) {
+        const m = userSettings.imageModelId
+          ? p.models.find((model) => (model.id === userSettings.imageModelId || model.modelId === userSettings.imageModelId) && isModelValid({ ...model, provider: p }))
+          : null;
+        if (m) {
+          targetProviderId = p.id;
+          targetModelId = m.id;
+        } else {
+          const defM = p.models.find((model) => model.isDefaultImage && isModelValid({ ...model, provider: p }))
+            ?? p.models.find((model) => model.modelId.includes('flux-1-schnell') && isModelValid({ ...model, provider: p }))
+            ?? p.models.find((model) => isModelValid({ ...model, provider: p }));
+          if (defM) {
+            targetProviderId = p.id;
+            targetModelId = defM.id;
+          }
         }
       }
+    }
+
+    // 2. Global settings check (Platform AI)
+    if (!targetProviderId && globalSettings?.imageProviderId) {
+      const p = await db.aiProvider.findFirst({
+        where: { id: globalSettings.imageProviderId, isActive: true, apiKeyEncrypted: { not: null } },
+        include: { models: { where: { isActive: true } } },
+      });
+      if (p && canProviderSupportImageGeneration(p.kind)) {
+        const m = globalSettings.imageModelId
+          ? p.models.find((model) => (model.id === globalSettings.imageModelId || model.modelId === globalSettings.imageModelId) && isModelValid({ ...model, provider: p }))
+          : null;
+        if (m) {
+          targetProviderId = p.id;
+          targetModelId = m.id;
+        } else {
+          const defM = p.models.find((model) => model.isDefaultImage && isModelValid({ ...model, provider: p }))
+            ?? p.models.find((model) => model.modelId.includes('flux-1-schnell') && isModelValid({ ...model, provider: p }))
+            ?? p.models.find((model) => isModelValid({ ...model, provider: p }));
+          if (defM) {
+            targetProviderId = p.id;
+            targetModelId = defM.id;
+          }
+        }
+      }
+    }
+
+    // 3. System default image model (isDefaultImage: true on active provider)
+    if (!targetProviderId) {
+      const defaultImageModel = await db.aiModel.findFirst({
+        where: {
+          isDefaultImage: true,
+          isActive: true,
+          provider: { isActive: true, apiKeyEncrypted: { not: null } },
+        },
+        include: { provider: true },
+        orderBy: [
+          { provider: { isDefault: 'desc' } },
+          { updatedAt: 'desc' },
+        ],
+      });
+      if (defaultImageModel && isModelValid(defaultImageModel)) {
+        targetProviderId = defaultImageModel.providerId;
+        targetModelId = defaultImageModel.id;
+      }
+    }
+
+    // 4. Any active Cloudflare provider with active image models
+    if (!targetProviderId) {
+      const cfProvider = await db.aiProvider.findFirst({
+        where: { kind: 'CLOUDFLARE', isActive: true, apiKeyEncrypted: { not: null } },
+        include: { models: { where: { isActive: true } } },
+        orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
+      });
+      if (cfProvider && cfProvider.models.length > 0) {
+        const m = cfProvider.models.find((model) => model.isDefaultImage && isModelValid({ ...model, provider: cfProvider }))
+          ?? cfProvider.models.find((model) => model.modelId.includes('flux-1-schnell') && isModelValid({ ...model, provider: cfProvider }))
+          ?? cfProvider.models.find((model) => isModelValid({ ...model, provider: cfProvider }));
+        if (m) {
+          targetProviderId = cfProvider.id;
+          targetModelId = m.id;
+        }
+      }
+    }
+
+    // 5. Any other active provider that supports image generation
+    if (!targetProviderId) {
+      const otherProviders = await db.aiProvider.findMany({
+        where: { isActive: true, apiKeyEncrypted: { not: null } },
+        include: { models: { where: { isActive: true } } },
+        orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
+      });
+      for (const p of otherProviders) {
+        if (canProviderSupportImageGeneration(p.kind)) {
+          const m = p.models.find((model) => model.isDefaultImage && isModelValid({ ...model, provider: p }))
+            ?? p.models.find((model) => isModelValid({ ...model, provider: p }));
+          if (m) {
+            targetProviderId = p.id;
+            targetModelId = m.id;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!targetProviderId) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'NO_IMAGE_PROVIDER_CONFIGURED',
+            message: 'No active AI Image Provider or Model configured. Please configure an image provider (such as Cloudflare) under Platform Admin > AI.',
+          },
+          meta: { requestId: id },
+        },
+        { status: 400 },
+      );
     }
 
     const results = [];
 
-    if (settings?.imageProviderId && settings?.imageModelId) {
-      // Use configured AI Provider and Model
-      const imgRes = await executeImageGeneration({
-        providerId: settings.imageProviderId,
-        modelId: settings.imageModelId,
-        prompt: effectivePrompt,
-        size: (size as any) || '1024x1024',
-        n: clampedCount,
-        responseFormat: 'b64_json',
-        siteId,
-        userId: auth.user.id,
+    // Use configured / resolved AI Provider and Model
+    const imgRes = await executeImageGeneration({
+      providerId: targetProviderId,
+      modelId: targetModelId ?? undefined,
+      prompt: effectivePrompt,
+      size: (size as any) || '1024x1024',
+      n: clampedCount,
+      responseFormat: 'b64_json',
+      siteId,
+      userId: auth.user.id,
+    });
+
+    for (const img of imgRes.images) {
+      const base64Url = img.b64_json
+        ? (img.b64_json.startsWith('data:') ? img.b64_json : `data:image/png;base64,${img.b64_json}`)
+        : (img.url || '');
+      const filename = `ai_${nanoid(8)}_${Date.now()}.png`;
+
+      const item = await db.media.create({
+        data: {
+          filename,
+          originalName: `AI: ${prompt.trim().slice(0, 60)}`,
+          mimeType: 'image/png',
+          size: Math.round((base64Url.length * 3) / 4),
+          url: base64Url,
+          folderId: folderId === '' ? null : folderId || null,
+          siteId,
+          uploadedById: uploaderId,
+          processingStatus: 'READY',
+        },
+        include: mediaIncludes,
       });
 
-      for (const img of imgRes.images) {
-        const base64Url = img.b64_json
-          ? (img.b64_json.startsWith('data:') ? img.b64_json : `data:image/png;base64,${img.b64_json}`)
-          : (img.url || '');
-        const filename = `ai_${nanoid(8)}_${Date.now()}.png`;
-
-        const item = await db.media.create({
-          data: {
-            filename,
-            originalName: `AI: ${prompt.trim().slice(0, 60)}`,
-            mimeType: 'image/png',
-            size: Math.round((base64Url.length * 3) / 4),
-            url: base64Url,
-            folderId: folderId === '' ? null : folderId || null,
-            siteId,
-            uploadedById: uploaderId,
-            processingStatus: 'READY',
-          },
-          include: mediaIncludes,
-        });
-
-        results.push(item);
-      }
-    } else {
-      // Fall back to platform z-ai-web-dev-sdk
-      const ZAI = (await import('z-ai-web-dev-sdk')).default;
-      const zai = await ZAI.create();
-
-      for (let i = 0; i < clampedCount; i++) {
-        const res = await zai.images.generations.create({ prompt: effectivePrompt, size });
-
-        for (const img of res.data || []) {
-          const base64Url = `data:image/png;base64,${img.base64}`;
-          const filename = `ai_${nanoid(8)}_${Date.now()}.png`;
-
-          const item = await db.media.create({
-            data: {
-              filename,
-              originalName: `AI: ${prompt.trim().slice(0, 60)}`,
-              mimeType: 'image/png',
-              size: Math.round((img.base64.length * 3) / 4),
-              url: base64Url,
-              folderId: folderId === '' ? null : folderId || null,
-              siteId,
-              uploadedById: uploaderId,
-              processingStatus: 'READY',
-            },
-            include: mediaIncludes,
-          });
-
-          results.push(item);
-        }
-      }
-
-      if (results.length > 0) {
-        await db.aiLog
-          .create({
-            data: {
-              providerId: null,
-              providerName: 'Platform SDK (media)',
-              modelId: null,
-              question: `[IMAGE] ${prompt.trim()}`,
-              response: JSON.stringify({
-                imagesGenerated: results.length,
-                size,
-                format: 'b64_json',
-                model: 'z-ai-web-dev-sdk',
-              }),
-              inputTokens: 0,
-              outputTokens: 0,
-              totalTokens: 0,
-              costUsd: 0,
-              durationMs: null,
-              status: 'success',
-              siteId: siteId ?? null,
-              userId: auth.user.id,
-            },
-          })
-          .catch(() => {});
-      }
+      results.push(item);
     }
 
     return NextResponse.json({ data: results, meta: { requestId: id } }, { status: 201 });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Failed to generate images';
+    const rawMsg = error instanceof Error ? error.message : 'Failed to generate images';
     console.error(`[MEDIA:GENERATE] ${id} —`, error);
-    const isClientError = /does not support|not found|disabled|invalid/i.test(msg);
+    const msg = rawMsg.includes('.z-ai-config')
+      ? 'No active AI Image Provider or Model configured. Please configure an image provider (such as Cloudflare) under Platform Admin > AI.'
+      : rawMsg;
+    const isClientError = /does not support|not found|disabled|invalid|configured/i.test(msg);
     return NextResponse.json(
       { error: { code: 'IMAGE_GENERATION_ERROR', message: msg }, meta: { requestId: id } },
       { status: isClientError ? 400 : 500 },

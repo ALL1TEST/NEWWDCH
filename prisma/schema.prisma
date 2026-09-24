@@ -2458,6 +2458,7 @@ enum AiProviderKind {
   GEMINI
   GROQ
   DEEPSEEK
+  CLOUDFLARE
   CUSTOM
 }
 

@@ -33,7 +33,7 @@ export interface ProviderModel {
   capabilities?: ModelCapability[];
 }
 
-export const PROVIDER_KINDS = ['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK', 'CUSTOM'] as const;
+export const PROVIDER_KINDS = ['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK', 'CLOUDFLARE', 'CUSTOM'] as const;
 
 export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
   OPENAI: {
@@ -109,6 +109,88 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
       { modelId: 'deepseek-reasoner', name: 'DeepSeek R1', contextLength: 131072, inputCostPer1k: 0.00055, outputCostPer1k: 0.00219, supportsImages: false, supportsVision: false, supportsFunctionCalling: false, supportsJsonMode: false, supportsStreaming: true, supportsTools: false, capabilities: ['TEXT_GENERATION'] },
     ],
   },
+  CLOUDFLARE: {
+    // Cloudflare Workers AI — specifically dedicated to AI Image Generation
+    kind: 'CLOUDFLARE',
+    name: 'Cloudflare',
+    defaultBaseUrl: 'https://api.cloudflare.com/client/v4',
+    modelsEndpoint: '', // Uses Workers AI schema / search
+    chatEndpoint: '',
+    helpText: 'Enter your Cloudflare Account ID and API Token with Workers AI permissions.',
+    icon: 'Cloudflare',
+    defaultModels: [
+      {
+        modelId: '@cf/black-forest-labs/flux-1-schnell',
+        name: 'FLUX.1 Schnell',
+        contextLength: 0,
+        inputCostPer1k: 0,
+        outputCostPer1k: 0.003,
+        supportsImages: true,
+        supportsVision: false,
+        supportsFunctionCalling: false,
+        supportsJsonMode: false,
+        supportsStreaming: false,
+        supportsTools: false,
+        capabilities: ['IMAGE_GENERATION'],
+      },
+      {
+        modelId: '@cf/black-forest-labs/flux-2-klein-4b',
+        name: 'FLUX.2 Klein 4B',
+        contextLength: 0,
+        inputCostPer1k: 0,
+        outputCostPer1k: 0.003,
+        supportsImages: true,
+        supportsVision: false,
+        supportsFunctionCalling: false,
+        supportsJsonMode: false,
+        supportsStreaming: false,
+        supportsTools: false,
+        capabilities: ['IMAGE_GENERATION'],
+      },
+      {
+        modelId: '@cf/black-forest-labs/flux-2-klein-9b',
+        name: 'FLUX.2 Klein 9B',
+        contextLength: 0,
+        inputCostPer1k: 0,
+        outputCostPer1k: 0.006,
+        supportsImages: true,
+        supportsVision: false,
+        supportsFunctionCalling: false,
+        supportsJsonMode: false,
+        supportsStreaming: false,
+        supportsTools: false,
+        capabilities: ['IMAGE_GENERATION'],
+      },
+      {
+        modelId: '@cf/stabilityai/stable-diffusion-xl-base-1.0',
+        name: 'Stable Diffusion XL Base 1.0',
+        contextLength: 0,
+        inputCostPer1k: 0,
+        outputCostPer1k: 0.003,
+        supportsImages: true,
+        supportsVision: false,
+        supportsFunctionCalling: false,
+        supportsJsonMode: false,
+        supportsStreaming: false,
+        supportsTools: false,
+        capabilities: ['IMAGE_GENERATION'],
+      },
+      {
+        modelId: '@cf/bytedance/stable-diffusion-xl-lightning',
+        name: 'SDXL Lightning',
+        contextLength: 0,
+        inputCostPer1k: 0,
+        outputCostPer1k: 0.002,
+        supportsImages: true,
+        supportsVision: false,
+        supportsFunctionCalling: false,
+        supportsJsonMode: false,
+        supportsStreaming: false,
+        supportsTools: false,
+        capabilities: ['IMAGE_GENERATION'],
+      },
+    ],
+  },
   CUSTOM: {
     // Custom OpenAI-compatible provider. The admin configures the Base URL
     // and API key; we treat it as an OpenAI-compatible endpoint for chat,
@@ -134,6 +216,11 @@ export const IMAGE_MODEL_IDS = new Set([
   'gemini-image-gen',
   'imagen-3.0-generate-002',
   'imagen-3.0-fast-generate-001',
+  '@cf/black-forest-labs/flux-1-schnell',
+  '@cf/black-forest-labs/flux-2-klein-4b',
+  '@cf/black-forest-labs/flux-2-klein-9b',
+  '@cf/stabilityai/stable-diffusion-xl-base-1.0',
+  '@cf/bytedance/stable-diffusion-xl-lightning',
 ]);
 
 export const KNOWN_IMAGE_PATTERNS = [
@@ -149,6 +236,11 @@ export const KNOWN_IMAGE_PATTERNS = [
   'playground-v2',
   'image-gen',
   'gpt-image',
+  'dreamshaper',
+  'leonardo',
+  'openjourney',
+  'runwayml',
+  'lcm',
 ];
 
 export function isKnownImageModel(modelId: string): boolean {
@@ -168,7 +260,13 @@ export const KNOWN_TEXT_PATTERNS = [
 /** Check whether a provider kind has any image generation endpoint support */
 export function canProviderSupportImageGeneration(kind: string): boolean {
   const upper = (kind || '').toUpperCase();
-  return upper === 'OPENAI' || upper === 'GEMINI' || upper === 'CUSTOM';
+  return upper === 'OPENAI' || upper === 'GEMINI' || upper === 'CLOUDFLARE' || upper === 'CUSTOM';
+}
+
+/** Check whether a provider kind has any text generation endpoint support */
+export function canProviderSupportTextGeneration(kind: string): boolean {
+  const upper = (kind || '').toUpperCase();
+  return upper !== 'CLOUDFLARE';
 }
 
 /** Check whether a model is explicitly forbidden from being marked as IMAGE_GENERATION */
@@ -183,6 +281,11 @@ export function isModelForbiddenForImageGeneration(providerKind: string, modelId
 
   const lowerModel = (modelId || '').toLowerCase().trim();
   if (!lowerModel) return { forbidden: false };
+
+  // Cloudflare Workers AI integration in this platform is dedicated to Image AI models
+  if (kind === 'CLOUDFLARE' || lowerModel.startsWith('@cf/')) {
+    return { forbidden: false };
+  }
 
   // If it's a known explicit image generation model, it is allowed
   if (isKnownImageModel(lowerModel)) {
@@ -201,7 +304,7 @@ export function isModelForbiddenForImageGeneration(providerKind: string, modelId
 
   // 2. Gemini: Only Imagen models generate images. Gemini vision models read images, they do NOT generate images!
   if (kind === 'GEMINI') {
-    if (!lowerModel.includes('imagen') && !lowerModel.includes('image-gen')) {
+    if (!lowerModel.includes('imagen') && !lowerModel.includes('image-gen') && lowerModel !== 'gemini-2.0-flash-image') {
       return {
         forbidden: true,
         reason: `${modelId} is a language/multimodal input model and does not generate images. Google Gemini only supports image generation via Imagen models (e.g. imagen-3.0-generate-002).`,
@@ -220,6 +323,97 @@ export function isModelForbiddenForImageGeneration(providerKind: string, modelId
   }
 
   return { forbidden: false };
+}
+
+/** Check whether a model is explicitly forbidden from being marked as TEXT_GENERATION */
+export function isModelForbiddenForTextGeneration(providerKind: string, modelId: string): { forbidden: boolean; reason?: string } {
+  const kind = (providerKind || '').toUpperCase();
+  if (!canProviderSupportTextGeneration(kind)) {
+    return {
+      forbidden: true,
+      reason: `${providerKind || 'Cloudflare'} is dedicated exclusively to Image AI and does not support text generation.`,
+    };
+  }
+
+  const lowerModel = (modelId || '').toLowerCase().trim();
+  if (!lowerModel) return { forbidden: false };
+
+  if (lowerModel.startsWith('@cf/')) {
+    return {
+      forbidden: true,
+      reason: `${modelId} is a Cloudflare Image AI model and does not support text generation.`,
+    };
+  }
+
+  if (
+    IMAGE_MODEL_IDS.has(modelId) ||
+    lowerModel.startsWith('dall-e') ||
+    lowerModel.includes('imagen') ||
+    lowerModel.includes('flux') ||
+    lowerModel.includes('stable-diffusion') ||
+    lowerModel.includes('sdxl') ||
+    lowerModel.includes('dreamshaper') ||
+    lowerModel.includes('midjourney') ||
+    lowerModel.includes('kandinsky') ||
+    lowerModel.includes('playground-v2') ||
+    lowerModel === 'gpt-image-1' ||
+    lowerModel === 'gemini-2.0-flash-image'
+  ) {
+    return {
+      forbidden: true,
+      reason: `${modelId} is an image-generation model and does not support text generation.`,
+    };
+  }
+
+  return { forbidden: false };
+}
+
+export interface ModelCapabilitySupport {
+  supportsText: boolean;
+  supportsImage: boolean;
+  isTextOnly: boolean;
+  isImageOnly: boolean;
+  supportsBoth: boolean;
+  reason?: string;
+}
+
+/**
+ * Universal capability support resolver for any model on any provider.
+ * - isImageOnly: Dedicated image models (Cloudflare, DALL-E, Imagen, Flux, etc.) -> locked to Image Only.
+ * - isTextOnly: Dedicated text models (Claude, Llama, DeepSeek, GPT-4, etc.) -> locked to Text Only.
+ * - supportsBoth: Multimodal / unified models -> user can choose Text Only, Image Only, or Both.
+ */
+export function getModelCapabilitySupport(
+  providerKind: string,
+  modelId: string
+): ModelCapabilitySupport {
+  const textCheck = isModelForbiddenForTextGeneration(providerKind, modelId);
+  const imageCheck = isModelForbiddenForImageGeneration(providerKind, modelId);
+
+  const supportsText = !textCheck.forbidden;
+  const supportsImage = !imageCheck.forbidden;
+
+  const isTextOnly = supportsText && !supportsImage;
+  const isImageOnly = supportsImage && !supportsText;
+  const supportsBoth = supportsText && supportsImage;
+
+  let reason = '';
+  if (isImageOnly) {
+    reason = textCheck.reason || `${modelId || 'This model'} is dedicated exclusively to Image Generation.`;
+  } else if (isTextOnly) {
+    reason = imageCheck.reason || `${modelId || 'This model'} is dedicated exclusively to Text Generation.`;
+  } else if (supportsBoth) {
+    reason = 'This model supports both text and image generation.';
+  }
+
+  return {
+    supportsText,
+    supportsImage,
+    isTextOnly,
+    isImageOnly,
+    supportsBoth,
+    reason,
+  };
 }
 
 /**
@@ -261,7 +455,12 @@ export function detectModelCapabilities(
     return ['TEXT_GENERATION'];
   }
 
-  // 2. Gemini
+  // 2. Cloudflare Workers AI is strictly an image generation provider
+  if (kind === 'CLOUDFLARE') {
+    return ['IMAGE_GENERATION'];
+  }
+
+  // 3. Gemini
   if (kind === 'GEMINI') {
     const methods = metadata?.supportedGenerationMethods || [];
     const isExplicitImagen = lowerId.includes('imagen') || lowerId.includes('image-gen') || lowerId === 'gemini-2.0-flash-image';
@@ -276,7 +475,7 @@ export function detectModelCapabilities(
     return ['TEXT_GENERATION'];
   }
 
-  // 3. OpenAI
+  // 4. OpenAI
   if (kind === 'OPENAI') {
     if (lowerId.startsWith('dall-e') || lowerId === 'gpt-image-1') {
       return ['IMAGE_GENERATION'];

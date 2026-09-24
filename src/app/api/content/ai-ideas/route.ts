@@ -16,6 +16,7 @@ import { requireFeature } from '@/lib/platform/platform-auth';
 import { hasFeature } from '@/lib/platform/entitlements';
 import { checkAiLimit, aiLimitExceededResponse } from '@/lib/platform/usage-limits';
 import { resolvePlatformPrompt, resolveAiProviderForUser, getOperationMaxTokens } from '@/lib/ai/platform-ai';
+import { rankCandidateModels } from '@/lib/ai/ai-service';
 
 function reqId() {
   return 'req_' + crypto.randomUUID().slice(0, 8);
@@ -348,7 +349,7 @@ export async function POST(request: NextRequest) {
     ];
 
     // Load persisted AI Settings (user-scoped first if it matches activeProvider, then global)
-    const activeProvider = await resolveAiProviderForUser(auth.user.id);
+    const activeProvider = await resolveAiProviderForUser(auth.user.id, 'TEXT');
     if (!activeProvider) {
       return err(
         'No AI provider is connected. Please configure and connect a provider in AI Settings.',
@@ -367,7 +368,9 @@ export async function POST(request: NextRequest) {
     const targetModel = configuredModelDbId
       ? activeProvider.models.find((m) => (m.id === configuredModelDbId || m.modelId === configuredModelDbId) && m.isActive && m.type?.toUpperCase() === 'TEXT')
       : null;
+    const rankedCandidates = rankCandidateModels(activeProvider.models, 'TEXT_GENERATION');
     const defaultModel = targetModel
+      ?? rankedCandidates[0]
       ?? activeProvider.models.find((m) => m.isActive && m.isDefault && m.type?.toUpperCase() === 'TEXT')
       ?? activeProvider.models.find((m) => m.isActive && m.type?.toUpperCase() === 'TEXT');
 

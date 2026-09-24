@@ -131,17 +131,51 @@ export async function POST(request: NextRequest) {
     }
 
     const d = parsed.data;
-    const slug = d.slug || slugify(d.name);
+    const siteId = request.nextUrl.searchParams.get('siteId');
+
+    // If tag name contains commas, split into multiple distinct tags
+    const tagNames = d.name.split(',').map((s) => s.trim()).filter(Boolean);
+    if (tagNames.length > 1) {
+      const createdItems = [];
+      for (const name of tagNames) {
+        const slug = slugify(name);
+        const existing = await db.tag.findFirst({
+          where: {
+            OR: [
+              { name: { equals: name } },
+              { slug: { equals: slug } },
+            ],
+          },
+        });
+        if (existing) {
+          createdItems.push(existing);
+        } else {
+          const finalSlug = `${slug}-${nanoid(4)}`;
+          const item = await db.tag.create({
+            data: {
+              name,
+              slug: finalSlug,
+              color: d.color === '' ? null : d.color ?? null,
+              siteId: siteId || undefined,
+            },
+            include: tagIncludes,
+          });
+          createdItems.push(item);
+        }
+      }
+      return NextResponse.json({ data: createdItems[0], allCreated: createdItems, meta: { requestId: id } }, { status: 201 });
+    }
+
+    const singleName = tagNames[0] || d.name;
+    const slug = d.slug || slugify(singleName);
 
     // Ensure slug uniqueness
     const existing = await db.tag.findFirst({ where: { slug } });
     const finalSlug = existing ? `${slug}-${nanoid(4)}` : slug;
 
-    const siteId = request.nextUrl.searchParams.get('siteId');
-
     const item = await db.tag.create({
       data: {
-        name: d.name,
+        name: singleName,
         slug: finalSlug,
         color: d.color === '' ? null : d.color ?? null,
         siteId: siteId || undefined,

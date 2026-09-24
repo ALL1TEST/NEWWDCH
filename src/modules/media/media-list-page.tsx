@@ -269,16 +269,6 @@ function MediaGridCard({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        {imgSrc && (
-          <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/70 via-black/30 to-transparent pointer-events-none" />
-        )}
-        {imgSrc && (
-          <div className="absolute bottom-0 left-0 right-0 p-3 pointer-events-none">
-            <p className="text-[11px] font-semibold text-white/90 leading-tight line-clamp-2 drop-shadow-md">
-              {item.originalName || item.filename}
-            </p>
-          </div>
-        )}
       </div>
       <div className="p-2.5">
         <p className="text-xs font-semibold text-foreground truncate">{item.originalName || item.filename}</p>
@@ -531,9 +521,10 @@ export function MediaListPage() {
   const bulkDeleteMutation = useMutation({
     mutationFn: () => Promise.all(selectedIds.map((id) => deleteApi(`/api/media/${id}`))),
     onSuccess: () => {
+      const count = selectedIds.length;
       invalidateMediaAndFolders();
       setSelectedIds([]);
-      toast.success(`${selectedIds.length} ${t('media.itemsDeletedSuffix')}`);
+      toast.success(`${count} ${t('media.itemsDeletedSuffix')}`);
     },
     onError: () => toast.error(t('media.deleteItemsFailed')),
   });
@@ -876,17 +867,21 @@ export function MediaListPage() {
   const activeFilterLabel = FILTER_OPTIONS.find((f) => f.value === activeFilter)?.labelKey;
 
   return (
-    <div className="flex flex-col h-full" onClick={closeMenus}>
+    <div className="flex-1 min-h-0 flex flex-col h-full" onClick={closeMenus}>
       {/* Header Bar */}
-      <div className="flex items-center justify-between border-b px-6 py-4 bg-card">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between px-6 pt-3.5 pb-1 bg-card">
+        <div className="flex items-center gap-2.5">
           {/* Filter dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors">
-                <FolderOpen className="h-3.5 w-3.5" />
-                {t('media.filter')}
-              </button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 px-3 text-xs font-medium rounded-lg border-border bg-background shadow-xs hover:bg-muted/60"
+              >
+                <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>{t('media.filter')}</span>
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-44">
               {FILTER_OPTIONS.map((opt) => (
@@ -902,20 +897,23 @@ export function MediaListPage() {
             </DropdownMenuContent>
           </DropdownMenu>
           {activeFilter !== 'all' && (
-            <span className="px-3 py-1 bg-amber-400 text-black text-xs font-semibold rounded-full">{activeFilterLabel && t(activeFilterLabel)}</span>
+            <span className="px-2.5 py-0.5 bg-amber-400/15 text-amber-700 dark:text-amber-300 border border-amber-400/30 text-xs font-semibold rounded-full">
+              {activeFilterLabel && t(activeFilterLabel)}
+            </span>
           )}
           {!isAllSites && (
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => { setNewFolderParentId(currentFolderId); setNewFolderName(''); setNewFolderDialogOpen(true); }}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground border border-border rounded-lg transition-colors"
+              className="h-8 gap-1.5 px-3 text-xs font-medium rounded-lg border-border bg-background shadow-xs hover:bg-muted/60"
             >
-              <FolderPlus className="h-3.5 w-3.5" />
-              {t('media.newFolder')}
-            </button>
+              <FolderPlus className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>{t('media.newFolder')}</span>
+            </Button>
           )}
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">{items.length} {items.length !== 1 ? t('media.filesPlural') : t('media.fileSingular')}</span>
           {/* FIX #8: AI Generate button - amber/gold color */}
           {!isAllSites && (
             <>
@@ -963,21 +961,9 @@ export function MediaListPage() {
         </div>
       )}
 
-      {/* Search + Select All + View Toggle */}
-      <div className="flex items-center justify-between border-b px-6 py-3 bg-card">
+      {/* Search + View Toggle */}
+      <div className="flex items-center justify-between px-6 pt-1 pb-2 bg-card">
         <div className="flex items-center gap-3 flex-1">
-          {items.length > 0 && (
-            <label className="flex items-center gap-2 cursor-pointer select-none shrink-0">
-              <Checkbox
-                checked={allSelected ? true : someSelected ? 'indeterminate' : false}
-                onCheckedChange={toggleSelectAll}
-                className="data-[state=checked]:bg-amber-400 data-[state=checked]:border-amber-400 data-[state=indeterminate]:bg-amber-400 data-[state=indeterminate]:border-amber-400"
-              />
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {allSelected ? t('media.deselectAll') : t('media.selectAll')}
-              </span>
-            </label>
-          )}
           <div className="relative flex-1 max-w-xl">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -994,9 +980,9 @@ export function MediaListPage() {
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-y-auto bg-muted/30">
+      <div className="flex-1 min-h-0 overflow-y-auto bg-muted/30">
         {isLoading && !mediaItems ? (
-          <div className={cn('p-6', viewMode === 'grid' ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4' : 'space-y-2')}>
+          <div className={cn('px-6 pt-3 pb-6', viewMode === 'grid' ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4' : 'space-y-2')}>
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className={viewMode === 'grid' ? 'space-y-2' : 'flex items-center gap-4'}>
                 <Skeleton className={viewMode === 'grid' ? 'aspect-square w-full rounded-xl' : 'h-12 w-12 rounded-lg'} />
@@ -1014,7 +1000,7 @@ export function MediaListPage() {
           <>
             {/* Folders */}
             {viewMode === 'grid' && folderList.length > 0 && (
-              <div className="p-6 pb-2">
+              <div className="px-6 pt-3 pb-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t('media.folders')}</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                   {folderList.map((folder) => (
@@ -1031,7 +1017,7 @@ export function MediaListPage() {
 
             {/* Media items */}
             {viewMode === 'grid' ? (
-              <div className="p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              <div className="px-6 pt-3 pb-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                 {items.map((item) => (
                   <MediaGridCard
                     key={item.id}
@@ -1047,7 +1033,7 @@ export function MediaListPage() {
                 ))}
               </div>
             ) : (
-              <div className="p-6 space-y-2">
+              <div className="px-6 pt-3 pb-6 space-y-2">
                 {items.map((item) => (
                   <MediaListItem
                     key={item.id}
@@ -1076,12 +1062,31 @@ export function MediaListPage() {
 
       {/* Selection Bar */}
       {selectedIds.length > 0 && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 rounded-full border bg-card shadow-2xl px-5 py-2.5">
-          <span className="text-sm font-medium">{`${selectedIds.length} ${t('media.selectedSuffix')}`}</span>
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3.5 rounded-full border bg-card shadow-2xl px-5 py-2.5 animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              className="h-4 w-4 rounded border-gray-300 accent-black text-black cursor-pointer focus:ring-black"
+              style={{ accentColor: '#000000' }}
+            />
+            <span className="text-xs font-semibold text-foreground whitespace-nowrap">
+              {allSelected ? t('media.deselectAll') : t('media.selectAll')}
+            </span>
+          </label>
+
           <div className="w-px h-5 bg-border" />
+
+          <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            {`${selectedIds.length} ${t('media.selectedSuffix')}`}
+          </span>
+
+          <div className="w-px h-5 bg-border" />
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              <button className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
                 <Move className="h-3.5 w-3.5" /> {t('media.move')}
               </button>
             </DropdownMenuTrigger>
@@ -1096,14 +1101,21 @@ export function MediaListPage() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+
           <button
             onClick={() => bulkDeleteMutation.mutate()}
-            className="flex items-center gap-1.5 text-sm font-medium text-destructive hover:text-destructive/80 transition-colors"
+            className="flex items-center gap-1.5 text-sm font-medium text-destructive hover:text-destructive/80 transition-colors cursor-pointer"
           >
             <Trash2 className="h-3.5 w-3.5" /> {t('common.delete')}
           </button>
+
           <div className="w-px h-5 bg-border" />
-          <button onClick={() => setSelectedIds([])} className="text-muted-foreground hover:text-foreground transition-colors">
+
+          <button
+            onClick={() => setSelectedIds([])}
+            className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer p-0.5"
+            title={t('common.close') || 'Close'}
+          >
             <X className="h-4 w-4" />
           </button>
         </div>

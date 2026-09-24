@@ -62,6 +62,7 @@ prisma/*.db
 
 # transient tool output (never commit)
 /tool-results/
+/scratch/
 
 # uploads
 public/uploads/*

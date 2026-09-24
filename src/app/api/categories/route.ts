@@ -142,30 +142,40 @@ export async function POST(request: NextRequest) {
     }
 
     const d = parsed.data;
-    const slug = d.slug || slugify(d.name);
     const parentId = d.parentId === '' ? null : d.parentId ?? null;
-
-    // Ensure slug uniqueness within the same parent scope
-    const existing = await db.category.findFirst({
-      where: { slug, parentId },
-    });
-    const finalSlug = existing ? `${slug}-${nanoid(4)}` : slug;
-
     const siteId = request.nextUrl.searchParams.get('siteId');
 
-    const item = await db.category.create({
-      data: {
-        name: d.name,
-        slug: finalSlug,
-        description: d.description === '' ? null : d.description ?? null,
-        parentId,
-        sortOrder: d.sortOrder,
-        siteId: siteId || undefined,
-      },
-      include: categoryIncludes,
-    });
+    const rawNames = d.name.includes(',')
+      ? d.name.split(',').map((s) => s.trim()).filter(Boolean)
+      : [d.name.trim()];
 
-    return NextResponse.json({ data: item, meta: { requestId: id } }, { status: 201 });
+    const createdItems: any[] = [];
+
+    for (const catName of rawNames) {
+      const slug = d.slug && rawNames.length === 1 ? d.slug : slugify(catName);
+
+      // Ensure slug uniqueness within the same parent scope
+      const existing = await db.category.findFirst({
+        where: { slug, parentId },
+      });
+      const finalSlug = existing ? `${slug}-${nanoid(4)}` : slug;
+
+      const item = await db.category.create({
+        data: {
+          name: catName,
+          slug: finalSlug,
+          description: d.description === '' ? null : d.description ?? null,
+          parentId,
+          sortOrder: d.sortOrder,
+          siteId: siteId || undefined,
+        },
+        include: categoryIncludes,
+      });
+      createdItems.push(item);
+    }
+
+    const result = createdItems.length === 1 ? createdItems[0] : createdItems;
+    return NextResponse.json({ data: result, meta: { requestId: id } }, { status: 201 });
   } catch (error) {
     console.error(`[CATEGORIES:CREATE] ${id} —`, error);
     return NextResponse.json(

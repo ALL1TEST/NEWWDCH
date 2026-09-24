@@ -32,13 +32,14 @@ function err(message: string, status = 400, code = 'VALIDATION_ERROR') {
 
 const updateSchema = z.object({
   name: z.string().min(1).max(200).trim().optional(),
- kind: z.enum(['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK', 'CUSTOM']).optional(),
- baseUrl: z.string().max(2048).optional().or(z.literal('')),
- apiKey: z.string().max(1000).optional().or(z.literal('')),
+  kind: z.enum(['OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ', 'DEEPSEEK', 'CLOUDFLARE', 'CUSTOM']).optional(),
+  baseUrl: z.string().max(2048).optional().or(z.literal('')),
+  apiKey: z.string().max(1000).optional().or(z.literal('')),
   apiVersion: z.string().max(100).optional().or(z.literal('')),
   config: z.string().max(50000).optional().or(z.literal('')),
   siteId: z.string().optional().or(z.literal('')),
   isActive: z.boolean().optional(),
+  isDefault: z.boolean().optional(),
 });
 
 // =====================================================================
@@ -74,17 +75,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     let maskedKey: string | null = null;
+    let decryptedKey: string | null = null;
     if (item.apiKeyEncrypted) {
       try {
         const raw = await decrypt(item.apiKeyEncrypted);
         maskedKey = maskSecret(raw);
+        decryptedKey = raw;
       } catch {
         maskedKey = '••••••••';
       }
     }
 
     const { apiKeyEncrypted, ...rest } = item;
-    return ok({ ...rest, apiKeyMasked: maskedKey });
+    return ok({ ...rest, apiKey: decryptedKey, apiKeyMasked: maskedKey });
   } catch (error) {
     console.error(`[AI/PROVIDERS:GET] ${id} —`, error);
     return err('Failed to fetch provider', 500, 'INTERNAL_ERROR');
@@ -141,6 +144,38 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (d.siteId !== undefined) data.siteId = d.siteId === '' ? null : d.siteId;
     if (d.isActive !== undefined) data.isActive = d.isActive;
 
+    if (d.isDefault !== undefined) {
+      if (d.isDefault) {
+        if (isPlatformStaff(featureAuth.user)) {
+          const { getPlatformStaffUserIds } = await import('@/lib/ai/platform-ai');
+          const staffIds = await getPlatformStaffUserIds();
+          await db.aiProvider.updateMany({
+            where: { isDefault: true, id: { not: providerId }, createdById: { in: staffIds.length > 0 ? staffIds : ['__none__'] } },
+            data: { isDefault: false },
+          });
+        } else {
+          await db.aiProvider.updateMany({
+            where: { isDefault: true, id: { not: providerId }, createdById: existing.createdById },
+            data: { isDefault: false },
+          });
+        }
+        data.isDefault = true;
+
+        const scope = isPlatformStaff(featureAuth.user) ? 'global' : `user:${featureAuth.user.id}`;
+        await db.aiSettings.upsert({
+          where: { scope },
+          update: { defaultProviderId: providerId },
+          create: { scope, defaultProviderId: providerId },
+        });
+      } else {
+        data.isDefault = false;
+        await db.aiSettings.updateMany({
+          where: { defaultProviderId: providerId },
+          data: { defaultProviderId: null },
+        });
+      }
+    }
+
     // CUSTOM providers require a Base URL. Validate if kind is changing to CUSTOM
     // or if baseUrl is being updated on an existing CUSTOM provider.
     const effectiveKind = (d.kind ?? existing.kind) as string;
@@ -168,16 +203,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     // Strip apiKeyEncrypted from the response — never send ciphertext to client
     const { apiKeyEncrypted: _stripped, ...safeItem } = item;
+    const finalEncrypted = (data.apiKeyEncrypted as string | undefined) ?? existing.apiKeyEncrypted;
     let maskedKey: string | null = null;
-    if (existing.apiKeyEncrypted) {
+    let decryptedKey: string | null = null;
+    if (finalEncrypted) {
       try {
-        const raw = await decrypt(existing.apiKeyEncrypted);
+        const raw = await decrypt(finalEncrypted);
         maskedKey = maskSecret(raw);
+        decryptedKey = raw;
       } catch {
         maskedKey = '••••••••';
       }
     }
-    return ok({ ...safeItem, apiKeyMasked: maskedKey });
+    return ok({ ...safeItem, apiKey: decryptedKey, apiKeyMasked: maskedKey });
   } catch (error) {
     console.error(`[AI/PROVIDERS:UPDATE] ${id} —`, error);
     return err('Failed to update provider', 500, 'INTERNAL_ERROR');

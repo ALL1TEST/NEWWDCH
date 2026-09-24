@@ -534,13 +534,17 @@ function SidebarMenuButton({
     }
   }
 
+  if (state !== "collapsed" || isMobile) {
+    return button;
+  }
+
   return (
     <Tooltip disableHoverableContent>
       <TooltipTrigger asChild>{button}</TooltipTrigger>
       <TooltipContent
+        suppressHydrationWarning
         side="right"
         align="center"
-        hidden={state !== "collapsed" || isMobile}
         {...tooltip}
       />
     </Tooltip>
