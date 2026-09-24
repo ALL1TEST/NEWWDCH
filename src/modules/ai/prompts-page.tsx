@@ -24,9 +24,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
@@ -34,7 +31,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
-  Plus, Search, MoreHorizontal, Pencil, Trash2, Copy, LayoutGrid, List, ChevronLeft, ChevronRight, Loader2, MessageSquare, Shield, Eye, Sparkles, Info,
+  Plus, Search, Pencil, Trash2, Copy, LayoutGrid, List, ChevronLeft, ChevronRight, Loader2, MessageSquare, Shield, Eye, Sparkles, Info,
 } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { useSiteStore } from '@/lib/stores/site-store';
@@ -298,6 +295,18 @@ export function PromptsPage() {
     onError: (err: Error) => toast.error(err.message || t('ai.failedToDuplicate') || 'Failed to duplicate'),
   });
 
+  // Active-status toggle — reuses the existing PATCH endpoint with a
+  // partial body ({ isActive }): the API accepts field-level updates, so
+  // no duplicate status system is created.
+  const toggleActiveMutation = useMutation({
+    mutationFn: (prompt: AiPrompt) =>
+      patchApi<AiPrompt>(`/api/ai/prompts/${prompt.id}`, { isActive: !prompt.isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
+    },
+    onError: (err: Error) => toast.error(err.message || t('ai.failedToSavePrompt') || 'Failed to update prompt'),
+  });
+
   const handleOpenCreate = () => {
     setEditingPrompt(null);
     setFormData(emptyForm);
@@ -491,8 +500,8 @@ export function PromptsPage() {
                     <TableHead className="min-w-[240px]">{t('common.name') || 'Name'}</TableHead>
                     <TableHead>{t('ai.category') || 'Category'}</TableHead>
                     <TableHead className="whitespace-nowrap">{t('users.updatedColumn') || 'Updated'}</TableHead>
-                    <TableHead>{t('common.status') || 'Status'}</TableHead>
-                    <TableHead className="w-[72px] text-right">{t('common.actions') || 'Actions'}</TableHead>
+                    <TableHead className="text-center">{t('common.status') || 'Status'}</TableHead>
+                    <TableHead className="w-[100px] text-center">{t('common.actions') || 'Actions'}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -502,8 +511,8 @@ export function PromptsPage() {
                         <TableCell><Skeleton className="h-4 w-48" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                        <TableCell className="text-right"><Skeleton className="h-4 w-8 ml-auto" /></TableCell>
+                        <TableCell className="text-center"><Skeleton className="h-4 w-8 mx-auto rounded-full" /></TableCell>
+                        <TableCell className="text-center"><Skeleton className="h-4 w-16 mx-auto" /></TableCell>
                       </TableRow>
                     ))
                   ) : isError ? (
@@ -550,42 +559,42 @@ export function PromptsPage() {
                             {formatRelativeTime(prompt.updatedAt)}
                           </span>
                         </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={prompt.isActive ? 'default' : 'secondary'}
-                            className={prompt.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : ''}
-                          >
-                            {prompt.isActive ? (t('common.active') || 'Active') : (t('common.inactive') || 'Inactive')}
-                          </Badge>
+                        <TableCell className="text-center">
+                          <Switch
+                            checked={prompt.isActive}
+                            disabled={!prompt.canEdit || (toggleActiveMutation.isPending && toggleActiveMutation.variables?.id === prompt.id)}
+                            onCheckedChange={() => toggleActiveMutation.mutate(prompt)}
+                            aria-label={prompt.name}
+                          />
                         </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {prompt.canEdit ? (
-                                <DropdownMenuItem onClick={() => handleOpenEdit(prompt)}>
-                                  <Pencil className="h-4 w-4 mr-2" />{t('common.edit') || 'Edit'}
-                                </DropdownMenuItem>
-                              ) : (
-                                <DropdownMenuItem onClick={() => handleOpenEdit(prompt)}>
-                                  <Eye className="h-4 w-4 mr-2" /> View
-                                </DropdownMenuItem>
-                              )}
-                              {prompt.canEdit && (
-                                <DropdownMenuItem
-                                  className="text-red-600"
-                                  onClick={() => {
-                                    setDeletingPrompt(prompt);
-                                    setDeleteDialogOpen(true);
-                                  }}
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />{t('common.delete') || 'Delete'}
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={() => handleOpenEdit(prompt)}
+                              aria-label={prompt.canEdit ? (t('common.edit') || 'Edit prompt') : 'View prompt'}
+                              title={prompt.canEdit ? (t('common.edit') || 'Edit') : 'View'}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            {prompt.canEdit && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                                onClick={() => {
+                                  setDeletingPrompt(prompt);
+                                  setDeleteDialogOpen(true);
+                                }}
+                                aria-label={t('common.delete') || 'Delete prompt'}
+                                title={t('common.delete') || 'Delete'}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -652,9 +661,12 @@ export function PromptsPage() {
                     </Badge>
                   </div>
                   <div className="flex items-center justify-between gap-2 pt-2 border-t mt-auto">
-                    <Badge variant={prompt.isActive ? 'default' : 'secondary'} className={prompt.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : ''}>
-                      {prompt.isActive ? (t('common.active') || 'Active') : (t('common.inactive') || 'Inactive')}
-                    </Badge>
+                    <Switch
+                      checked={prompt.isActive}
+                      disabled={!prompt.canEdit || (toggleActiveMutation.isPending && toggleActiveMutation.variables?.id === prompt.id)}
+                      onCheckedChange={() => toggleActiveMutation.mutate(prompt)}
+                      aria-label={prompt.name}
+                    />
                     <div className="flex items-center gap-1">
                       {prompt.canEdit ? (
                         <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => handleOpenEdit(prompt)}>

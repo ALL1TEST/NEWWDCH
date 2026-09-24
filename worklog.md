@@ -12096,3 +12096,27 @@ Stage Summary:
 - No DB schema, API, or data changes; all kept functionality verified end-to-end in browser.
 - Files changed: src/modules/ai/prompts-page.tsx (+49/−210), src/lib/i18n/core/{en,fr}.ts, src/lib/i18n/fragments/{en,fr}/client-ai.ts.
 - Changes NOT committed/pushed (no commit requested this task).
+
+---
+Task ID: PT-1
+Agent: main (orchestrator)
+Task: Update Prompt Library table Status + Actions columns to reference UI style — replace Active/Inactive text badges with functional compact toggle switches; replace three-dot dropdown with direct Edit (neutral) / Delete (red) icon buttons; center-align both columns.
+
+Work Log:
+- Verified PATCH /api/ai/prompts/[id] accepts partial bodies (isActive optional, field-level update) → toggle reuses existing persistence, no new backend/system.
+- Added toggleActiveMutation: patchApi with { isActive: !prompt.isActive } → invalidate aiPrompts queries; error toast on failure; per-row disable while that row's mutation is pending (variables?.id check).
+- Status column (table): Badge → compact Switch (18×32px shadcn), checked=prompt.isActive, disabled for read-only platform prompts (canEdit=false), aria-label=prompt.name.
+- Actions column (table): removed DropdownMenu entirely → direct ghost icon buttons: Pencil (neutral, opens existing handleOpenEdit flow — read-only prompts get the View dialog) + Trash2 (red, opens existing delete confirmation); Delete hidden when !canEdit.
+- Centered Status + Actions headers and cells (Actions w-[100px]); skeleton rows updated (rounded switch-shaped status skeleton, centered).
+- Grid view: status Badge → same Switch (consistency with "no Active/Inactive text badges anymore"); existing direct Edit/Delete buttons untouched.
+- Cleanup: removed DropdownMenu* and MoreHorizontal imports.
+
+Verification:
+- tsc: 0 errors in prompts-page.tsx; ESLint clean.
+- Browser E2E (admin, Demo Blog site): switches render ON for Active rows / OFF for Inactive; toggled FR → EN Translator OFF→ON (UI + API confirmed true, Updated timestamp refreshed), persisted across reload, toggled back ON→OFF (restored original state); Edit icon opens edit dialog with data; Delete icon opens Confirm Delete dialog (cancelled); platform prompt (Platform Templates filter): switch disabled, single View icon opens read-only dialog with "Duplicate to My Prompts" preserved; grid view switch toggles both ways.
+- VLM desktop check: compact toggles centered, direct pencil/red-trash icons, no menu, balanced layout — PASS. Mobile 390px: table scrolls horizontally, all switches/icons reachable.
+- Console: only pre-existing textarea null-value warning (from edit dialog with null systemPrompt — untouched). dev.log: no new errors.
+
+Stage Summary:
+- Status is now a real per-row toggle (reuses PATCH endpoint); Actions are direct Edit/Delete icons; both centered; no dropdowns or text status badges remain in the Prompt Library.
+- File changed: src/modules/ai/prompts-page.tsx only. Not committed/pushed.
