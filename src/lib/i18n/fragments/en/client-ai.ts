@@ -208,6 +208,7 @@ export const clientAiEn: Record<string, string> = {
   'ai.promptCreated': 'Prompt created',
   'ai.failedToSavePrompt': 'Failed to save prompt',
   'ai.promptDeleted': 'Prompt deleted',
+  'ai.deletePromptConfirm': 'Are you sure you want to delete this prompt? This action cannot be undone.',
   'ai.failedToDeletePrompt': 'Failed to delete prompt',
   'ai.failedToToggleFavorite': 'Failed to toggle favorite',
   'ai.promptDuplicated': 'Prompt duplicated',

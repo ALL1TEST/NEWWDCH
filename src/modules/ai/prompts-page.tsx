@@ -24,7 +24,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -34,7 +34,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
-  Plus, Search, MoreHorizontal, Pencil, Trash2, Copy, LayoutGrid, List, History, ChevronLeft, ChevronRight, Loader2, MessageSquare, Heart, Shield, User, Eye, Sparkles, Info,
+  Plus, Search, MoreHorizontal, Pencil, Trash2, Copy, LayoutGrid, List, ChevronLeft, ChevronRight, Loader2, MessageSquare, Shield, Eye, Sparkles, Info,
 } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { useSiteStore } from '@/lib/stores/site-store';
@@ -94,14 +94,6 @@ interface PromptFormData {
   isActive: boolean;
 }
 
-interface PromptVersion {
-  id: string;
-  version: number;
-  systemPrompt: string;
-  userPrompt: string;
-  createdAt: string;
-}
-
 // -------------------- Constants --------------------
 
 const PROMPT_CATEGORIES: PromptCategoryNew[] = [
@@ -149,7 +141,6 @@ const emptyForm: PromptFormData = {
 };
 
 type ViewMode = 'table' | 'grid';
-type FavFilter = 'all' | 'favorites';
 type SourceFilter = 'all' | 'platform' | 'client';
 
 // -------------------- Component --------------------
@@ -179,7 +170,6 @@ export function PromptsPage() {
   const [pageSize] = useState(25);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [favFilter, setFavFilter] = useState<FavFilter>('all');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>(!isAllSites && activeSiteDbId ? 'client' : 'all');
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -187,8 +177,6 @@ export function PromptsPage() {
   const [formData, setFormData] = useState<PromptFormData>(emptyForm);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingPrompt, setDeletingPrompt] = useState<AiPrompt | null>(null);
-  const [versionsDialogOpen, setVersionsDialogOpen] = useState(false);
-  const [versionsPrompt, setVersionsPrompt] = useState<AiPrompt | null>(null);
 
   // Sync source filter when active site changes
   React.useEffect(() => {
@@ -205,7 +193,6 @@ export function PromptsPage() {
       pageSize,
       search,
       category: categoryFilter,
-      isFavorite: favFilter,
       source: sourceFilter,
       siteId: siteIdParam,
     }),
@@ -217,7 +204,6 @@ export function PromptsPage() {
           pageSize,
           search: search || undefined,
           category: categoryFilter !== 'all' ? categoryFilter : undefined,
-          isFavorite: favFilter === 'favorites' ? true : undefined,
           source: sourceFilter !== 'all' ? sourceFilter : undefined,
           siteId: siteIdParam,
         },
@@ -248,14 +234,6 @@ export function PromptsPage() {
     enabled: !!formData.providerId,
   });
   const models = (modelsData?.data ?? []).filter((m) => m.type?.toUpperCase() !== 'IMAGE');
-
-  // Fetch versions
-  const { data: versionsData, isLoading: versionsLoading } = useQuery({
-    queryKey: queryKeys.aiPrompts.nested('versions').detail(versionsPrompt?.id ?? ''),
-    queryFn: () => getApi<PromptVersion[]>(`/api/ai/prompts/${versionsPrompt!.id}/versions`),
-    enabled: !!versionsPrompt,
-  });
-  const versions = versionsData ?? [];
 
   // Create / Update mutation
   const saveMutation = useMutation({
@@ -307,15 +285,6 @@ export function PromptsPage() {
       setDeletingPrompt(null);
     },
     onError: (err: Error) => toast.error(err.message || t('ai.failedToDeletePrompt') || 'Failed to delete prompt'),
-  });
-
-  // Favorite toggle
-  const favMutation = useMutation({
-    mutationFn: (id: string) => postApi(`/api/ai/prompts/${id}/favorite`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.aiPrompts.all });
-    },
-    onError: (err: Error) => toast.error(err.message || t('ai.failedToToggleFavorite') || 'Failed to favorite'),
   });
 
   // Duplicate mutation
@@ -507,22 +476,6 @@ export function PromptsPage() {
                 <SelectItem value="all">All Sources</SelectItem>
               </SelectContent>
             </Select>
-
-            <Select
-              value={favFilter}
-              onValueChange={(v) => {
-                setFavFilter(v as FavFilter);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-full sm:w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('ai.all') || 'All Prompts'}</SelectItem>
-                <SelectItem value="favorites">{t('ai.favorites') || 'Favorites'}</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </CardContent>
       </Card>
@@ -532,44 +485,36 @@ export function PromptsPage() {
         <Card>
           <CardContent className="p-0">
             <ScrollArea className="w-full">
-              <Table className="[&_th]:px-3 [&_td]:px-3 [&_td]:py-3 [&_td]:align-top">
+              <Table className="[&_th]:px-3 [&_td]:px-3 [&_td]:py-3">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="min-w-[220px]">{t('common.name') || 'Name'}</TableHead>
-                    <TableHead>Source</TableHead>
+                    <TableHead className="min-w-[240px]">{t('common.name') || 'Name'}</TableHead>
                     <TableHead>{t('ai.category') || 'Category'}</TableHead>
-                    <TableHead className="hidden md:table-cell w-[200px]">{t('title.tags') || 'Tags'}</TableHead>
-                    <TableHead className="hidden lg:table-cell">{t('users.updatedColumn') || 'Updated'}</TableHead>
-                    <TableHead className="w-[44px]">
-                      <span className="sr-only">Favorite</span>
-                    </TableHead>
+                    <TableHead className="whitespace-nowrap">{t('users.updatedColumn') || 'Updated'}</TableHead>
                     <TableHead>{t('common.status') || 'Status'}</TableHead>
-                    <TableHead className="text-right">{t('common.actions') || 'Actions'}</TableHead>
+                    <TableHead className="w-[72px] text-right">{t('common.actions') || 'Actions'}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <TableRow key={i}>
-                        <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-48" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                        <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
-                        <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-4" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                         <TableCell className="text-right"><Skeleton className="h-4 w-8 ml-auto" /></TableCell>
                       </TableRow>
                     ))
                   ) : isError ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-zinc-500">
+                      <TableCell colSpan={5} className="text-center py-8 text-zinc-500">
                         {t('ai.failedToLoadPrompts') || 'Failed to load prompts'}
                       </TableCell>
                     </TableRow>
                   ) : prompts.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-12 text-zinc-500">
+                      <TableCell colSpan={5} className="text-center py-12 text-zinc-500">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <MessageSquare className="h-8 w-8 text-zinc-300 dark:text-zinc-600" />
                           <p className="font-medium text-sm text-zinc-700 dark:text-zinc-300">
@@ -590,61 +535,20 @@ export function PromptsPage() {
                   ) : (
                     prompts.map((prompt) => (
                       <TableRow key={prompt.id}>
-                        <TableCell className="max-w-[320px] lg:max-w-[420px]">
-                          <div className="min-w-0">
-                            <span className="font-medium block truncate" title={prompt.name}>
-                              {prompt.name}
-                            </span>
-                            {prompt.description ? (
-                              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5 max-w-[38ch]" title={prompt.description}>
-                                {prompt.description}
-                              </p>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {prompt.sourceType === 'PLATFORM' ? (
-                            <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800 gap-1 text-xs">
-                              <Shield className="h-3 w-3" /> Platform
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 gap-1 text-xs">
-                              <User className="h-3 w-3" /> My Prompt
-                            </Badge>
-                          )}
+                        <TableCell className="max-w-[480px]">
+                          <span className="font-medium block truncate" title={prompt.name}>
+                            {prompt.name}
+                          </span>
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary" className={CATEGORY_COLORS[prompt.category] ?? ''}>
                             {CATEGORY_LABELS[prompt.category] ?? prompt.category}
                           </Badge>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell max-w-[200px]">
-                          {prompt.tags?.length ? (
-                            <div className="flex flex-wrap gap-1.5 items-center">
-                              {prompt.tags.slice(0, 2).map((tag) => (
-                                <Badge key={tag} variant="outline" className="text-xs max-w-[95px] truncate" title={tag}>
-                                  {tag}
-                                </Badge>
-                              ))}
-                              {prompt.tags.length > 2 && (
-                                <Badge variant="outline" className="text-xs shrink-0 text-muted-foreground">
-                                  +{prompt.tags.length - 2}
-                                </Badge>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                           <span title={new Date(prompt.updatedAt).toLocaleString()}>
                             {formatRelativeTime(prompt.updatedAt)}
                           </span>
-                        </TableCell>
-                        <TableCell className="w-[44px]">
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => favMutation.mutate(prompt.id)} aria-label={prompt.isFavorite ? 'Remove from favorites' : 'Add to favorites'}>
-                            <Heart className={`h-4 w-4 ${prompt.isFavorite ? 'fill-red-500 text-red-500' : 'text-zinc-400'}`} />
-                          </Button>
                         </TableCell>
                         <TableCell>
                           <Badge
@@ -657,7 +561,7 @@ export function PromptsPage() {
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm"><MoreHorizontal className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               {prompt.canEdit ? (
@@ -666,34 +570,19 @@ export function PromptsPage() {
                                 </DropdownMenuItem>
                               ) : (
                                 <DropdownMenuItem onClick={() => handleOpenEdit(prompt)}>
-                                  <Eye className="h-4 w-4 mr-2" /> View Prompt
+                                  <Eye className="h-4 w-4 mr-2" /> View
                                 </DropdownMenuItem>
                               )}
-                              <DropdownMenuItem onClick={() => duplicateMutation.mutate(prompt.id)}>
-                                <Copy className="h-4 w-4 mr-2" />
-                                {prompt.sourceType === 'PLATFORM' && canCreateCustom ? 'Duplicate to My Prompts' : (t('ai.duplicate') || 'Duplicate')}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setVersionsPrompt(prompt);
-                                  setVersionsDialogOpen(true);
-                                }}
-                              >
-                                <History className="h-4 w-4 mr-2" />{t('ai.versionHistory') || 'History'}
-                              </DropdownMenuItem>
                               {prompt.canEdit && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    className="text-red-600"
-                                    onClick={() => {
-                                      setDeletingPrompt(prompt);
-                                      setDeleteDialogOpen(true);
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />{t('common.delete') || 'Delete'}
-                                  </DropdownMenuItem>
-                                </>
+                                <DropdownMenuItem
+                                  className="text-red-600"
+                                  onClick={() => {
+                                    setDeletingPrompt(prompt);
+                                    setDeleteDialogOpen(true);
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />{t('common.delete') || 'Delete'}
+                                </DropdownMenuItem>
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -753,31 +642,16 @@ export function PromptsPage() {
           ) : (
             prompts.map((prompt) => (
               <Card key={prompt.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-semibold truncate">{prompt.name}</h3>
-                        {prompt.sourceType === 'PLATFORM' ? (
-                          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800 gap-1 text-[10px] py-0">
-                            <Shield className="h-2.5 w-2.5" /> Platform
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 gap-1 text-[10px] py-0">
-                            <User className="h-2.5 w-2.5" /> My Prompt
-                          </Badge>
-                        )}
-                      </div>
-                      <Badge variant="secondary" className={`${CATEGORY_COLORS[prompt.category] ?? ''} mt-1 text-xs`}>
-                        {CATEGORY_LABELS[prompt.category] ?? prompt.category}
-                      </Badge>
-                    </div>
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => favMutation.mutate(prompt.id)}>
-                      <Heart className={`h-4 w-4 ${prompt.isFavorite ? 'fill-red-500 text-red-500' : 'text-zinc-400'}`} />
-                    </Button>
+                <CardContent className="p-4 flex flex-col gap-3">
+                  <div className="min-w-0 space-y-1.5">
+                    <h3 className="font-semibold leading-snug break-words" title={prompt.name}>
+                      {prompt.name}
+                    </h3>
+                    <Badge variant="secondary" className={`${CATEGORY_COLORS[prompt.category] ?? ''} text-xs`}>
+                      {CATEGORY_LABELS[prompt.category] ?? prompt.category}
+                    </Badge>
                   </div>
-                  {prompt.description && <p className="text-sm text-zinc-500 line-clamp-2">{prompt.description}</p>}
-                  <div className="flex items-center justify-between text-xs text-zinc-400 pt-2 border-t">
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t mt-auto">
                     <Badge variant={prompt.isActive ? 'default' : 'secondary'} className={prompt.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : ''}>
                       {prompt.isActive ? (t('common.active') || 'Active') : (t('common.inactive') || 'Inactive')}
                     </Badge>
@@ -791,9 +665,20 @@ export function PromptsPage() {
                           <Eye className="h-3.5 w-3.5 mr-1" /> View
                         </Button>
                       )}
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => duplicateMutation.mutate(prompt.id)}>
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
+                      {prompt.canEdit && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                          aria-label={t('common.delete') || 'Delete'}
+                          onClick={() => {
+                            setDeletingPrompt(prompt);
+                            setDeleteDialogOpen(true);
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -1094,52 +979,6 @@ export function PromptsPage() {
               </Button>
             )}
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Version History Dialog */}
-      <Dialog open={versionsDialogOpen} onOpenChange={setVersionsDialogOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[70vh]">
-          <DialogHeader>
-            <DialogTitle>{t('ai.versionHistory') || 'Version History'} — {versionsPrompt?.name}</DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="max-h-[500px]">
-            {versionsLoading ? (
-              <div className="space-y-3 p-1">
-                {Array.from({ length: 2 }).map((_, i) => (
-                  <Skeleton key={i} className="h-24 w-full" />
-                ))}
-                <p className="text-center text-sm text-zinc-500">{t('ai.loadingVersions') || 'Loading versions...'}</p>
-              </div>
-            ) : versions.length === 0 ? (
-              <p className="text-center py-8 text-zinc-500">{t('ai.noVersions') || 'No version history recorded'}</p>
-            ) : (
-              <div className="space-y-4 p-1">
-                {versions.map((v) => (
-                  <Card key={v.id}>
-                    <CardContent className="p-4 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Badge variant="secondary">v{v.version}</Badge>
-                        <span className="text-xs text-zinc-500">{new Date(v.createdAt).toLocaleString()}</span>
-                      </div>
-                      {v.systemPrompt && (
-                        <div>
-                          <span className="text-xs font-semibold text-zinc-500">{t('ai.systemPrompt') || 'System Prompt'}</span>
-                          <p className="text-xs bg-zinc-50 dark:bg-zinc-900 p-2 rounded line-clamp-3 font-mono mt-1">{v.systemPrompt}</p>
-                        </div>
-                      )}
-                      {v.userPrompt && (
-                        <div>
-                          <span className="text-xs font-semibold text-zinc-500">{t('ai.userPrompt') || 'User Prompt'}</span>
-                          <p className="text-xs bg-zinc-50 dark:bg-zinc-900 p-2 rounded line-clamp-3 font-mono mt-1">{v.userPrompt}</p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
         </DialogContent>
       </Dialog>
 

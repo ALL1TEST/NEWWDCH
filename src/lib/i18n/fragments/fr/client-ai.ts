@@ -190,6 +190,7 @@ export const clientAiFr: Record<string, string> = {
   "ai.promptCreated": "Invite créée",
   "ai.failedToSavePrompt": "Échec de l'enregistrement de l'invite",
   "ai.promptDeleted": "Invite supprimée",
+  "ai.deletePromptConfirm": "Êtes-vous sûr de vouloir supprimer cette invite ? Cette action est irréversible.",
   "ai.failedToDeletePrompt": "Échec de la suppression de l'invite",
   "ai.failedToToggleFavorite": "Échec du basculement des favoris",
   "ai.promptDuplicated": "Invite dupliquée",

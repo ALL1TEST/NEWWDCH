@@ -12068,3 +12068,31 @@ Stage Summary:
 - Table now: cleaner professional SaaS layout, one genuinely useful column added (Updated), one decorative removed (Variables count), zero functionality changes
 - Two pre-existing bugs fixed en route: raw i18n key visible in Tags header; edit-dialog crash on null temperature/maxTokens
 - DB now seeded (users/sites/prompts) for future verification work
+
+---
+Task ID: PL-1
+Agent: main (orchestrator)
+Task: Simplify the Prompt Library table — remove Source column, Tags column, favorite/heart icon, description under names; reduce Actions menu to Edit + Delete only; keep Search / Category / Source filters, List-Grid toggle, Add Prompt, and existing Edit/Delete flows.
+
+Work Log:
+- Inspected Prompt Library implementation: single component `src/modules/ai/prompts-page.tsx` (reused by ai-page.tsx and platform-ai.tsx) + `/api/ai/prompts` routes; confirmed data model (AiPrompt: description/tags/isFavorite/sourceType all API-returned) — no schema change needed, display-only edit.
+- Removed from table: Source column (Platform/My Prompt badges), Tags column (+N badges), Favorite heart column/button, description line under names (Name cell now single-line truncated name only).
+- Final table structure: Name (min-w-240, truncate) | Category (colored badge) | Updated (relative time, always visible now) | Status (Active/Inactive badge) | Actions (72px right-aligned). Removed `align-top`, adjusted skeleton rows to 5 cells, colSpan 8→5.
+- Simplified Actions dropdown to Edit + Delete only (removed Duplicate, Version History, separator). Platform read-only prompts keep "View" (read-only equivalent of Edit, no Delete). Removed now-unreachable Version History dialog + versions query/state.
+- Removed Favorites filter select + favMutation + isFavorite query param (dead UI once the only favorite toggle — the heart button — was removed). Kept Source filter (Site Prompts / Platform Templates / All Sources) — still useful for editability distinction.
+- Grid view cards simplified to match: name + category badge + status badge + Edit/View + Delete (removed heart, source badges, description, copy button).
+- Kept "Duplicate to My Prompts" ONLY inside the read-only platform prompt dialog footer (contextual, outside Actions menu — preserves the platform-prompt customization path).
+- Fixed pre-existing raw-i18n-key bug in this page's delete confirmation (keys used nowhere else): added `common.confirmDelete` to core en/fr and `ai.deletePromptConfirm` to fragments en/fr (en/fr parity discipline; other locales fall back to English via documented chain).
+- Cleanup: removed unused imports (History, Heart, User, DropdownMenuSeparator), PromptVersion interface, FavFilter type.
+
+Verification:
+- tsc: 0 errors in changed files; ESLint: clean on all 5 changed files.
+- agent-browser E2E at `#/ai/prompts` (admin session): table headers exactly Name/Category/Updated/Status/Actions; 3 seeded site prompts render name-only rows; Actions menu shows exactly Edit + Delete (platform prompt shows only View); read-only dialog + "Duplicate to My Prompts" footer intact; search ("Newsletter"→1 row), Category filter (SEO→correct rows via API cross-check), Source filter (Platform Templates→Long-form Article Writer) all functional; List/Grid toggle works; Add Prompt created "ZZ Test Prompt Verify" → full Delete flow (translated confirm dialog) removed it, original data intact.
+- VLM visual check (desktop): columns/labels/layout PASS, no defects. Mobile 390px: table horizontally scrollable inside ScrollArea (scrolled 352px, Status/Actions reachable). Grid view VLM: PASS.
+- dev.log: no new runtime errors (only historical EADDRINUSE from prior session); console clean apart from pre-existing dev-mode warnings.
+
+Stage Summary:
+- Prompt Library is now a clean minimal Name | Category | Updated | Status | Actions table with Edit/Delete-only actions, matching Karmax CMS style.
+- No DB schema, API, or data changes; all kept functionality verified end-to-end in browser.
+- Files changed: src/modules/ai/prompts-page.tsx (+49/−210), src/lib/i18n/core/{en,fr}.ts, src/lib/i18n/fragments/{en,fr}/client-ai.ts.
+- Changes NOT committed/pushed (no commit requested this task).

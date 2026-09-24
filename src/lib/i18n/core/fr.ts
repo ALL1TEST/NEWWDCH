@@ -20,6 +20,7 @@ export const coreFr: Record<string, string> = {
   'common.saveChanges': 'Enregistrer les modifications',
   'common.cancel': 'Annuler',
   'common.delete': 'Supprimer',
+  'common.confirmDelete': 'Confirmer la suppression',
   'common.edit': 'Modifier',
   'common.create': 'Créer',
   'common.search': 'Rechercher...',
