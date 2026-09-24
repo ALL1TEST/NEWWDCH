@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { useSiteStore } from '@/lib/stores/site-store';
+import { formatRelativeTime } from '@/lib/utils';
 
 // -------------------- Types --------------------
 
@@ -52,8 +53,8 @@ interface AiPrompt {
   userPrompt: string;
   providerId: string | null;
   modelId: string | null;
-  temperature: number;
-  maxTokens: number;
+  temperature: number | null;
+  maxTokens: number | null;
   isActive: boolean;
   isFavorite: boolean;
   usageCount: number;
@@ -346,8 +347,12 @@ export function PromptsPage() {
       userPrompt: prompt.userPrompt,
       providerId: prompt.providerId ?? '',
       modelId: prompt.modelId ?? '',
-      temperature: prompt.temperature,
-      maxTokens: prompt.maxTokens,
+      // Null guards: temperature / maxTokens are nullable in the schema —
+      // API-created or seeded prompts may omit them. Fall back to the same
+      // defaults the create form and the API use (0.7 / 2048) so the edit
+      // dialog never crashes on .toFixed / parseInt with null.
+      temperature: prompt.temperature ?? 0.7,
+      maxTokens: prompt.maxTokens ?? 2048,
       isActive: prompt.isActive,
     });
     setDialogOpen(true);
@@ -527,15 +532,17 @@ export function PromptsPage() {
         <Card>
           <CardContent className="p-0">
             <ScrollArea className="w-full">
-              <Table>
+              <Table className="[&_th]:px-3 [&_td]:px-3 [&_td]:py-3 [&_td]:align-top">
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>{t('common.name') || 'Name'}</TableHead>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="min-w-[220px]">{t('common.name') || 'Name'}</TableHead>
                     <TableHead>Source</TableHead>
                     <TableHead>{t('ai.category') || 'Category'}</TableHead>
-                    <TableHead className="hidden md:table-cell w-[220px]">{t('common.tags') || 'Tags'}</TableHead>
-                    <TableHead className="hidden lg:table-cell">{t('ai.variablesLabel') || 'Variables'}</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
+                    <TableHead className="hidden md:table-cell w-[200px]">{t('title.tags') || 'Tags'}</TableHead>
+                    <TableHead className="hidden lg:table-cell">{t('users.updatedColumn') || 'Updated'}</TableHead>
+                    <TableHead className="w-[44px]">
+                      <span className="sr-only">Favorite</span>
+                    </TableHead>
                     <TableHead>{t('common.status') || 'Status'}</TableHead>
                     <TableHead className="text-right">{t('common.actions') || 'Actions'}</TableHead>
                   </TableRow>
@@ -548,7 +555,7 @@ export function PromptsPage() {
                         <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                         <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
-                        <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-12" /></TableCell>
+                        <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-4" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                         <TableCell className="text-right"><Skeleton className="h-4 w-8 ml-auto" /></TableCell>
@@ -583,12 +590,16 @@ export function PromptsPage() {
                   ) : (
                     prompts.map((prompt) => (
                       <TableRow key={prompt.id}>
-                        <TableCell>
-                          <div>
-                            <span className="font-medium">{prompt.name}</span>
-                            {prompt.description && (
-                              <p className="text-xs text-zinc-400 line-clamp-1 mt-0.5">{prompt.description}</p>
-                            )}
+                        <TableCell className="max-w-[320px] lg:max-w-[420px]">
+                          <div className="min-w-0">
+                            <span className="font-medium block truncate" title={prompt.name}>
+                              {prompt.name}
+                            </span>
+                            {prompt.description ? (
+                              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5 max-w-[38ch]" title={prompt.description}>
+                                {prompt.description}
+                              </p>
+                            ) : null}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -607,25 +618,31 @@ export function PromptsPage() {
                             {CATEGORY_LABELS[prompt.category] ?? prompt.category}
                           </Badge>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell max-w-[220px]">
-                          <div className="flex flex-wrap gap-1.5 items-center">
-                            {prompt.tags?.slice(0, 2).map((tag) => (
-                              <Badge key={tag} variant="outline" className="text-xs max-w-[95px] truncate" title={tag}>
-                                {tag}
-                              </Badge>
-                            ))}
-                            {(prompt.tags?.length ?? 0) > 2 && (
-                              <Badge variant="outline" className="text-xs shrink-0 text-muted-foreground">
-                                +{prompt.tags!.length - 2}
-                              </Badge>
-                            )}
-                          </div>
+                        <TableCell className="hidden md:table-cell max-w-[200px]">
+                          {prompt.tags?.length ? (
+                            <div className="flex flex-wrap gap-1.5 items-center">
+                              {prompt.tags.slice(0, 2).map((tag) => (
+                                <Badge key={tag} variant="outline" className="text-xs max-w-[95px] truncate" title={tag}>
+                                  {tag}
+                                </Badge>
+                              ))}
+                              {prompt.tags.length > 2 && (
+                                <Badge variant="outline" className="text-xs shrink-0 text-muted-foreground">
+                                  +{prompt.tags.length - 2}
+                                </Badge>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell">
-                          {prompt.variables ? Object.keys(prompt.variables).length : 0}
+                        <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
+                          <span title={new Date(prompt.updatedAt).toLocaleString()}>
+                            {formatRelativeTime(prompt.updatedAt)}
+                          </span>
                         </TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => favMutation.mutate(prompt.id)}>
+                        <TableCell className="w-[44px]">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => favMutation.mutate(prompt.id)} aria-label={prompt.isFavorite ? 'Remove from favorites' : 'Add to favorites'}>
                             <Heart className={`h-4 w-4 ${prompt.isFavorite ? 'fill-red-500 text-red-500' : 'text-zinc-400'}`} />
                           </Button>
                         </TableCell>
@@ -690,7 +707,7 @@ export function PromptsPage() {
             </ScrollArea>
 
             {pagination && pagination.totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t">
+              <div className="flex items-center justify-between px-3 py-3 border-t">
                 <p className="text-sm text-zinc-500">
                   {(pagination.page - 1) * pagination.pageSize + 1}–
                   {Math.min(pagination.page * pagination.pageSize, pagination.total)} {t('common.of') || 'of'} {pagination.total}

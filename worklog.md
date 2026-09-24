@@ -12040,3 +12040,31 @@ Stage Summary:
 - Local app at /home/z/my-project now serves EXACTLY the GitHub repository HEAD (809d801: editor cell border fixes + CMS features sync, incl. bff6cd5 About page)
 - Repo's canonical service topology restored: mini-services/dev-runner owns port 3000 keep-alive, backup-scheduler on 3010 — no duplicate instances, no old code cached
 - Old local-only about commit preserved in backup/local-about-998894e (content superseded by remote bff6cd5)
+
+---
+Task ID: PL-TABLE-1
+Agent: main (orchestrator)
+Task: Review and refine Prompt Library main prompts table (columns + visual polish) without changing any functionality
+
+Work Log:
+- Inspected data model first: prisma PromptTemplate (name, category, description?, tags?, variables?, providerId?, modelId?, temperature?, maxTokens?, version, isActive, isFavorite, usageCount, sourceType, ownerId, createdAt, updatedAt), GET /api/ai/prompts serialization, and existing AiPrompt interface
+- Column analysis: removed decorative "Variables" count column (bare number, useless for scanning); added "Updated" column using existing updatedAt + formatRelativeTime (matches users-detail-page CMS convention); kept Name(+desc), Source, Category, Tags, heart toggle, Status, Actions; skipped usageCount (zero-valued in practice = "always empty" clutter) and providerId/modelId (raw cuids, interface has no names)
+- Fixed pre-existing visible bug: Tags header used missing key t('common.tags') → rendered raw "common.tags" (t() returns key on miss, so || fallback never fired) → switched to t('title.tags') (translated in all 40 core locales)
+- Visual polish: table-level [&_th]:px-3 [&_td]:px-3 [&_td]:py-3 [&_td]:align-top (pro top-alignment + breathing room), header row hover:bg-transparent, name cell max-w + truncate + title tooltips, description → text-muted-foreground + max-w-[38ch], tags show "—" when empty, heart column w-[44px] with sr-only "Favorite" header + aria-label, pagination padding px-4→px-3 aligned with cells, colSpan 8 maintained (removed 1, added 1)
+- Fixed pre-existing crash exposed during verification: edit dialog crashed with "Cannot read properties of null (reading 'toFixed')" when prompt had null temperature (nullable schema field; API/seed/marketplace prompts can omit it) → null guards in handleOpenEdit (temperature ?? 0.7, maxTokens ?? 2048 — same defaults as create form/API) + honest interface types (number | null)
+- Test data setup (DB was empty): ran src/lib/seed.ts + platform bootstrap; created Demo Blog site (planScope max), 3 prompts (PLATFORM long-desc+4 tags+usage, CLIENT active, CLIENT inactive no-desc), admin Subscription → max plan (ai_client feature needed for AI sidebar); created "Newsletter Intro Writer" via the real UI Add Prompt flow
+
+Verification (agent-browser, all passed):
+- Table renders 8 columns: Name | Source | Category | Tags | Updated | ♥ | Status | Actions; both Source badge variants (Platform purple / My Prompt emerald) verified
+- Long description truncates to one line with tooltip; tags show 2 badges + "+2" overflow; "—" for empty tags; relative "Today at h:mm" timestamps
+- Search ("meta" → 1 row), Category filter (Translation → 1 row), Source filter (Site/Platform/All), Favorites filter + heart toggle (aria-label flips), grid ↔ table toggle (3 cards ↔ 8 headers)
+- Row actions menu: Edit / Duplicate / Version History / Delete; Edit dialog opens (no crash) + Update saves; Add Prompt creates + appears in table
+- Responsive: 768px hides Updated (lg+), 390px hides Tags+Updated with working horizontal ScrollArea (scrollWidth 814 vs 340)
+- Dark mode: VLM confirms all badges/text readable, no contrast issues; light mode final VLM QA passes
+- bun x tsc --noEmit: no errors in prompts-page.tsx; bun run lint: only pre-existing errors in scripts/ (repo files), prompts-page clean
+
+Stage Summary:
+- Single file changed: src/modules/ai/prompts-page.tsx (+52/−35)
+- Table now: cleaner professional SaaS layout, one genuinely useful column added (Updated), one decorative removed (Variables count), zero functionality changes
+- Two pre-existing bugs fixed en route: raw i18n key visible in Tags header; edit-dialog crash on null temperature/maxTokens
+- DB now seeded (users/sites/prompts) for future verification work
