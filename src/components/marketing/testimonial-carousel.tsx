@@ -6,20 +6,21 @@
 // Premium card architecture: a single elevated white card whose
 // circular avatar overlaps the top border (crossfading between
 // slides), a centered quote, a hairline divider and the author
-// block (uppercase name + role/company). Floating chevron
-// controls outside the card appear on hover (always visible on
-// touch devices); dot pagination marks the active slide in
-// brand orange.
+// block (uppercase name, role, company). Circular chevron
+// controls flank the card (swipe below sm); dot pagination marks
+// the active slide in brand orange.
 //
 // HONESTY RULE: this component renders ONLY the testimonials it
 // is given. Callers must pass real customer data — never
-// fabricated quotes, names or roles. With an empty list it
-// renders nothing, so pages can show their own honest empty
-// state instead.
+// fabricated quotes, names or roles. Slides flagged with
+// `demo: true` are rendered as clearly-marked placeholders
+// (silhouette avatar + "Demo" chip) so sample content can never
+// be mistaken for a real customer. With an empty list it renders
+// nothing, so pages can show their own honest empty state instead.
 // ============================================================
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, UserRound } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 
 export interface Testimonial {
@@ -30,13 +31,26 @@ export interface Testimonial {
   company?: string;
   /** Optional avatar image URL; falls back to styled initials. */
   avatar?: string;
+  /** Marks the slide as placeholder content: silhouette avatar + "Demo" chip. */
+  demo?: boolean;
 }
 
 const AUTO_ADVANCE_MS = 7000;
 const AVATAR_SIZE = 80;
 
-/** Circular avatar with a card-colored ring; initials fallback. */
+/** Circular avatar with a card-colored ring; demo slides use a
+    neutral silhouette, real customers fall back to initials. */
 function TestimonialAvatar({ testimonial }: { testimonial: Testimonial }) {
+  if (testimonial.demo) {
+    return (
+      <span
+        aria-hidden="true"
+        className="flex h-20 w-20 items-center justify-center rounded-full bg-mkt-accent-soft text-mkt-accent-soft-fg ring-4 ring-card"
+      >
+        <UserRound className="h-9 w-9" />
+      </span>
+    );
+  }
   if (testimonial.avatar) {
     return (
       <img
@@ -139,6 +153,13 @@ export function TestimonialCarousel({
         className="relative overflow-hidden rounded-3xl border border-border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_40px_-12px_rgb(0_0_0/0.12)]"
         aria-live="polite"
       >
+        {/* Demo chip — clearly marks placeholder slides */}
+        {testimonials[index]?.demo && (
+          <span className="absolute right-4 top-4 z-10 rounded-full border border-border bg-muted/60 px-2.5 py-1 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
+            {t('mkt.about.demoBadge')}
+          </span>
+        )}
+
         {/* Avatar overlapping the top border — crossfades per slide */}
         <div className="pointer-events-none absolute left-1/2 top-0 z-10 h-20 w-20 -translate-x-1/2 -translate-y-1/2">
           {testimonials.map((testimonial, i) => (
@@ -179,8 +200,10 @@ export function TestimonialCarousel({
                   </p>
                   <p className="mt-1 text-sm leading-snug text-text-secondary">
                     {testimonial.role}
-                    {testimonial.company ? ` · ${testimonial.company}` : ''}
                   </p>
+                  {testimonial.company && (
+                    <p className="text-sm leading-snug text-text-secondary">{testimonial.company}</p>
+                  )}
                 </figcaption>
               </div>
             </figure>
@@ -188,25 +211,26 @@ export function TestimonialCarousel({
         </div>
       </div>
 
-      {/* Floating chevron controls — revealed on hover (pointer
-          devices), always visible on touch, always keyboard-safe. */}
+      {/* Circular chevron controls — always visible on pointer
+          screens (hidden below sm: touch devices swipe instead),
+          always keyboard-safe. */}
       {count > 1 && (
         <>
           <button
             type="button"
             onClick={() => go(index - 1)}
             aria-label={t('mkt.about.carouselPrev')}
-            className="mkt-focus absolute -left-4 top-1/2 z-20 hidden -translate-y-1/2 rounded-full p-2 text-muted-foreground transition-opacity duration-200 hover:text-text-primary focus-visible:opacity-100 sm:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/carousel:opacity-100 [@media(pointer:coarse)]:opacity-100"
+            className="mkt-focus absolute -left-4 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-[0_1px_3px_rgb(0_0_0/0.08)] transition-colors duration-200 hover:border-muted-foreground/40 hover:text-text-primary sm:flex sm:-left-5"
           >
-            <ChevronLeft className="h-7 w-7" aria-hidden="true" />
+            <ChevronLeft className="h-5 w-5" aria-hidden="true" />
           </button>
           <button
             type="button"
             onClick={() => go(index + 1)}
             aria-label={t('mkt.about.carouselNext')}
-            className="mkt-focus absolute -right-4 top-1/2 z-20 hidden -translate-y-1/2 rounded-full p-2 text-muted-foreground transition-opacity duration-200 hover:text-text-primary focus-visible:opacity-100 sm:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/carousel:opacity-100 [@media(pointer:coarse)]:opacity-100"
+            className="mkt-focus absolute -right-4 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-[0_1px_3px_rgb(0_0_0/0.08)] transition-colors duration-200 hover:border-muted-foreground/40 hover:text-text-primary sm:flex sm:-right-5"
           >
-            <ChevronRight className="h-7 w-7" aria-hidden="true" />
+            <ChevronRight className="h-5 w-5" aria-hidden="true" />
           </button>
         </>
       )}

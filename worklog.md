@@ -12120,3 +12120,33 @@ Verification:
 Stage Summary:
 - Status is now a real per-row toggle (reuses PATCH endpoint); Actions are direct Edit/Delete icons; both centered; no dropdowns or text status badges remain in the Prompt Library.
 - File changed: src/modules/ai/prompts-page.tsx only. Not committed/pushed.
+
+---
+Task ID: ABT-1
+Agent: main (orchestrator)
+Task: Redesign the Karmax About page per user spec — simplify the "One calm workflow" intro (remove image + eyebrow, centered/compact), merge Mission + Story into one cohesive editorial band (remove eyebrows), redesign "What we believe" cards (remove eyebrow/subtitle), replace the single placeholder testimonial with a 4-slide clearly-marked demo carousel, and globally tighten section rhythm.
+
+Work Log:
+- Inspected current implementation: src/components/marketing/about-page.tsx (6 sections: hero, AboutPublish w/ BrowserFrame image + PUBLISHING eyebrow + capability PointList, AboutMission + AboutStory as two separate mkt-sections w/ MISSION/STORY eyebrows, AboutBeliefs w/ PRINCIPLES eyebrow + subtitle, AboutCustomers w/ honest-empty single card), testimonial-carousel.tsx, primitives.tsx, en/fr client-marketing i18n fragments; captured BEFORE screenshots (page total 4768px, gaps up to 256px between sections, Mission/Story split across two padded sections)
+- Analyzed the 3 attached reference images via VLM (HubSpot testimonial carousel w/ overlapping avatar + chevrons + 4 dots; ClickUp mission hero; HubSpot mission/story two-column alternating rows) — used as layout inspiration only
+- NOTE: user message referenced an uploaded icon.svg for the principle cards but the file does not exist in /home/z/my-project/upload (verified via find) — kept the existing coherent Lucide SVG set (Feather/Zap/BadgeCheck/ShieldCheck) which are proper stroke SVGs
+- Rewrote about-page.tsx: AboutPublish → AboutIntro (no image, no eyebrow, no capability list; short centered h2 + shortened missionLead, pb-14/20 only); AboutMission + AboutStory → AboutMissionStory (ONE warm band, border-y, py-16/20/24, internal gap-14/16/20, alternating image/text rows, eyebrows removed, headings kept verbatim); AboutBeliefs (header = title only, cards = white bg-card + hairline border + soft shadow, h-12 accent-soft icon container above title, equal heights via Reveal h-full + flex h-full, grid 4/2/1); AboutCustomers renders 4 demo slides (demo:true flag, t()-driven placeholder quotes/name/role/company)
+- Updated testimonial-carousel.tsx: added `demo?: boolean` to Testimonial interface (silhouette UserRound avatar + "DEMO" chip top-right when active slide is demo); role and company now on separate lines; chevron buttons restyled as always-visible circular bordered buttons (hidden <sm, swipe there); kept autoplay, dots, crossfade, swipe, a11y
+- Updated i18n en + fr (parity): removed dead keys (publishEyebrow, publishShotLabel, pubCap1-6, missionTitle, rowStoryEyebrow, believeEyebrow, believeSubtitle, customersEmpty, customersEmptyRole); shortened missionLead; updated customersBody; added demoBadge/demoName/demoRole/demoCompany/demoQuote1-4
+
+Verification (all passed):
+- tsc --noEmit: clean; ESLint: no errors in the 4 changed files (remaining repo errors pre-existing in unrelated modules)
+- Browser E2E desktop 1440px: page 3803px (was 4768px, ~20% tighter); section content gaps 24/177/193/193px (consistent rhythm); hero→intro sits 24px under mountain fade; both story figures identical 536×306; 4 belief cards equal 276px; carousel: next arrow 1→2, dots →4, prev 2→1, autoplay observed, 4 dots, DEMO chip + SAMPLE CUSTOMER attribution visible
+- VLM QA desktop: intro "sits naturally under the mountains, centered and compact"; Mission/Story band "connected as one cohesive section, appropriate spacing"; beliefs "equal height, icons aligned, heading centered without extra labels, no defects"; final full-page pass: "clean, premium, editorial, professionally balanced; sections flow naturally" (only stitching artifacts flagged)
+- Tablet 768px: beliefs 2-col with equal heights per row; carousel arrows visible; story images full-width stack; hero h1 160px vs navbar bottom 72px (no overlap)
+- Mobile 390px: beliefs 1-col (cards 350px); carousel arrows hidden + swipe verified via dispatched PointerEvents (1→2); card fits viewport (no overflow); hero h1 128px vs navbar 68px (60px clearance); carousel-to-footer content gap 114px
+- Dark mode (via cms localStorage theme=dark): VLM confirms correct rendering, readable, warm dark bands
+- French locale (cms_locale=fr): all sections + demo content translated, zero raw i18n keys visible
+- Fresh reload: clean console (only React DevTools info + HMR); no page errors; dev.log no new errors; homepage regression check OK
+
+Stage Summary:
+- 4 files changed (+169/−185), zero new files — existing components modified per requirement
+- About page now flows: Hero → centered Intro → Mission+Story cohesive band → What we believe → What our customers say (demo carousel) → Footer
+- Testimonial system is CMS-ready: pass real Testimonial[] (drop demo flag, add avatar URLs) to go live; demo slides can never be mistaken for real customers (silhouette avatar + DEMO chip + explanatory placeholder copy)
+- icon.svg upload was missing; principles use the existing Lucide SVG set — swap to user-supplied SVGs later is a 4-line change in BELIEFS
+- Changes NOT committed/pushed (no commit requested)

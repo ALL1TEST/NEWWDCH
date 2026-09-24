@@ -3,35 +3,32 @@
 // ============================================================
 // ABOUT — premium long-form editorial page
 // ============================================================
-// Mission hero ("Our mission." serif headline over an original
-// mountain scene with the Karmax flag at the summit) → the
-// publishing story (asymmetric editorial split with a real
-// capture of the article workflow) → mission row on a subtle
-// warm band → story row → What we believe → customer
-// testimonial section. The page closes on the customers
-// section — the site footer provides the final navigation.
+// Hero ("Our mission." serif headline over an original mountain
+// scene with the Karmax flag at the summit) → a compact centered
+// intro ("One calm workflow for everything you publish.") → ONE
+// cohesive editorial band pairing the mission row and the story
+// row (alternating image/text, shared warm surface, no eyebrow
+// labels) → What we believe (four principle cards) → What our
+// customers say (testimonial carousel).
 //
 // Product-honest by construction: copy is adapted from the
-// existing about texts; the story-row visuals are brand imagery
-// and the publishing visual is a REAL capture of the running
-// product (no invented people, history, customers, stats or
-// claims). The testimonial section ships its carousel structure
-// with an honest empty state until REAL customer data exists.
+// existing about texts; the mission/story visuals are brand
+// imagery (no invented people, history, customers, stats or
+// claims). The testimonial carousel ships with CLEARLY MARKED
+// demo slides — never fabricated customers — and accepts real
+// data through the reusable `Testimonial[]` prop (CMS/API
+// ready) so the demo content is replaced, not mixed in.
 // ============================================================
 
 import React from 'react';
 import {
   BadgeCheck,
   Feather,
-  Quote,
   ShieldCheck,
   Zap,
 } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import {
-  BrowserFrame,
-  Eyebrow,
-  PointList,
   Reveal,
   SectionHeader,
 } from './primitives';
@@ -145,57 +142,29 @@ function AboutHero() {
   );
 }
 
-// -------------------- The publishing story --------------------
-// Asymmetric editorial split: the publishing thesis and the real
-// product capture of the article workflow (draft → review →
-// scheduled → published). The capability list names the modules
-// that actually ship — no invented features.
+// -------------------- Intro --------------------
+// A short, centered statement that carries the publishing thesis
+// right after the hero — no image, no eyebrow, compact. The real
+// product capabilities live in the mission and story copy below.
 
-const PUBLISH_CAPABILITIES = [
-  'mkt.about.pubCap1',
-  'mkt.about.pubCap2',
-  'mkt.about.pubCap3',
-  'mkt.about.pubCap4',
-  'mkt.about.pubCap5',
-  'mkt.about.pubCap6',
-];
-
-function AboutPublish() {
+function AboutIntro() {
   const { t } = useT();
   return (
-    <section className="mkt-section" aria-labelledby="about-publish-heading">
+    <section className="pb-14 pt-4 sm:pb-20 sm:pt-6" aria-labelledby="about-intro-heading">
       <div className="mkt-container">
-        <div className="grid items-center gap-12 lg:grid-cols-12 lg:gap-16">
-          {/* Copy */}
-          <div className="lg:col-span-5">
-            <Reveal>
-              <div className="flex flex-col items-start gap-5">
-                <Eyebrow>{t('mkt.about.publishEyebrow')}</Eyebrow>
-                <h2
-                  id="about-publish-heading"
-                  className="mkt-serif text-[1.875rem] font-bold leading-[1.12] text-text-primary sm:text-[2.375rem]"
-                >
-                  {t('mkt.about.missionHead')}
-                </h2>
-                <p className="text-base leading-relaxed text-text-secondary sm:text-[1.0625rem]">
-                  {t('mkt.about.missionLead')}
-                </p>
-                <PointList points={PUBLISH_CAPABILITIES.map((key) => t(key))} />
-              </div>
-            </Reveal>
+        <Reveal>
+          <div className="mx-auto flex max-w-2xl flex-col items-center gap-5 text-center">
+            <h2
+              id="about-intro-heading"
+              className="mkt-serif text-[1.875rem] font-bold leading-[1.12] text-text-primary sm:text-[2.375rem]"
+            >
+              {t('mkt.about.missionHead')}
+            </h2>
+            <p className="max-w-xl text-base leading-relaxed text-text-secondary sm:text-[1.0625rem]">
+              {t('mkt.about.missionLead')}
+            </p>
           </div>
-
-          {/* Visual — the real article workflow inside the product */}
-          <div className="lg:col-span-7">
-            <Reveal delay={120}>
-              <BrowserFrame
-                src="/marketing/shot-articles.png"
-                alt={`${t('mkt.about.publishShotLabel')} — ${t('mkt.brand.name')}`}
-                label={t('mkt.about.publishShotLabel')}
-              />
-            </Reveal>
-          </div>
-        </div>
+        </Reveal>
       </div>
     </section>
   );
@@ -204,6 +173,8 @@ function AboutPublish() {
 // -------------------- Story figure --------------------
 // Editorial brand imagery — generous rounding, hairline ring and
 // a soft two-tier shadow (no invented people or milestones).
+// Shared by the mission and story rows so both figures share
+// identical dimensions, radius and elevation.
 
 function StoryFigure({ src, alt }: { src: string; alt: string }) {
   return (
@@ -213,25 +184,25 @@ function StoryFigure({ src, alt }: { src: string; alt: string }) {
   );
 }
 
-// -------------------- Mission --------------------
-// Two-column editorial row on a subtle warm band: brand imagery
-// on one side, the mission statement on the other.
+// -------------------- Mission + Story --------------------
+// ONE cohesive editorial band: the mission row and the story row
+// share a warm surface, alternating image/text positions and one
+// visual rhythm — no eyebrow labels, no double section padding.
+// The tight internal gap makes Mission → Story read as a single
+// continuous narrative rather than two disconnected blocks.
 
-function AboutMission() {
+function AboutMissionStory() {
   const { t } = useT();
   return (
-    <section
-      className="mkt-section border-y border-border bg-mkt-about-warm"
-      aria-labelledby="about-mission-heading"
-    >
-      <div className="mkt-container">
+    <section className="border-y border-border bg-mkt-about-warm" aria-label={t('mkt.about.eyebrow')}>
+      <div className="mkt-container flex flex-col gap-14 py-16 sm:gap-16 sm:py-20 lg:gap-20 lg:py-24">
+        {/* Mission — image left, copy right */}
         <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
           <Reveal>
             <StoryFigure src="/marketing/about-studio.png" alt={t('mkt.about.studioAlt')} />
           </Reveal>
           <Reveal delay={100}>
             <div className="flex flex-col items-start gap-5">
-              <Eyebrow>{t('mkt.about.missionTitle')}</Eyebrow>
               <h2
                 id="about-mission-heading"
                 className="mkt-serif text-[1.75rem] font-bold leading-[1.15] text-text-primary sm:text-[2.125rem]"
@@ -243,24 +214,11 @@ function AboutMission() {
             </div>
           </Reveal>
         </div>
-      </div>
-    </section>
-  );
-}
 
-// -------------------- Story --------------------
-// Mirrors the mission row with the image/text positions
-// alternated — the classic editorial rhythm.
-
-function AboutStory() {
-  const { t } = useT();
-  return (
-    <section className="mkt-section" aria-labelledby="about-story-heading">
-      <div className="mkt-container">
+        {/* Story — copy left, image right (alternated) */}
         <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
           <Reveal>
             <div className="flex flex-col items-start gap-5">
-              <Eyebrow>{t('mkt.about.rowStoryEyebrow')}</Eyebrow>
               <h2
                 id="about-story-heading"
                 className="mkt-serif text-[1.75rem] font-bold leading-[1.15] text-text-primary sm:text-[2.125rem]"
@@ -281,8 +239,11 @@ function AboutStory() {
 }
 
 // -------------------- What we believe --------------------
-// Four principle cards — subtle warm surfaces, thin borders,
-// small icon containers with orange accents, equal heights.
+// Four principle cards — quiet white surfaces, hairline borders,
+// a soft shadow and a small accent icon container above each
+// title. Icons are a coherent stroke set (Lucide SVGs): feather
+// for Simplicity, bolt for Automation, badge for Quality, shield
+// for Control. Equal heights on every breakpoint.
 // Responsive: 4 columns desktop, 2 tablet, 1 mobile.
 
 const BELIEFS = [
@@ -295,26 +256,21 @@ const BELIEFS = [
 function AboutBeliefs() {
   const { t } = useT();
   return (
-    <section className="mkt-section pt-0" aria-labelledby="about-believe-heading">
+    <section className="py-16 sm:py-20 lg:py-24" aria-labelledby="about-believe-heading">
       <div className="mkt-container">
         <Reveal>
-          <SectionHeader
-            id="about-believe-heading"
-            eyebrow={t('mkt.about.believeEyebrow')}
-            title={t('mkt.about.believeTitle')}
-            subtitle={t('mkt.about.believeSubtitle')}
-          />
+          <SectionHeader id="about-believe-heading" title={t('mkt.about.believeTitle')} />
         </Reveal>
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-10 grid gap-5 sm:mt-12 sm:grid-cols-2 lg:grid-cols-4">
           {BELIEFS.map((belief, i) => {
             const Icon = belief.icon;
             return (
-              <Reveal key={belief.titleKey} delay={i * 70}>
-                <div className="mkt-card-hover h-full rounded-2xl border border-border bg-mkt-about-warm p-6 sm:p-7">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-card text-mkt-accent shadow-[0_1px_2px_rgb(0_0_0/0.05)]">
-                    <Icon className="h-[1.1875rem] w-[1.1875rem]" aria-hidden="true" />
+              <Reveal key={belief.titleKey} delay={i * 70} className="h-full">
+                <div className="mkt-card-hover flex h-full flex-col rounded-2xl border border-border bg-card p-6 shadow-[0_1px_2px_rgb(0_0_0/0.04)] sm:p-7">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-mkt-accent-soft text-mkt-accent">
+                    <Icon className="h-5 w-5" aria-hidden="true" />
                   </span>
-                  <h3 className="mt-5 text-[0.9375rem] font-semibold text-text-primary">{t(belief.titleKey)}</h3>
+                  <h3 className="mt-6 text-[0.9375rem] font-semibold text-text-primary">{t(belief.titleKey)}</h3>
                   <p className="mt-2.5 text-sm leading-relaxed text-text-secondary">{t(belief.bodyKey)}</p>
                 </div>
               </Reveal>
@@ -327,17 +283,51 @@ function AboutBeliefs() {
 }
 
 // -------------------- Customer perspective --------------------
-// The testimonial carousel structure, fully wired. It renders
-// ONLY real customer data — until such data exists the section
-// shows an honest empty state instead of fabricated quotes.
-
-const TESTIMONIALS: Testimonial[] = [];
+// The testimonial carousel, wired with CLEARLY MARKED demo
+// slides. Each demo slide uses a placeholder silhouette avatar,
+// generic attribution fields and an explanatory quote, plus a
+// "Demo" chip on the card — nothing can be mistaken for a real
+// customer. To go live with REAL data, replace DEMO_TESTIMONIALS
+// with testimonials loaded from the CMS/API (same `Testimonial`
+// shape; drop the `demo` flag and pass `avatar` image URLs).
 
 function AboutCustomers() {
   const { t } = useT();
+
+  const DEMO_TESTIMONIALS: Testimonial[] = [
+    {
+      demo: true,
+      quote: t('mkt.about.demoQuote1'),
+      name: t('mkt.about.demoName'),
+      role: t('mkt.about.demoRole'),
+      company: t('mkt.about.demoCompany'),
+    },
+    {
+      demo: true,
+      quote: t('mkt.about.demoQuote2'),
+      name: t('mkt.about.demoName'),
+      role: t('mkt.about.demoRole'),
+      company: t('mkt.about.demoCompany'),
+    },
+    {
+      demo: true,
+      quote: t('mkt.about.demoQuote3'),
+      name: t('mkt.about.demoName'),
+      role: t('mkt.about.demoRole'),
+      company: t('mkt.about.demoCompany'),
+    },
+    {
+      demo: true,
+      quote: t('mkt.about.demoQuote4'),
+      name: t('mkt.about.demoName'),
+      role: t('mkt.about.demoRole'),
+      company: t('mkt.about.demoCompany'),
+    },
+  ];
+
   return (
     <section className="border-y border-border bg-mkt-about-warm" aria-labelledby="about-customers-heading">
-      <div className="mkt-container py-20 sm:py-28">
+      <div className="mkt-container py-16 sm:py-20 lg:py-24">
         <Reveal>
           <SectionHeader
             id="about-customers-heading"
@@ -345,31 +335,8 @@ function AboutCustomers() {
             subtitle={t('mkt.about.customersBody')}
           />
         </Reveal>
-        <Reveal delay={100} className="mt-16">
-          {TESTIMONIALS.length > 0 ? (
-            <TestimonialCarousel testimonials={TESTIMONIALS} />
-          ) : (
-            /* Honest empty state — same card architecture as the
-               carousel (badge overlapping the top border, quote,
-               divider, attribution area) without any fabricated
-               testimonial. */
-            <figure className="relative mx-auto flex w-full max-w-2xl flex-col items-center rounded-3xl border border-border bg-card px-6 pb-10 pt-20 text-center shadow-[0_1px_2px_rgb(0_0_0/0.04),0_12px_48px_-16px_rgb(0_0_0/0.14)] sm:px-12">
-              <span className="absolute left-1/2 top-0 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-mkt-accent-soft ring-4 ring-card">
-                <Quote className="h-8 w-8 text-mkt-accent-soft-fg" aria-hidden="true" />
-              </span>
-              <blockquote className="max-w-xl">
-                <p className="text-lg leading-relaxed text-text-primary sm:text-xl">
-                  {t('mkt.about.customersEmpty')}
-                </p>
-              </blockquote>
-              <div className="mt-8 w-full border-t border-border pt-6">
-                <p className="text-sm font-bold uppercase tracking-wider text-text-primary">
-                  {t('mkt.brand.name')}
-                </p>
-                <p className="mt-1 text-sm text-text-secondary">{t('mkt.about.customersEmptyRole')}</p>
-              </div>
-            </figure>
-          )}
+        <Reveal delay={100} className="mt-14 sm:mt-16">
+          <TestimonialCarousel testimonials={DEMO_TESTIMONIALS} />
         </Reveal>
       </div>
     </section>
@@ -382,9 +349,8 @@ export function AboutPage() {
   return (
     <>
       <AboutHero />
-      <AboutPublish />
-      <AboutMission />
-      <AboutStory />
+      <AboutIntro />
+      <AboutMissionStory />
       <AboutBeliefs />
       <AboutCustomers />
     </>
