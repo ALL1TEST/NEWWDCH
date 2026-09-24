@@ -329,18 +329,27 @@ export const clientMarketingFr: Record<string, string> = {
   // ---- À propos ----
   'mkt.about.eyebrow': 'À propos',
   'mkt.about.heroTitle': 'Notre mission.',
+  'mkt.about.publishEyebrow': 'Publication',
   'mkt.about.missionHead': 'Un flux de travail apaisé pour tout ce que vous publiez.',
   'mkt.about.missionLead':
     'Karmax existe parce que la façon de publier est brisée — l’écriture dans une appli, le SEO dans une autre, les médias dans une troisième, la publication par copier-coller. Nous sommes un produit indépendant, construit par une petite équipe qui gère plusieurs sites de contenu et s’est lassée d’assembler six outils pour chaque article.',
-  'mkt.about.rowsLabel': 'Mission et histoire',
+  'mkt.about.publishShotLabel': 'Articles',
+  'mkt.about.pubCap1': 'Rédaction',
+  'mkt.about.pubCap2': 'SEO',
+  'mkt.about.pubCap3': 'Bibliothèque de médias',
+  'mkt.about.pubCap4': 'Newsletter',
+  'mkt.about.pubCap5': 'Automatisation',
+  'mkt.about.pubCap6': 'Publication vers WordPress ou n’importe quel CMS REST',
   'mkt.about.studioAlt':
     'Un salon de bureau apaisé avec des fauteuils orange et une grande installation de lettres « CALM » sur un mur de lattes en bois',
+  'mkt.about.missionTitle': 'Mission',
   'mkt.about.rowMissionTitle': 'Notre mission : une plateforme sereine pour ceux qui publient.',
   'mkt.about.rowMissionBody1':
     'Offrir à toute personne qui publie — blogueurs solos, agences, éditeurs, entreprises — une plateforme sereine et honnête pour tout le flux de contenu : écriture, médias, SEO, engagement et automatisation.',
   'mkt.about.rowMissionBody2':
     'Nous ne gagnons que lorsque votre flux de travail devient plus calme. Votre contenu vit dans votre CMS et vos sites restent les vôtres — Karmax gère et publie, il ne retient jamais votre travail en otage.',
   'mkt.about.teamAlt': 'Une petite équipe collaborant autour d’un bureau dans un studio chaleureux',
+  'mkt.about.rowStoryEyebrow': 'Histoire',
   'mkt.about.rowStoryTitle': 'Notre histoire',
   'mkt.about.rowStoryBody1':
     'Les outils existaient tous, mais jamais réunis. L’écriture vivait dans une appli, le SEO dans une autre, les médias dans une troisième — et la publication se faisait par copier-coller. Alors nous avons construit le workflow lui-même : un éditeur, une suite SEO complète, une médiathèque, une newsletter et des automatisations, réunis dans un produit qui dialogue avec les sites que vous gérez déjà.',
@@ -366,9 +375,6 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.about.carouselPrev': 'Témoignage précédent',
   'mkt.about.carouselNext': 'Témoignage suivant',
   'mkt.about.carouselGoTo': 'Aller au témoignage',
-  'mkt.about.ctaTitle': 'Créer, optimiser et publier — depuis un seul endroit apaisé.',
-  'mkt.about.ctaBody': 'Commencez sur le plan gratuit et évoluez à votre rythme. Vos sites restent les vôtres.',
-  'mkt.about.ctaSecondary': 'Découvrir les fonctionnalités',
 
   // ---- Vue d’ensemble Solutions (#/solutions) ----
   'mkt.sol.title': 'Des solutions pour chaque objectif de publication.',

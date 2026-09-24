@@ -336,18 +336,27 @@ export const clientMarketingEn: Record<string, string> = {
   // ---- About ----
   'mkt.about.eyebrow': 'About',
   'mkt.about.heroTitle': 'Our mission.',
+  'mkt.about.publishEyebrow': 'Publishing',
   'mkt.about.missionHead': 'One calm workflow for everything you publish.',
   'mkt.about.missionLead':
     'Karmax exists because the way teams publish is broken — writing in one app, SEO in another, media in a third, publishing by copy-paste. We are an independent product built by a small team that runs multiple content sites and got tired of stitching six tools together for every article.',
-  'mkt.about.rowsLabel': 'Mission and story',
+  'mkt.about.publishShotLabel': 'Articles',
+  'mkt.about.pubCap1': 'Writing',
+  'mkt.about.pubCap2': 'SEO',
+  'mkt.about.pubCap3': 'Media library',
+  'mkt.about.pubCap4': 'Newsletter',
+  'mkt.about.pubCap5': 'Automation',
+  'mkt.about.pubCap6': 'Publishing to WordPress or any REST CMS',
   'mkt.about.studioAlt':
     'A calm office lounge with orange armchairs and a large “CALM” letter installation on a wooden slat wall',
+  'mkt.about.missionTitle': 'Mission',
   'mkt.about.rowMissionTitle': 'Our mission: one calm platform for people who publish.',
   'mkt.about.rowMissionBody1':
     'Give every person who publishes — solo bloggers, agencies, publishers, businesses — one calm, honest platform for the whole content workflow: writing, media, SEO, engagement and automation.',
   'mkt.about.rowMissionBody2':
     'We only win when your workflow gets calmer. Your content lives in your CMS and your sites stay yours — Karmax manages and publishes, it never holds your work hostage.',
   'mkt.about.teamAlt': 'A small team collaborating around a desk in a warm studio workspace',
+  'mkt.about.rowStoryEyebrow': 'Story',
   'mkt.about.rowStoryTitle': 'Our story',
   'mkt.about.rowStoryBody1':
     'The tools were all there, but never together. Writing lived in one app, SEO in another, media in a third — and publishing happened by copy-paste. So we built the workflow itself: an editor, a full SEO suite, a media library, a newsletter and automations, connected in one product that talks to the sites you already run.',
@@ -373,9 +382,6 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.about.carouselPrev': 'Previous testimonial',
   'mkt.about.carouselNext': 'Next testimonial',
   'mkt.about.carouselGoTo': 'Go to testimonial',
-  'mkt.about.ctaTitle': 'Create, optimize and publish — from one calm place.',
-  'mkt.about.ctaBody': 'Start on the free plan and grow from there. Your sites stay yours.',
-  'mkt.about.ctaSecondary': 'Explore features',
 
   // ---- Solutions overview (#/solutions) ----
   'mkt.sol.title': 'Solutions for every publishing goal.',
