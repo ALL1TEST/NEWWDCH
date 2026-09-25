@@ -71,6 +71,8 @@ export const coreFi: Record<string, string> = {
   'menu.theme': 'Teema',
   'menu.manageSubscription': 'Hallinnoi tilausta',
   'menu.help': 'Ohje',
+  'menu.helpCenter': 'Ohjekeskus',
+  'menu.privacy': 'Tietosuoja',
   'menu.logOut': 'Kirjaudu ulos',
   'menu.light': 'Vaalea',
   'menu.dark': 'Tumma',

@@ -71,6 +71,8 @@ export const coreEs: Record<string, string> = {
   'menu.theme': 'Tema',
   'menu.manageSubscription': 'Gestionar suscripción',
   'menu.help': 'Ayuda',
+  'menu.helpCenter': 'Centro de ayuda',
+  'menu.privacy': 'Privacidad',
   'menu.logOut': 'Cerrar sesión',
   'menu.light': 'Claro',
   'menu.dark': 'Oscuro',

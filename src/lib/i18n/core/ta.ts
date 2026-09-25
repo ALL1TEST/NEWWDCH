@@ -70,6 +70,8 @@ export const coreTa: Record<string, string> = {
   'menu.theme': 'தீம்',
   'menu.manageSubscription': 'சந்தாவை நிர்வகி',
   'menu.help': 'உதவி',
+  'menu.helpCenter': 'உதவி மையம்',
+  'menu.privacy': 'தனியுரிமை',
   'menu.logOut': 'வெளியேறு',
   'menu.light': 'லைட்',
   'menu.dark': 'டார்க்',

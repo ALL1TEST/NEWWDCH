@@ -71,6 +71,8 @@ export const coreUk: Record<string, string> = {
   'menu.theme': 'Тема',
   'menu.manageSubscription': 'Керування підпискою',
   'menu.help': 'Довідка',
+  'menu.helpCenter': 'Центр підтримки',
+  'menu.privacy': 'Конфіденційність',
   'menu.logOut': 'Вийти',
   'menu.light': 'Світла',
   'menu.dark': 'Темна',

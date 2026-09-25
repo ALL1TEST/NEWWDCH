@@ -70,6 +70,8 @@ export const coreBn: Record<string, string> = {
   'menu.theme': 'থিম',
   'menu.manageSubscription': 'সাবস্ক্রিপশন পরিচালনা',
   'menu.help': 'সহায়তা',
+  'menu.helpCenter': 'সহায়তা কেন্দ্র',
+  'menu.privacy': 'গোপনীয়তা',
   'menu.logOut': 'লগ আউট',
   'menu.light': 'লাইট',
   'menu.dark': 'ডার্ক',

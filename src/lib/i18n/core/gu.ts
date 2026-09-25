@@ -70,6 +70,8 @@ export const coreGu: Record<string, string> = {
   'menu.theme': 'થીમ',
   'menu.manageSubscription': 'સબ્સ્ક્રિપ્શન મેનેજ કરો',
   'menu.help': 'મદદ',
+  'menu.helpCenter': 'મદદ કેન્દ્ર',
+  'menu.privacy': 'ગોપનીયતા',
   'menu.logOut': 'લોગ આઉટ',
   'menu.light': 'લાઇટ',
   'menu.dark': 'ડાર્ક',

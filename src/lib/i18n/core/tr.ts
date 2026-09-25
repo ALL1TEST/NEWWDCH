@@ -71,6 +71,8 @@ export const coreTr: Record<string, string> = {
   'menu.theme': 'Tema',
   'menu.manageSubscription': 'Aboneliği yönet',
   'menu.help': 'Yardım',
+  'menu.helpCenter': 'Yardım Merkezi',
+  'menu.privacy': 'Gizlilik',
   'menu.logOut': 'Çıkış yap',
   'menu.light': 'Açık',
   'menu.dark': 'Koyu',

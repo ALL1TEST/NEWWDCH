@@ -106,6 +106,8 @@ export const coreEn: Record<string, string> = {
   'menu.theme': 'Theme',
   'menu.manageSubscription': 'Manage Subscription',
   'menu.help': 'Help',
+  'menu.helpCenter': 'Help Center',
+  'menu.privacy': 'Privacy',
   'menu.logOut': 'Log out',
   'menu.light': 'Light',
   'menu.dark': 'Dark',
@@ -113,8 +115,7 @@ export const coreEn: Record<string, string> = {
   'menu.default': 'Default',
 
   // ---- Help / Support side panel ----
-  'support.title': 'Help',
-  'support.subtitle': 'Karmax Support',
+  'support.title': 'Karmax Support',
   'support.today': 'Today',
   'support.greeting': 'How can I help you today?',
   'support.inputPlaceholder': 'Message...',
@@ -127,7 +128,7 @@ export const coreEn: Record<string, string> = {
   'support.suggestion4': 'How do I manage my subscription?',
   'support.suggestion5': 'How do I connect WordPress?',
   'support.autoReply':
-    'Thanks for reaching out! Live support replies aren\u2019t connected yet \u2014 this panel is a preview of the upcoming Karmax support experience, so your message hasn\u2019t been sent. In the meantime, try the suggested questions or open Privacy below.',
+    'Thanks for reaching out! Live support replies aren\u2019t connected yet \u2014 this panel is a preview of the upcoming Karmax support experience, so your message hasn\u2019t been sent. In the meantime, try the suggested questions \u2014 you can also find Privacy under Help in your account menu.',
 
   // ---- Theme toasts ----
   'theme.setLight': 'Theme set to Light',

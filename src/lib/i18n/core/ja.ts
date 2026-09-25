@@ -70,6 +70,8 @@ export const coreJa: Record<string, string> = {
   'menu.theme': 'テーマ',
   'menu.manageSubscription': 'サブスクリプションを管理',
   'menu.help': 'ヘルプ',
+  'menu.helpCenter': 'ヘルプセンター',
+  'menu.privacy': 'プライバシー',
   'menu.logOut': 'ログアウト',
   'menu.light': 'ライト',
   'menu.dark': 'ダーク',

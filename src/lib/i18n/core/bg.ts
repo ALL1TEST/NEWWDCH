@@ -71,6 +71,8 @@ export const coreBg: Record<string, string> = {
   'menu.theme': 'Тема',
   'menu.manageSubscription': 'Управление на абонамента',
   'menu.help': 'Помощ',
+  'menu.helpCenter': 'Център за помощ',
+  'menu.privacy': 'Поверителност',
   'menu.logOut': 'Изход',
   'menu.light': 'Светла',
   'menu.dark': 'Тъмна',

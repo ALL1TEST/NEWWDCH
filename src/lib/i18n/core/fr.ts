@@ -100,6 +100,8 @@ export const coreFr: Record<string, string> = {
   'menu.theme': 'Thème',
   'menu.manageSubscription': 'Gérer l\'abonnement',
   'menu.help': 'Aide',
+  'menu.helpCenter': 'Centre d\'aide',
+  'menu.privacy': 'Confidentialité',
   'menu.logOut': 'Déconnexion',
   'menu.light': 'Clair',
   'menu.dark': 'Sombre',
@@ -107,8 +109,7 @@ export const coreFr: Record<string, string> = {
   'menu.default': 'Par défaut',
 
   // ---- Panneau d'aide / support latéral ----
-  'support.title': 'Aide',
-  'support.subtitle': 'Assistance Karmax',
+  'support.title': 'Assistance Karmax',
   'support.today': 'Aujourd\'hui',
   'support.greeting': 'Comment puis-je vous aider aujourd\'hui ?',
   'support.inputPlaceholder': 'Message...',
@@ -121,7 +122,7 @@ export const coreFr: Record<string, string> = {
   'support.suggestion4': 'Comment gérer mon abonnement ?',
   'support.suggestion5': 'Comment connecter WordPress ?',
   'support.autoReply':
-    'Merci pour votre message ! Les réponses du support en direct ne sont pas encore connectées — ce panneau est un aperçu de la future expérience d\'assistance Karmax, votre message n\'a donc pas été envoyé. En attendant, essayez les questions suggérées ou ouvrez Confidentialité ci-dessous.',
+    'Merci pour votre message ! Les réponses du support en direct ne sont pas encore connectées — ce panneau est un aperçu de la future expérience d\'assistance Karmax, votre message n\'a donc pas été envoyé. En attendant, essayez les questions suggérées \u2014 vous trouverez aussi Confidentialité sous Aide dans le menu de votre compte.',
 
   // ---- Notifications de thème ----
   'theme.setLight': 'Thème réglé sur Clair',

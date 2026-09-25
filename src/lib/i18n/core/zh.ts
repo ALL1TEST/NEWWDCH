@@ -70,6 +70,8 @@ export const coreZh: Record<string, string> = {
   'menu.theme': '主题',
   'menu.manageSubscription': '管理订阅',
   'menu.help': '帮助',
+  'menu.helpCenter': '帮助中心',
+  'menu.privacy': '隐私',
   'menu.logOut': '退出登录',
   'menu.light': '浅色',
   'menu.dark': '深色',

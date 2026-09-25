@@ -4,12 +4,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowUp,
   CircleHelp,
-  ShieldCheck,
 } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
@@ -17,17 +15,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useSupportPanelStore } from '@/lib/stores/support-panel-store';
-import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useLocaleStore, useT } from '@/lib/i18n';
 
 // ============================================================
-// HELP / SUPPORT SIDE PANEL
+// HELP / SUPPORT FLOATING PANEL
 // ============================================================
-// Right-side support drawer opened from the account menu's
-// "Help" action (see user-profile-menu.tsx). Mounted ONCE in
-// AdminShell next to the CommandPalette and driven by the same
-// global-store pattern (support-panel-store), so any dashboard
-// surface can open it without prop-drilling.
+// Right-side FLOATING support panel opened from the account
+// menu's "Help → Help Center" action (see user-profile-menu.tsx).
+// Mounted ONCE in AdminShell next to the CommandPalette and
+// driven by the same global-store pattern
+// (support-panel-store), so any dashboard surface can open it
+// without prop-drilling.
+//
+// FLOATING TREATMENT (unlike a docked drawer): the panel keeps
+// a small margin from the top/right/bottom viewport edges,
+// rounds ALL four corners and floats above the dimmed
+// dashboard through the standard Sheet overlay — a chat
+// card, not an edge-to-edge side drawer.
 //
 // HONESTY CONTRACT (mirrors the marketing Contact page): the
 // product has NO live support backend today, so this panel is a
@@ -40,9 +44,10 @@ import { useLocaleStore, useT } from '@/lib/i18n';
 //     no pretended AI). When a real support/AI backend lands,
 //     replace the local echo in handleSend with the API call.
 //
-// Navigation: the "Privacy" action routes to the dashboard's
-// native Privacy Policy module (#/privacy — see
-// modules/legal/privacy-page.tsx) and closes the panel.
+// Navigation: the Privacy action now lives in the account
+// menu's Help SUBMENU (user-profile-menu.tsx) and routes to
+// the dashboard's native Privacy Policy module (#/privacy —
+// modules/legal/privacy-page.tsx).
 // ============================================================
 
 // A suggested quick-help question (its i18n key).
@@ -70,7 +75,6 @@ interface SupportMessage {
 export function SupportPanel() {
   const isOpen = useSupportPanelStore((s) => s.isOpen);
   const closePanel = useSupportPanelStore((s) => s.close);
-  const navigate = useNavigationStore((s) => s.navigate);
   const locale = useLocaleStore((s) => s.locale);
   const { t } = useT();
 
@@ -140,41 +144,47 @@ export function SupportPanel() {
     });
   };
 
-  // Privacy → the dashboard's native Privacy Policy page. Close
-  // the panel so the destination is immediately visible.
-  const handlePrivacy = () => {
-    closePanel();
-    navigate('privacy');
-  };
-
   return (
     <Sheet open={isOpen} onOpenChange={(o) => (!o ? closePanel() : undefined)}>
       <SheetContent
         side="right"
-        // 440px on desktop (spec: 420–480), full width on mobile.
-        // p-0/gap-0: the panel manages its own header/body/footer
-        // padding so the borders run edge to edge. rounded-l-xl +
-        // shadow-xl: the floating-panel treatment on the left edge
-        // while staying flush right. z-[60] keeps the panel above
-        // sticky headers (z-40/50) exactly like the profile
-        // dropdown, so nothing overlaps the conversation.
-        className="z-[60] flex w-full flex-col gap-0 p-0 sm:max-w-[440px] rounded-l-xl border-l shadow-xl"
-        aria-label={t('support.title')}
+        // FLOATING PANEL: instead of the docked side="right" drawer
+        // (inset-y-0 right-0 h-full w-3/4 border-l), this className
+        // — applied LAST, so tailwind-merge resolves every conflict
+        // in its favour — turns the sheet into a floating card:
+        //   • left-3 right-3 top-3 bottom-3 h-auto w-auto (mobile):
+        //     12px of daylight between the panel and EVERY viewport
+        //     edge, near-full width; sm:left-auto sm:right-4
+        //     sm:top-4 sm:bottom-4 sm:w-[440px] (desktop): a
+        //     440px-wide right-side floating panel (spec: 420–480px)
+        //     with a 16px gap from the top/right/bottom edges and
+        //     the full usable chat height between those gaps.
+        //   • rounded-2xl rounds ALL four corners (the old drawer
+        //     only rounded the left edge); border restores the full
+        //     border ring; shadow-xl floats it above the page.
+        //   • overflow-hidden clips the header's border-b and the
+        //     composer's border-t to those rounded corners.
+        //   • The dashboard stays dimmed behind the panel through
+        //     the Sheet's own overlay (unchanged).
+        // z-[60] keeps the panel above sticky headers (z-40/50)
+        // exactly like the profile dropdown.
+        className="z-[60] flex flex-col gap-0 overflow-hidden p-0 left-3 right-3 top-3 bottom-3 h-auto w-auto rounded-2xl border shadow-xl sm:left-auto sm:right-4 sm:top-4 sm:bottom-4 sm:w-[440px] sm:max-w-[440px]"
+        // No SheetDescription is rendered (single-title header),
+        // so silence Radix's missing-description warning.
+        aria-describedby={undefined}
       >
-        {/* ---------- Header ---------- */}
+        {/* ---------- Header: icon + single "Karmax Support"
+            title (the old small "Help" line was removed; the
+            built-in Sheet close button provides the [X] at the
+            panel's top-right corner). ---------- */}
         <SheetHeader className="border-b border-border px-5 py-4 text-left">
           <div className="flex items-center gap-3 pr-8">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground">
               <CircleHelp className="h-5 w-5" aria-hidden="true" />
             </span>
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <SheetTitle className="text-base font-semibold leading-none">
-                {t('support.title')}
-              </SheetTitle>
-              <SheetDescription className="text-xs leading-none text-muted-foreground">
-                {t('support.subtitle')}
-              </SheetDescription>
-            </div>
+            <SheetTitle className="text-base font-semibold leading-none">
+              {t('support.title')}
+            </SheetTitle>
           </div>
         </SheetHeader>
 
@@ -184,7 +194,7 @@ export function SupportPanel() {
           className="flex-1 overflow-y-auto px-5 py-5"
           role="log"
           aria-live="polite"
-          aria-label={t('support.subtitle')}
+          aria-label={t('support.title')}
         >
           {/* Timestamp divider — small, centered, muted (reference
               structure: a light time marker above the greeting). */}
@@ -243,24 +253,13 @@ export function SupportPanel() {
           </div>
         </div>
 
-        {/* ---------- Footer: Privacy + composer ---------- */}
-        <div className="border-t border-border px-5 pb-4 pt-3">
-          {/* Privacy — sits directly below the conversation area,
-              above the composer. Routes to Karmax's own Privacy
-              Policy page (never an external link). */}
-          <button
-            type="button"
-            onClick={handlePrivacy}
-            className="mb-3 inline-flex items-center gap-1.5 rounded-md text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          >
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            {t('support.privacy')}
-          </button>
-
-          {/* Composer — pinned at the panel bottom (the footer is
-              outside the scroll area), so the input stays reachable
-              at any scroll position. Enter sends; the circular
-              arrow button mirrors modern chat composers. */}
+        {/* ---------- Footer: composer ---------- */}
+        {/* No Privacy row here anymore — Privacy lives in the
+            account menu's Help submenu. The composer is the only
+            footer element: visually separated from the conversation
+            by the border-t divider, with the rounded-full input
+            mirroring the floating panel's rounded design. */}
+        <div className="border-t border-border px-5 pb-5 pt-4">
           <form
             className="flex items-center gap-2"
             onSubmit={(e) => {

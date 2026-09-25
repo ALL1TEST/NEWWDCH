@@ -71,6 +71,8 @@ export const corePtBr: Record<string, string> = {
   'menu.theme': 'Tema',
   'menu.manageSubscription': 'Gerenciar assinatura',
   'menu.help': 'Ajuda',
+  'menu.helpCenter': 'Central de Ajuda',
+  'menu.privacy': 'Privacidade',
   'menu.logOut': 'Sair',
   'menu.light': 'Claro',
   'menu.dark': 'Escuro',

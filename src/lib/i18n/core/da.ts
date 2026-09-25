@@ -71,6 +71,8 @@ export const coreDa: Record<string, string> = {
   'menu.theme': 'Tema',
   'menu.manageSubscription': 'Administrer abonnement',
   'menu.help': 'Hjælp',
+  'menu.helpCenter': 'Hjælpecenter',
+  'menu.privacy': 'Privatliv',
   'menu.logOut': 'Log ud',
   'menu.light': 'Lyst',
   'menu.dark': 'Mørkt',

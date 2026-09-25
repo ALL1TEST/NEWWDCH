@@ -71,6 +71,8 @@ export const coreId: Record<string, string> = {
   'menu.theme': 'Tema',
   'menu.manageSubscription': 'Kelola langganan',
   'menu.help': 'Bantuan',
+  'menu.helpCenter': 'Pusat Bantuan',
+  'menu.privacy': 'Privasi',
   'menu.logOut': 'Keluar',
   'menu.light': 'Terang',
   'menu.dark': 'Gelap',

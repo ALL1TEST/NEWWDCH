@@ -71,6 +71,8 @@ export const coreNb: Record<string, string> = {
   'menu.theme': 'Tema',
   'menu.manageSubscription': 'Administrer abonnementet',
   'menu.help': 'Hjelp',
+  'menu.helpCenter': 'Hjelpesenter',
+  'menu.privacy': 'Personvern',
   'menu.logOut': 'Logg ut',
   'menu.light': 'Lyst',
   'menu.dark': 'Mørkt',

@@ -73,6 +73,8 @@ export const coreAr: Record<string, string> = {
   'menu.theme': 'المظهر',
   'menu.manageSubscription': 'إدارة الاشتراك',
   'menu.help': 'مساعدة',
+  'menu.helpCenter': 'مركز المساعدة',
+  'menu.privacy': 'الخصوصية',
   'menu.logOut': 'تسجيل الخروج',
   'menu.light': 'فاتح',
   'menu.dark': 'داكن',

@@ -70,6 +70,8 @@ export const coreFa: Record<string, string> = {
   'menu.theme': 'پوسته',
   'menu.manageSubscription': 'مدیریت اشتراک',
   'menu.help': 'راهنما',
+  'menu.helpCenter': 'مرکز راهنما',
+  'menu.privacy': 'حریم خصوصی',
   'menu.logOut': 'خروج',
   'menu.light': 'روشن',
   'menu.dark': 'تیره',

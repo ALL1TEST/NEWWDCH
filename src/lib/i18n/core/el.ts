@@ -71,6 +71,8 @@ export const coreEl: Record<string, string> = {
   'menu.theme': 'Θέμα',
   'menu.manageSubscription': 'Διαχείριση συνδρομής',
   'menu.help': 'Βοήθεια',
+  'menu.helpCenter': 'Κέντρο βοήθειας',
+  'menu.privacy': 'Απόρρητο',
   'menu.logOut': 'Αποσύνδεση',
   'menu.light': 'Φωτεινό',
   'menu.dark': 'Σκούρο',

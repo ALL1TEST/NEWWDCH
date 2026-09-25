@@ -71,6 +71,8 @@ export const coreRu: Record<string, string> = {
   'menu.theme': 'Тема',
   'menu.manageSubscription': 'Управление подпиской',
   'menu.help': 'Помощь',
+  'menu.helpCenter': 'Центр поддержки',
+  'menu.privacy': 'Конфиденциальность',
   'menu.logOut': 'Выйти',
   'menu.light': 'Светлая',
   'menu.dark': 'Тёмная',

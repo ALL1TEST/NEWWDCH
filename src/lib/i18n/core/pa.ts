@@ -70,6 +70,8 @@ export const corePa: Record<string, string> = {
   'menu.theme': 'ਥੀਮ',
   'menu.manageSubscription': 'ਸਬਸਕ੍ਰਿਪਸ਼ਨ ਪ੍ਰਬੰਧਨ',
   'menu.help': 'ਮਦਦ',
+  'menu.helpCenter': 'ਮਦਦ ਕੇਂਦਰ',
+  'menu.privacy': 'ਗੋਪਨੀਯਤਾ',
   'menu.logOut': 'ਲੌਗ ਆਊਟ',
   'menu.light': 'ਲਾਈਟ',
   'menu.dark': 'ਡਾਰਕ',

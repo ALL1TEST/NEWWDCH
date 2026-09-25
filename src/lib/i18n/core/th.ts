@@ -70,6 +70,8 @@ export const coreTh: Record<string, string> = {
   'menu.theme': 'ธีม',
   'menu.manageSubscription': 'จัดการการสมัครสมาชิก',
   'menu.help': 'ช่วยเหลือ',
+  'menu.helpCenter': 'ศูนย์ช่วยเหลือ',
+  'menu.privacy': 'ความเป็นส่วนตัว',
   'menu.logOut': 'ออกจากระบบ',
   'menu.light': 'สว่าง',
   'menu.dark': 'มืด',

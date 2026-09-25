@@ -12,6 +12,8 @@ import {
   Moon,
   Monitor,
   Check,
+  MessageCircleQuestion,
+  ShieldCheck,
 } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -435,32 +437,57 @@ export function UserProfileMenu({
           </>
         )}
 
-        {/* 6 — Help → opens the in-dashboard Support side panel
-            (SupportPanel in admin-shell.tsx; NO navigation — the
-            dashboard stays mounted underneath). Available to EVERY
-            role: it is placed directly below "Manage Subscription"
-            (where present) and directly above "Log out", so the
-            menu reads Profile / Language / Theme / Manage
-            Subscription / Help / Log out for clients, and Profile /
-            Language / Theme / Help / Log out for platform staff +
-            the Internal Account (no personal subscription). On
-            mobile the drawer-hosted menu also closes the sidebar
-            sheet (same closeMobile() the navigation actions use)
-            so the panel never stacks on the open drawer. */}
-        <DropdownMenuItem
-          className="cursor-pointer"
-          onClick={() => {
-            openSupportPanel();
-            closeMobile();
-            // Dismiss the shadcn mobile drawer (the zustand closeMobile
-            // above mirrors the other menu actions; this one actually
-            // closes the Sheet the avatar lives in on small screens).
-            setOpenMobile(false);
-          }}
-        >
-          <CircleHelp className="h-4 w-4" />
-          {t('menu.help')}
-        </DropdownMenuItem>
+        {/* 6 — Help → SUBMENU (Profile / Language / Theme /
+            Manage Subscription / Help / Log out ordering is
+            unchanged; the Help entry is now a submenu trigger —
+            the SAME DropdownMenuSub pattern as Language and
+            Theme — exposing exactly two actions:
+              • Help Center → opens the in-dashboard Support
+                panel (SupportPanel in admin-shell.tsx; NO
+                navigation — the dashboard stays mounted).
+              • Privacy → the dashboard's native Privacy Policy
+                module (#/privacy — modules/legal/privacy-page).
+            Available to EVERY role. On mobile the drawer-hosted
+            menu also closes the sidebar sheet (closeMobile() +
+            setOpenMobile(false), the same pair the navigation
+            actions use) so the panel/policy never stacks on the
+            open drawer. */}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className="cursor-pointer">
+            <CircleHelp className="h-4 w-4 text-muted-foreground" />
+            <span className="text-muted-foreground">{t('menu.help')}</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="z-[70] w-48 p-1">
+            <DropdownMenuItem
+              className="cursor-pointer gap-2 rounded-md py-1.5 text-sm"
+              onClick={() => {
+                openSupportPanel();
+                closeMobile();
+                // Dismiss the shadcn mobile drawer (the zustand closeMobile
+                // above mirrors the other menu actions; this one actually
+                // closes the Sheet the avatar lives in on small screens).
+                setOpenMobile(false);
+              }}
+            >
+              <MessageCircleQuestion className="h-4 w-4 text-muted-foreground" />
+              <span className="flex-1">{t('menu.helpCenter')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="cursor-pointer gap-2 rounded-md py-1.5 text-sm"
+              onClick={() => {
+                // Same navigation helper the other menu actions use
+                // (navigate('privacy') + closeMobile()); the extra
+                // setOpenMobile(false) dismisses the shadcn mobile
+                // drawer when the menu is hosted inside it.
+                handleNavigate('privacy');
+                setOpenMobile(false);
+              }}
+            >
+              <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+              <span className="flex-1">{t('menu.privacy')}</span>
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
         <DropdownMenuSeparator />
 
         {/* 7 — Log out (destructive, existing auth-store handler) */}

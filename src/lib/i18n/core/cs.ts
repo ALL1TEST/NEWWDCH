@@ -71,6 +71,8 @@ export const coreCs: Record<string, string> = {
   'menu.theme': 'Motiv',
   'menu.manageSubscription': 'Spravovat předplatné',
   'menu.help': 'Nápověda',
+  'menu.helpCenter': 'Centrum nápovědy',
+  'menu.privacy': 'Soukromí',
   'menu.logOut': 'Odhlásit se',
   'menu.light': 'Světlý',
   'menu.dark': 'Tmavý',

@@ -71,6 +71,8 @@ export const coreHe: Record<string, string> = {
   'menu.theme': 'ערכת נושא',
   'menu.manageSubscription': 'נהל מנוי',
   'menu.help': 'עזרה',
+  'menu.helpCenter': 'מרכז העזרה',
+  'menu.privacy': 'פרטיות',
   'menu.logOut': 'התנתקות',
   'menu.light': 'בהיר',
   'menu.dark': 'כהה',

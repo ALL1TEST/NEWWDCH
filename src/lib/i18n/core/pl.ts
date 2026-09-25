@@ -71,6 +71,8 @@ export const corePl: Record<string, string> = {
   'menu.theme': 'Motyw',
   'menu.manageSubscription': 'Zarządzaj subskrypcją',
   'menu.help': 'Pomoc',
+  'menu.helpCenter': 'Centrum pomocy',
+  'menu.privacy': 'Prywatność',
   'menu.logOut': 'Wyloguj',
   'menu.light': 'Jasny',
   'menu.dark': 'Ciemny',

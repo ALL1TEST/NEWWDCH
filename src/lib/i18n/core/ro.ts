@@ -71,6 +71,8 @@ export const coreRo: Record<string, string> = {
   'menu.theme': 'Temă',
   'menu.manageSubscription': 'Administrează abonamentul',
   'menu.help': 'Ajutor',
+  'menu.helpCenter': 'Centru de ajutor',
+  'menu.privacy': 'Confidențialitate',
   'menu.logOut': 'Deconectare',
   'menu.light': 'Deschis',
   'menu.dark': 'Închis',

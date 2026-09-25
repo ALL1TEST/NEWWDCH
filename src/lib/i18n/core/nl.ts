@@ -71,6 +71,8 @@ export const coreNl: Record<string, string> = {
   'menu.theme': 'Thema',
   'menu.manageSubscription': 'Abonnement beheren',
   'menu.help': 'Hulp',
+  'menu.helpCenter': 'Helpcentrum',
+  'menu.privacy': 'Privacy',
   'menu.logOut': 'Uitloggen',
   'menu.light': 'Licht',
   'menu.dark': 'Donker',

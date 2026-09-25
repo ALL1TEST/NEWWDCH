@@ -70,6 +70,8 @@ export const coreKo: Record<string, string> = {
   'menu.theme': '테마',
   'menu.manageSubscription': '구독 관리',
   'menu.help': '도움말',
+  'menu.helpCenter': '도움말 센터',
+  'menu.privacy': '개인정보',
   'menu.logOut': '로그아웃',
   'menu.light': '라이트',
   'menu.dark': '다크',

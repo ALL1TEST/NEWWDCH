@@ -70,6 +70,8 @@ export const coreMr: Record<string, string> = {
   'menu.theme': 'थीम',
   'menu.manageSubscription': 'सदस्यता व्यवस्थापन',
   'menu.help': 'मदत',
+  'menu.helpCenter': 'मदत केंद्र',
+  'menu.privacy': 'गोपनीयता',
   'menu.logOut': 'लॉग आउट',
   'menu.light': 'लाइट',
   'menu.dark': 'डार्क',

@@ -71,6 +71,8 @@ export const coreDe: Record<string, string> = {
   'menu.theme': 'Design',
   'menu.manageSubscription': 'Abonnement verwalten',
   'menu.help': 'Hilfe',
+  'menu.helpCenter': 'Hilfe-Center',
+  'menu.privacy': 'Datenschutz',
   'menu.logOut': 'Abmelden',
   'menu.light': 'Hell',
   'menu.dark': 'Dunkel',

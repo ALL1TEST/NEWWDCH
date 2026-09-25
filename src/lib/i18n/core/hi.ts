@@ -70,6 +70,8 @@ export const coreHi: Record<string, string> = {
   'menu.theme': 'थीम',
   'menu.manageSubscription': 'सदस्यता प्रबंधित करें',
   'menu.help': 'सहायता',
+  'menu.helpCenter': 'सहायता केंद्र',
+  'menu.privacy': 'गोपनीयता',
   'menu.logOut': 'लॉग आउट',
   'menu.light': 'लाइट',
   'menu.dark': 'डार्क',

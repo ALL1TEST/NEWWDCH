@@ -71,6 +71,8 @@ export const corePtPt: Record<string, string> = {
   'menu.theme': 'Tema',
   'menu.manageSubscription': 'Gerir subscrição',
   'menu.help': 'Ajuda',
+  'menu.helpCenter': 'Centro de Ajuda',
+  'menu.privacy': 'Privacidade',
   'menu.logOut': 'Terminar sessão',
   'menu.light': 'Claro',
   'menu.dark': 'Escuro',

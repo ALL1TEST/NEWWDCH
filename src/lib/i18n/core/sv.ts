@@ -71,6 +71,8 @@ export const coreSv: Record<string, string> = {
   'menu.theme': 'Tema',
   'menu.manageSubscription': 'Hantera prenumeration',
   'menu.help': 'Hjälp',
+  'menu.helpCenter': 'Hjälpcenter',
+  'menu.privacy': 'Integritet',
   'menu.logOut': 'Logga ut',
   'menu.light': 'Ljust',
   'menu.dark': 'Mörkt',

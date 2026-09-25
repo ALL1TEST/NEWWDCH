@@ -71,6 +71,8 @@ export const coreVi: Record<string, string> = {
   'menu.theme': 'Giao diện',
   'menu.manageSubscription': 'Quản lý đăng ký',
   'menu.help': 'Trợ giúp',
+  'menu.helpCenter': 'Trung tâm trợ giúp',
+  'menu.privacy': 'Quyền riêng tư',
   'menu.logOut': 'Đăng xuất',
   'menu.light': 'Sáng',
   'menu.dark': 'Tối',

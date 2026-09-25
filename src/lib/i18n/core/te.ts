@@ -70,6 +70,8 @@ export const coreTe: Record<string, string> = {
   'menu.theme': 'థీమ్',
   'menu.manageSubscription': 'సబ్‌స్క్రిప్షన్ నిర్వహించు',
   'menu.help': 'సహాయం',
+  'menu.helpCenter': 'సహాయ కేంద్రం',
+  'menu.privacy': 'గోప్యత',
   'menu.logOut': 'లాగ్ అవుట్',
   'menu.light': 'లైట్',
   'menu.dark': 'డార్క్',

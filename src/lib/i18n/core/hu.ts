@@ -71,6 +71,8 @@ export const coreHu: Record<string, string> = {
   'menu.theme': 'Téma',
   'menu.manageSubscription': 'Előfizetés kezelése',
   'menu.help': 'Súgó',
+  'menu.helpCenter': 'Súgóközpont',
+  'menu.privacy': 'Adatvédelem',
   'menu.logOut': 'Kijelentkezés',
   'menu.light': 'Világos',
   'menu.dark': 'Sötét',

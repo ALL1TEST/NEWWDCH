@@ -70,6 +70,8 @@ export const coreKn: Record<string, string> = {
   'menu.theme': 'ಥೀಮ್',
   'menu.manageSubscription': 'ಸಬ್‌ಸ್ಕ್ರಿಪ್ಷನ್ ನಿರ್ವಹಿಸು',
   'menu.help': 'ಸಹಾಯ',
+  'menu.helpCenter': 'ಸಹಾಯ ಕೇಂದ್ರ',
+  'menu.privacy': 'ಗೋಪನೀಯತೆ',
   'menu.logOut': 'ಲಾಗ್ ಔಟ್',
   'menu.light': 'ಲೈಟ್',
   'menu.dark': 'ಡಾರ್ಕ್',

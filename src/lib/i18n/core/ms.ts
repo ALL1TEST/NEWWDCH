@@ -71,6 +71,8 @@ export const coreMs: Record<string, string> = {
   'menu.theme': 'Tema',
   'menu.manageSubscription': 'Urus langganan',
   'menu.help': 'Bantuan',
+  'menu.helpCenter': 'Pusat Bantuan',
+  'menu.privacy': 'Privasi',
   'menu.logOut': 'Log keluar',
   'menu.light': 'Cerah',
   'menu.dark': 'Gelap',

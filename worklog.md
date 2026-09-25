@@ -12248,3 +12248,33 @@ Stage Summary:
 - Media library now shows global records (same convention as categories/tags/content-types)
 - Files changed: .zscripts/seed-marketing.ts, src/lib/platform/entitlements.ts, src/lib/site-context.ts, src/app/api/sites/route.ts, src/app/api/media/route.ts
 - Not committed/pushed (no commit requested)
+
+---
+Task ID: HELP-2
+Agent: main (orchestrator)
+Task: Update the Karmax Help/Support experience per user's 9-point spec — Help becomes a submenu (Help Center / Privacy), the support panel becomes a floating panel with viewport margins, the header drops the separate "Help" title, the Privacy row (and its shield icon) is removed from above the chat input, and the honest auto-reply text no longer points to the removed in-panel Privacy row.
+
+Work Log:
+- Inspected current implementation (committed in 3cf9ad5): src/components/layout/user-profile-menu.tsx (account menu, single Help item), src/components/layout/support-panel.tsx (edge-to-edge right Sheet drawer), src/lib/stores/support-panel-store.ts, src/components/ui/sheet.tsx (side="right" base classes), i18n core dictionaries (menu.* translated in all 40 locales; support.* only en/fr with per-key English fallback)
+- Browser "before" capture confirmed the panel touched all viewport edges (rect 840,0→1280,577 on a 1280×577 viewport); VLM confirmed header had two lines ("Help" + "Karmax Support") and a shield+Privacy row above the composer; the "extra star icon" the user referenced is that shield badge — removed together with the row, nothing decorative re-added
+- user-profile-menu.tsx: converted the Help DropdownMenuItem into a DropdownMenuSub (same pattern/styling as the existing Language and Theme submenus — CircleHelp trigger icon, auto chevron). Submenu contains EXACTLY Help Center (MessageCircleQuestion icon → openSupportPanel() + closeMobile() + setOpenMobile(false)) and Privacy (ShieldCheck icon → handleNavigate('privacy') + setOpenMobile(false), reusing the existing #/privacy module). Menu order unchanged: Profile / Language / Theme / Manage Subscription / Help / Log out
+- support-panel.tsx: floating treatment via className overrides (applied last so tailwind-merge wins every conflict): left-3 right-3 top-3 bottom-3 h-auto w-auto rounded-2xl border shadow-xl on mobile (12px gap from EVERY viewport edge, near-full width) and sm:left-auto sm:right-4 sm:top-4 sm:bottom-4 sm:w-[440px] sm:max-w-[440px] on desktop (440px panel, 16px gaps top/right/bottom, full usable chat height). overflow-hidden clips header/footer dividers to the rounded corners; the Sheet's dimmed overlay is unchanged
+- support-panel.tsx: header reduced to icon + single SheetTitle "Karmax Support" (support.title retitled; support.subtitle removed; aria-describedby={undefined} to silence the Radix missing-description warning); removed the footer Privacy button + handlePrivacy + ShieldCheck/useNavigationStore imports; footer is now the composer only (border-t separation, rounded-full input, circular arrow send button — all kept)
+- i18n: added 'menu.helpCenter' + 'menu.privacy' to ALL 40 locale cores (inserted after each 'menu.help' row, natural translations) via one-off script (deleted after use); en/fr support.title → 'Karmax Support'/'Assistance Karmax' and support.subtitle removed; support.autoReply in en/fr no longer says "open Privacy below" — now points to "Help → Privacy in your account menu"
+- tsc --noEmit: 277 pre-existing error lines, byte-identical to a git-stash baseline (zero new); ESLint clean on all changed files; dev server crashed during the stash round-trip → restarted with the persistent double-fork command (PPID 1, HTTP 200)
+
+Verification (all passed, agent-browser):
+- Desktop 1280×800: account menu opens bottom-left above the sidebar footer avatar (unchanged); Help opens a submenu on hover/click with exactly Help Center + Privacy (192×74, fits viewport); Help Center opens the floating panel: rect 824,16→1264,784 (gaps 16/16/16), 440px wide, borderRadius 16px, 1px border, visible shadow-xl layers, overflow hidden; dashboard dimmed behind (overlay oklab black 50%)
+- Panel content: single title "Karmax Support" + question icon + X close; "How can I help you today?" greeting; 5 suggestion chips; "Message..." input; circular arrow send; chip click fills the input; send produces user bubble + honest auto-reply (updated text, no stale Privacy pointer); NO Privacy row / shield / decorative icon above the input (privacyButtons: 0)
+- Privacy submenu item → http://localhost:3000/#privacy renders "Privacy Policy" inside the dashboard shell (sidebar intact, VLM 4/4)
+- Close via X → panel + overlay unmount, "Executive Dashboard" intact; Esc closes cleanly
+- Mobile 390×844: sidebar drawer → avatar → Help → drawer auto-dismisses + panel floats with 12px gaps on ALL sides (366×820), no horizontal overflow (VLM QA 6/6)
+- French locale: menu "Aide" → "Centre d'aide" / "Confidentialité"; panel title "Assistance Karmax"; French auto-reply updated
+- Collapsed-rail desktop: menu opens right of the rail (x=56) and the submenu fits the viewport (VLM + geometry)
+- Browser console: no errors/warnings; dev.log: only normal queries + 200s
+
+Stage Summary:
+- 42 files changed (+193/−89): 2 components + 40 i18n cores
+- Help = submenu (Help Center → floating support panel; Privacy → existing #/privacy module); no external links, no Perplexity branding, no duplicate components; existing chat behavior untouched
+- Support panel = floating chat card (margins from viewport edges, rounded corners, border+shadow, dimmed overlay, single "Karmax Support" title, composer-only footer); fully responsive (440px desktop / near-full-width mobile)
+- Not committed (no commit requested)
