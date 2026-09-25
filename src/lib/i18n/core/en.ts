@@ -105,11 +105,29 @@ export const coreEn: Record<string, string> = {
   'menu.language': 'Language',
   'menu.theme': 'Theme',
   'menu.manageSubscription': 'Manage Subscription',
+  'menu.help': 'Help',
   'menu.logOut': 'Log out',
   'menu.light': 'Light',
   'menu.dark': 'Dark',
   'menu.system': 'System',
   'menu.default': 'Default',
+
+  // ---- Help / Support side panel ----
+  'support.title': 'Help',
+  'support.subtitle': 'Karmax Support',
+  'support.today': 'Today',
+  'support.greeting': 'How can I help you today?',
+  'support.inputPlaceholder': 'Message...',
+  'support.send': 'Send message',
+  'support.privacy': 'Privacy',
+  'support.suggestionsLabel': 'Suggested questions',
+  'support.suggestion1': 'How do I connect my website?',
+  'support.suggestion2': 'How do I publish an article?',
+  'support.suggestion3': 'How do I configure AI?',
+  'support.suggestion4': 'How do I manage my subscription?',
+  'support.suggestion5': 'How do I connect WordPress?',
+  'support.autoReply':
+    'Thanks for reaching out! Live support replies aren\u2019t connected yet \u2014 this panel is a preview of the upcoming Karmax support experience, so your message hasn\u2019t been sent. In the meantime, try the suggested questions or open Privacy below.',
 
   // ---- Theme toasts ----
   'theme.setLight': 'Theme set to Light',
@@ -269,6 +287,7 @@ export const coreEn: Record<string, string> = {
   'title.backups': 'Backups',
   'title.profile': 'Profile',
   'title.billing': 'Billing & Subscription',
+  'title.privacy': 'Privacy Policy',
   'title.internalDashboard': 'Internal Account',
   'title.platformOverview': 'Overview',
   'title.platformCustomers': 'Customers',

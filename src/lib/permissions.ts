@@ -196,6 +196,13 @@ export function canAccessPage(
   pagePermissions: string[] | null | undefined,
   pageKey: string,
 ): boolean {
+  // 'privacy' — the Privacy Policy module — is a LEGAL page with
+  // public content (identical to the marketing site's privacy
+  // page) opened from the Help panel's "Privacy" action. It is
+  // reachable from EVERY account menu, so every role can read it
+  // regardless of permissions (nothing sensitive lives there).
+  if (pageKey === 'privacy') return true;
+
   // OWNER has full platform + client access (billing bypass).
   if (role === 'OWNER') return true;
 

@@ -18,6 +18,7 @@ import {
   Plug,
   Settings,
   Shield,
+  ShieldCheck,
   Database,
   Zap,
   Activity,
@@ -67,6 +68,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'email-templates': MailPlus,
   profile: User,
   billing: CreditCard,
+  privacy: ShieldCheck,
 };
 
 // i18n — every module id maps to ONE 'title.*' key in the core
@@ -100,6 +102,8 @@ const MODULE_TITLE_KEYS: Record<string, string> = {
   billing: 'title.billing',
   // Internal Account dashboard (INTERNAL-role account's own page)
   'internal-dashboard': 'title.internalDashboard',
+  // Privacy Policy (shared legal page — Help panel "Privacy" action)
+  privacy: 'title.privacy',
 };
 
 // English fallback labels (used only for ids missing from
@@ -128,6 +132,7 @@ const MODULE_LABELS: Record<string, string> = {
   'email-templates': 'Email Templates',
   profile: 'Profile',
   billing: 'Billing & Subscription',
+  privacy: 'Privacy Policy',
   'internal-dashboard': 'Internal Account',
 };
 

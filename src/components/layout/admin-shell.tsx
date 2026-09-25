@@ -12,12 +12,20 @@ import { readPlanSelection, clearPlanSelection, isCheckoutHash } from '@/lib/che
 import { AppSidebar } from './sidebar';
 import { Topbar } from './topbar';
 import { CommandPalette } from '@/components/patterns/command-palette';
+import { SupportPanel } from './support-panel';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 
 // Marketing hash segments (the unauthenticated tree's routes).
+// NOTE: 'privacy' is deliberately NOT listed — the Privacy Policy is
+// a SHARED legal page: unauthenticated visitors get the marketing
+// privacy page (MarketingSite), while authenticated users get the
+// dashboard-native privacy module at #/privacy (opened from the Help
+// panel's "Privacy" action). Keeping it out of this redirect list is
+// what lets a logged-in #/privacy full-page load stay on the policy
+// page instead of bouncing to the dashboard.
 const MARKETING_HASHES = [
-  'pricing', 'blog', 'about', 'solutions', 'login', 'signup', 'privacy', 'terms', 'features',
+  'pricing', 'blog', 'about', 'solutions', 'login', 'signup', 'terms', 'features',
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -178,6 +186,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       <CommandPalette />
+      {/* Help / Support side panel — opened from the account menu's
+          "Help" action (global support-panel store, same pattern as
+          the CommandPalette above). Mounted once, over the dashboard. */}
+      <SupportPanel />
     </SidebarProvider>
   );
 }

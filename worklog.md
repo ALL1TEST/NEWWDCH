@@ -12174,3 +12174,37 @@ Stage Summary:
 - Canonical dev server (`bun run dev` → next dev -p 3000 | tee dev.log) running detached (PPID 1), survives session reaper
 - Port 3000 served solely by repository code from /home/z/my-project; no old/duplicate servers
 - dev-runner intentionally stopped to avoid duplicate next dev respawn loop; restart with double-fork if crash-failover supervisor is ever needed
+
+---
+Task ID: HELP-1
+Agent: main (orchestrator)
+Task: Add "Help" to the Karmax dashboard account menu + build the in-dashboard Help/Support side-panel experience (right drawer, default greeting, quick-help chips, composer, Privacy link → Karmax privacy policy), per user spec.
+
+Work Log:
+- Inspected architecture: account menu = user-profile-menu.tsx (single source, used by sidebar expanded footer side=top + collapsed rail side=right); routing = hash-based SPA (navigation-store → moduleRegistry); overlays = global zustand stores + portal (CommandPalette pattern); i18n = core dicts ×40 (menu.*/title.* keys in all) + fragments en/fr; NO client-facing support/AI backend exists (AI playground = platform-admin provider testing only) → honest preview approach per spec item 7
+- NEW src/lib/stores/support-panel-store.ts — open/close/toggle zustand (mirror of command-palette-store)
+- NEW src/components/layout/support-panel.tsx — right-side Sheet (side=right, w-full sm:max-w-[440px], rounded-l-xl, border-l, shadow-xl, z-[60], p-0): header (CircleHelp chip + "Help" + "Karmax Support" subtitle + built-in X), scrollable conversation (timestamp divider "Today · HH:MM", greeting bubble "How can I help you today?" visible on open, 5 quick-help chips that FILL the input only, user bubbles bg-primary + honest auto-reply bubble after 450ms), fixed footer (ShieldCheck "Privacy" link + "Message..." rounded-full input + circular ArrowUp send button, Enter submits, disabled when empty); auto-scroll on new messages; chips hide after first message; state resets per open (Radix unmount) — no fake persistence
+- NEW src/modules/legal/privacy-page.tsx — dashboard-native Privacy Policy module reusing the SAME mkt.privacy.* i18n content keys as the marketing page (single source of truth), dashboard typography (icon chip + h1 + Last updated + 5 sections)
+- Routing wired: module-registry 'privacy' entry; admin-app effectiveModule exceptions ('privacy' allowed for platform staff + internal like 'profile'); permissions.canAccessPage early-returns true for 'privacy' (legal page, every role); breadcrumbs MODULE_TITLE_KEYS/ICON_MAP/MODULE_LABELS + title.privacy; admin-shell MARKETING_HASHES: removed 'privacy' so authenticated #/privacy full-page loads STAY on the policy page (unauthenticated #/privacy still renders MarketingSite — regression-verified)
+- user-profile-menu.tsx: Help item (CircleHelp icon, menu.help) between Manage Subscription and Log out — order now Profile/Language/Theme/Manage Subscription/Help/Log out (platform staff + internal: …/Theme/Help/Log out); handler opens panel + closeMobile() + useSidebar().setOpenMobile(false) (the REAL mobile drawer API — zustand closeMobile is dead code; mobile drawer otherwise stays stacked under the panel)
+- admin-shell.tsx: <SupportPanel /> mounted beside <CommandPalette /> inside SidebarProvider
+- next.config.ts: devIndicators false — the Next.js dev badge (fixed right:20/bottom:20, z-index 2147483647) sat EXACTLY on the composer's send button making it unclickable in dev; every corner now hosts app chrome (repo had already repositioned it once for the sidebar); prod unaffected
+- i18n: menu.help + title.privacy added to ALL 40 core locales (script-inserted, verified 1 occurrence each); support.* keys (title/subtitle/today/greeting/inputPlaceholder/send/privacy/suggestionsLabel/suggestion1-5/autoReply) in en + fr (other locales fall back to English per the documented system)
+
+Verification (all passed):
+- tsc --noEmit: zero NEW errors (4 pre-existing in unrelated files: sidebar 'bottom' side type, site-selector dup identifier, client-content dup key — verified identical on git-stash baseline)
+- ESLint: clean on all 10 changed/new files
+- E2E desktop 1280px (real account created via /api/auth/signup, session cookie set in browser): account menu shows exact order with Help below Manage Subscription above Log out; Help → panel opens over intact dashboard (VLM QA: all 7 structure criteria pass, "clean, well-spaced, professionally designed"); greeting + timestamp + 5 chips render on open; chip click fills input; send (button + Enter) → user bubble + honest auto-reply; Privacy → panel closes + #/privacy privacy page renders INSIDE dashboard shell (sidebar intact, breadcrumb "All Sites / Privacy Policy"); full-page RELOAD at #/privacy while authenticated stays on policy (MARKETING_HASHES fix verified); sidebar nav back to dashboard OK; Close button + Esc close panel; dashboard intact underneath
+- E2E mobile 390px: mobile drawer → avatar → menu → Help → drawer CLOSES + panel opens full-width (390px), no horizontal overflow (VLM QA 5/5); desktop collapsed rail: menu opens right of rail at x=56, 224×316, fits viewport, 6 items
+- French locale (cms_locale=fr): menu "Aide", panel "Aide/Assistance Karmax/Aujourd'hui/Comment puis-je vous aider aujourd'hui ?"/5 chips FR/"Confidentialité", privacy page "Politique de confidentialité" — all translated
+- Dark mode (theme=dark): proper dark surfaces, readable, no defects (VLM 3/3)
+- Logged-out regression (fresh browser session): #/privacy renders the MARKETING privacy page (title "Privacy Policy — Karmax", marketing nav) — unchanged behavior
+- dev.log: no errors (403 /api/analytics = pre-existing Free-plan feature gate); browser console: no errors
+
+Stage Summary:
+- 3 new files (support-panel-store, support-panel, legal/privacy-page) + 7 modified (user-profile-menu, admin-shell, admin-app, breadcrumbs, module-registry, permissions, next.config) + 40 i18n cores
+- Account menu: Profile / Language / Theme / Manage Subscription / Help / Log out — Help opens the in-dashboard support panel (no navigation away)
+- Support panel = honest preview: static greeting + UI-only suggestions + local message echo with a truthful "live replies aren't connected yet" notice; single handleSend function is the only change needed when a real backend lands
+- Privacy link → dashboard-native Privacy Policy at #/privacy (shared content with the marketing page; refresh-safe for authenticated users; marketing page unchanged for logged-out visitors)
+- Dev badge disabled (was covering the send button in dev previews; zero prod impact)
+- Not committed/pushed (no commit requested)

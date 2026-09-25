@@ -37,9 +37,13 @@ const jobs = dynamic(() => import('@/modules/jobs').then(m => ({ default: m.Jobs
 const emailTemplates = dynamic(() => import('@/modules/email-templates').then(m => ({ default: m.EmailTemplatesModule as ComponentType })), { loading: ModuleFallback });
 const profile = dynamic(() => import('@/modules/profile').then(m => ({ default: m.ProfileModule as ComponentType })), { loading: ModuleFallback });
 const billing = dynamic(() => import('@/modules/billing').then(m => ({ default: m.BillingModule as ComponentType })), { loading: ModuleFallback });
+// Privacy Policy — dashboard-native legal page (shared content
+// with the marketing privacy page). Reachable by every role via
+// #/privacy (e.g. the Help panel's "Privacy" action).
+const privacy = dynamic(() => import('@/modules/legal/privacy-page').then(m => ({ default: m.default as ComponentType })), { loading: ModuleFallback });
 
 export const moduleRegistry: Record<string, ComponentType> = {
   ...platformModuleRegistry,
   'internal-dashboard': internalDashboard,
-  dashboard, content, pages, calendar, tasks, media, users, categories, tags, comments, newsletter, 'email-templates': emailTemplates, seo, analytics, notifications, settings, ai, audit, backups, automation, jobs, profile, billing,
+  dashboard, content, pages, calendar, tasks, media, users, categories, tags, comments, newsletter, 'email-templates': emailTemplates, seo, analytics, notifications, settings, ai, audit, backups, automation, jobs, profile, billing, privacy,
 };

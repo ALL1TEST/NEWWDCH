@@ -6,6 +6,7 @@ import {
   User,
   LogOut,
   CreditCard,
+  CircleHelp,
   Languages,
   Sun,
   Moon,
@@ -17,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useSidebarStore } from '@/lib/stores/sidebar-store';
+import { useSupportPanelStore } from '@/lib/stores/support-panel-store';
 import {
   useLocaleStore,
   useT,
@@ -49,11 +51,12 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { PlanBadge } from '@/components/layout/plan-badge';
+import { useSidebar } from '@/components/ui/sidebar';
 import { toast } from 'sonner';
 
 /**
  * SINGLE-SOURCE profile menu (Profile / Language / Theme /
- * Manage Subscription / Log out).
+ * Manage Subscription / Help / Log out).
  *
  * Used by BOTH the topbar avatar and the collapsed-sidebar avatar so there
  * is exactly one implementation of the menu itself. The caller provides the
@@ -114,6 +117,13 @@ export function UserProfileMenu({
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const closeMobile = useSidebarStore((s) => s.closeMobile);
+  // Shadcn sidebar context — the REAL mobile-drawer state (the
+  // zustand closeMobile above is kept for the other handlers' parity
+  // but the actual mobile Sheet is driven by this context's
+  // setOpenMobile). Used by the Help action so opening the support
+  // panel also dismisses the mobile drawer instead of stacking on it.
+  const { setOpenMobile } = useSidebar();
+  const openSupportPanel = useSupportPanelStore((s) => s.open);
   const locale = useLocaleStore((s) => s.locale);
   const setLocale = useLocaleStore((s) => s.setLocale);
   const { t } = useT();
@@ -425,7 +435,35 @@ export function UserProfileMenu({
           </>
         )}
 
-        {/* 6 — Log out (destructive, existing auth-store handler) */}
+        {/* 6 — Help → opens the in-dashboard Support side panel
+            (SupportPanel in admin-shell.tsx; NO navigation — the
+            dashboard stays mounted underneath). Available to EVERY
+            role: it is placed directly below "Manage Subscription"
+            (where present) and directly above "Log out", so the
+            menu reads Profile / Language / Theme / Manage
+            Subscription / Help / Log out for clients, and Profile /
+            Language / Theme / Help / Log out for platform staff +
+            the Internal Account (no personal subscription). On
+            mobile the drawer-hosted menu also closes the sidebar
+            sheet (same closeMobile() the navigation actions use)
+            so the panel never stacks on the open drawer. */}
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onClick={() => {
+            openSupportPanel();
+            closeMobile();
+            // Dismiss the shadcn mobile drawer (the zustand closeMobile
+            // above mirrors the other menu actions; this one actually
+            // closes the Sheet the avatar lives in on small screens).
+            setOpenMobile(false);
+          }}
+        >
+          <CircleHelp className="h-4 w-4" />
+          {t('menu.help')}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+
+        {/* 7 — Log out (destructive, existing auth-store handler) */}
         <DropdownMenuItem
           className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
           onClick={() => void logout()}
