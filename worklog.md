@@ -12278,3 +12278,33 @@ Stage Summary:
 - Help = submenu (Help Center → floating support panel; Privacy → existing #/privacy module); no external links, no Perplexity branding, no duplicate components; existing chat behavior untouched
 - Support panel = floating chat card (margins from viewport edges, rounded corners, border+shadow, dimmed overlay, single "Karmax Support" title, composer-only footer); fully responsive (440px desktop / near-full-width mobile)
 - Not committed (no commit requested)
+
+---
+Task ID: HELP-3
+Agent: main (orchestrator)
+Task: Two changes per user spec — (1) reorder the account menu to Profile / Manage Subscription / Language / Theme / Help / Log out (Manage Subscription directly under Profile), and (2) Help → Privacy must open the PUBLIC frontend Privacy Policy in a NEW browser tab instead of rendering the dashboard-native privacy module inside the CMS shell.
+
+Work Log:
+- Inspected the routing architecture: AdminShell renders MarketingSite only when NOT authenticated; a new tab shares the cms_session_token cookie, so simply window.open('/#/privacy') would still mount the CMS tree — the privacy hash itself must gate the public tree
+- user-profile-menu.tsx: moved the conditional Manage Subscription block (item + separator) from position 5 (between Theme and Help) to directly after Profile; renumbered section comments; updated the file JSDoc order
+- user-profile-menu.tsx: replaced the Privacy submenu item's onClick (handleNavigate('privacy')) with a REAL anchor via DropdownMenuItem asChild — href="/#/privacy" target="_blank" rel="noopener noreferrer" (native external-tab behavior; onClick only dismisses the shadcn mobile drawer). No external/Perplexity links — the destination is Karmax's own public page
+- admin-shell.tsx: added isPrivacyHash helper ('#/privacy' and Chromium-normalized '#privacy') + isPublicPrivacyRoute lazy state + hashchange tracking (mirrors the existing checkout-route pattern); the render gate became `if (!isAuthenticated || isPublicPrivacyRoute) return <MarketingSite />` — #/privacy now renders the PUBLIC marketing tree for authenticated users too (marketing header/footer, no CMS sidebar/topbar/account menu); updated MARKETING_HASHES + render-gate comments
+- admin-app.tsx + module-registry.tsx: comment-only updates — documented why the 'privacy' registry entry and the role-redirect exclusions MUST stay (platform staff / Internal Account would be redirected to platform-overview / internal-dashboard before the marketing tree mounts, breaking the public page for those roles); the dashboard privacy module itself never mounts anymore (retained registration, unreachable)
+- No i18n changes needed (labels unchanged); tsc --noEmit: 277 pre-existing error lines, identical to baseline (zero new); ESLint clean on all changed files
+
+Verification (all passed, agent-browser):
+- Admin (desktop 1280×800): account menu order = Profile / Manage Subscription / Language / Theme / Help / Log out; Help submenu = Help Center / Privacy; DOM check of the Privacy anchor: href="/#/privacy", target="_blank", rel="noopener noreferrer"
+- Click Privacy → NEW TAB opens at http://localhost:3000/#/privacy: marketing root present, NO CMS sidebar / dashboard nav / account menu, title "Privacy Policy — Karmax", h1 "Privacy Policy" with full policy sections (VLM QA); session confirmed live in the new tab (GET /api/auth/me 200 — proves the public gate works for authenticated users, not just logged-out)
+- Refresh in the new tab → still the public page; direct navigation (brand-new tab, typed URL) → still the public page
+- Original tab after the click: dashboard intact (Executive Dashboard), dropdown auto-closed
+- Regression: Help Center still opens the floating "Karmax Support" panel (440px, 16px viewport gaps)
+- Mobile 390×844: drawer → avatar → Help → Privacy → new tab shows the public page with no horizontal overflow; mobile drawer auto-dismissed; original tab back on the dashboard
+- Logged-out regression (isolated session): #/privacy renders the marketing page — unchanged behavior
+- Platform Admin (staff): menu = Profile / Language / Theme / Help / Log out (Manage Subscription correctly hidden, order preserved); Privacy → new tab public page (role-redirect exclusions working); original tab stays on platform-overview
+- Browser console: no errors; dev.log: clean (no errors/warnings)
+
+Stage Summary:
+- 4 files changed: user-profile-menu.tsx (menu reorder + Privacy anchor), admin-shell.tsx (public privacy route gate), admin-app.tsx + module-registry.tsx (comment clarifications only)
+- Account menu order now Profile / Manage Subscription / Language / Theme / Help / Log out; functionality of every item unchanged
+- Help → Privacy opens Karmax's own PUBLIC Privacy Policy (marketing layout, no CMS chrome) in a new browser tab via target="_blank" + rel="noopener noreferrer"; the dashboard-native privacy module is no longer used (unreachable; registration retained for role-redirect stability); refresh + direct navigation verified for authenticated AND logged-out visitors
+- Not committed (no commit requested)

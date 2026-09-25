@@ -48,9 +48,14 @@ export default function AdminApp() {
 
   // Synchronously compute effectiveModule so there is NEVER an intermediate
   // render showing the wrong page, layout shift/decalage, or flashing "Access Denied" during role switch
-  // 'privacy' — like 'profile' — is a SHARED page (the Privacy Policy
-  // module opened from the Help panel) accessible to every role,
-  // so it is excluded from the role-specific redirects below.
+  // 'privacy' — like 'profile' — is excluded from the role-specific
+  // redirects below. #/privacy is now a PUBLIC route (the marketing
+  // site's Privacy Policy, opened in a new tab by the account menu's
+  // Help → Privacy action): keeping the hash stable for every role is
+  // what lets AdminShell's public-route gate render the public page —
+  // without these exclusions platform staff / the Internal Account
+  // would be redirected (platform-overview / internal-dashboard)
+  // before the marketing tree ever mounts.
   let effectiveModule = currentModule;
   if (isPlatformStaff && !isPlatformPage(currentModule) && currentModule !== 'profile' && currentModule !== 'privacy') {
     effectiveModule = 'platform-overview';

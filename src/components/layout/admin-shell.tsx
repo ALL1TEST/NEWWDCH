@@ -18,15 +18,26 @@ import { cn } from '@/lib/utils';
 
 // Marketing hash segments (the unauthenticated tree's routes).
 // NOTE: 'privacy' is deliberately NOT listed — the Privacy Policy is
-// a SHARED legal page: unauthenticated visitors get the marketing
-// privacy page (MarketingSite), while authenticated users get the
-// dashboard-native privacy module at #/privacy (opened from the Help
-// panel's "Privacy" action). Keeping it out of this redirect list is
-// what lets a logged-in #/privacy full-page load stay on the policy
-// page instead of bouncing to the dashboard.
+// a PUBLIC page rendered by the marketing tree for EVERYONE (see
+// isPrivacyHash below): unauthenticated visitors AND authenticated
+// users (the account menu's Help → Privacy action opens #/privacy in
+// a NEW TAB). Keeping it out of this redirect list is what lets a
+// logged-in #/privacy load render the PUBLIC policy page instead of
+// bouncing to the dashboard.
 const MARKETING_HASHES = [
   'pricing', 'blog', 'about', 'solutions', 'login', 'signup', 'terms', 'features',
 ];
+
+// '#/privacy' (or Chromium-normalized '#privacy') — the PUBLIC
+// Privacy Policy route. Unlike the MARKETING_HASHES segments (which
+// redirect authenticated users into the dashboard), the privacy hash
+// ALWAYS renders the marketing tree: AdminShell gates on it BEFORE
+// mounting any dashboard chrome, so the page shows the public
+// Karmax frontend layout (marketing header/footer) with no CMS
+// sidebar, topbar or account menu — for authenticated users too.
+function isPrivacyHash(hash: string): boolean {
+  return hash.replace(/^#\/?/, '').split(/[/?#]/)[0] === 'privacy';
+}
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isCheckingAuth, checkAuth } = useAuthStore();
@@ -68,6 +79,24 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
+
+  // ---- Public Privacy Policy route (#/privacy) ----
+  // The Privacy Policy is a PUBLIC frontend page: #/privacy renders
+  // the marketing tree (MarketingSite) for authenticated users too —
+  // the account menu's Help → Privacy action opens it in a NEW
+  // browser tab (target="_blank"), and that tab must show the public
+  // layout with NO CMS chrome. The new tab shares the session
+  // cookie, so authentication alone cannot be the gate — the hash
+  // itself is. Tracked lazily at mount + via hashchange, exactly
+  // like the checkout-route tracking below.
+  const [isPublicPrivacyRoute, setIsPublicPrivacyRoute] = useState(() =>
+    typeof window === 'undefined' ? false : isPrivacyHash(window.location.hash),
+  );
+  useEffect(() => {
+    const read = () => setIsPublicPrivacyRoute(isPrivacyHash(window.location.hash));
+    window.addEventListener('hashchange', read);
+    return () => window.removeEventListener('hashchange', read);
+  }, []);
 
   // ---- Checkout route tracking (#/checkout) ----
   // The payment step of the pricing → signup/login → payment →
@@ -140,13 +169,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || isPublicPrivacyRoute) {
     // PUBLIC MARKETING SITE — the unauthenticated surface is the
     // full marketing website (home / pricing / blog / about /
     // solutions / legal) with the login experience at #/login
     // (the LoginScreen itself is embedded there, auth logic
     // untouched). On successful login the auth store flips and
     // this shell re-renders into the dashboard below.
+    //
+    // #/privacy renders this SAME public tree for AUTHENTICATED
+    // users (new tab opened by the account menu's Help → Privacy
+    // action — the dashboard stays open in the original tab): the
+    // isPublicPrivacyRoute gate above mounts the marketing site
+    // instead of the dashboard shell, so the public Privacy Policy
+    // shows the Karmax frontend layout with no CMS chrome.
     return <MarketingSite />;
   }
 
@@ -186,9 +222,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       <CommandPalette />
-      {/* Help / Support side panel — opened from the account menu's
-          "Help" action (global support-panel store, same pattern as
-          the CommandPalette above). Mounted once, over the dashboard. */}
+      {/* Help / Support floating panel — opened from the account
+          menu's "Help → Help Center" action (global support-panel
+          store, same pattern as the CommandPalette above). Mounted
+          once, over the dashboard. */}
       <SupportPanel />
     </SidebarProvider>
   );

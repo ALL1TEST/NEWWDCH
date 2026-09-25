@@ -37,9 +37,14 @@ const jobs = dynamic(() => import('@/modules/jobs').then(m => ({ default: m.Jobs
 const emailTemplates = dynamic(() => import('@/modules/email-templates').then(m => ({ default: m.EmailTemplatesModule as ComponentType })), { loading: ModuleFallback });
 const profile = dynamic(() => import('@/modules/profile').then(m => ({ default: m.ProfileModule as ComponentType })), { loading: ModuleFallback });
 const billing = dynamic(() => import('@/modules/billing').then(m => ({ default: m.BillingModule as ComponentType })), { loading: ModuleFallback });
-// Privacy Policy — dashboard-native legal page (shared content
-// with the marketing privacy page). Reachable by every role via
-// #/privacy (e.g. the Help panel's "Privacy" action).
+// Privacy — RETAINED REGISTRATION ONLY. #/privacy is now a PUBLIC
+// route: AdminShell renders the marketing site's Privacy Policy for
+// EVERYONE (the account menu's Help → Privacy action opens it in a
+// new tab), so this dashboard module never mounts. The registration
+// itself must STAY: the role-redirect logic in admin-app.tsx relies
+// on 'privacy' being a known module (and excluded from redirects)
+// so the hash stays #/privacy and the public page renders for every
+// role — platform staff and the Internal Account included.
 const privacy = dynamic(() => import('@/modules/legal/privacy-page').then(m => ({ default: m.default as ComponentType })), { loading: ModuleFallback });
 
 export const moduleRegistry: Record<string, ComponentType> = {

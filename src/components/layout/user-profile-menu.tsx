@@ -57,8 +57,10 @@ import { useSidebar } from '@/components/ui/sidebar';
 import { toast } from 'sonner';
 
 /**
- * SINGLE-SOURCE profile menu (Profile / Language / Theme /
- * Manage Subscription / Help / Log out).
+ * SINGLE-SOURCE profile menu (Profile / Manage Subscription /
+ * Language / Theme / Help / Log out — "Manage Subscription" sits
+ * directly underneath "Profile"; it is hidden for platform staff
+ * and the Internal Account, who have no personal subscription).
  *
  * Used by BOTH the topbar avatar and the collapsed-sidebar avatar so there
  * is exactly one implementation of the menu itself. The caller provides the
@@ -317,7 +319,27 @@ export function UserProfileMenu({
         </DropdownMenuItem>
         <DropdownMenuSeparator />
 
-        {/* 3 — Language → submenu listing the COMPLETE supported
+        {/* 3 — Manage Subscription → existing billing module, placed
+            DIRECTLY underneath "Profile". Hidden for platform staff
+            (OWNER / PLATFORM_ADMIN) and the Internal Account
+            (INTERNAL role): none of them has a personal subscription
+            — the Internal Account is the platform team's internal
+            SaaS account (billing bypass), not a paying client, so a
+            "Manage Subscription" action does not apply. */}
+        {!isPlatformStaff && !isInternalAccount && (
+          <>
+            <DropdownMenuItem
+              className="cursor-pointer"
+              onClick={() => handleNavigate('billing')}
+            >
+              <CreditCard className="h-4 w-4" />
+              {t('menu.manageSubscription')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
+
+        {/* 4 — Language → submenu listing the COMPLETE supported
             locale registry (source of truth: SUPPORTED_LOCALES in
             src/lib/i18n). Compact scrollable rows; a checkmark marks
             the active locale and English (the default language)
@@ -362,7 +384,7 @@ export function UserProfileMenu({
         </DropdownMenuSub>
         <DropdownMenuSeparator />
 
-        {/* 4 — Theme → submenu with EXACTLY Light / Dark / System.
+        {/* 5 — Theme → submenu with EXACTLY Light / Dark / System.
             Reuses the SAME next-themes state the rest of the app uses
             (no second source of truth) and persists the choice through
             next-themes' own storage — Light and Dark switch the entire
@@ -418,40 +440,27 @@ export function UserProfileMenu({
         </DropdownMenuSub>
         <DropdownMenuSeparator />
 
-        {/* 5 — Manage Subscription → existing billing module. Hidden for
-            platform staff (OWNER / PLATFORM_ADMIN) and the Internal
-            Account (INTERNAL role): none of them has a personal
-            subscription — the Internal Account is the platform team's
-            internal SaaS account (billing bypass), not a paying client,
-            so a "Manage Subscription" action does not apply. */}
-        {!isPlatformStaff && !isInternalAccount && (
-          <>
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={() => handleNavigate('billing')}
-            >
-              <CreditCard className="h-4 w-4" />
-              {t('menu.manageSubscription')}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-          </>
-        )}
-
-        {/* 6 — Help → SUBMENU (Profile / Language / Theme /
-            Manage Subscription / Help / Log out ordering is
-            unchanged; the Help entry is now a submenu trigger —
-            the SAME DropdownMenuSub pattern as Language and
-            Theme — exposing exactly two actions:
+        {/* 6 — Help → SUBMENU (Profile / Manage Subscription /
+            Language / Theme / Help / Log out ordering; the Help
+            entry is a submenu trigger — the SAME DropdownMenuSub
+            pattern as Language and Theme — exposing exactly two
+            actions:
               • Help Center → opens the in-dashboard Support
                 panel (SupportPanel in admin-shell.tsx; NO
                 navigation — the dashboard stays mounted).
-              • Privacy → the dashboard's native Privacy Policy
-                module (#/privacy — modules/legal/privacy-page).
+              • Privacy → the PUBLIC Karmax Privacy Policy page
+                (the marketing site's #/privacy — the same page
+                logged-out visitors see), opened in a NEW BROWSER
+                TAB via a real anchor (target="_blank" +
+                rel="noopener noreferrer") so the dashboard stays
+                open in the original tab. The new tab never mounts
+                the CMS shell (see the public-route gate in
+                admin-shell.tsx).
             Available to EVERY role. On mobile the drawer-hosted
             menu also closes the sidebar sheet (closeMobile() +
             setOpenMobile(false), the same pair the navigation
-            actions use) so the panel/policy never stacks on the
-            open drawer. */}
+            actions use) so the panel never stacks on the open
+            drawer. */}
         <DropdownMenuSub>
           <DropdownMenuSubTrigger className="cursor-pointer">
             <CircleHelp className="h-4 w-4 text-muted-foreground" />
@@ -472,19 +481,36 @@ export function UserProfileMenu({
               <MessageCircleQuestion className="h-4 w-4 text-muted-foreground" />
               <span className="flex-1">{t('menu.helpCenter')}</span>
             </DropdownMenuItem>
+            {/* Privacy — a REAL anchor (asChild) so the browser's
+                native new-tab behavior applies: target="_blank" +
+                rel="noopener noreferrer" (never an external
+                site — this is Karmax's own public #/privacy page,
+                the same Privacy Policy logged-out visitors see).
+                The dashboard stays open in the ORIGINAL tab; the
+                new tab renders the marketing layout with NO CMS
+                chrome (admin-shell gates #/privacy to the public
+                tree for authenticated users too). The onClick only
+                dismisses the mobile drawer — the navigation itself
+                is the anchor's default action. */}
             <DropdownMenuItem
+              asChild
               className="cursor-pointer gap-2 rounded-md py-1.5 text-sm"
-              onClick={() => {
-                // Same navigation helper the other menu actions use
-                // (navigate('privacy') + closeMobile()); the extra
-                // setOpenMobile(false) dismisses the shadcn mobile
-                // drawer when the menu is hosted inside it.
-                handleNavigate('privacy');
-                setOpenMobile(false);
-              }}
             >
-              <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-              <span className="flex-1">{t('menu.privacy')}</span>
+              <a
+                href="/#/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  closeMobile();
+                  // Dismiss the shadcn mobile drawer the menu is
+                  // hosted in on small screens (same as the other
+                  // menu actions — the dashboard stays underneath).
+                  setOpenMobile(false);
+                }}
+              >
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                <span className="flex-1">{t('menu.privacy')}</span>
+              </a>
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
