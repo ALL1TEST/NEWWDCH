@@ -20,18 +20,20 @@ export function PublishDatePicker({ value, onChange, className }: PublishDatePic
 
   // Parse initial date
   const parsedDate = useMemo(() => {
-    if (!value) return new Date();
+    if (!value) return null;
     const d = new Date(value.includes('T') ? value : `${value}T00:00:00`);
-    return isNaN(d.getTime()) ? new Date() : d;
+    return isNaN(d.getTime()) ? null : d;
   }, [value]);
 
-  const [viewYear, setViewYear] = useState(() => parsedDate.getFullYear());
-  const [viewMonth, setViewMonth] = useState(() => parsedDate.getMonth());
+  const [viewYear, setViewYear] = useState(() => (parsedDate || new Date()).getFullYear());
+  const [viewMonth, setViewMonth] = useState(() => (parsedDate || new Date()).getMonth());
 
   // Sync view when value changes
   useEffect(() => {
-    setViewYear(parsedDate.getFullYear());
-    setViewMonth(parsedDate.getMonth());
+    if (parsedDate) {
+      setViewYear(parsedDate.getFullYear());
+      setViewMonth(parsedDate.getMonth());
+    }
   }, [parsedDate]);
 
   const monthName = useMemo(() => {
@@ -104,6 +106,7 @@ export function PublishDatePicker({ value, onChange, className }: PublishDatePic
   }, [viewYear, viewMonth]);
 
   const selectedDateStr = useMemo(() => {
+    if (!parsedDate) return '';
     const y = parsedDate.getFullYear();
     const m = String(parsedDate.getMonth() + 1).padStart(2, '0');
     const d = String(parsedDate.getDate()).padStart(2, '0');
@@ -119,11 +122,11 @@ export function PublishDatePicker({ value, onChange, className }: PublishDatePic
   }, []);
 
   const displayDateText = useMemo(() => {
-    return parsedDate.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+    if (!parsedDate) return '--/--/----';
+    const m = String(parsedDate.getMonth() + 1).padStart(2, '0');
+    const d = String(parsedDate.getDate()).padStart(2, '0');
+    const y = parsedDate.getFullYear();
+    return `${m}/${d}/${y}`;
   }, [parsedDate]);
 
   return (
@@ -132,20 +135,21 @@ export function PublishDatePicker({ value, onChange, className }: PublishDatePic
         <button
           type="button"
           className={cn(
-            'flex items-center gap-2 h-9 px-3 w-full rounded-md border border-input bg-transparent hover:bg-muted/20 transition-colors text-xs font-normal shadow-xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring text-left',
+            'flex items-center justify-between h-10 px-3 w-full rounded-md border border-input bg-transparent hover:bg-muted/10 transition-colors text-sm font-normal shadow-xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring text-left',
             className,
           )}
         >
-          <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <span className="truncate flex-1 text-foreground">{displayDateText}</span>
+          <span className={cn('truncate flex-1', !parsedDate ? 'text-muted-foreground' : 'text-foreground')}>
+            {displayDateText}
+          </span>
+          <CalendarIcon className="h-4 w-4 text-muted-foreground shrink-0" />
         </button>
       </PopoverTrigger>
       <PopoverContent
-        side="top"
+        side="bottom"
         align="start"
-        sideOffset={8}
-        collisionPadding={{ right: 30, left: 16, top: 16, bottom: 16 }}
-        className="w-[264px] p-3 rounded-2xl border border-border/80 bg-popover shadow-xl select-none"
+        sideOffset={6}
+        className="w-[264px] p-3 rounded-2xl border border-border/80 bg-popover shadow-xl select-none z-[200]"
       >
         {/* Month Header (matches Image 1: < September 2026 >) */}
         <div className="flex items-center justify-between pb-3 px-1">
@@ -270,20 +274,49 @@ export function PublishTimePicker({ value, onChange, className }: PublishTimePic
 
   useEffect(() => {
     if (!open) return;
-    setTimeout(() => {
-      if (hourListRef.current) {
-        const selected = hourListRef.current.querySelector('[data-selected="true"]') as HTMLElement;
+    const hourEl = hourListRef.current;
+    const minEl = minListRef.current;
+
+    const onWheelScroll = (e: WheelEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const target = e.currentTarget as HTMLElement;
+      if (target) {
+        target.scrollTop += e.deltaY;
+      }
+    };
+
+    if (hourEl) {
+      hourEl.addEventListener('wheel', onWheelScroll, { passive: false });
+    }
+    if (minEl) {
+      minEl.addEventListener('wheel', onWheelScroll, { passive: false });
+    }
+
+    const timer = setTimeout(() => {
+      if (hourEl) {
+        const selected = hourEl.querySelector('[data-selected="true"]') as HTMLElement;
         if (selected) {
-          hourListRef.current.scrollTop = selected.offsetTop - 40;
+          hourEl.scrollTop = selected.offsetTop - 40;
         }
       }
-      if (minListRef.current) {
-        const selected = minListRef.current.querySelector('[data-selected="true"]') as HTMLElement;
+      if (minEl) {
+        const selected = minEl.querySelector('[data-selected="true"]') as HTMLElement;
         if (selected) {
-          minListRef.current.scrollTop = selected.offsetTop - 40;
+          minEl.scrollTop = selected.offsetTop - 40;
         }
       }
     }, 50);
+
+    return () => {
+      clearTimeout(timer);
+      if (hourEl) {
+        hourEl.removeEventListener('wheel', onWheelScroll);
+      }
+      if (minEl) {
+        minEl.removeEventListener('wheel', onWheelScroll);
+      }
+    };
   }, [open]);
 
   return (
@@ -292,26 +325,34 @@ export function PublishTimePicker({ value, onChange, className }: PublishTimePic
         <button
           type="button"
           className={cn(
-            'flex items-center justify-between h-9 px-3 w-full rounded-md border border-input bg-transparent hover:bg-muted/20 transition-colors text-xs font-normal shadow-xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring text-left',
+            'flex items-center justify-between h-10 px-3 w-full rounded-md border border-input bg-transparent hover:bg-muted/10 transition-colors text-sm font-normal shadow-xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring text-left',
             className,
           )}
         >
           <span className={value ? 'text-foreground' : 'text-muted-foreground'}>{displayText}</span>
-          <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
         </button>
       </PopoverTrigger>
       <PopoverContent
-        side="top"
-        align="end"
-        sideOffset={8}
-        collisionPadding={{ right: 30, left: 16, top: 16, bottom: 16 }}
-        className="w-auto p-2.5 rounded-xl border border-border/80 bg-popover shadow-xl select-none"
+        side="bottom"
+        align="start"
+        sideOffset={6}
+        data-scroll-locked=""
+        data-radix-scroll-lock-ignore=""
+        className="w-auto p-2.5 rounded-xl border border-border/80 bg-popover shadow-xl select-none z-[200]"
       >
-        <div className="flex items-start gap-1">
+        <div className="flex items-start gap-1" data-scroll-locked="" data-radix-scroll-lock-ignore="">
           {/* Column 1: Hours (matches Image 2 with black active color) */}
           <div
             ref={hourListRef}
-            className="flex flex-col gap-1 max-h-56 overflow-y-auto pr-1 scrollbar-thin"
+            data-scroll-locked=""
+            data-radix-scroll-lock-ignore=""
+            onWheel={(e) => {
+              e.stopPropagation();
+              e.currentTarget.scrollTop += e.deltaY;
+            }}
+            className="flex flex-col gap-1 max-h-56 overflow-y-auto pr-1 scrollbar-thin select-none"
+            style={{ overscrollBehavior: 'contain' }}
           >
             {HOURS.map((h) => {
               const isSelected = h === hour12;
@@ -337,7 +378,14 @@ export function PublishTimePicker({ value, onChange, className }: PublishTimePic
           {/* Column 2: Minutes (matches Image 2 with black active color) */}
           <div
             ref={minListRef}
-            className="flex flex-col gap-1 max-h-56 overflow-y-auto px-1 border-x border-border/60 scrollbar-thin"
+            data-scroll-locked=""
+            data-radix-scroll-lock-ignore=""
+            onWheel={(e) => {
+              e.stopPropagation();
+              e.currentTarget.scrollTop += e.deltaY;
+            }}
+            className="flex flex-col gap-1 max-h-56 overflow-y-auto px-1 border-x border-border/60 scrollbar-thin select-none"
+            style={{ overscrollBehavior: 'contain' }}
           >
             {MINUTES.map((m) => {
               const isSelected = m === minute;

@@ -512,6 +512,7 @@ function SidebarMenuButton({
 } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const Comp = asChild ? Slot : "button"
   const { isMobile, state } = useSidebar()
+  const [tooltipOpen, setTooltipOpen] = React.useState(false)
 
   const button = (
     <Comp
@@ -521,6 +522,11 @@ function SidebarMenuButton({
       data-active={isActive}
       className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
       {...props}
+      onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+        setTooltipOpen(false);
+        (e.currentTarget as HTMLElement)?.blur();
+        props.onClick?.(e);
+      }}
     />
   )
 
@@ -539,8 +545,20 @@ function SidebarMenuButton({
   }
 
   return (
-    <Tooltip disableHoverableContent>
-      <TooltipTrigger asChild>{button}</TooltipTrigger>
+    <Tooltip
+      disableHoverableContent
+      open={tooltipOpen}
+      onOpenChange={setTooltipOpen}
+    >
+      <TooltipTrigger
+        asChild
+        onClick={(e) => {
+          setTooltipOpen(false);
+          (e.currentTarget as HTMLElement)?.blur();
+        }}
+      >
+        {button}
+      </TooltipTrigger>
       <TooltipContent
         suppressHydrationWarning
         side="right"

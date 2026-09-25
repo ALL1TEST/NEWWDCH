@@ -267,12 +267,16 @@ function MediaLibraryDialog({
 
   const { data, isLoading } = useQuery({
     queryKey: ['media-library', search],
-    queryFn: () => getApi<{ data: MediaItem[] }>(`/api/media?pageSize=50${search ? `&search=${encodeURIComponent(search)}` : ''}`),
+    queryFn: () => getApi<MediaItem[] | { data: MediaItem[] }>(`/api/media?pageSize=50${search ? `&search=${encodeURIComponent(search)}` : ''}`),
     enabled: open,
     staleTime: 30_000,
   });
 
-  const mediaItems = data?.data ?? [];
+  const mediaItems: MediaItem[] = Array.isArray(data)
+    ? data
+    : Array.isArray((data as any)?.data)
+      ? (data as any).data
+      : [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -343,25 +347,33 @@ function ScheduleDialog({
   onOpenChange,
   onSchedule,
   isPending,
+  initialDate,
+  initialTime,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSchedule: (date: string, time: string) => void;
   isPending: boolean;
+  initialDate?: string;
+  initialTime?: string;
 }) {
   const { t } = useT();
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const defaultDate = tomorrow.toISOString().split('T')[0];
-  const [date, setDate] = useState(defaultDate);
-  const [time, setTime] = useState('10:00');
+  const [date, setDate] = useState(initialDate || '');
+  const [time, setTime] = useState(initialTime || '');
+
+  useEffect(() => {
+    if (open) {
+      setDate(initialDate || '');
+      setTime(initialTime || '');
+    }
+  }, [open, initialDate, initialTime]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <CalendarClock className="h-5 w-5 text-blue-600" />
+            <CalendarClock className="h-5 w-5 text-muted-foreground" />
             {t('articles.scheduleArticleTitle')}
           </DialogTitle>
           <DialogDescription>{t('articles.scheduleArticleDescription')}</DialogDescription>
@@ -370,11 +382,11 @@ function ScheduleDialog({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">{t('articles.date')}</Label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-10" />
+            <PublishDatePicker value={date} onChange={setDate} className="h-10" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">{t('articles.time')}</Label>
-            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-10" />
+            <PublishTimePicker value={time} onChange={setTime} className="h-10" />
           </div>
         </div>
 
@@ -669,11 +681,8 @@ export function ContentEditPage({ contentId, isPage: isPageProp }: { contentId: 
           setScheduledTime(`${hh}:${mm}`);
         }
       } else {
-        const now = new Date();
-        setScheduledDate(now.toISOString().split('T')[0]);
-        const hh = String(now.getHours()).padStart(2, '0');
-        const mm = String(now.getMinutes()).padStart(2, '0');
-        setScheduledTime(`${hh}:${mm}`);
+        setScheduledDate('');
+        setScheduledTime('');
       }
     }
   }, [content, normalizedContent, reset]);
@@ -1641,62 +1650,7 @@ export function ContentEditPage({ contentId, isPage: isPageProp }: { contentId: 
                   </AccordionItem>
                 )}
 
-                {/* 2. Publishing (Date & Time Schedule) — matches Image 2 */}
-                {!isPage && (
-                  <AccordionItem value="publishing">
-                    <AccordionTrigger className="py-3 text-sm">
-                      <span className="flex items-center gap-2">
-                        <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                        {t('articles.section.publishing')}
-                      </span>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="pb-4 space-y-2.5">
-                        <div className="grid grid-cols-2 gap-3">
-                          {/* Date (matches Image 1 popup) */}
-                          <div className="space-y-1.5">
-                            <Label className="text-xs text-muted-foreground font-normal">
-                              Date
-                            </Label>
-                            <PublishDatePicker
-                              value={scheduledDate}
-                              onChange={(val) => {
-                                setScheduledDate(val);
-                                const timePart = scheduledTime || '10:00';
-                                const iso = new Date(`${val}T${timePart}:00`).toISOString();
-                                setValue('scheduledAt' as any, iso, { shouldDirty: true });
-                              }}
-                            />
-                          </div>
-
-                          {/* Time (matches Image 2 popup) */}
-                          <div className="space-y-1.5">
-                            <Label className="text-xs text-muted-foreground font-normal flex items-center gap-1">
-                              <Clock className="h-3 w-3 text-muted-foreground" />
-                              <span>Time</span>
-                            </Label>
-                            <PublishTimePicker
-                              value={scheduledTime}
-                              onChange={(val) => {
-                                setScheduledTime(val);
-                                if (scheduledDate) {
-                                  const iso = new Date(`${scheduledDate}T${val}:00`).toISOString();
-                                  setValue('scheduledAt' as any, iso, { shouldDirty: true });
-                                }
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        <p className="text-[11px] text-muted-foreground pt-0.5">
-                          Auto-publish on schedule
-                        </p>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                )}
-
-                {/* 3. Category — Separated in its own section */}
+                {/* 2. Category — Separated in its own section */}
                 {!isPage && (
                   <AccordionItem value="categories">
                     <AccordionTrigger className="py-3 text-sm">
@@ -1947,6 +1901,8 @@ export function ContentEditPage({ contentId, isPage: isPageProp }: { contentId: 
         onOpenChange={setScheduleOpen}
         onSchedule={handleSchedule}
         isPending={isSubmitting}
+        initialDate={scheduledDate}
+        initialTime={scheduledTime}
       />
 
       {/* Media Library Dialog */}

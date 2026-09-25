@@ -92,10 +92,32 @@ export async function GET(request: NextRequest) {
       siteFilter = await getSiteWhere(request);
     }
 
-    const where: Record<string, unknown> = { ...siteFilter };
-    if (category && CATEGORIES.includes(category as typeof CATEGORIES[number])) where.category = category;
-    if (status && STATUSES.includes(status as typeof STATUSES[number])) where.status = status;
-    if (search) where.name = { contains: search, mode: 'insensitive' };
+    const andConditions: Record<string, unknown>[] = [];
+
+    if (scope === 'platform') {
+      andConditions.push({ siteId: null });
+    } else if (siteFilter && Object.keys(siteFilter).length > 0) {
+      // Client view: show templates belonging to this site PLUS system defaults (siteId: null or isSystem: true)
+      andConditions.push({
+        OR: [
+          siteFilter,
+          { siteId: null },
+          { isSystem: true },
+        ],
+      });
+    }
+
+    if (category && CATEGORIES.includes(category as typeof CATEGORIES[number])) {
+      andConditions.push({ category });
+    }
+    if (status && STATUSES.includes(status as typeof STATUSES[number])) {
+      andConditions.push({ status });
+    }
+    if (search) {
+      andConditions.push({ name: { contains: search, mode: 'insensitive' } });
+    }
+
+    const where: Record<string, unknown> = andConditions.length > 0 ? { AND: andConditions } : {};
 
     const orderBy: Record<string, string> = { [sort]: order };
 

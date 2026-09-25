@@ -140,6 +140,11 @@ function buildHash(mod: string, itemId?: string | null, subPage?: string | null)
   return `#${mod}`;
 }
 
+function buildFullUrl(hash: string): string {
+  if (typeof window === 'undefined') return hash;
+  return `${window.location.pathname}${window.location.search}${hash}`;
+}
+
 // -------------------- Initial State --------------------
 
 const RAW_INITIAL_HASH =
@@ -158,7 +163,7 @@ if (typeof window !== 'undefined') {
   );
   const normalizedInitial = `#${RAW_INITIAL_HASH.replace(/^#\/?/, '')}`;
   if (normalizedInitial !== '#' && normalizedInitial !== canonicalHash) {
-    window.history.replaceState(null, '', canonicalHash || '#');
+    window.history.replaceState(null, '', buildFullUrl(canonicalHash || '#'));
   }
 }
 
@@ -193,13 +198,14 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       currentSubPage: targetSubPage,
     });
 
-    // Update browser hash without triggering a page reload
+    // Update browser hash without triggering a page reload while preserving query params (e.g. siteId)
     const hash = buildHash(targetMod, targetItemId, targetSubPage);
     if (typeof window !== 'undefined') {
+      const fullUrl = buildFullUrl(hash);
       if (window.location.hash !== hash) {
-        window.history.pushState(null, '', hash);
+        window.history.pushState(null, '', fullUrl);
       } else {
-        window.history.replaceState(null, '', hash);
+        window.history.replaceState(null, '', fullUrl);
       }
     }
   },
@@ -230,7 +236,7 @@ function syncHashToStore() {
   // replaceState does NOT fire hashchange, so no loop is possible.
   const canonical = buildHash(parsed.mod, parsed.itemId, parsed.subPage);
   if (hash !== canonical && canonical) {
-    window.history.replaceState(null, '', canonical);
+    window.history.replaceState(null, '', buildFullUrl(canonical));
   }
 }
 

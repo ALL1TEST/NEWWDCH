@@ -356,12 +356,12 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
 
 function SaveIndicator({ state }: { state: SaveState }) {
   const { t } = useT();
+  if (state === 'idle') return null;
   return (
     <div className="flex items-center gap-2 text-xs">
       <div
         className={cn(
           'h-2 w-2 rounded-full transition-colors duration-300',
-          state === 'idle' && 'bg-zinc-300 dark:bg-zinc-600',
           state === 'dirty' && 'bg-amber-400',
           state === 'saving' && 'bg-sky-400 animate-pulse',
           state === 'saved' && 'bg-emerald-400',
@@ -370,13 +370,11 @@ function SaveIndicator({ state }: { state: SaveState }) {
       <span
         className={cn(
           'tabular-nums',
-          state === 'idle' && 'text-muted-foreground',
           state === 'dirty' && 'text-amber-600 dark:text-amber-400',
           state === 'saving' && 'text-sky-600 dark:text-sky-400',
           state === 'saved' && 'text-emerald-600 dark:text-emerald-400',
         )}
       >
-        {state === 'idle' && t('emailTemplates.saveStateIdle')}
         {state === 'dirty' && t('emailTemplates.saveStateDirty')}
         {state === 'saving' && t('emailTemplates.saveStateSaving')}
         {state === 'saved' && t('emailTemplates.saveStateSaved')}
@@ -838,6 +836,57 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
     });
   }, [templateName, subject, htmlBody, settings, createMutation, t]);
 
+  // -------------------- Preview Navigation Handler --------------------
+
+  const handleNavigatePreview = useCallback(async () => {
+    if (isNew) {
+      if (!templateName.trim()) {
+        toast.error(t('emailTemplates.nameRequired'));
+        return;
+      }
+      try {
+        setSaveState('saving');
+        const res = await postApi<EmailTemplate>('/api/email-templates', {
+          name: templateName.trim(),
+          subject,
+          htmlBody,
+          category: settings.category,
+          status: settings.status,
+          createdById: currentUser?.id,
+          ...(isPlatform ? { scope: 'platform' } : {}),
+        });
+        toast.success(t('emailTemplates.created'));
+        if (isPlatform) {
+          queryClient.invalidateQueries({ queryKey: ['email-templates', 'list', 'platform'] });
+          queryClient.invalidateQueries({ queryKey: ['email-templates', 'category-counts', 'platform'] });
+        } else {
+          queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.all });
+          queryClient.invalidateQueries({ queryKey: ['email-templates', 'category-counts', 'client'] });
+        }
+        onPreview(res.id);
+      } catch (err: any) {
+        setSaveState('idle');
+        toast.error(err.message || t('emailTemplates.createFailed'));
+      }
+    } else {
+      if (isDirty) {
+        try {
+          await patchApi(`/api/email-templates/${templateId}`, {
+            name: templateName.trim(),
+            subject,
+            htmlBody,
+            category: settings.category,
+            status: settings.status,
+          });
+          queryClient.invalidateQueries({ queryKey: queryKeys.emailTemplates.detail(templateId) });
+        } catch {
+          // ignore auto-save failure on navigation, will proceed to preview
+        }
+      }
+      onPreview(templateId);
+    }
+  }, [isNew, templateName, subject, htmlBody, settings, currentUser, isPlatform, isDirty, templateId, onPreview, queryClient, t]);
+
   // -------------------- Keyboard Shortcuts --------------------
 
   useEffect(() => {
@@ -1137,15 +1186,11 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
           <button
             type="button"
             onClick={onBack}
-            className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            className="flex items-center gap-1.5 font-medium text-foreground hover:text-foreground/80 transition-colors shrink-0"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span className="hidden sm:inline">{isPlatform ? t('emailTemplates.platformEmailTemplates') : t('title.emailTemplates')}</span>
+            <span>{isPlatform ? t('emailTemplates.platformEmailTemplates') : t('title.emailTemplates')}</span>
           </button>
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <span className="truncate font-medium max-w-[200px] lg:max-w-[400px]">
-            {isNew ? t('emailTemplates.createTemplate') : (template?.name ?? t('common.loading'))}
-          </span>
         </nav>
 
         {/* Right Actions */}
@@ -1154,6 +1199,16 @@ export function TemplateEditor({ templateId, isNew = false, scope = 'client', on
           <div className="hidden md:flex mr-2">
             <SaveIndicator state={displaySaveState} />
           </div>
+
+          {/* Preview Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleNavigatePreview}
+          >
+            <Eye className="h-4 w-4" />
+            <span className="ml-1.5 hidden sm:inline">{t('emailTemplates.preview') || 'Preview'}</span>
+          </Button>
 
           {/* Cancel */}
           <Button

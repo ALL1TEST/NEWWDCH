@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
+import { getSiteFromRequest } from '@/lib/site-context';
+import { getAuthUser } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -28,7 +30,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 const duplicateSchema = z.object({
   name: z.string().min(1).max(200).trim().optional(),
-  createdById: z.string().min(1, 'Creator ID is required'),
+  createdById: z.string().optional(),
 });
 
 // =====================================================================
@@ -49,14 +51,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    let body: unknown;
+    let body: Record<string, unknown> = {};
     try {
-      body = await request.json();
+      const parsedBody = await request.json();
+      if (typeof parsedBody === 'object' && parsedBody !== null) {
+        body = parsedBody as Record<string, unknown>;
+      }
     } catch {
-      return NextResponse.json(
-        { error: { code: 'INVALID_JSON', message: 'Request body must be valid JSON' }, meta: { requestId: id } },
-        { status: 400 },
-      );
+      // Empty or non-JSON body is valid
+      body = {};
     }
 
     const parsed = duplicateSchema.safeParse(body);
@@ -85,9 +88,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
       finalSlug = `${slug}-${counter++}`;
     }
 
+    const requestSiteId = await getSiteFromRequest(request);
+    const targetSiteId = template.siteId ?? requestSiteId ?? null;
+
+    const authUser = await getAuthUser(request);
+    let createdById = d.createdById || authUser?.id || template.createdById;
+    if (!createdById) {
+      const firstUser = await db.user.findFirst({ select: { id: true }, orderBy: { createdAt: 'asc' } });
+      createdById = firstUser?.id;
+    }
+    if (!createdById) {
+      return NextResponse.json(
+        { error: { code: 'NO_USER', message: 'No user found to assign as creator' }, meta: { requestId: id } },
+        { status: 400 },
+      );
+    }
+
     const duplicate = await db.emailTemplate.create({
       data: {
-        siteId: template.siteId,
+        siteId: targetSiteId,
         name,
         slug: finalSlug,
         subject: template.subject,
@@ -105,7 +124,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         enableAttachments: template.enableAttachments,
         isSystem: false,
         defaultBody: template.defaultBody,
-        createdById: d.createdById,
+        createdById,
       },
     });
 

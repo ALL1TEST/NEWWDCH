@@ -737,6 +737,9 @@ function CollapsedParentNavItem({
     e.preventDefault();
     e.stopPropagation();
     setFloatOpen(false); // close the floating submenu after navigation…
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     // …but do NOT touch sidebar expansion state (rule #7).
     const hash = child.href.replace(/^#/, '');
     const parts = hash.split('/');
@@ -790,6 +793,9 @@ function CollapsedParentNavItem({
           collisionPadding={12}
           className="w-56 rounded-md border bg-popover p-1.5 shadow-md"
           onEscapeKeyDown={() => setFloatOpen(false)}
+          onCloseAutoFocus={(e) => {
+            e.preventDefault();
+          }}
         >
           <ul
             role="menu"

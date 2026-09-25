@@ -74,7 +74,7 @@ type DeviceMode = 'desktop' | 'tablet' | 'mobile';
 // Variable Replacement Map
 // ============================================================
 
-const DUMMY_DATA: Record<string, string> = {
+export const DUMMY_DATA: Record<string, string> = {
   '{{customer.first_name}}': 'John',
   '{{customer.last_name}}': 'Doe',
   '{{customer.name}}': 'John Doe',
@@ -322,9 +322,6 @@ export function TemplatePreview({ templateId, scope = 'client', onBack }: Templa
           <h2 className="text-base font-semibold text-foreground truncate">
             {t('emailTemplates.emailPreview')}
           </h2>
-          <Badge className="shrink-0 bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800">
-            {t('emailTemplates.testMode')}
-          </Badge>
         </div>
 
         {/* Right: Device Toggles + Dark Mode */}

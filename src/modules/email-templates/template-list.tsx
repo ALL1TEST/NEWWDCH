@@ -438,7 +438,7 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
   }, [queryClient, isPlatform]);
 
   const duplicateMutation = useMutation({
-    mutationFn: (id: string) => postApi(`/api/email-templates/${id}/duplicate`),
+    mutationFn: (id: string) => postApi(`/api/email-templates/${id}/duplicate`, {}),
     onSuccess: () => {
       toast.success(t('emailTemplates.duplicated'));
       invalidateAll();
@@ -706,14 +706,6 @@ export function TemplateList({ onEdit, onPreview, scope = 'client' }: TemplateLi
                         <span className="truncate font-medium text-foreground">
                           {template.name}
                         </span>
-                        {template.isSystem && (
-                          <Badge
-                            variant="outline"
-                            className="shrink-0 px-1.5 py-0 text-[10px] font-medium text-muted-foreground border-dashed"
-                          >
-                            {t('emailTemplates.systemBadge')}
-                          </Badge>
-                        )}
                       </div>
                     </TableCell>
 

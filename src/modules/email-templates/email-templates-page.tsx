@@ -37,6 +37,7 @@ export function EmailTemplatesPage({ scope = 'client' }: { scope?: 'client' | 'p
   const currentItemId = useNavigationStore((s) => s.currentItemId);
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
+  const [previewFromEditor, setPreviewFromEditor] = React.useState(false);
 
   // The module name must match the navigation-store module that
   // rendered this router. For client scope the platform sidebar /
@@ -52,7 +53,20 @@ export function EmailTemplatesPage({ scope = 'client' }: { scope?: 'client' | 'p
       <TemplatePreview
         templateId={currentItemId}
         scope={scope}
-        onBack={() => navigate(moduleName, currentItemId)}
+        onBack={() => {
+          const fromEditor =
+            previewFromEditor ||
+            (typeof window !== 'undefined' &&
+              sessionStorage.getItem(`email_preview_from_${currentItemId}`) === 'editor');
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem(`email_preview_from_${currentItemId}`);
+          }
+          if (fromEditor) {
+            navigate(moduleName, currentItemId);
+          } else {
+            navigate(moduleName);
+          }
+        }}
       />
     );
   }
@@ -66,7 +80,13 @@ export function EmailTemplatesPage({ scope = 'client' }: { scope?: 'client' | 'p
         isNew={isNew}
         scope={scope}
         onBack={() => navigate(moduleName)}
-        onPreview={(id) => navigate(moduleName, id, 'preview')}
+        onPreview={(id) => {
+          setPreviewFromEditor(true);
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem(`email_preview_from_${id}`, 'editor');
+          }
+          navigate(moduleName, id, 'preview');
+        }}
         onCreated={(id) => navigate(moduleName, id)}
       />
     );
@@ -77,7 +97,13 @@ export function EmailTemplatesPage({ scope = 'client' }: { scope?: 'client' | 'p
     <TemplateList
       scope={scope}
       onEdit={(id) => navigate(moduleName, id)}
-      onPreview={(id) => navigate(moduleName, id, 'preview')}
+      onPreview={(id) => {
+        setPreviewFromEditor(false);
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem(`email_preview_from_${id}`);
+        }
+        navigate(moduleName, id, 'preview');
+      }}
     />
   );
 }

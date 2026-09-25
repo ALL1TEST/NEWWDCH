@@ -335,6 +335,11 @@ export const useSiteStore = create<SiteState>((set, get) => ({
 
 if (typeof window !== 'undefined') {
   window.addEventListener('popstate', () => {
+    const params = new URLSearchParams(window.location.search);
+    // If the URL does not contain an explicit siteId query parameter,
+    // do NOT reset the active site on browser back/forward or hash navigation.
+    if (!params.has('siteId')) return;
+
     const urlRef = readFromUrl();
     const { activeSiteSlug, sites } = useSiteStore.getState();
     const currentSlug = urlRef;

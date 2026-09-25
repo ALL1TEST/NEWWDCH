@@ -964,7 +964,7 @@ export function MediaListPage() {
       {/* Search + View Toggle */}
       <div className="flex items-center justify-between px-6 pt-1 pb-2 bg-card">
         <div className="flex items-center gap-3 flex-1">
-          <div className="relative flex-1 max-w-xl">
+          <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={search} onChange={(e) => handleSearchChange(e.target.value)}
