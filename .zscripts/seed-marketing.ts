@@ -357,7 +357,7 @@ async function main() {
     { title: 'Notes on Running a Weekly Newsletter', slug: 'running-weekly-newsletter', status: 'PUBLISHED', daysAgo: 12, cat: 'field-notes', cover: 'automation-cover.png' },
     { title: 'Interviewing Your Own Readers', slug: 'interviewing-your-own-readers', status: 'IN_REVIEW', daysAgo: 1, cat: 'field-notes', cover: 'seo-cover.png' },
     { title: 'A Gentle Argument for Fewer Plugins', slug: 'argument-for-fewer-plugins', status: 'DRAFT', daysAgo: 0, cat: 'craft', cover: 'design-system-cover.png' },
-    { title: 'What We Learned Migrating 200 Posts', slug: 'migrating-200-posts', status: 'SCHEDULED', daysAhead: 3, cat: 'craft', cover: 'performance-cover.png' },
+    { title: 'What We Learned Migrating 200 Posts', slug: 'migrating-200-posts', status: 'APPROVED', scheduled: true, daysAhead: 3, cat: 'craft', cover: 'performance-cover.png' },
   ];
 
   for (const sa of siteArticles) {
@@ -367,7 +367,10 @@ async function main() {
       data: {
         title: sa.title,
         slug: sa.slug,
-        status: sa.status as 'PUBLISHED' | 'IN_REVIEW' | 'DRAFT' | 'SCHEDULED',
+        // PostStatus has no SCHEDULED value — the app's own convention
+        // (content-create-page.tsx submitWithStatus) models scheduled content
+        // as status APPROVED + a future scheduledAt timestamp.
+        status: sa.status as 'PUBLISHED' | 'IN_REVIEW' | 'DRAFT' | 'APPROVED',
         content: `<p>${sa.title} — a working draft managed in the Sitesmith demo site. The editor, media library, SEO panel and publishing flow are all part of the real product.</p><h2>Why this exists</h2><p>Demo content for the Craft Journal shows how a real editorial team uses one pipeline for drafts, review, scheduling and publishing.</p>`,
         excerpt: `Notes from the Craft Journal: ${sa.title.toLowerCase()}.`,
         authorId: adminUser.id,
@@ -378,11 +381,9 @@ async function main() {
         publishedAt:
           sa.status === 'PUBLISHED'
             ? new Date(Date.now() - (sa.daysAgo ?? 0) * 24 * 3600 * 1000)
-            : sa.status === 'SCHEDULED'
-              ? new Date(Date.now() + (sa.daysAhead ?? 0) * 24 * 3600 * 1000)
-              : null,
+            : null,
         scheduledAt:
-          sa.status === 'SCHEDULED' ? new Date(Date.now() + (sa.daysAhead ?? 0) * 24 * 3600 * 1000) : null,
+          sa.scheduled ? new Date(Date.now() + (sa.daysAhead ?? 0) * 24 * 3600 * 1000) : null,
       },
     });
     console.log(`  + site article: ${sa.title} [${sa.status}]`);

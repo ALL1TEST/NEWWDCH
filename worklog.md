@@ -12208,3 +12208,43 @@ Stage Summary:
 - Privacy link → dashboard-native Privacy Policy at #/privacy (shared content with the marketing page; refresh-safe for authenticated users; marketing page unchanged for logged-out visitors)
 - Dev badge disabled (was covering the send button in dev previews; zero prod impact)
 - Not committed/pushed (no commit requested)
+
+---
+Task ID: FIX-1
+Agent: main (orchestrator)
+Task: User reported "fix" with a screenshot (image failed to save to upload/) — dev.log showed repeated POST /api/auth/login 401 failures. Root cause: the SQLite DB had been wiped at some point and only contained the HELP-1 E2E test user; every demo account advertised on the login screen (Admin / Platform Admin / Internal quick sign-in buttons) was missing → all login attempts returned "Invalid email or password".
+
+Work Log:
+- Diagnosed from dev.log: 4× POST /api/auth/login 401; DB inventory showed 1 user (e2e.help.test), 0 sites, 0 settings, 0 content — database effectively empty
+- Re-ran the project's own seeders in dependency order:
+  1. bun run src/lib/seed.ts — base CMS seed (admin/editor/author + content types, categories, tags, media, 10 content items, navigation, settings, comments, notifications)
+  2. bun run src/lib/platform/bootstrap.ts — platform accounts (owner/platform/internal/admin + free/plus/pro/max plan demo accounts) + plan configs, feature flags, country pricing, coupons
+  3. bun run .zscripts/seed-marketing.ts — marketing blog articles + "The Craft Journal" demo site
+- Fixed a pre-existing bug in .zscripts/seed-marketing.ts: it inserted status 'SCHEDULED' which does not exist in the PostStatus enum → Prisma throw. The app's own convention (content-create-page.tsx) models scheduled content as status APPROVED + future scheduledAt — updated the script to match (status APPROVED + scheduled flag)
+- Generated 9 blog cover images (public/uploads/blog/*.png, 1344×768, Karmax brand style: warm cream + burnt orange + near-black flat editorial illustrations) via image-generation skill; re-ran marketing seed to attach them as Media records + featured images; wrote one-off script to attach covers to the 6 demo-site articles created before the covers existed
+- Generated the 4 base-seed media files that were missing on disk (hero-banner-2025.png, typescript-guide-cover.jpg, nextjs-performance.webp + thumbnails/, style-guide-v3.pdf minimal valid PDF)
+- Discovered follow-on bug while verifying: user (after login was fixed) had switched admin@example.com to the Max plan via Manage Subscription → their Craft Journal demo site (planScope NULL) + all its content vanished from dashboard/articles/media. Root cause: commit 21f8a04 introduced EXACT-MATCH plan isolation (non-free plans see only planScope === currentPlan), contradicting the documented tier semantics in THREE places (Site.planScope schema comment: "NULL ... always visible to the owner", "user plan tier >= site planScope tier"; entitlements.ts header; getPlanTier/siteVisibleForTier helpers)
+- Fixed plan isolation to documented tier semantics:
+  • src/lib/platform/entitlements.ts — added getVisiblePlanScopes(planId) helper (scopes at or below user's tier); siteEligibleForPlan now tier-based (removed exact-match branch; keeps maxSites=0 rule) so eligibility counts match visibility
+  • src/lib/site-context.ts — getActivePlanSiteId + getSiteWhere: OR [{ planScope: null }, { planScope: { in: visibleScopes } }] (free plan resolves to identical behavior as before — no regression; upgrades keep access; downgrades still hide higher-tier sites)
+  • src/app/api/sites/route.ts — GET visibility filter: same tier-based OR
+- Fixed media library empty state: src/app/api/media/route.ts GET now uses getSiteWhereIncludeGlobal (consistent with categories/tags/content-types routes) so global (siteId null) records like the platform cover images are visible alongside site-scoped uploads while plan isolation still applies
+- Dev server died silently during git stash verification round-trip → restarted with the persistent double-fork command (PPID 1)
+
+Verification (all passed):
+- curl: login 200 for admin@example.com/admin123, platform@example.com/platform123, internal@example.com/internal123, free@example.com/free123
+- Browser E2E (admin, Max plan): quick sign-in → Executive Dashboard shows 1/1 Sites Online, Total Content 6 (3 published), pending review card; Articles page lists all 6 Craft Journal articles (Approved/Draft/IN_REVIEW/PUBLISHED statuses); Media page shows 9 cover thumbnails, 0 broken (VLM: "grid of media thumbnails, images render correctly, clean layout")
+- Browser E2E: Platform Admin quick sign-in → #platform-overview with full platform sidebar; Internal Account quick sign-in → #internal-dashboard (empty states expected — owns no sites)
+- Marketing blog (#blog): 9 covers render, 0 broken (VLM: consistent flat-illustration style, brand orange palette; cookie banner is by design)
+- Article detail page renders title/status/excerpt/content correctly (no cover by design — edit page shows it)
+- tsc --noEmit: zero NEW errors (all flagged errors verified identical on git-stash baseline); ESLint: clean on all changed files (2 pre-existing require() errors in sites route unchanged)
+- Fresh reload console: zero errors/warnings; dev.log: all API 200s, no errors
+- Free-plan filter unchanged (getVisiblePlanScopes('free') = ['free'] + null → identical to old behavior); platform staff global visibility branch untouched
+
+Stage Summary:
+- Login fixed by restoring the full demo dataset with the project's own seeders (3 seed scripts + 1 enum-bug fix in seed-marketing.ts)
+- 13 media files generated/restored on disk (9 blog covers + hero + 2 covers + PDF + thumbnail)
+- Plan isolation corrected to the documented tier semantics — upgrading a plan no longer hides existing sites (admin on Max sees Craft Journal again); downgrades still hide higher-tier sites
+- Media library now shows global records (same convention as categories/tags/content-types)
+- Files changed: .zscripts/seed-marketing.ts, src/lib/platform/entitlements.ts, src/lib/site-context.ts, src/app/api/sites/route.ts, src/app/api/media/route.ts
+- Not committed/pushed (no commit requested)

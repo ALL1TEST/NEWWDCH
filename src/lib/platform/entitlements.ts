@@ -128,6 +128,19 @@ export async function getUserPlanTier(user: EntitlementUser): Promise<number> {
 // under a Free plan) and where Plus showed "dod" despite maxSites=0.
 // (`db` is already imported at the top of this module — reused.)
 
+/** All plan-scope values a site can carry (see the Site.planScope column). */
+const PLAN_SCOPES = ['free', 'plus', 'pro', 'max'] as const;
+
+/** The planScope values whose sites are VISIBLE to a user on `planId`:
+ *  every plan at or below the user's tier (documented tier semantics —
+ *  upgrading never removes access, downgrading hides higher-tier sites).
+ *  NULL/legacy planScope (tier 0) is covered by callers as "always
+ *  visible to the owner" and must be OR-ed separately. */
+export function getVisiblePlanScopes(planId: string | null | undefined): string[] {
+  const userTier = getPlanTier(planId);
+  return PLAN_SCOPES.filter((p) => getPlanTier(p) <= userTier);
+}
+
 /** Whether a site with the given planScope is ELIGIBLE under the
  *  user's current plan (tier check + plan-allows-sites check).
  *  `planMaxSites` is the user's plan limit (from getEffectiveLimitsAsync).
@@ -140,13 +153,12 @@ export function siteEligibleForPlan(
 ): boolean {
   // A plan that allows 0 sites (maxSites=0) makes NO site eligible.
   if (planMaxSites === 0) return false;
-  // If userPlanId is specified, match the plan directly so sites created in one plan don't leak into others
-  if (userPlanId && userPlanId !== 'internal') {
-    const sPlan = (sitePlanScope || 'free').toLowerCase();
-    const uPlan = userPlanId.toLowerCase();
-    return sPlan === uPlan;
-  }
-  return siteVisibleForTier(sitePlanScope, userPlanTier);
+  // Tier semantics (single source of truth, matches the Site.planScope
+  // schema docs): a site is eligible when the user's plan tier >= the
+  // site's required tier. NULL/legacy scope = tier 0 = always eligible.
+  // This keeps the eligibility count consistent with the visibility
+  // filter used by GET /api/sites and getSiteWhere().
+  return siteVisibleForTier(sitePlanScope, userPlanId ? getPlanTier(userPlanId) : userPlanTier);
 }
 
 /** The authoritative count of ELIGIBLE sites the user currently owns.

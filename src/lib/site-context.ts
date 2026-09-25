@@ -5,7 +5,7 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { getAuthUser } from '@/lib/platform/platform-auth';
-import { getEffectivePlanIdAsync } from '@/lib/platform/entitlements';
+import { getEffectivePlanIdAsync, getVisiblePlanScopes } from '@/lib/platform/entitlements';
 import type { AuthUser } from '@/lib/platform/platform-auth';
 
 /**
@@ -41,12 +41,13 @@ export async function getSiteFromRequest(request: NextRequest): Promise<string |
 export async function getActivePlanSiteId(authUser: AuthUser): Promise<string | null> {
   try {
     const { planId } = await getEffectivePlanIdAsync(authUser);
-    const currentPlan = (planId || 'free').toLowerCase();
+    // Tier semantics: a site is visible when the user's plan tier >= the
+    // site's required planScope tier; NULL (legacy) scope is always visible.
     const site = await db.site.findFirst({
       where: {
         ownerId: authUser.id,
         status: { not: 'ARCHIVED' },
-        OR: currentPlan === 'free' ? [{ planScope: 'free' }, { planScope: null }] : [{ planScope: currentPlan }],
+        OR: [{ planScope: null }, { planScope: { in: getVisiblePlanScopes(planId) } }],
       },
       orderBy: { updatedAt: 'desc' },
       select: { id: true },
@@ -60,13 +61,16 @@ export async function getActivePlanSiteId(authUser: AuthUser): Promise<string | 
 /**
  * Build a Prisma where clause for site-scoped queries, strictly isolated by the user's active Plan.
  *
- * PLAN ISOLATION RULES:
+ * PLAN ISOLATION RULES (tier semantics — see Site.planScope schema docs):
  * 1. If a specific siteId is requested:
  *    - Validates that the requested site belongs to the user's current plan.
  *    - If it does, returns { siteId }.
  *    - If it belongs to a different plan, returns { siteId: '__FORBIDDEN_SITE__' } to prevent data cross-contamination.
  * 2. If in "All Sites" mode (no siteId or siteId='all'):
- *    - Resolves all active sites belonging to the user's current active plan.
+ *    - Resolves all active sites whose required planScope tier is <= the
+ *      user's current plan tier (upgrading never removes access;
+ *      downgrading hides higher-tier sites). NULL/legacy planScope is
+ *      always visible to the owner.
  *    - Returns { siteId: { in: planSiteIds } }.
  *    - This guarantees that "All Sites" NEVER leaks articles, automations, media, etc. from other plans!
  * 3. Platform staff (OWNER / PLATFORM_ADMIN) have global visibility across all sites when in All Sites mode.
@@ -84,13 +88,12 @@ export async function getSiteWhere(request: NextRequest): Promise<Record<string,
   // Client CMS users — strictly isolate by the user's current plan
   if (authUser) {
     const { planId } = await getEffectivePlanIdAsync(authUser);
-    const currentPlan = (planId || 'free').toLowerCase();
 
     const sites = await db.site.findMany({
       where: {
         ownerId: authUser.id,
         status: { not: 'ARCHIVED' },
-        OR: currentPlan === 'free' ? [{ planScope: 'free' }, { planScope: null }] : [{ planScope: currentPlan }],
+        OR: [{ planScope: null }, { planScope: { in: getVisiblePlanScopes(planId) } }],
       },
       select: { id: true },
     });

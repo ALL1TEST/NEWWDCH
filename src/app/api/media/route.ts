@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
-import { getSiteWhere } from '@/lib/site-context';
+import { getSiteWhereIncludeGlobal } from '@/lib/site-context';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -53,7 +53,11 @@ export async function GET(request: NextRequest) {
     const processingStatus = sp.get('processingStatus') || undefined;
     const search = sp.get('search') || '';
 
-    const siteFilter = await getSiteWhere(request);
+    // Include BOTH site-scoped AND global (siteId null) records — same
+    // convention as categories / tags / content-types: shared library
+    // resources (e.g. platform cover images) stay visible alongside
+    // site-scoped uploads, while plan isolation is still respected.
+    const siteFilter = await getSiteWhereIncludeGlobal(request);
     const where: Record<string, unknown> = { ...siteFilter, deletedAt: null };
     // When folderId is explicitly empty string, show root-level items only (folderId = null)
     // When folderId has a value, show items in that folder

@@ -2,7 +2,7 @@ import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/platform/platform-auth';
 import { checkLimit, limitExceededResponse, getEffectiveLimitsAsync } from '@/lib/platform/usage-limits';
-import { hasBillingBypass, getUserPlanTier, siteEligibleForPlan } from '@/lib/platform/entitlements';
+import { hasBillingBypass, getUserPlanTier, siteEligibleForPlan, getVisiblePlanScopes } from '@/lib/platform/entitlements';
 import { getEffectivePlanIdAsync } from '@/lib/platform/entitlements';
 
 // ============================================================
@@ -68,20 +68,17 @@ export async function GET(request: NextRequest) {
       // Admin User's sites separate from the Internal Account's sites.
       where.ownerId = user.id;
 
-      // Plan isolation: sites created under a specific plan only appear
-      // when the user is on that plan.
-      // E.g. A site created under Free does NOT appear in Plus, Pro, or Max.
+      // Plan isolation (tier semantics — see Site.planScope schema docs):
+      // a site is visible when the user's current plan tier >= the site's
+      // required planScope tier. Upgrading never removes access;
+      // downgrading hides higher-tier sites. NULL/legacy planScope is
+      // always visible to the owner.
       if (user.role !== 'INTERNAL') {
         const { planId } = await getEffectivePlanIdAsync(user);
-        const currentPlan = (planId || 'free').toLowerCase();
-        if (currentPlan === 'free') {
-          where.OR = [
-            { planScope: 'free' },
-            { planScope: null },
-          ];
-        } else {
-          where.planScope = currentPlan;
-        }
+        where.OR = [
+          { planScope: null },
+          { planScope: { in: getVisiblePlanScopes(planId) } },
+        ];
       }
     }
 
