@@ -1,14 +1,15 @@
 'use client';
 
 // ============================================================
-// SOLUTIONS + LEGAL + CONTACT pages
+// LEGAL + CONTACT pages
 // ============================================================
-// The remaining compact legal pages (security/accessibility),
-// the legal center, and the contact page. All content is
-// product-honest — no invented team, stats or claims.
-// (The About experience now lives in about-page.tsx; the
-// long-form Privacy Policy lives in privacy-page.tsx; the
-// long-form Terms of Service lives in terms-page.tsx.)
+// The remaining compact legal pages (accessibility), the legal
+// center, and the contact page. All content is product-honest —
+// no invented team, stats or claims. (The About experience now
+// lives in about-page.tsx; the long-form Privacy Policy lives in
+// privacy-page.tsx; the long-form Terms of Service lives in
+// terms-page.tsx; the long-form Security page lives in
+// security-page.tsx.)
 // ============================================================
 
 import React from 'react';
@@ -46,39 +47,10 @@ function LegalSection({ titleKey, bodyKey }: { titleKey: string; bodyKey: string
 }
 
 // (The public Privacy Policy is the long-form document in
-// privacy-page.tsx, and the public Terms of Service is the
-// long-form document in terms-page.tsx — this module keeps only
-// the other legal pages.)
-
-// -------------------- Security --------------------
-
-export function SecurityPage() {
-  const { t } = useT();
-  return (
-    <div className="mkt-container max-w-2xl pt-32 pb-10 sm:pt-40">
-      <Reveal>
-        <header className="flex flex-col gap-4 border-b border-border pb-8">
-          <Eyebrow>
-            <Lock className="h-3.5 w-3.5" aria-hidden="true" />
-            {t('mkt.footer.legal')}
-          </Eyebrow>
-          <h1 className="mkt-display text-3xl text-text-primary sm:text-4xl">{t('mkt.security.title')}</h1>
-          <p className="text-sm text-text-muted">
-            {t('mkt.privacy.updated')}: {new Date().toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' })}
-          </p>
-          <p className="text-sm leading-relaxed text-text-secondary">{t('mkt.security.intro')}</p>
-        </header>
-      </Reveal>
-      <div className="mt-8 flex flex-col gap-8">
-        <Reveal><LegalSection titleKey="mkt.security.accountsTitle" bodyKey="mkt.security.accountsBody" /></Reveal>
-        <Reveal><LegalSection titleKey="mkt.security.dataTitle" bodyKey="mkt.security.dataBody" /></Reveal>
-        <Reveal><LegalSection titleKey="mkt.security.backupsTitle" bodyKey="mkt.security.backupsBody" /></Reveal>
-        <Reveal><LegalSection titleKey="mkt.security.auditTitle" bodyKey="mkt.security.auditBody" /></Reveal>
-        <Reveal><LegalSection titleKey="mkt.security.reportTitle" bodyKey="mkt.security.reportBody" /></Reveal>
-      </div>
-    </div>
-  );
-}
+// privacy-page.tsx, the public Terms of Service is the long-form
+// document in terms-page.tsx, and the public Security page is
+// the long-form document in security-page.tsx — this module
+// keeps only the other legal pages.)
 
 // -------------------- Accessibility --------------------
 

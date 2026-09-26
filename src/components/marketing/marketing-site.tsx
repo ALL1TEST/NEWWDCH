@@ -12,6 +12,7 @@
 //   #/blog/<slug> article       #/about      about
 //   #/solutions   solutions     #/login      login
 //   #/privacy     privacy       #/terms      terms
+//   #/security    security (long-form legal-style doc)
 //   #/signup      create account (own chrome — no header/footer)
 //
 // Note: the Create Account page presents the Karmax brand
@@ -32,7 +33,8 @@ import { BlogPage, BlogArticlePage } from './blog-page';
 import { AboutPage } from './about-page';
 import { PrivacyPage } from './privacy-page';
 import { TermsPage } from './terms-page';
-import { SecurityPage, AccessibilityPage, LegalCenterPage, ContactPage } from './content-pages';
+import { SecurityPage } from './security-page';
+import { AccessibilityPage, LegalCenterPage, ContactPage } from './content-pages';
 import { SolutionsOverview } from './solutions-overview';
 import { SolutionPage } from './solution-page';
 import { SOLUTION_BY_SLUG } from './solutions-data';

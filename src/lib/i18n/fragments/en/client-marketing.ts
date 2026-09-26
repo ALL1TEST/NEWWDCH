@@ -1119,25 +1119,163 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.terms.s23P1':
     'If you have questions about these Terms, please contact us.',
 
-  // ---- Security page ----
-  'mkt.security.title': 'Security at Karmax',
+  // ---- Legal: security — long-form public page ----
+  // The security page in 17 sections, rendered by
+  // components/marketing/security-page.tsx (via the shared
+  // LegalPageLayout of legal-document.tsx — the same system as
+  // the privacy policy and the terms of service). Keys
+  // s<N>{Title,P#,H#,L#}. Strings may embed {tokens} (rendered
+  // as links by the page) and [bracketed placeholders] (styled so
+  // the security/legal team can find and replace them — never
+  // invent these facts).
+  'mkt.security.title': 'Security',
+  'mkt.security.lastUpdated': 'Last updated',
+  'mkt.security.metaDescription':
+    'Learn how Karmax protects your data, secures its infrastructure, and maintains the reliability and integrity of its services.',
+  'mkt.security.onThisPage': 'On this page',
+  'mkt.security.questions': 'Questions about security?',
+  'mkt.security.contactEmailLabel': 'Email',
+  'mkt.security.contactCta': 'Contact us',
   'mkt.security.intro':
-    'How we protect your account, your content and your readers’ data — described honestly, based on what the platform actually does today.',
-  'mkt.security.accountsTitle': 'Accounts & sign-in',
-  'mkt.security.accountsBody':
-    'Karmax accounts sign in with an email address and a password, or with Google. Sessions end when you sign out, and you can review your account details from your profile at any time.',
-  'mkt.security.dataTitle': 'Data protection',
-  'mkt.security.dataBody':
-    'Traffic between your browser and Karmax travels over encrypted HTTPS connections. Each site you manage keeps its own content, media and settings inside your workspace, separate from other sites.',
-  'mkt.security.backupsTitle': 'Backups & recovery',
-  'mkt.security.backupsBody':
+    'Learn how we protect your data, secure our infrastructure, and maintain the reliability and integrity of our services.',
+
+  'mkt.security.s1Title': 'Security Overview',
+  'mkt.security.s1P1':
+    'This page describes how we protect the information you entrust to Karmax and how we work to keep the Service secure. Security is an ongoing process: we build features carefully, review them regularly, and improve them over time.',
+  'mkt.security.s1P2':
+    'We describe our practices honestly and in plain language. Where a detail depends on an operational or organizational policy that has not been finalized, we mark it as a bracketed placeholder rather than stating it as fact.',
+  'mkt.security.s1P3':
+    'Nothing on this page is a contractual commitment. Our {terms} govern your use of the Service, and our {privacy} explains how we collect and process personal data.',
+
+  'mkt.security.s2Title': 'Infrastructure Security',
+  'mkt.security.s2P1':
+    'Karmax is a hosted service: the application, its database and its media storage run on server infrastructure operated for the Service. [Hosting and infrastructure details — to be completed.]',
+  'mkt.security.s2P2':
+    'Access to the infrastructure that runs the Service is limited to the people who need it to operate and maintain the service. [Infrastructure access policy — confirm details.]',
+
+  'mkt.security.s3Title': 'Data Encryption',
+  'mkt.security.s3H1': 'Encryption in Transit',
+  'mkt.security.s3P1':
+    'Traffic between your browser and the Service travels over encrypted HTTPS connections.',
+  'mkt.security.s3H2': 'Encryption at Rest',
+  'mkt.security.s3P2':
+    'Data you store in the Service — content, media and settings — is kept in the Service’s database and media storage. [Encryption at rest — confirm implementation details before publishing.]',
+
+  'mkt.security.s4Title': 'Access Controls',
+  'mkt.security.s4P1':
+    'Access inside Karmax is controlled per user. When you invite teammates to your workspace, you decide who joins, and the permissions of each teammate are controlled by the role assigned to them.',
+  'mkt.security.s4P2':
+    'Roles follow the principle of least privilege: each user receives only the access needed for their work, and each site you manage keeps its own content, media and settings inside your workspace, separate from other sites.',
+  'mkt.security.s4P3':
+    'You can review your account details from your profile at any time, and important account activity is recorded in the audit log — so you always know who did what.',
+
+  'mkt.security.s5Title': 'Authentication',
+  'mkt.security.s5P1':
+    'Karmax accounts sign in with an email address and a password. Sessions end when you sign out.',
+  'mkt.security.s5P2':
+    'You can change your password at any time from your profile in the dashboard, and you can review your account details there. Multi-factor authentication is not currently offered; if this changes, this page will be updated.',
+  'mkt.security.s5P3':
+    'If you suspect that someone else has accessed your account, change your password and contact us.',
+
+  'mkt.security.s6Title': 'Application Security',
+  'mkt.security.s6P1':
+    'The Service is built as a modern web application, and access to its features is checked against the signed-in user and their role before any action is performed.',
+  'mkt.security.s6P2':
+    'Features that accept user input — forms, editors, file uploads and API endpoints — validate the data they receive before processing it, and errors are reported clearly instead of failing silently.',
+  'mkt.security.s6P3':
+    '[Secure development practices, dependency management and security testing — to be completed.]',
+
+  'mkt.security.s7Title': 'Network Security',
+  'mkt.security.s7P1':
+    'All traffic between your browser and the Service travels over encrypted HTTPS connections. The Service is not accessible through any other public channel.',
+  'mkt.security.s7P2':
+    '[Additional network protections — confirm what is deployed before publishing.]',
+
+  'mkt.security.s8Title': 'Data Protection',
+  'mkt.security.s8P1':
+    'The content, media and site settings you create belong to your account and workspace. Each site keeps its own data, separate from other sites you manage.',
+  'mkt.security.s8P2':
+    'You can export your data, and you can delete sites and content from your workspace when you no longer need them. Backups (see Backups and Recovery below) help you restore a site when something goes wrong.',
+  'mkt.security.s8P3':
+    'For details on how we collect and process personal data, see our {privacy}.',
+
+  'mkt.security.s9Title': 'Backups and Recovery',
+  'mkt.security.s9P1':
     'You can back up a site on demand or on a recurring schedule, download or store archives externally, review a detailed log of every run, and restore a site from a backup when you need to.',
-  'mkt.security.auditTitle': 'Audit trail & permissions',
-  'mkt.security.auditBody':
-    'Important account activity is recorded in the audit log, and access for teammates is controlled per user with roles — so you always know who did what.',
-  'mkt.security.reportTitle': 'Responsible disclosure',
-  'mkt.security.reportBody':
-    'If you believe you have found a security issue in Karmax, please tell us through an official channel listed on this site so we can investigate and fix it. We ask for reasonable time to respond before any public disclosure.',
+  'mkt.security.s9P2':
+    '[Backup and recovery details — confirm operational policy.]',
+
+  'mkt.security.s10Title': 'Monitoring and Logging',
+  'mkt.security.s10P1':
+    'Important account activity is recorded in the audit log, so that activity in your workspace can be reviewed after the fact.',
+  'mkt.security.s10P2':
+    '[System monitoring, error monitoring and log retention practices — to be completed.]',
+
+  'mkt.security.s11Title': 'Incident Response',
+  'mkt.security.s11P1':
+    'If a security incident affects the Service, our priorities are to understand it, limit its impact and fix it.',
+  'mkt.security.s11H1': 'Detection',
+  'mkt.security.s11P2':
+    'Incidents can come to our attention through logs, through the audit trail, or through reports from users and security researchers — see Reporting a Security Issue below.',
+  'mkt.security.s11H2': 'Investigation',
+  'mkt.security.s11P3':
+    'We investigate alerts and reports to understand what happened and which accounts or data, if any, are affected.',
+  'mkt.security.s11H3': 'Containment',
+  'mkt.security.s11P4':
+    'When an issue is confirmed, we work to contain it — for example by fixing the underlying problem or removing access that should not exist.',
+  'mkt.security.s11H4': 'Remediation',
+  'mkt.security.s11P5':
+    'Once contained, we fix the cause and review related areas of the application to help prevent recurrence.',
+  'mkt.security.s11H5': 'Notification',
+  'mkt.security.s11P6':
+    'If we confirm that an incident has affected your account or data, we will notify you. [Notification commitments and timelines — to be completed.]',
+
+  'mkt.security.s12Title': 'Third-Party Services',
+  'mkt.security.s12P1':
+    'The Service relies on a small number of third-party providers for specific functions: payment processing (Stripe), AI-powered features (our AI provider), outbound email (SMTP) and spam checking (Akismet). Each provider processes only the data needed to perform its function.',
+  'mkt.security.s12P2':
+    'For more information, see the Service Providers section of our {privacy}.',
+
+  'mkt.security.s13Title': 'Employee Security',
+  'mkt.security.s13P1':
+    'Access to customer data by the people who operate the Service is limited to what is needed to run, support and improve it.',
+  'mkt.security.s13P2':
+    '[Employee security practices — background checks, training and policies — to be completed.]',
+
+  'mkt.security.s14Title': 'Availability and Reliability',
+  'mkt.security.s14P1':
+    'We work to keep the Service available and to fix problems that affect it. Backups and the ability to restore a site help you recover your content when something goes wrong.',
+  'mkt.security.s14P2':
+    'We do not promise a specific uptime percentage on this page. [Service level commitments — to be completed if offered.]',
+
+  'mkt.security.s15Title': 'Security Responsibilities',
+  'mkt.security.s15P1':
+    'Security is a shared effort — you play an important role in keeping your account and content safe:',
+  'mkt.security.s15L1':
+    'Protect your credentials — Keep your password secret and do not share it with anyone.',
+  'mkt.security.s15L2':
+    'Use strong passwords — Choose passwords that are unique and hard to guess.',
+  'mkt.security.s15L3':
+    'Keep access information confidential — Treat API keys and other access credentials with the same care as your password.',
+  'mkt.security.s15L4':
+    'Report suspicious activity — If you notice something unexpected in your account or in the Service, tell us.',
+  'mkt.security.s15L5':
+    'Maintain appropriate access permissions — Review the teammates and permissions in your workspace, and remove access that is no longer needed.',
+  'mkt.security.s15P2':
+    'For the responsibilities that apply to your account under our agreement, see our {terms}.',
+
+  'mkt.security.s16Title': 'Reporting a Security Issue',
+  'mkt.security.s16P1':
+    'If you believe you have discovered a security vulnerability, please contact our security team using the contact information below.',
+  'mkt.security.s16P2': 'Security contact: [Security Email]',
+  'mkt.security.s16P3':
+    'Please include a description of the issue and, where possible, the steps to reproduce it. We ask for reasonable time to investigate and fix the issue before any public disclosure.',
+  'mkt.security.s16P4':
+    'Please do not test vulnerabilities against accounts or data that are not your own.',
+
+  'mkt.security.s17Title': 'Contact Us',
+  'mkt.security.s17P1':
+    'If you have questions about our security practices, please contact our team.',
 
   // ---- Accessibility page ----
   'mkt.a11y.intro':

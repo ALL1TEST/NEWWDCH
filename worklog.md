@@ -12377,3 +12377,34 @@ Stage Summary:
 - Legal content is product-honest: established facts only + 17 clearly-styled placeholders for the legal team; en + fr fully translated.
 - Files: NEW src/components/marketing/legal-document.tsx, src/components/marketing/terms-page.tsx; MODIFIED privacy-page.tsx (refactor, DOM unchanged), content-pages.tsx (old TermsPage removed), marketing-site.tsx (import), en+fr client-marketing.ts (long-form terms keys).
 - Pending from earlier tasks: product-tour.mp4 still not delivered to the server (hero video code ready, deploys on file arrival); blog redesign task still not started.
+
+---
+Task ID: security-legal-sibling-1
+Agent: main (orchestrator)
+Task: (1) Remove "Cookie Preferences" from the global footer legal row. (2) Redesign /security (#/security) as a long-form legal/trust document — the exact visual sibling of the Privacy Policy and Terms of Service pages, using the shared LegalPageLayout, 17 numbered sections, no invented security claims.
+
+Work Log:
+- TASK 1 — marketing-footer.tsx: removed the cookie-preferences button + its pipe separator from the legal row (now exactly "Privacy Policy | Terms of Service"), removed the now-unused openCookiePreferences import, updated file header comment + inline comments. Cookie functionality itself untouched: banner still opens from the Privacy body {cookiePrefs} token and the Legal Center row (both re-verified working).
+- TASK 2 — inspected the existing legal system: legal-document.tsx (LegalPageLayout with parametrized topId/titleKey/effectiveAsOfKey/introKey/onThisPageKey/metaDescriptionKey/sections/tokens/contact), privacy-page.tsx + terms-page.tsx as references, MKT routes (security: '#/security' already existed), marketing-site.tsx router (security route already wired).
+- Fact-verification pass before writing content: LoginScreen = email/password only (no Google button — did NOT carry over the old page's Google claim); password change exists (POST /api/auth/change-password); API routes validate input via safeParse schemas; verified product facts: sessions end on sign-out, per-user roles, per-site workspace separation, audit log, on-demand + scheduled backups with download/log/restore, data export + deletion, HTTPS, Stripe/AI-provider/SMTP/Akismet integrations.
+- Created src/components/marketing/security-page.tsx — SecurityPage rendering <LegalPageLayout> with 17 sections (Security Overview → Contact Us) exactly per spec, tokens {privacy}/{terms}, contact card with [Security Contact Email] placeholder + CTA → #/contact, topId "security", effectiveAsOfKey = mkt.security.lastUpdated ("Last updated" — renders "Last updated: September 26, 2026" via the layout's locale-formatted date).
+- Removed the old compact SecurityPage from content-pages.tsx (header comment updated); marketing-site.tsx now imports SecurityPage from security-page.tsx.
+- i18n: replaced the old mkt.security.* block in en/client-marketing.ts with the full long-form set (title 'Security', lastUpdated, metaDescription, onThisPage, questions, contactEmailLabel, contactCta, intro = exact user copy, s1..s17 with H3 subsections for Encryption in Transit/Rest + Incident Response Detection/Investigation/Containment/Remediation/Notification, s15 responsibility list with bold lead-ins); complete French translation added in fr/client-marketing.ts (localized date "Dernière mise à jour : 26 septembre 2026"). 12 bracketed placeholders for unverified facts: hosting details, infrastructure access, encryption at rest, backup policy, monitoring practices, notification timelines, employee practices, SLA, additional network protections, secure-dev practices, [Security Email] x2. NO invented claims (no SOC 2/ISO/WAF/DDoS/algorithms/uptime/vendors/MFA — MFA absence stated honestly).
+- bun run lint: zero errors in all modified files (42 pre-existing errors in unrelated files untouched); dev.log clean compiles.
+
+E2E verification (agent-browser, 1440x900 + 375x812):
+- #/security: title "Security — Karmax", H1 "Security" 48px/700, "Last updated: September 26, 2026", 17 H2 sections, 7 H3s, 18-item TOC exactly matching the spec list, meta description set.
+- TOC interaction: click "Incident Response" → active (aria-current=location) + smooth scroll to 112px; free-scroll tracking top→"Security", bottom→"Contact Us"; sidebar sticky top100px.
+- Style parity vs #/privacy (computed): container 1216px, grid 840px/240px gap 56px, H1 48px/49.92 w700, H2 32px w700, H3 20px/28 w600, P 17px/29.75, sidebar sticky/top100/w240/radius16/pad20, TOC btn 13px/borderL2px — ALL IDENTICAL. VLM side-by-side: "same design system… no discernible design differences".
+- Footer: "Privacy Policy | Terms of Service" on home/privacy/terms/security (EN) and "Politique de confidentialité | Conditions d'utilisation" (FR); no Cookie Preferences anywhere in the footer (DOM + VLM visual check of footer screenshot).
+- Regressions: Privacy (20 sections, 21 TOC items, cookie-prefs token opens banner), Terms (23 sections, 24 TOC items, {security} token → #/security), Legal Center (Security doc listed; its Cookie Preferences row still opens the banner), Contact page security channel intact.
+- Mobile 375px: desktop aside display:none, collapsible "ON THIS PAGE" (18 items) expands, item click auto-collapses then scrolls to 112px, H1 36px, no horizontal scroll.
+- FR (cms_locale=fr + reload): full French page incl. localized date, French TOC/section titles, incident-response H3s (Détection/Investigation/Confinement/Correction/Notification), French contact card.
+- No page/console errors throughout.
+
+Stage Summary:
+- Footer legal row is now exactly "Privacy Policy | Terms of Service" globally (EN+FR); cookie functionality preserved via banner, Privacy token and Legal Center.
+- /security is the third page of the unified legal/trust documentation system: same LegalPageLayout as Privacy + Terms (requested <LegalPageLayout><Security/></LegalPageLayout> architecture), 17 sections, sticky TOC with active tracking, fully responsive, EN+FR.
+- Security content is product-honest: only verified facts stated (email+password auth, password change, sessions, roles, per-site separation, audit log, backups+restore, export/delete, HTTPS, validated inputs, Stripe/AI/SMTP/Akismet) + 12 clearly-styled placeholders; honest MFA-absence disclosure; no certifications/vendors/algorithms/uptime invented.
+- Files: NEW src/components/marketing/security-page.tsx; MODIFIED marketing-footer.tsx (cookie link removed), content-pages.tsx (old SecurityPage removed), marketing-site.tsx (import), en+fr client-marketing.ts (long-form security keys).
+- Pending from earlier tasks: product-tour.mp4 still not delivered to the server (hero video code ready); blog redesign task still not started.

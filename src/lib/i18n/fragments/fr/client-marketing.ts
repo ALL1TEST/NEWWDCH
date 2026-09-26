@@ -1108,25 +1108,163 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.terms.s23P1':
     'Si vous avez des questions sur les présentes conditions, n’hésitez pas à nous contacter.',
 
-  // ---- Page Sécurité ----
-  'mkt.security.title': 'La sécurité chez Karmax',
+  // ---- Légal : sécurité — page publique longue ----
+  // La page sécurité en 17 sections, rendue par
+  // components/marketing/security-page.tsx (via le
+  // LegalPageLayout partagé de legal-document.tsx — le même
+  // système que la politique de confidentialité et les
+  // conditions d'utilisation). Clés s<N>{Title,P#,H#,L#}.
+  // Les chaînes peuvent contenir des {jetons} (liens) et des
+  // [emplacements réservés] à remplir par l'équipe sécurité /
+  // juridique.
+  'mkt.security.title': 'Sécurité',
+  'mkt.security.lastUpdated': 'Dernière mise à jour',
+  'mkt.security.metaDescription':
+    'Découvrez comment Karmax protège vos données, sécurise son infrastructure et maintient la fiabilité et l’intégrité de ses services.',
+  'mkt.security.onThisPage': 'Sur cette page',
+  'mkt.security.questions': 'Des questions sur la sécurité ?',
+  'mkt.security.contactEmailLabel': 'E-mail',
+  'mkt.security.contactCta': 'Nous contacter',
   'mkt.security.intro':
-    'Comment nous protégeons votre compte, vos contenus et les données de vos lecteurs — décrit honnêtement, d’après ce que la plateforme fait réellement aujourd’hui.',
-  'mkt.security.accountsTitle': 'Comptes et connexion',
-  'mkt.security.accountsBody':
-    'Les comptes Karmax se connectent avec une adresse e-mail et un mot de passe, ou avec Google. Les sessions prennent fin à la déconnexion, et vous pouvez consulter les détails de votre compte depuis votre profil à tout moment.',
-  'mkt.security.dataTitle': 'Protection des données',
-  'mkt.security.dataBody':
-    'Le trafic entre votre navigateur et Karmax transite par des connexions HTTPS chiffrées. Chaque site géré conserve ses contenus, médias et réglages dans votre espace de travail, séparé des autres sites.',
-  'mkt.security.backupsTitle': 'Sauvegardes et restauration',
-  'mkt.security.backupsBody':
+    'Découvrez comment nous protégeons vos données, sécurisons notre infrastructure et maintenons la fiabilité et l’intégrité de nos services.',
+
+  'mkt.security.s1Title': 'Aperçu de la sécurité',
+  'mkt.security.s1P1':
+    'Cette page décrit comment nous protégeons les informations que vous nous confiez et comment nous travaillons à garder le Service sécurisé. La sécurité est un processus continu : nous concevons les fonctionnalités avec soin, les examinons régulièrement et les améliorons au fil du temps.',
+  'mkt.security.s1P2':
+    'Nous décrivons nos pratiques honnêtement et en termes clairs. Lorsqu’un détail dépend d’une politique opérationnelle ou organisationnelle non finalisée, nous l’indiquons par un emplacement réservé entre crochets plutôt que de l’énoncer comme un fait.',
+  'mkt.security.s1P3':
+    'Rien sur cette page ne constitue un engagement contractuel. Nos {terms} régissent votre utilisation du Service, et notre {privacy} explique comment nous collectons et traitons les données personnelles.',
+
+  'mkt.security.s2Title': 'Sécurité de l’infrastructure',
+  'mkt.security.s2P1':
+    'Karmax est un service hébergé : l’application, sa base de données et son stockage de médias s’exécutent sur une infrastructure serveur dédiée au Service. [Détails d’hébergement et d’infrastructure — à compléter.]',
+  'mkt.security.s2P2':
+    'L’accès à l’infrastructure qui fait tourner le Service est limité aux personnes qui en ont besoin pour l’exploiter et le maintenir. [Politique d’accès à l’infrastructure — à confirmer.]',
+
+  'mkt.security.s3Title': 'Chiffrement des données',
+  'mkt.security.s3H1': 'Chiffrement en transit',
+  'mkt.security.s3P1':
+    'Le trafic entre votre navigateur et le Service transite par des connexions HTTPS chiffrées.',
+  'mkt.security.s3H2': 'Chiffrement au repos',
+  'mkt.security.s3P2':
+    'Les données que vous stockez dans le Service — contenus, médias et réglages — sont conservées dans la base de données et le stockage de médias du Service. [Chiffrement au repos — confirmer les détails de mise en œuvre avant publication.]',
+
+  'mkt.security.s4Title': 'Contrôle des accès',
+  'mkt.security.s4P1':
+    'Les accès dans Karmax sont contrôlés utilisateur par utilisateur. Lorsque vous invitez des collaborateurs dans votre espace de travail, vous décidez qui le rejoint, et les permissions de chacun sont contrôlées par le rôle qui lui est attribué.',
+  'mkt.security.s4P2':
+    'Les rôles suivent le principe du moindre privilège : chaque utilisateur ne reçoit que les accès nécessaires à son travail, et chaque site que vous gérez conserve ses propres contenus, médias et réglages dans votre espace de travail, séparé des autres sites.',
+  'mkt.security.s4P3':
+    'Vous pouvez consulter les détails de votre compte depuis votre profil à tout moment, et les activités importantes y sont consignées dans le journal d’audit — vous savez toujours qui a fait quoi.',
+
+  'mkt.security.s5Title': 'Authentification',
+  'mkt.security.s5P1':
+    'Les comptes Karmax se connectent avec une adresse e-mail et un mot de passe. Les sessions prennent fin à la déconnexion.',
+  'mkt.security.s5P2':
+    'Vous pouvez changer votre mot de passe à tout moment depuis votre profil dans le tableau de bord, où vous pouvez aussi consulter les détails de votre compte. L’authentification multifacteur n’est pas proposée actuellement ; si cela change, cette page sera mise à jour.',
+  'mkt.security.s5P3':
+    'Si vous pensez que quelqu’un d’autre a accédé à votre compte, changez votre mot de passe et contactez-nous.',
+
+  'mkt.security.s6Title': 'Sécurité de l’application',
+  'mkt.security.s6P1':
+    'Le Service est conçu comme une application web moderne, et l’accès à ses fonctionnalités est vérifié par rapport à l’utilisateur connecté et à son rôle avant toute action.',
+  'mkt.security.s6P2':
+    'Les fonctionnalités qui acceptent des données saisies — formulaires, éditeurs, téléversements de fichiers et points d’API — valident les données reçues avant de les traiter, et les erreurs sont signalées clairement au lieu d’échouer silencieusement.',
+  'mkt.security.s6P3':
+    '[Pratiques de développement sécurisé, gestion des dépendances et tests de sécurité — à compléter.]',
+
+  'mkt.security.s7Title': 'Sécurité du réseau',
+  'mkt.security.s7P1':
+    'Tout le trafic entre votre navigateur et le Service transite par des connexions HTTPS chiffrées. Le Service n’est accessible par aucun autre canal public.',
+  'mkt.security.s7P2':
+    '[Protections réseau supplémentaires — confirmer ce qui est déployé avant publication.]',
+
+  'mkt.security.s8Title': 'Protection des données',
+  'mkt.security.s8P1':
+    'Les contenus, médias et réglages de site que vous créez appartiennent à votre compte et à votre espace de travail. Chaque site conserve ses propres données, séparées des autres sites que vous gérez.',
+  'mkt.security.s8P2':
+    'Vous pouvez exporter vos données, et vous pouvez supprimer des sites et des contenus de votre espace de travail lorsque vous n’en avez plus besoin. Les sauvegardes (voir Sauvegardes et restauration ci-dessous) vous aident à restaurer un site en cas de problème.',
+  'mkt.security.s8P3':
+    'Pour savoir comment nous collectons et traitons les données personnelles, consultez notre {privacy}.',
+
+  'mkt.security.s9Title': 'Sauvegardes et restauration',
+  'mkt.security.s9P1':
     'Vous pouvez sauvegarder un site à la demande ou selon un calendrier récurrent, télécharger ou archiver les sauvegardes à l’extérieur, consulter le journal détaillé de chaque exécution et restaurer un site depuis une sauvegarde au besoin.',
-  'mkt.security.auditTitle': 'Journal d’audit et autorisations',
-  'mkt.security.auditBody':
-    'Les activités importantes du compte sont consignées dans le journal d’audit, et l’accès de vos coéquipiers est contrôlé utilisateur par utilisateur via des rôles — vous savez toujours qui a fait quoi.',
-  'mkt.security.reportTitle': 'Divulgation responsable',
-  'mkt.security.reportBody':
-    'Si vous pensez avoir trouvé un problème de sécurité dans Karmax, signalez-le-nous via un canal officiel listé sur ce site afin que nous puissions l’examiner et le corriger. Nous demandons un délai raisonnable avant toute divulgation publique.',
+  'mkt.security.s9P2':
+    '[Détails de sauvegarde et de restauration — confirmer la politique opérationnelle.]',
+
+  'mkt.security.s10Title': 'Supervision et journaux',
+  'mkt.security.s10P1':
+    'Les activités importantes du compte sont consignées dans le journal d’audit, afin que l’activité de votre espace de travail puisse être examinée après coup.',
+  'mkt.security.s10P2':
+    '[Supervision des systèmes, supervision des erreurs et pratiques de conservation des journaux — à compléter.]',
+
+  'mkt.security.s11Title': 'Réponse aux incidents',
+  'mkt.security.s11P1':
+    'Si un incident de sécurité affecte le Service, nos priorités sont de le comprendre, de limiter son impact et de le corriger.',
+  'mkt.security.s11H1': 'Détection',
+  'mkt.security.s11P2':
+    'Les incidents peuvent porter à notre attention via les journaux, via la piste d’audit ou via les signalements d’utilisateurs et de chercheurs en sécurité — voir Signaler un problème de sécurité ci-dessous.',
+  'mkt.security.s11H2': 'Investigation',
+  'mkt.security.s11P3':
+    'Nous examinons les alertes et les signalements pour comprendre ce qui s’est passé et quels comptes ou données, le cas échéant, sont concernés.',
+  'mkt.security.s11H3': 'Confinement',
+  'mkt.security.s11P4':
+    'Lorsqu’un problème est confirmé, nous travaillons à le contenir — par exemple en corrigeant la cause sous-jacente ou en supprimant des accès qui ne devraient pas exister.',
+  'mkt.security.s11H4': 'Correction',
+  'mkt.security.s11P5':
+    'Une fois le problème contenu, nous corrigeons sa cause et passons en revue les parties connexes de l’application pour aider à éviter qu’il se reproduise.',
+  'mkt.security.s11H5': 'Notification',
+  'mkt.security.s11P6':
+    'Si nous confirmons qu’un incident a affecté votre compte ou vos données, nous vous en informerons. [Engagements et délais de notification — à compléter.]',
+
+  'mkt.security.s12Title': 'Services tiers',
+  'mkt.security.s12P1':
+    'Le Service s’appuie sur un petit nombre de prestataires tiers pour des fonctions précises : le traitement des paiements (Stripe), les fonctionnalités dopées à l’IA (notre fournisseur d’IA), l’envoi d’e-mails (SMTP) et la détection de spam (Akismet). Chaque prestataire ne traite que les données nécessaires à sa fonction.',
+  'mkt.security.s12P2':
+    'Pour en savoir plus, consultez la section Prestataires de services de notre {privacy}.',
+
+  'mkt.security.s13Title': 'Sécurité des collaborateurs',
+  'mkt.security.s13P1':
+    'L’accès des personnes qui exploitent le Service aux données des clients est limité à ce qui est nécessaire pour l’exploiter, le maintenir et l’améliorer.',
+  'mkt.security.s13P2':
+    '[Pratiques de sécurité des collaborateurs — vérifications, formation et politiques — à compléter.]',
+
+  'mkt.security.s14Title': 'Disponibilité et fiabilité',
+  'mkt.security.s14P1':
+    'Nous travaillons à garder le Service disponible et à corriger les problèmes qui l’affectent. Les sauvegardes et la possibilité de restaurer un site vous aident à récupérer vos contenus en cas de problème.',
+  'mkt.security.s14P2':
+    'Nous ne promettons pas de pourcentage de disponibilité spécifique sur cette page. [Engagements de niveau de service — à compléter si proposés.]',
+
+  'mkt.security.s15Title': 'Responsabilités de sécurité',
+  'mkt.security.s15P1':
+    'La sécurité est un effort partagé — vous jouez un rôle important pour protéger votre compte et vos contenus :',
+  'mkt.security.s15L1':
+    'Protégez vos identifiants — Gardez votre mot de passe secret et ne le partagez avec personne.',
+  'mkt.security.s15L2':
+    'Utilisez des mots de passe robustes — Choisissez des mots de passe uniques et difficiles à deviner.',
+  'mkt.security.s15L3':
+    'Gardez vos accès confidentiels — Traitez vos clés API et autres identifiants d’accès avec le même soin que votre mot de passe.',
+  'mkt.security.s15L4':
+    'Signalez toute activité suspecte — Si vous remarquez quelque chose d’inattendu dans votre compte ou dans le Service, dites-le-nous.',
+  'mkt.security.s15L5':
+    'Maintenez des permissions appropriées — Examinez les collaborateurs et les permissions de votre espace de travail, et retirez les accès qui ne sont plus nécessaires.',
+  'mkt.security.s15P2':
+    'Pour les responsabilités qui s’appliquent à votre compte dans le cadre de notre accord, consultez nos {terms}.',
+
+  'mkt.security.s16Title': 'Signaler un problème de sécurité',
+  'mkt.security.s16P1':
+    'Si vous pensez avoir découvert une vulnérabilité de sécurité, contactez notre équipe sécurité en utilisant les coordonnées ci-dessous.',
+  'mkt.security.s16P2': 'Contact sécurité : [Security Email]',
+  'mkt.security.s16P3':
+    'Merci d’inclure une description du problème et, si possible, les étapes pour le reproduire. Nous demandons un délai raisonnable pour examiner et corriger le problème avant toute divulgation publique.',
+  'mkt.security.s16P4':
+    'Merci de ne pas tester de vulnérabilités sur des comptes ou des données qui ne sont pas les vôtres.',
+
+  'mkt.security.s17Title': 'Nous contacter',
+  'mkt.security.s17P1':
+    'Si vous avez des questions sur nos pratiques de sécurité, n’hésitez pas à contacter notre équipe.',
 
   // ---- Page Accessibilité ----
   'mkt.a11y.intro':

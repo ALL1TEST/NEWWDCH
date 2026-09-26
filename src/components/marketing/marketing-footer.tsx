@@ -16,7 +16,7 @@
 //   ├────────────────────────────────────────────────────────┤
 //   │  BAND 3 — CENTERED BRAND + LEGAL                       │
 //   │  logo · © 2026 Karmax. All rights reserved.            │
-//   │  Privacy Policy | Terms of Service | Cookie Preferences│
+//   │  Privacy Policy | Terms of Service                     │
 //   └────────────────────────────────────────────────────────┘
 //
 // Breakpoints:
@@ -31,8 +31,10 @@
 // • Items whose destination does not exist yet are rendered
 //   VISUALLY INACTIVE (muted, non-clickable, aria-disabled) —
 //   never as fake routes.
-// • The legal row links to real pages (Privacy Policy, Terms of
-//   Service) and opens the real cookie-preferences control.
+// • The legal row links to the real legal pages (Privacy
+//   Policy, Terms of Service). The cookie-preferences control
+//   itself remains available from the cookie banner and the
+//   Legal Center — only this footer link was removed by design.
 // • Social icons link to the configurable Karmax profiles in
 //   SOCIAL_PROFILES below — update the URLs when the real
 //   handles differ.
@@ -49,7 +51,6 @@ import {
 import { useT } from '@/lib/i18n';
 import { Logo } from './primitives';
 import { MKT } from './marketing-header';
-import { openCookiePreferences } from './cookie-banner';
 
 // ---- Karmax social profiles (single source of truth) ----
 // External brand links rendered in the social row. Update the
@@ -165,8 +166,7 @@ const INACTIVE_CLASS =
 // Column headings: bold white — the anchor points of each group.
 const HEADING_CLASS =
   'text-base font-bold leading-6 text-mkt-footer-heading';
-// Legal-row links (and the cookie-preferences button, which
-// shares the same visual treatment).
+// Legal-row links.
 const LEGAL_LINK_CLASS =
   'mkt-footer-focus rounded text-sm font-bold text-white underline-offset-4 transition-colors hover:text-mkt-footer-text-active hover:underline';
 
@@ -336,9 +336,8 @@ export function MarketingFooter({ currentHash }: { currentHash?: string }) {
             © {year} {t('mkt.brand.name')}. {t('mkt.footer.rightsReserved')}
           </p>
 
-          {/* Legal navigation with pipe separators — two real
-              pages plus the cookie-preferences control (re-opens
-              the consent dialog with its options expanded). */}
+          {/* Legal navigation with pipe separators — the two
+              legal pages. */}
           <nav
             aria-label={t('mkt.footer.legal')}
             className="flex flex-wrap items-center justify-center"
@@ -356,16 +355,6 @@ export function MarketingFooter({ currentHash }: { currentHash?: string }) {
             <a href={MKT.terms} className={LEGAL_LINK_CLASS}>
               {t('mkt.footer.terms')}
             </a>
-            <span className="mx-3 select-none text-white/30" aria-hidden="true">
-              |
-            </span>
-            <button
-              type="button"
-              onClick={openCookiePreferences}
-              className={`cursor-pointer ${LEGAL_LINK_CLASS}`}
-            >
-              {t('mkt.footer.cookiePrefs')}
-            </button>
           </nav>
         </div>
       </div>
