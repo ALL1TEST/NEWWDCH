@@ -717,7 +717,7 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.privacy.title': 'Politique de confidentialité',
   'mkt.privacy.updated': 'Dernière mise à jour',
   'mkt.privacy.intro':
-    'Cette politique explique ce que Karmax collecte, pourquoi, et les choix dont vous disposez. Court et honnête.',
+    'Votre vie privée compte pour nous. La présente politique de confidentialité explique quelles informations nous collectons, comment nous les utilisons, comment nous les protégeons et les choix dont vous disposez.',
   'mkt.privacy.collectTitle': 'Ce que nous collectons',
   'mkt.privacy.collectBody':
     'Les données de compte que vous fournissez (nom, e-mail), le contenu et les médias que vous gérez dans le produit, et les données techniques telles que les cookies de session nécessaires pour rester connecté. Avec votre consentement, des statistiques d’usage anonymes.',
@@ -733,6 +733,174 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.privacy.rightsTitle': 'Vos droits',
   'mkt.privacy.rightsBody':
     'Vous pouvez exporter ou supprimer votre contenu depuis le tableau de bord à tout moment. Supprimer votre compte efface vos données utilisateur. Contactez-nous pour tout le reste, nous vous aiderons.',
+
+  // ---- Légal : confidentialité — page publique longue ----
+  // Les 20 sections de la politique de confidentialité rendues par
+  // components/marketing/privacy-page.tsx. Clés s<N>{Title,P#,H#,L#}
+  // (titre / paragraphe / intertitre / élément de liste). Les chaînes
+  // peuvent contenir des {jetons} (liens/boutons) et des
+  // [emplacements réservés] à remplir par l’équipe juridique.
+  'mkt.privacy.effectiveAsOf': 'En vigueur depuis',
+  'mkt.privacy.metaDescription':
+    'Découvrez comment Karmax collecte, utilise, protège et gère les informations personnelles.',
+  'mkt.privacy.onThisPage': 'Sur cette page',
+  'mkt.privacy.manageCookies': 'Gérer les préférences de cookies',
+  'mkt.privacy.questions': 'Des questions sur cette politique de confidentialité ?',
+  'mkt.privacy.contactEmailLabel': 'E-mail',
+  'mkt.privacy.contactCompanyLabel': 'Société',
+  'mkt.privacy.contactAddressLabel': 'Adresse',
+  'mkt.privacy.contactCta': 'Nous contacter',
+
+  'mkt.privacy.s1Title': 'Portée de la présente politique',
+  'mkt.privacy.s1P1':
+    'La présente politique de confidentialité s’applique au site web, aux applications et au service hébergé de Karmax (ensemble, le « Service »), exploités par [Company Legal Name] (« nous », « notre »). Elle décrit la manière dont nous traitons les informations personnelles lorsque vous consultez notre site, créez un compte ou utilisez le Service.',
+  'mkt.privacy.s1P2':
+    'Elle ne s’applique pas aux services exploités par des tiers. Lorsque vous connectez une intégration — un fournisseur d’IA, votre propre serveur SMTP ou Akismet — ce service traite les informations selon sa propre politique de confidentialité. Votre utilisation du Service est régie plus généralement par nos {terms}.',
+
+  'mkt.privacy.s2Title': 'Quelles informations collectons-nous ?',
+  'mkt.privacy.s2P1':
+    'Les informations que nous traitons dépendent de la façon dont vous utilisez le Service. Elles se répartissent globalement en deux catégories.',
+  'mkt.privacy.s2H1': 'Informations permettant de vous identifier',
+  'mkt.privacy.s2P2':
+    'Des informations qui vous identifient en tant que personne — par exemple votre nom et votre adresse e-mail, les contenus et médias que vous gérez dans le produit, ainsi que les messages que vous nous adressez.',
+  'mkt.privacy.s2H2': 'Informations non nominatives',
+  'mkt.privacy.s2P3':
+    'Des informations qui, prises seules, ne sont pas liées à une identité précise — par exemple les données techniques de session et, uniquement avec votre consentement, des statistiques d’usage anonymes.',
+
+  'mkt.privacy.s3Title': 'Pourquoi collectons-nous des données personnelles ?',
+  'mkt.privacy.s3P1':
+    'Nous collectons et utilisons des informations personnelles pour exploiter votre compte, fournir et maintenir le Service, sécuriser la plateforme et — uniquement si vous l’acceptez — comprendre l’usage global afin d’améliorer le produit.',
+  'mkt.privacy.s3P2':
+    'Nous ne vendons pas vos informations personnelles et n’exploitons aucun traceur publicitaire.',
+
+  'mkt.privacy.s4Title': 'Informations que vous fournissez directement',
+  'mkt.privacy.s4P1':
+    'Vous nous transmettez directement certaines informations lorsque vous utilisez le Service :',
+  'mkt.privacy.s4L1':
+    'Informations de compte — votre nom et votre adresse e-mail lors de la création du compte, ainsi que vos identifiants de connexion.',
+  'mkt.privacy.s4L2':
+    'Contenus — les articles, médias et réglages que vous créez et gérez dans le produit.',
+  'mkt.privacy.s4L3':
+    'Communications — les informations que vous incluez lorsque vous nous contactez ou répondez à nos messages.',
+  'mkt.privacy.s4P2':
+    'Lorsque vous passez à un plan payant, les informations de facturation sont traitées par notre prestataire de paiement — voir {serviceProviders} ci-dessous.',
+
+  'mkt.privacy.s5Title': 'Informations collectées automatiquement',
+  'mkt.privacy.s5P1':
+    'Lorsque vous utilisez le Service, certaines informations sont collectées automatiquement :',
+  'mkt.privacy.s5L1':
+    'Informations techniques — des données telles que votre session, nécessaires pour rester connecté, ainsi que vos préférences de langue et de thème.',
+  'mkt.privacy.s5L2':
+    'Informations d’usage — avec votre consentement, des statistiques anonymes sur l’utilisation des fonctionnalités, qui nous aident à améliorer le produit.',
+  'mkt.privacy.s5P2':
+    'Nous n’utilisons aucun cookie publicitaire ni traceur multi-sites.',
+
+  'mkt.privacy.s6Title': 'Informations reçues d’autres sources',
+  'mkt.privacy.s6P1':
+    'Nous n’achetons pas d’informations personnelles auprès de courtiers en données et nous ne les collectons pas auprès de sources tierces pour nos propres finalités.',
+  'mkt.privacy.s6P2':
+    'Lorsque vous connectez une intégration — un fournisseur d’IA, votre propre serveur SMTP ou Akismet — nous pouvons recevoir les informations limitées que l’intégration renvoie pour fonctionner, telles que les résultats de remise ou de contrôle de spam des contenus que vous y envoyez.',
+
+  'mkt.privacy.s7Title': 'Comment nous utilisons vos informations',
+  'mkt.privacy.s7P1': 'Nous utilisons les informations décrites dans cette politique pour :',
+  'mkt.privacy.s7L1': 'Exploiter votre compte et maintenir votre connexion en toute sécurité.',
+  'mkt.privacy.s7L2': 'Fournir, maintenir et améliorer le Service.',
+  'mkt.privacy.s7L3': 'Traiter les paiements des plans payants, via notre prestataire de paiement.',
+  'mkt.privacy.s7L4': 'Sécuriser la plateforme et votre compte, notamment grâce au journal d’audit.',
+  'mkt.privacy.s7L5': 'Comprendre — uniquement avec votre consentement — l’usage global et anonyme du produit.',
+  'mkt.privacy.s7L6': 'Répondre à vos demandes et communiquer avec vous au sujet de votre compte ou du Service.',
+  'mkt.privacy.s7P2':
+    'Nous n’utilisons pas vos informations pour vous profiler à des fins publicitaires, et nous ne les vendons pas.',
+
+  'mkt.privacy.s8Title': 'Cookies et technologies similaires',
+  'mkt.privacy.s8P1':
+    'Le Service utilise un nombre restreint de cookies et de technologies similaires :',
+  'mkt.privacy.s8L1':
+    'Cookies strictement nécessaires — session, langue et thème. Toujours actifs : le site ne peut pas fonctionner sans eux.',
+  'mkt.privacy.s8L2':
+    'Analyse — statistiques d’usage anonymes. Elles ne se chargent qu’après votre acceptation dans le bandeau de cookies et sont désactivées par défaut.',
+  'mkt.privacy.s8P2':
+    'Nous ne déposons jamais de cookies publicitaires ou de suivi.',
+  'mkt.privacy.s8P3':
+    'Vous pouvez modifier votre choix à tout moment : {cookiePrefs}.',
+
+  'mkt.privacy.s9Title': 'Quand communiquons-nous des informations à des tiers ?',
+  'mkt.privacy.s9P1':
+    'Nous ne communiquons d’informations personnelles à des tiers que dans les situations limitées décrites dans cette politique :',
+  'mkt.privacy.s9L1':
+    'Aux prestataires qui nous aident à exploiter le Service (voir {serviceProviders}).',
+  'mkt.privacy.s9L2': 'Aux autorités, lorsque la loi l’exige (voir {legalRequirements}).',
+  'mkt.privacy.s9L3': 'Dans le cadre de transferts d’activité (voir {businessTransfers}).',
+  'mkt.privacy.s9P2': 'Nous ne vendons jamais vos informations personnelles.',
+
+  'mkt.privacy.s10Title': 'Prestataires',
+  'mkt.privacy.s10P1':
+    'Nous nous appuyons sur un nombre restreint de prestataires tiers pour exploiter le Service :',
+  'mkt.privacy.s10L1':
+    'Paiements — les plans payants sont facturés via Stripe, qui traite vos informations de paiement selon ses propres règles.',
+  'mkt.privacy.s10L2':
+    'Intégrations que vous connectez — si vous connectez un fournisseur d’IA, votre propre serveur SMTP ou Akismet, ces services reçoivent les données que leur intégration exige.',
+  'mkt.privacy.s10P2':
+    'Nous ne partageons avec ces prestataires que ce qui est nécessaire à leur mission.',
+
+  'mkt.privacy.s11Title': 'Exigences légales',
+  'mkt.privacy.s11P1':
+    'Nous pouvons communiquer des informations si la loi applicable, une procédure juridique ou une demande valable d’une autorité publique l’exige, ou lorsque nous estimons que cela est nécessaire pour protéger les droits, les biens ou la sécurité de nos utilisateurs, du Service ou d’autrui.',
+
+  'mkt.privacy.s12Title': 'Transferts d’activité',
+  'mkt.privacy.s12P1':
+    'Si nous sommes impliqués dans une fusion, une acquisition ou une cession d’actifs, vos informations peuvent être transférées dans le cadre de cette opération. Nous vous informerons avant que vos informations ne soient transférées ou ne deviennent soumises à une autre politique, et nous vous indiquerons les choix dont vous disposez.',
+
+  'mkt.privacy.s13Title': 'Sociétés affiliées',
+  'mkt.privacy.s13P1':
+    'Nous ne partageons actuellement pas vos informations personnelles avec des sociétés affiliées pour leurs propres finalités. Si cela venait à changer, la présente politique serait mise à jour en conséquence.',
+
+  'mkt.privacy.s14Title': 'Conservation des données',
+  'mkt.privacy.s14P1':
+    'Nous ne conservons les informations personnelles que le temps nécessaire aux finalités décrites dans cette politique et à l’exploitation du Service — par exemple, tant que votre compte est actif.',
+  'mkt.privacy.s14P2':
+    'Vous pouvez exporter ou supprimer votre contenu depuis le tableau de bord à tout moment, et la suppression de votre compte efface vos données utilisateur. Lorsque les informations ne sont plus nécessaires, nous les supprimons, sauf obligation légale de conservation ou pendant que les copies de sauvegarde sont retirées au fil du temps.',
+
+  'mkt.privacy.s15Title': 'Sécurité des données',
+  'mkt.privacy.s15P1':
+    'Nous mettons en œuvre des mesures techniques et organisationnelles raisonnables, conçues pour protéger les informations contre tout accès non autorisé, perte, mauvais usage ou divulgation.',
+  'mkt.privacy.s15P2':
+    'Le trafic entre votre navigateur et le Service transite par des connexions HTTPS chiffrées, les activités importantes du compte sont consignées dans un journal d’audit, et l’accès de vos coéquipiers est contrôlé utilisateur par utilisateur via des rôles. Pour en savoir plus, consultez notre page {security}.',
+
+  'mkt.privacy.s16Title': 'Transferts internationaux de données',
+  'mkt.privacy.s16P1':
+    'Vos informations peuvent être traitées dans des pays autres que le vôtre. Dans ce cas, nous prenons des mesures pour garantir un niveau de protection comparable, conformément aux exigences légales applicables.',
+  'mkt.privacy.s16P2':
+    'Localisations de traitement et mécanismes de transfert précis : [à compléter par l’équipe juridique].',
+
+  'mkt.privacy.s17Title': 'Vos droits en matière de confidentialité',
+  'mkt.privacy.s17P1':
+    'Selon votre lieu de résidence et la loi applicable, vous pouvez disposer de certains des droits suivants sur vos informations personnelles :',
+  'mkt.privacy.s17L1': 'Accès — connaître les informations que nous détenons à votre sujet.',
+  'mkt.privacy.s17L2': 'Rectification — demander la correction d’informations inexactes.',
+  'mkt.privacy.s17L3': 'Suppression — demander la suppression de vos informations.',
+  'mkt.privacy.s17L4': 'Portabilité — recevoir une copie de vos informations dans un format utilisable.',
+  'mkt.privacy.s17L5': 'Limitation — demander la limitation de certains traitements.',
+  'mkt.privacy.s17L6': 'Opposition — vous opposer à certaines utilisations.',
+  'mkt.privacy.s17L7': 'Retrait du consentement — retirer un consentement donné, par exemple pour les cookies d’analyse.',
+  'mkt.privacy.s17P2':
+    'Indépendamment de votre lieu de résidence, le produit vous donne un contrôle direct : vous pouvez exporter ou supprimer votre contenu depuis le tableau de bord à tout moment, et la suppression de votre compte efface vos données utilisateur. Pour tout le reste, contactez-nous et nous vous aiderons.',
+
+  'mkt.privacy.s18Title': 'Confidentialité des enfants',
+  'mkt.privacy.s18P1':
+    'Le Service ne s’adresse pas aux enfants, et nous ne collectons pas sciemment d’informations personnelles les concernant.',
+  'mkt.privacy.s18P2':
+    'Si vous pensez qu’un enfant nous a transmis des informations personnelles, merci de nous contacter : nous prendrons les mesures appropriées pour les supprimer.',
+
+  'mkt.privacy.s19Title': 'Modifications de la présente politique',
+  'mkt.privacy.s19P1':
+    'Nous pouvons mettre à jour cette politique de confidentialité de temps à autre. La date « En vigueur depuis » en haut de cette page reflète toujours la version actuelle.',
+  'mkt.privacy.s19P2':
+    'En cas de changements importants, nous vous en informerons — par exemple par un avis sur cette page ou via votre compte. Nous vous invitons à consulter cette page régulièrement.',
+
+  'mkt.privacy.s20Title': 'Nous contacter',
+  'mkt.privacy.s20P1':
+    'Si vous avez des questions sur la présente politique ou sur nos pratiques en matière de confidentialité, n’hésitez pas à nous contacter.',
 
   // ---- Légal : conditions ----
   'mkt.terms.title': "Conditions d'utilisation",

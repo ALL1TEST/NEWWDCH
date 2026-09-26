@@ -30,7 +30,8 @@ import { MarketingHome } from './home-page';
 import { PricingPage } from './pricing-page';
 import { BlogPage, BlogArticlePage } from './blog-page';
 import { AboutPage } from './about-page';
-import { PrivacyPage, TermsPage, SecurityPage, AccessibilityPage, LegalCenterPage, ContactPage } from './content-pages';
+import { PrivacyPage } from './privacy-page';
+import { TermsPage, SecurityPage, AccessibilityPage, LegalCenterPage, ContactPage } from './content-pages';
 import { SolutionsOverview } from './solutions-overview';
 import { SolutionPage } from './solution-page';
 import { SOLUTION_BY_SLUG } from './solutions-data';
@@ -308,7 +309,7 @@ export function MarketingSite() {
         {renderPage()}
       </main>
 
-      {!isSignup && <MarketingFooter />}
+      {!isSignup && <MarketingFooter currentHash={hash} />}
       {!isSignup && <CookieBanner />}
     </div>
   );

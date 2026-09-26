@@ -232,9 +232,15 @@ function AccordionGroup({ titleKey, links }: { titleKey: string; links: FooterLi
   );
 }
 
-export function MarketingFooter() {
+export function MarketingFooter({ currentHash }: { currentHash?: string }) {
   const { t } = useT();
   const year = new Date().getFullYear();
+
+  // Is the visitor ON the privacy route? (Both '#/privacy' and
+  // '#privacy' forms occur — Chromium normalizes the slash away.)
+  const onPrivacy =
+    typeof currentHash === 'string' &&
+    currentHash.replace(/^#\/?/, '').split(/[/?#]/)[0] === 'privacy';
 
   return (
     <footer className="bg-mkt-footer-bg">
@@ -337,7 +343,11 @@ export function MarketingFooter() {
             aria-label={t('mkt.footer.legal')}
             className="flex flex-wrap items-center justify-center"
           >
-            <a href={MKT.privacy} className={LEGAL_LINK_CLASS}>
+            <a
+              href={MKT.privacy}
+              aria-current={onPrivacy ? 'page' : undefined}
+              className={`${LEGAL_LINK_CLASS}${onPrivacy ? ' underline' : ''}`}
+            >
               {t('mkt.footer.privacy')}
             </a>
             <span className="mx-3 select-none text-white/30" aria-hidden="true">

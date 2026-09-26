@@ -724,7 +724,7 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.privacy.title': 'Privacy Policy',
   'mkt.privacy.updated': 'Last updated',
   'mkt.privacy.intro':
-    'This policy explains what Karmax collects, why, and the choices you have. We keep it short and honest.',
+    'Your privacy is important to us. This Privacy Policy explains what information we collect, how we use it, how we protect it, and the choices available to you.',
   'mkt.privacy.collectTitle': 'What we collect',
   'mkt.privacy.collectBody':
     'Account data you provide (name, email), the content and media you manage in the product, and technical data such as session cookies needed to keep you signed in. With your consent, anonymous usage statistics.',
@@ -740,6 +740,176 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.privacy.rightsTitle': 'Your rights',
   'mkt.privacy.rightsBody':
     'You can export or delete your content from the dashboard at any time. Deleting your account removes your user data. Contact us for anything else and we will help.',
+
+  // ---- Legal: privacy — long-form public page ----
+  // The 20-section production privacy policy rendered by
+  // components/marketing/privacy-page.tsx. Blocks are keyed
+  // s<N>{Title,P#,H#,L#} (title / paragraph / subheading / list
+  // item) and composed by the page's section table. Paragraph and
+  // list strings may embed {tokens} (rendered as links/buttons by
+  // the page) and [bracketed placeholders] (styled so the legal
+  // team can find and replace them — never invent these facts).
+  'mkt.privacy.effectiveAsOf': 'Effective as of',
+  'mkt.privacy.metaDescription':
+    'Learn how Karmax collects, uses, protects, and manages personal information.',
+  'mkt.privacy.onThisPage': 'On this page',
+  'mkt.privacy.manageCookies': 'Manage cookie preferences',
+  'mkt.privacy.questions': 'Questions about this Privacy Policy?',
+  'mkt.privacy.contactEmailLabel': 'Email',
+  'mkt.privacy.contactCompanyLabel': 'Company',
+  'mkt.privacy.contactAddressLabel': 'Address',
+  'mkt.privacy.contactCta': 'Contact us',
+
+  'mkt.privacy.s1Title': 'Scope of this Privacy Policy',
+  'mkt.privacy.s1P1':
+    'This Privacy Policy applies to the Karmax website, applications and hosted service (together, the “Service”) operated by [Company Legal Name] (“we”, “us”, “our”). It describes how we handle personal information when you browse our website, create an account or use the Service.',
+  'mkt.privacy.s1P2':
+    'It does not apply to services operated by third parties. When you connect an integration — such as an AI provider, your own SMTP server or Akismet — that service handles information under its own privacy policy. Your use of the Service in general is governed by our {terms}.',
+
+  'mkt.privacy.s2Title': 'What Information Do We Collect?',
+  'mkt.privacy.s2P1':
+    'The information we handle depends on how you use the Service. In general, it falls into two categories.',
+  'mkt.privacy.s2H1': 'Personally identifiable information',
+  'mkt.privacy.s2P2':
+    'Information that identifies you as an individual — for example your name and email address, the content and media you manage in the product, and communications you send us.',
+  'mkt.privacy.s2H2': 'Non-personally identifiable information',
+  'mkt.privacy.s2P3':
+    'Information that is not linked to a specific identity on its own — for example technical session data and, only with your consent, anonymous usage statistics.',
+
+  'mkt.privacy.s3Title': 'Why Do We Collect Personal Data?',
+  'mkt.privacy.s3P1':
+    'We collect and use personal information to operate your account, to provide and maintain the Service, to keep the platform secure, and — only if you opt in — to understand aggregate usage so we can improve the product.',
+  'mkt.privacy.s3P2':
+    'We do not sell your personal information, and we do not run advertising trackers.',
+
+  'mkt.privacy.s4Title': 'Information You Provide Directly',
+  'mkt.privacy.s4P1':
+    'You give us certain information directly when you use the Service:',
+  'mkt.privacy.s4L1':
+    'Account information — your name and email address when you create an account, and the credentials you use to sign in.',
+  'mkt.privacy.s4L2':
+    'Content — the articles, media and settings you create and manage in the product.',
+  'mkt.privacy.s4L3':
+    'Communications — information you include when you contact us or respond to our messages.',
+  'mkt.privacy.s4P2':
+    'When you upgrade to a paid plan, billing information is handled by our payment provider — see {serviceProviders} below.',
+
+  'mkt.privacy.s5Title': 'Information We Collect Automatically',
+  'mkt.privacy.s5P1':
+    'When you use the Service, some information is collected automatically:',
+  'mkt.privacy.s5L1':
+    'Technical information — data such as your session, which is needed to keep you signed in, and your language and theme preferences.',
+  'mkt.privacy.s5L2':
+    'Usage information — with your consent, anonymous statistics about how features are used, which help us improve the product.',
+  'mkt.privacy.s5P2':
+    'We do not use advertising or cross-site tracking cookies.',
+
+  'mkt.privacy.s6Title': 'Information We Receive From Other Sources',
+  'mkt.privacy.s6P1':
+    'We do not purchase personal information from data brokers, and we do not collect it from third-party sources for our own purposes.',
+  'mkt.privacy.s6P2':
+    'When you connect an integration — an AI provider, your own SMTP server or Akismet — we may receive the limited information the integration returns in order to work, such as delivery or spam-check results for the content you send through it.',
+
+  'mkt.privacy.s7Title': 'How We Use Your Information',
+  'mkt.privacy.s7P1': 'We use the information described in this policy to:',
+  'mkt.privacy.s7L1': 'Operate your account and keep you signed in securely.',
+  'mkt.privacy.s7L2': 'Provide, maintain and improve the Service.',
+  'mkt.privacy.s7L3': 'Process payments for paid plans, through our payment provider.',
+  'mkt.privacy.s7L4': 'Keep the platform and your account secure, including through the audit trail.',
+  'mkt.privacy.s7L5': 'Understand — only with your consent — aggregate, anonymous usage of the product.',
+  'mkt.privacy.s7L6': 'Respond to your requests and communicate with you about your account or the Service.',
+  'mkt.privacy.s7P2':
+    'We do not use your information to profile you for advertising, and we do not sell it.',
+
+  'mkt.privacy.s8Title': 'Cookies and Similar Technologies',
+  'mkt.privacy.s8P1':
+    'The Service uses a small number of cookies and similar browser technologies:',
+  'mkt.privacy.s8L1':
+    'Strictly necessary cookies — session, language and theme. These are always on; the site cannot work without them.',
+  'mkt.privacy.s8L2':
+    'Analytics — anonymous usage statistics. These load only after you accept them in the cookie banner, and they are off by default.',
+  'mkt.privacy.s8P2':
+    'We do not set advertising or tracking cookies at any time.',
+  'mkt.privacy.s8P3':
+    'You can change your choice at any time: {cookiePrefs}.',
+
+  'mkt.privacy.s9Title': 'When Do We Disclose Information to Third Parties?',
+  'mkt.privacy.s9P1':
+    'We disclose personal information to third parties only in the limited situations described in this policy:',
+  'mkt.privacy.s9L1':
+    'Service providers that help us operate the Service (see {serviceProviders}).',
+  'mkt.privacy.s9L2': 'Legal requirements (see {legalRequirements}).',
+  'mkt.privacy.s9L3': 'Business transfers (see {businessTransfers}).',
+  'mkt.privacy.s9P2': 'We never sell your personal information.',
+
+  'mkt.privacy.s10Title': 'Service Providers',
+  'mkt.privacy.s10P1':
+    'We rely on a small number of third-party providers to operate the Service:',
+  'mkt.privacy.s10L1':
+    'Payments — paid plans are billed through Stripe, which processes your payment information under its own policies.',
+  'mkt.privacy.s10L2':
+    'Integrations you connect — if you connect an AI provider, your own SMTP server or Akismet, those services receive the data their integration requires to work.',
+  'mkt.privacy.s10P2':
+    'We share with these providers only what is necessary for the task at hand.',
+
+  'mkt.privacy.s11Title': 'Legal Requirements',
+  'mkt.privacy.s11P1':
+    'We may disclose information if we are required to do so by applicable law, legal process or a valid request from a public authority, or when we believe it is necessary to protect the rights, property or safety of our users, the Service or others.',
+
+  'mkt.privacy.s12Title': 'Business Transfers',
+  'mkt.privacy.s12P1':
+    'If we are involved in a merger, acquisition or sale of assets, your information may be transferred as part of that transaction. We will let you know before your information is transferred or becomes subject to a different policy, and we will tell you about the choices available to you.',
+
+  'mkt.privacy.s13Title': 'Affiliates',
+  'mkt.privacy.s13P1':
+    'We do not currently share your personal information with affiliated companies for their own purposes. If that ever changes, this Privacy Policy will be updated to say so.',
+
+  'mkt.privacy.s14Title': 'Data Retention',
+  'mkt.privacy.s14P1':
+    'We keep personal information only as long as necessary for the purposes described in this policy and to operate the Service — for example, while your account is active.',
+  'mkt.privacy.s14P2':
+    'You can export or delete your content from the dashboard at any time, and deleting your account removes your user data. When information is no longer needed, we remove it, except where we are legally required to keep it or while backup copies are rotated out over time.',
+
+  'mkt.privacy.s15Title': 'Data Security',
+  'mkt.privacy.s15P1':
+    'We use reasonable technical and organizational measures designed to protect information from unauthorized access, loss, misuse or disclosure.',
+  'mkt.privacy.s15P2':
+    'Traffic between your browser and the Service travels over encrypted HTTPS connections, important account activity is recorded in an audit log, and access for teammates is controlled per user with roles. You can read more on our {security} page.',
+
+  'mkt.privacy.s16Title': 'International Data Transfers',
+  'mkt.privacy.s16P1':
+    'Your information may be processed in countries other than your own. When that happens, we take measures to help ensure it receives a comparable level of protection, in line with applicable legal requirements.',
+  'mkt.privacy.s16P2':
+    'Specific processing locations and transfer mechanisms: [to be completed by the legal team].',
+
+  'mkt.privacy.s17Title': 'Your Privacy Rights',
+  'mkt.privacy.s17P1':
+    'Depending on your location and applicable law, you may have some of the following rights over your personal information:',
+  'mkt.privacy.s17L1': 'Access — to know what information we hold about you.',
+  'mkt.privacy.s17L2': 'Correction — to ask us to correct inaccurate information.',
+  'mkt.privacy.s17L3': 'Deletion — to ask us to delete your information.',
+  'mkt.privacy.s17L4': 'Data portability — to receive a copy of your information in a usable format.',
+  'mkt.privacy.s17L5': 'Restriction — to ask us to limit how we use your information.',
+  'mkt.privacy.s17L6': 'Objection — to object to certain uses.',
+  'mkt.privacy.s17L7': 'Consent withdrawal — to withdraw a consent you have given, for example for analytics cookies.',
+  'mkt.privacy.s17P2':
+    'Independently of where you live, the product gives you direct control: you can export or delete your content from the dashboard at any time, and deleting your account removes your user data. For anything else, contact us and we will help.',
+
+  'mkt.privacy.s18Title': 'Children’s Privacy',
+  'mkt.privacy.s18P1':
+    'The Service is not directed to children, and we do not knowingly collect personal information from children.',
+  'mkt.privacy.s18P2':
+    'If you believe a child has provided us with personal information, please contact us and we will take appropriate steps to delete it.',
+
+  'mkt.privacy.s19Title': 'Changes to This Privacy Policy',
+  'mkt.privacy.s19P1':
+    'We may update this Privacy Policy from time to time. The “Effective as of” date at the top of this page always reflects the current version.',
+  'mkt.privacy.s19P2':
+    'If we make material changes, we will notify you — for example with a notice on this page or through your account. We encourage you to review this page periodically.',
+
+  'mkt.privacy.s20Title': 'Contact Us',
+  'mkt.privacy.s20P1':
+    'If you have questions about this Privacy Policy or our privacy practices, please contact us.',
 
   // ---- Legal: terms ----
   'mkt.terms.title': 'Terms of Service',

@@ -3,10 +3,11 @@
 // ============================================================
 // SOLUTIONS + LEGAL + CONTACT pages
 // ============================================================
-// The legal pages (privacy/terms/security/accessibility), the
-// legal center, and the contact page. All content is product-
+// The legal pages (terms/security/accessibility), the legal
+// center, and the contact page. All content is product-
 // honest — no invented team, stats or claims.
-// (The About experience now lives in about-page.tsx.)
+// (The About experience now lives in about-page.tsx; the
+// long-form Privacy Policy lives in privacy-page.tsx.)
 // ============================================================
 
 import React from 'react';
@@ -43,33 +44,8 @@ function LegalSection({ titleKey, bodyKey }: { titleKey: string; bodyKey: string
   );
 }
 
-export function PrivacyPage() {
-  const { t } = useT();
-  return (
-    <div className="mkt-container max-w-2xl pt-32 pb-10 sm:pt-40">
-      <Reveal>
-        <header className="flex flex-col gap-4 border-b border-border pb-8">
-          <Eyebrow>
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            {t('mkt.footer.legal')}
-          </Eyebrow>
-          <h1 className="mkt-display text-3xl text-text-primary sm:text-4xl">{t('mkt.privacy.title')}</h1>
-          <p className="text-sm text-text-muted">
-            {t('mkt.privacy.updated')}: {new Date().toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' })}
-          </p>
-          <p className="text-sm leading-relaxed text-text-secondary">{t('mkt.privacy.intro')}</p>
-        </header>
-      </Reveal>
-      <div className="mt-8 flex flex-col gap-8">
-        <Reveal><LegalSection titleKey="mkt.privacy.collectTitle" bodyKey="mkt.privacy.collectBody" /></Reveal>
-        <Reveal><LegalSection titleKey="mkt.privacy.whyTitle" bodyKey="mkt.privacy.whyBody" /></Reveal>
-        <Reveal><LegalSection titleKey="mkt.privacy.cookiesTitle" bodyKey="mkt.privacy.cookiesBody" /></Reveal>
-        <Reveal><LegalSection titleKey="mkt.privacy.thirdTitle" bodyKey="mkt.privacy.thirdBody" /></Reveal>
-        <Reveal><LegalSection titleKey="mkt.privacy.rightsTitle" bodyKey="mkt.privacy.rightsBody" /></Reveal>
-      </div>
-    </div>
-  );
-}
+// (The public Privacy Policy is the long-form document in
+// privacy-page.tsx — this module keeps only the other legal pages.)
 
 export function TermsPage() {
   const { t } = useT();
