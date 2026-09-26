@@ -16,7 +16,7 @@
 //   ├────────────────────────────────────────────────────────┤
 //   │  BAND 3 — CENTERED BRAND + LEGAL                       │
 //   │  logo · © 2026 Karmax. All rights reserved.            │
-//   │  Privacy Policy | Terms of Service                     │
+//   │  Privacy Policy | Terms of Service | Security          │
 //   └────────────────────────────────────────────────────────┘
 //
 // Breakpoints:
@@ -31,10 +31,11 @@
 // • Items whose destination does not exist yet are rendered
 //   VISUALLY INACTIVE (muted, non-clickable, aria-disabled) —
 //   never as fake routes.
-// • The legal row links to the real legal pages (Privacy
-//   Policy, Terms of Service). The cookie-preferences control
-//   itself remains available from the cookie banner and the
-//   Legal Center — only this footer link was removed by design.
+// • The legal row links to the real legal/trust pages (Privacy
+//   Policy, Terms of Service, Security). The cookie-preferences
+//   control itself remains available from the cookie banner and
+//   the Legal Center — only this footer link was removed by
+//   design.
 // • Social icons link to the configurable Karmax profiles in
 //   SOCIAL_PROFILES below — update the URLs when the real
 //   handles differ.
@@ -336,8 +337,8 @@ export function MarketingFooter({ currentHash }: { currentHash?: string }) {
             © {year} {t('mkt.brand.name')}. {t('mkt.footer.rightsReserved')}
           </p>
 
-          {/* Legal navigation with pipe separators — the two
-              legal pages. */}
+          {/* Legal navigation with pipe separators — the three
+              legal/trust pages. */}
           <nav
             aria-label={t('mkt.footer.legal')}
             className="flex flex-wrap items-center justify-center"
@@ -354,6 +355,12 @@ export function MarketingFooter({ currentHash }: { currentHash?: string }) {
             </span>
             <a href={MKT.terms} className={LEGAL_LINK_CLASS}>
               {t('mkt.footer.terms')}
+            </a>
+            <span className="mx-3 select-none text-white/30" aria-hidden="true">
+              |
+            </span>
+            <a href={MKT.security} className={LEGAL_LINK_CLASS}>
+              {t('mkt.footer.security')}
             </a>
           </nav>
         </div>

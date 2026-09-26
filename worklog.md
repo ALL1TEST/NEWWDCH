@@ -12408,3 +12408,28 @@ Stage Summary:
 - Security content is product-honest: only verified facts stated (email+password auth, password change, sessions, roles, per-site separation, audit log, backups+restore, export/delete, HTTPS, validated inputs, Stripe/AI/SMTP/Akismet) + 12 clearly-styled placeholders; honest MFA-absence disclosure; no certifications/vendors/algorithms/uptime invented.
 - Files: NEW src/components/marketing/security-page.tsx; MODIFIED marketing-footer.tsx (cookie link removed), content-pages.tsx (old SecurityPage removed), marketing-site.tsx (import), en+fr client-marketing.ts (long-form security keys).
 - Pending from earlier tasks: product-tour.mp4 still not delivered to the server (hero video code ready); blog redesign task still not started.
+
+---
+Task ID: footer-security-link-1
+Agent: main (orchestrator)
+Task: Add a "Security" link to the global footer legal row, immediately after "Terms of Service" → final row exactly "Privacy Policy | Terms of Service | Security". Link to the EXISTING /security page. No layout/color/other-link changes; no Cookie Preferences.
+
+Work Log:
+- Verified prerequisites already existed: MKT.security = '#/security' (marketing-header.tsx), SecurityPage wired in marketing-site.tsx ('security' hash route), i18n key 'mkt.footer.security' = 'Security' (en) / 'Sécurité' (fr) — only EN+FR have client-marketing fragments.
+- Edited ONLY src/components/marketing/marketing-footer.tsx legal nav (Band 3): appended `<span class="mx-3 select-none text-white/30">|</span>` + `<a href={MKT.security} className={LEGAL_LINK_CLASS}>{t('mkt.footer.security')}</a>` after the Terms link — identical separator span and identical LEGAL_LINK_CLASS as existing links.
+- Updated file header comments only (ASCII Band-3 diagram now shows three links; content-honesty bullet lists Privacy/Terms/Security) — zero visual impact.
+- bunx eslint on marketing-footer.tsx: 0 errors; dev.log clean compiles.
+
+E2E verification (agent-browser):
+- Home (1440x900): legal row renders "Privacy Policy | Terms of Service | Security" in exact order; computed styles of all 3 links identical (14px / 700 / white / underline-offset 4px / hover:underline); both separators identical (|, 12px margins, white/30).
+- Cookie banner accepted (it was covering the page — unrelated pre-existing behavior).
+- Clicked footer "Security" → navigates to #security, title "Security — Karmax", H1 "Security", 17 H2 sections intact (existing page untouched).
+- Global consistency: #/privacy and #/terms footers both show the new row; both pages' own content intact (H1s correct).
+- FR (localStorage cms_locale=fr + reload): row = "Politique de confidentialité | Conditions d'utilisation | Sécurité".
+- Mobile 375x812: row width 335px, no horizontal overflow; VLM screenshots (desktop + mobile): identical typography, even spacing, no Cookie Preferences, no layout issues.
+- Fresh loads of / and #/security: zero console/page errors.
+
+Stage Summary:
+- Footer legal row is now exactly "Privacy Policy | Terms of Service | Security" globally (EN + FR), reusing the existing /security page, existing MKT.security route constant and existing i18n keys — no new page, no layout/color changes, no other links touched, no Cookie Preferences.
+- Single file modified: src/components/marketing/marketing-footer.tsx (one link + one separator + comment updates).
+- Pending from earlier tasks: product-tour.mp4 still not delivered; blog redesign still not started.
