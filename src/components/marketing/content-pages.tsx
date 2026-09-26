@@ -3,11 +3,12 @@
 // ============================================================
 // SOLUTIONS + LEGAL + CONTACT pages
 // ============================================================
-// The legal pages (terms/security/accessibility), the legal
-// center, and the contact page. All content is product-
-// honest — no invented team, stats or claims.
+// The remaining compact legal pages (security/accessibility),
+// the legal center, and the contact page. All content is
+// product-honest — no invented team, stats or claims.
 // (The About experience now lives in about-page.tsx; the
-// long-form Privacy Policy lives in privacy-page.tsx.)
+// long-form Privacy Policy lives in privacy-page.tsx; the
+// long-form Terms of Service lives in terms-page.tsx.)
 // ============================================================
 
 import React from 'react';
@@ -45,32 +46,9 @@ function LegalSection({ titleKey, bodyKey }: { titleKey: string; bodyKey: string
 }
 
 // (The public Privacy Policy is the long-form document in
-// privacy-page.tsx — this module keeps only the other legal pages.)
-
-export function TermsPage() {
-  const { t } = useT();
-  return (
-    <div className="mkt-container max-w-2xl pt-32 pb-10 sm:pt-40">
-      <Reveal>
-        <header className="flex flex-col gap-4 border-b border-border pb-8">
-          <Eyebrow>
-            <Scale className="h-3.5 w-3.5" aria-hidden="true" />
-            {t('mkt.footer.legal')}
-          </Eyebrow>
-          <h1 className="mkt-display text-3xl text-text-primary sm:text-4xl">{t('mkt.terms.title')}</h1>
-          <p className="text-sm leading-relaxed text-text-secondary">{t('mkt.terms.intro')}</p>
-        </header>
-      </Reveal>
-      <div className="mt-8 flex flex-col gap-8">
-        <Reveal><LegalSection titleKey="mkt.terms.accountTitle" bodyKey="mkt.terms.accountBody" /></Reveal>
-        <Reveal><LegalSection titleKey="mkt.terms.serviceTitle" bodyKey="mkt.terms.serviceBody" /></Reveal>
-        <Reveal><LegalSection titleKey="mkt.terms.fairUseTitle" bodyKey="mkt.terms.fairUseBody" /></Reveal>
-        <Reveal><LegalSection titleKey="mkt.terms.billingTitle" bodyKey="mkt.terms.billingBody" /></Reveal>
-        <Reveal><LegalSection titleKey="mkt.terms.liabilityTitle" bodyKey="mkt.terms.liabilityBody" /></Reveal>
-      </div>
-    </div>
-  );
-}
+// privacy-page.tsx, and the public Terms of Service is the
+// long-form document in terms-page.tsx — this module keeps only
+// the other legal pages.)
 
 // -------------------- Security --------------------
 

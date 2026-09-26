@@ -12346,3 +12346,34 @@ Stage Summary:
 - Legal placeholders intentionally preserved and visually distinct for the legal team: [Company Legal Name], [Privacy Contact Email], [Business Address], [to be completed by the legal team] (international transfers).
 - Existing systems reused (nothing duplicated): header, footer, cookie preferences, design tokens, hash routing, i18n; dashboard privacy module unaffected (old mkt.privacy.collect/why/cookies/third/rights keys kept for it).
 - The attached reference screenshot was a HubSpot marketing page — design followed the user's 23-section text spec instead.
+
+---
+Task ID: terms-legal-sibling-1
+Agent: main (orchestrator)
+Task: Redesign the Terms of Service page as the exact visual sibling of the current (already redesigned) Privacy Policy page — same design system, same LegalPageLayout architecture, 23 numbered sections, no invented legal facts.
+
+Work Log:
+- Inspected the current Privacy Policy implementation (src/components/marketing/privacy-page.tsx) — the SOURCE OF TRUTH design: compact doc header (H1 + "Effective as of" + intro), two-column grid (article + sticky TOC), mkt-container max-w-6xl, grid-cols-[minmax(0,1fr)_15rem], sticky top-25 sidebar, active-section tracking on .mkt-scroll-root, mobile collapsible "On this page".
+- Created src/components/marketing/legal-document.tsx — shared LEGAL DOCUMENT SYSTEM extracted verbatim from privacy-page.tsx: LegalPageLayout (parametrized by topId/titleKey/effectiveAsOfKey/introKey/onThisPageKey/metaDescriptionKey/sections/tokens/contact), LegalSectionData/LegalBlock/LegalTokenDef/LegalContactConfig types, tokens via React context, parseInline ({tokens} + [placeholders]), LegalListItem, TocList, scrollToLegalId, active-tracking effect, meta-description effect.
+- Refactored privacy-page.tsx to render <LegalPageLayout> with its existing SECTIONS/TOKENS/contact config — rendered DOM identical (verified: 21 TOC items, active tracking, cookie-prefs dialog, scroll tokens, contact card all still work).
+- Created src/components/marketing/terms-page.tsx — TermsPage with the 23 required sections (Acceptance of Terms → Contact Us), tokens {privacy}/{security}/{pricing}, contact card with [Legal Contact Email] + [Company Legal Name] placeholders, CTA → #/contact.
+- Removed the old compact TermsPage from content-pages.tsx; marketing-site.tsx now imports TermsPage from './terms-page'.
+- Replaced the mkt.terms.* i18n block in en/client-marketing.ts with the full long-form set (s1..s23, en) and added the complete French translation in fr/client-marketing.ts. Old unused keys (accountTitle/Body, serviceTitle/Body, fairUseTitle/Body, billingTitle/Body, liabilityTitle/Body) removed — verified zero stale references.
+- Legal content rules honored: only established project facts used (Stripe billing, monthly/yearly plans, dashboard upgrade/downgrade/cancel, end-of-period cancellation, AI features, SMTP/Akismet/AI-provider integrations, HTTPS, audit log, per-user roles, backups, export/delete from dashboard); NO currency claim (old CHF text conflicted with USD pricing display — replaced by [Billing terms] placeholder); 17 bracketed placeholders for liability cap, indemnification, governing law, dispute resolution, refunds, data retention, uptime, notice periods, age eligibility, AI providers.
+- Verified: bun run lint → zero errors in modified files (42 pre-existing errors in unrelated files untouched); dev.log clean compiles; no console/page errors.
+
+E2E verification (agent-browser, 1440x900 + 375x812):
+- #/terms renders: H1 "Terms of Service" 48px/700, "Effective as of: September 26, 2026", intro, 23 H2 sections (1. Acceptance of Terms … 23. Contact Us), 11 H3 subsections, 24 TOC items, sticky sidebar, meta description set, title "Terms of Service — Karmax".
+- TOC click "Subscriptions and Billing" → active (aria-current=location) + smooth scroll to 112px (scroll-mt-28); free-scroll tracking updates active item correctly.
+- Style parity vs #/privacy (computed styles): container 1216px, grid "840px 240px" gap 56px, H1 48px/700/-1.44px, date 14px, body P 17px/29.75px, H2 32px/700, H3 20px/600, header border 1px, sidebar sticky/top-100px/w-240px/border-1px/radius-16px/pad-20px/maxH-748px, TOC button 13px/2px-left-border, active color rgb(255,72,0)/500, section gap 56px, list 17px — ALL IDENTICAL.
+- VLM side-by-side comparison of full-page screenshots: "same legal-document system… built at the same time"; differences are content-only.
+- Mobile 375px: desktop sidebar hidden, collapsible "ON THIS PAGE" (24 items) expands, TOC nav auto-collapses then scrolls to 112px, no horizontal scroll, H1 36px.
+- FR (cms_locale=fr): full French rendering incl. localized date "26 septembre 2026", French TOC/billing H3s/contact card.
+- Privacy regression: cookie-preferences dialog opens/closes, {serviceProviders} scroll token works, contact card intact, body {terms} link navigates to #/terms.
+- Cross-navigation: footer "Terms of Service" link, privacy body → terms link, terms body → privacy link all work.
+
+Stage Summary:
+- Terms of Service is now the direct visual sibling of the Privacy Policy page, rendered by the SAME LegalPageLayout system (user's requested <LegalPageLayout><TermsOfService/></LegalPageLayout> architecture) — identical header/container/typography/sidebar/TOC/spacing/footer/responsive behavior by construction.
+- Legal content is product-honest: established facts only + 17 clearly-styled placeholders for the legal team; en + fr fully translated.
+- Files: NEW src/components/marketing/legal-document.tsx, src/components/marketing/terms-page.tsx; MODIFIED privacy-page.tsx (refactor, DOM unchanged), content-pages.tsx (old TermsPage removed), marketing-site.tsx (import), en+fr client-marketing.ts (long-form terms keys).
+- Pending from earlier tasks: product-tour.mp4 still not delivered to the server (hero video code ready, deploys on file arrival); blog redesign task still not started.

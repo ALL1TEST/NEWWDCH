@@ -911,25 +911,213 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.privacy.s20P1':
     'If you have questions about this Privacy Policy or our privacy practices, please contact us.',
 
-  // ---- Legal: terms ----
+  // ---- Legal: terms — long-form public page ----
+  // The 23-section Terms of Service rendered by
+  // components/marketing/terms-page.tsx (through the shared
+  // LegalPageLayout in legal-document.tsx — the same system as
+  // the Privacy Policy page). Blocks are keyed s<N>{Title,P#,H#,L#}
+  // (title / paragraph / subheading / list item). Paragraph and
+  // list strings may embed {tokens} (rendered as links by the
+  // page) and [bracketed placeholders] (styled so the legal team
+  // can find and replace them — never invent these facts).
   'mkt.terms.title': 'Terms of Service',
+  'mkt.terms.effectiveAsOf': 'Effective as of',
+  'mkt.terms.metaDescription':
+    'Read the Terms of Service that govern your access to and use of the Karmax service.',
+  'mkt.terms.onThisPage': 'On this page',
+  'mkt.terms.questions': 'Questions about these Terms?',
+  'mkt.terms.contactEmailLabel': 'Email',
+  'mkt.terms.contactCompanyLabel': 'Company',
+  'mkt.terms.contactCta': 'Contact us',
   'mkt.terms.intro':
-    'These terms govern your use of Karmax. Plain language, no traps.',
-  'mkt.terms.accountTitle': 'Your account',
-  'mkt.terms.accountBody':
-    'You are responsible for your account credentials and for the content you publish through the platform. Keep your password safe and your API keys private.',
-  'mkt.terms.serviceTitle': 'The service',
-  'mkt.terms.serviceBody':
-    'Karmax provides content management, SEO tooling, media storage, newsletter and automation features per your plan. We may improve or change features; material changes will be announced.',
-  'mkt.terms.fairUseTitle': 'Fair use',
-  'mkt.terms.fairUseBody':
-    'Plan limits (sites, storage, AI usage) are enforced for the health of the platform. Use the service lawfully and respect the sites you connect.',
-  'mkt.terms.billingTitle': 'Billing',
-  'mkt.terms.billingBody':
-    'Paid plans are billed monthly or yearly in CHF through Stripe. You can upgrade, downgrade or cancel anytime from your dashboard; cancellations take effect at the end of the billing period.',
-  'mkt.terms.liabilityTitle': 'Liability',
-  'mkt.terms.liabilityBody':
-    'The service is provided “as is”. We work hard on reliability — backups, monitoring, honest uptime — but we are not liable for indirect damages or lost profits.',
+    'These Terms of Service govern your access to and use of the Karmax service. By accessing or using the Service, you agree to be bound by these Terms.',
+
+  'mkt.terms.s1Title': 'Acceptance of Terms',
+  'mkt.terms.s1P1':
+    'These Terms of Service (these “Terms”) govern your access to and use of the Karmax website, applications and hosted service (together, the “Service”) operated by [Company Legal Name] (“we”, “us”, “our”). By accessing or using the Service, you agree to be bound by these Terms and by our {privacy}, which is incorporated into these Terms by reference.',
+  'mkt.terms.s1P2':
+    'If you do not agree to these Terms, you should not access or use the Service.',
+  'mkt.terms.s1P3':
+    'If you use the Service on behalf of an organization, you represent and warrant that you have the authority to bind that organization to these Terms. In that case, “you” and “your” refer to that organization.',
+
+  'mkt.terms.s2Title': 'Eligibility and Account',
+  'mkt.terms.s2P1':
+    'You may use the Service only if you are able to form a binding contract with us and are not barred from doing so under applicable law. [Minimum age and eligibility requirements — to be completed.]',
+  'mkt.terms.s2P2':
+    'To use the Service you create an account, signing in with an email address and a password, or with Google. You agree to provide accurate, current and complete information when you create your account, and to keep it up to date.',
+  'mkt.terms.s2P3':
+    'You are responsible for safeguarding your password and other credentials, for keeping your API keys private, and for all activity that occurs under your account. If you suspect unauthorized access to your account, contact us.',
+  'mkt.terms.s2P4':
+    'You can invite teammates to your workspace; their access is controlled per user with roles. You are responsible for the people you invite and for the permissions you grant them.',
+
+  'mkt.terms.s3Title': 'The Service',
+  'mkt.terms.s3P1':
+    'Karmax is a content management platform. Depending on your plan, the Service provides content management, SEO tooling, media storage, newsletter and automation features, backups, and related functionality for the sites you manage.',
+  'mkt.terms.s3P2':
+    'The Service evolves continually. We may add, change or remove features, and the functionality available to you depends on the plan you choose and the limits that apply to it.',
+  'mkt.terms.s3P3':
+    'We may impose plan limits — such as the number of sites, storage, or AI usage — for the health of the platform and the quality of the Service. The plans and their limits are described on our {pricing} page.',
+
+  'mkt.terms.s4Title': 'Subscriptions and Billing',
+  'mkt.terms.s4H1': 'Plans and Pricing',
+  'mkt.terms.s4P2':
+    'We offer the plans and pricing described on our {pricing} page. What a plan includes — its features and limits — depends on the plan you select.',
+  'mkt.terms.s4H2': 'Billing',
+  'mkt.terms.s4P3':
+    'Paid plans are billed on a monthly or yearly basis through Stripe, our payment provider. The price and billing period are shown to you at checkout before you confirm a purchase. [Billing terms — currency, invoicing and taxes — to be completed.]',
+  'mkt.terms.s4H3': 'Automatic Renewal',
+  'mkt.terms.s4P4':
+    'Paid plans renew automatically at the end of each billing period, using the payment method on file, unless you cancel before the renewal date.',
+  'mkt.terms.s4H4': 'Cancellation',
+  'mkt.terms.s4P5':
+    'You can upgrade, downgrade or cancel your subscription at any time from your dashboard. Cancellation takes effect at the end of the current billing period; the subscription then stops renewing.',
+  'mkt.terms.s4H5': 'Refunds',
+  'mkt.terms.s4P6':
+    '[Refund Policy — to be completed.] If you believe you have been charged in error, please contact us.',
+  'mkt.terms.s4H6': 'Price Changes',
+  'mkt.terms.s4P7':
+    'We may change our prices from time to time. Changes that affect an existing subscription will be communicated to you before they take effect. [Notice period — confirm business policy.]',
+
+  'mkt.terms.s5Title': 'Free Trials',
+  'mkt.terms.s5P1':
+    'From time to time we may offer free trials or promotional access to parts of the Service. When a trial is offered, its conditions — including its duration and what happens when it ends — are shown to you before you start it.',
+  'mkt.terms.s5P2':
+    'Unless stated otherwise, trials are provided for evaluation, and these Terms — including the Acceptable Use section — apply to them in the same way as to paid use.',
+
+  'mkt.terms.s6Title': 'Acceptable Use',
+  'mkt.terms.s6P1':
+    'You may use the Service only for lawful purposes and in accordance with these Terms. In connection with your use of the Service, you must not:',
+  'mkt.terms.s6L1':
+    'Break the law — use the Service in violation of any applicable law or regulation, or in a way that infringes the rights of others.',
+  'mkt.terms.s6L2':
+    'Gain unauthorized access — access accounts, data or systems that are not yours, or circumvent authentication, security controls or plan limits.',
+  'mkt.terms.s6L3':
+    'Distribute malware — upload, transmit or distribute malicious code, viruses or similar harmful software.',
+  'mkt.terms.s6L4':
+    'Attack the Service — interfere with, overload or disrupt the Service, its infrastructure or other users, including through excessive automated requests where prohibited.',
+  'mkt.terms.s6L5':
+    'Probe or reverse engineer — probe, scan or test the vulnerability of the Service, or reverse engineer it where prohibited by applicable law.',
+  'mkt.terms.s6L6':
+    'Abuse others — use the Service to harass, threaten or defame others, or to distribute spam.',
+  'mkt.terms.s6L7':
+    'Circumvent enforcement — deliberately work around plan limits, enforcement measures or the intended use of the Service.',
+  'mkt.terms.s6P2':
+    'We may enforce these rules, and plan limits, to protect the platform and its users.',
+
+  'mkt.terms.s7Title': 'User Content',
+  'mkt.terms.s7P1':
+    'The content you create, upload or manage through the Service — such as articles, media and settings — remains yours, subject to the rights of others and to applicable law. We do not claim ownership of your content.',
+  'mkt.terms.s7P2':
+    'To provide the Service, you grant us the permissions the Service needs: to host, store, process, transmit and display your content, and to back it up, in each case solely as needed to operate and provide the Service for you.',
+  'mkt.terms.s7P3':
+    'You are responsible for the content you submit, including for having the rights needed to use it. You can export or delete your content from the dashboard at any time.',
+
+  'mkt.terms.s8Title': 'Intellectual Property',
+  'mkt.terms.s8P1':
+    'The Service — including its software, website, branding, design, documentation and underlying technology — is owned by [Company Legal Name] and its licensors and is protected by intellectual property laws.',
+  'mkt.terms.s8P2':
+    'Access to the Service gives you the right to use it under these Terms. It does not transfer ownership of the software, the platform or any of its components to you, and nothing in these Terms grants you a license to our trademarks.',
+
+  'mkt.terms.s9Title': 'Third-Party Services',
+  'mkt.terms.s9P1':
+    'The Service supports integrations with third-party services — for example AI providers you connect, your own SMTP server, or Akismet. When you connect an integration, it receives the data it needs to work, and your use of that service is governed by its own terms and policies.',
+  'mkt.terms.s9P2':
+    'We do not control third-party services and are not responsible for their actions or availability. Payments for paid plans are processed by Stripe under its own terms.',
+
+  'mkt.terms.s10Title': 'AI Features',
+  'mkt.terms.s10P1':
+    'Parts of the Service include AI features — such as AI assistance for writing — subject to the limits of your plan. When you use them, you provide the input, and the Service returns generated output.',
+  'mkt.terms.s10P2':
+    'AI-generated output may be incomplete, inaccurate or unsuitable for your purpose. You should review any output before relying on it or publishing it.',
+  'mkt.terms.s10P3':
+    'You are responsible for how you use AI-generated content, including for making sure it complies with these Terms, applicable law and the rights of others.',
+  'mkt.terms.s10P4':
+    'AI features may rely on platform-provided models or on AI providers you connect. [AI providers and models — list or link the current providers.]',
+
+  'mkt.terms.s11Title': 'Privacy',
+  'mkt.terms.s11P1':
+    'Your use of the Service is also subject to our {privacy}, which explains how we collect, use and protect personal information.',
+
+  'mkt.terms.s12Title': 'Security',
+  'mkt.terms.s12P1':
+    'We use reasonable technical and organizational measures designed to protect the Service and its data — such as encrypted HTTPS connections, an audit log of important account activity, per-user roles for teammates, and backups you can run on demand or on a schedule.',
+  'mkt.terms.s12P2':
+    'No method of transmission or storage is completely secure, and we cannot guarantee absolute security. You can read more on our {security} page.',
+
+  'mkt.terms.s13Title': 'Service Availability',
+  'mkt.terms.s13P1':
+    'We aim to provide a reliable Service and work on it — with backups, monitoring and honest communication. Even so, the Service may occasionally be unavailable, for example for maintenance, updates, outages or events outside our reasonable control.',
+  'mkt.terms.s13P2':
+    'We do not promise a specific availability level. [Uptime commitment, if any — to be completed.]',
+
+  'mkt.terms.s14Title': 'Suspension and Termination',
+  'mkt.terms.s14P1':
+    'You can stop using the Service at any time. You can export or delete your content from the dashboard, and deleting your account removes your user data. [Data retention period after termination — confirm business policy.]',
+  'mkt.terms.s14P2':
+    'We may suspend or restrict access to the Service, in whole or in part, if we reasonably believe these Terms have been violated, that an account is being used unlawfully, for non-payment of amounts due, or for security or legal reasons.',
+  'mkt.terms.s14P3':
+    'We may terminate these Terms and close an account for the same reasons, with notice where reasonable. Provisions of these Terms that by their nature are intended to survive termination continue to apply.',
+
+  'mkt.terms.s15Title': 'Disclaimers',
+  'mkt.terms.s15P1':
+    'The Service is provided on an “as is” and “as available” basis, to the fullest extent permitted by applicable law. Except as expressly stated in these Terms, we disclaim all warranties, express or implied, including warranties of merchantability, fitness for a particular purpose and non-infringement.',
+  'mkt.terms.s15P2':
+    'We do not warrant that the Service will be uninterrupted, error-free, completely secure or always available, and we make no representation about the accuracy or reliability of AI-generated output.',
+
+  'mkt.terms.s16Title': 'Limitation of Liability',
+  'mkt.terms.s16P1':
+    'To the fullest extent permitted by applicable law, we will not be liable for indirect, incidental, special, consequential or punitive damages, or for lost profits, revenue or data, arising from or relating to your use of the Service.',
+  'mkt.terms.s16P2':
+    'Our aggregate liability for direct damages arising out of or relating to these Terms is limited to: [Liability cap — insert the approved amount or formula]. Nothing in these Terms limits liability that cannot be limited under applicable law.',
+
+  'mkt.terms.s17Title': 'Indemnification',
+  'mkt.terms.s17P1':
+    'You agree to indemnify and hold us harmless from claims, damages and expenses (including reasonable legal costs) arising from your use of the Service, your content, or your violation of these Terms or applicable law, to the extent permitted by law.',
+  'mkt.terms.s17P2':
+    '[Insert approved indemnification language — scope, procedures and exceptions to be confirmed by the legal team.]',
+
+  'mkt.terms.s18Title': 'Changes to the Service',
+  'mkt.terms.s18P1':
+    'The Service evolves over time. We may add, change or remove features, adjust plan limits, or modify how parts of the platform work.',
+  'mkt.terms.s18P2':
+    'Material changes to the Service will be announced. [Announcement channel — confirm business policy.]',
+
+  'mkt.terms.s19Title': 'Changes to These Terms',
+  'mkt.terms.s19P1':
+    'We may update these Terms from time to time. The “Effective as of” date at the top of this page always reflects the current version.',
+  'mkt.terms.s19P2':
+    'If we make material changes, we will notify you — for example with a notice on this page or through your account. Continuing to use the Service after a change means you accept the updated Terms. [Notice period — confirm business policy.]',
+
+  'mkt.terms.s20Title': 'Governing Law',
+  'mkt.terms.s20P1':
+    'These Terms, and any disputes arising out of or relating to them, are governed by: [Governing law and jurisdiction — to be completed.]',
+
+  'mkt.terms.s21Title': 'Dispute Resolution',
+  'mkt.terms.s21P1':
+    'If a dispute arises between you and us in connection with the Service, we encourage you to contact us first so that we can try to resolve it informally.',
+  'mkt.terms.s21P2':
+    '[Dispute-resolution mechanism — to be completed by the legal team.]',
+
+  'mkt.terms.s22Title': 'General Provisions',
+  'mkt.terms.s22H1': 'Severability',
+  'mkt.terms.s22P1':
+    'If a provision of these Terms is found unenforceable, the remaining provisions stay in effect, and the unenforceable provision is replaced by an enforceable one that comes closest to its intent.',
+  'mkt.terms.s22H2': 'Waiver',
+  'mkt.terms.s22P2':
+    'Our failure to enforce a provision of these Terms is not a waiver of it. A waiver is effective only if we give it in writing.',
+  'mkt.terms.s22H3': 'Assignment',
+  'mkt.terms.s22P3':
+    'You may not assign these Terms or transfer your account without our prior written consent. We may assign these Terms, for example in connection with a merger, acquisition or sale of assets.',
+  'mkt.terms.s22H4': 'Entire Agreement',
+  'mkt.terms.s22P4':
+    'These Terms, together with our {privacy} and any additional terms that apply to features you use, form the entire agreement between you and us regarding the Service.',
+  'mkt.terms.s22H5': 'Force Majeure',
+  'mkt.terms.s22P5':
+    'We are not responsible for delays or failures caused by events outside our reasonable control.',
+
+  'mkt.terms.s23Title': 'Contact Us',
+  'mkt.terms.s23P1':
+    'If you have questions about these Terms, please contact us.',
 
   // ---- Security page ----
   'mkt.security.title': 'Security at Karmax',
