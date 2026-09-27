@@ -12433,3 +12433,56 @@ Stage Summary:
 - Footer legal row is now exactly "Privacy Policy | Terms of Service | Security" globally (EN + FR), reusing the existing /security page, existing MKT.security route constant and existing i18n keys — no new page, no layout/color changes, no other links touched, no Cookie Preferences.
 - Single file modified: src/components/marketing/marketing-footer.tsx (one link + one separator + comment updates).
 - Pending from earlier tasks: product-tour.mp4 still not delivered; blog redesign still not started.
+
+---
+Task ID: blog-redesign-1
+Agent: main (orchestrator)
+Task: Complete redesign of the public Blog (#/blog) into a production-quality SaaS editorial publication + premium single-article page, per user's 22-point spec (hero, category nav, featured, 3-col grid, load more, editor's picks, topics, newsletter, search, empty state, article page with sticky TOC + progress bar + author + related + SEO structured data). Data-driven from the existing CMS model; no second blog system.
+
+Plan (investigation findings):
+- Screenshots b21707ae/c7d99016/55c43501 did NOT reach upload/ (same gateway issue as product-tour.mp4). Proceeding from the fully detailed 22-point textual spec; watcher started (.zscripts/watch-blog-refs.sh).
+- Current blog: src/components/marketing/blog-page.tsx (simple hero + featured + grid + article page, no TOC/search/picks/topics/progress).
+- APIs exist: /api/public/blog (list, returns ALL + full HTML, only consumer = blog-page.tsx) and /api/public/blog/[slug] (detail + related). DB is COMPLETELY EMPTY (0 users/posts/categories — wiped Sep 26 20:58; CMS login/pricing/demo data all gone).
+- Data model: ContentItem (slug/title/excerpt/content/status/publishedAt/seoTitle/seoDescription/featuredImageId/categoryId/siteId/tags[]), Category (name/slug/description), Tag, Media (url/alt/seoTitle), User + AuthorProfile (displayName/bio/avatar/twitter/github/linkedin/website). Public blog = PUBLISHED + siteId NULL + contentType 'post'.
+- Base seed src/lib/seed.ts = full destructive CMS bootstrap (users admin/editor/author@example.com, post/page types, categories technology/design/business/frontend/backend, tags, 10 content items of which 4 posts PUBLISHED, plans, settings). Old .zscripts/seed-marketing.ts is STALE (expects owner@example.com, mentions old brand "Sitesmith") — will write a fresh .zscripts/seed-blog-editorial.ts instead.
+- Design system: mkt-container/mkt-section/mkt-display/mkt-prose/mkt-card-hover/mkt-dotgrid, accent orange #ff4800, mkt-accent-soft wash, text-/border-/card tokens, primitives (Eyebrow, MarketingButton, Reveal, SectionHeader). LegalPageLayout provides the sticky-TOC + active-tracking pattern to reuse for the article sidebar.
+- Routing: hash-based; #/blog/<slug> → article route exists in marketing-site.tsx. Per-route titles already handled.
+- Featured status: no isFeatured field in CMS — deriving featured = most recent published (auto-reflects admin changes; no schema/CMS surgery). Editor's picks = tag 'editors-choice' (data-driven, admin-controllable), fallback recency.
+
+Implementation steps:
+1. Run base seed → restore CMS demo data.
+2. Generate ~13 branded editorial images (article covers + newsletter illustration) via image-generation skill.
+3. New seed-blog-editorial.ts: 3 editorial authors + AuthorProfiles, 8 categories (AI, SEO, Content Marketing, Automation, SaaS, Tutorials, Growth, Product) w/ descriptions, tags, media rows, 8 new Karmax articles (rich HTML: h2/h3/lists/blockquotes/callouts/tables/figures) + covers/SEO/tags for the 4 published base tech articles. Idempotent.
+4. Extend /api/public/blog (drop html from list payload; add categories+counts, author avatar, tags) and [slug] (author socials, tags, richer related).
+5. Rewrite blog-page.tsx (homepage + article page per spec).
+6. Extend .mkt-prose CSS (figure/figcaption/table/img/video/callout/scroll-margin).
+7. i18n EN+FR new mkt.blog.* keys.
+8. Lint + browser E2E (desktop/mobile, with-data + empty-state, article page interactions) + worklog.
+
+Work Log (execution — blog-redesign-1 continued):
+- DB was empty (wiped Sep 26) → ran base seed `bun run src/lib/seed.ts` (3 users, post/page types, 5 categories, 6 tags, 10 content items, plans, settings restored).
+- Generated 13 branded editorial images via z-ai image CLI (1344x768 covers + 1152x864 newsletter illustration) into public/uploads/blog/; regenerated 6 that contained accidental "SaaS" text (VLM-verified all 13 clean, consistent flat-vector warm palette).
+- Wrote .zscripts/seed-blog-editorial.ts (idempotent): 3 editorial authors (Sarah Miller/David Chen/Emma Rodriguez + AuthorProfiles w/ bios + twitter/linkedin), 8 categories w/ descriptions (AI, SEO, Content Marketing, Automation, SaaS, Product, Tutorials, Growth), 12 editorial tags incl. 'editors-choice', 12 Media rows, 8 new rich-HTML Karmax articles (h2/h3, lists, blockquotes, callouts, tables, figures+captions, internal links, code block) + upgraded the 4 base tech articles (covers/excerpts/SEO/tags/reassigned categories+authors). Fixed Prisma nested-write (connect for create, set for update). Featured article expanded to 7-min read.
+- API /api/public/blog: list now returns articles (slug/title/excerpt/category/author{name,avatar}/tags/publishedAt/updatedAt/readingMinutes/image — html stays server-side) + categories[] w/ live counts. [slug]: author socials+avatar from AuthorProfile, tags, related = same-category-then-recent with full card data.
+- NEW /api/public/newsletter (public subscribe for anonymous visitors — the CMS /api/subscribers is auth-gated; reuses NewsletterSubscriber model, source MARKETING_BLOG, siteId null, in-memory rate limit).
+- REWROTE src/components/marketing/blog-page.tsx (~1600 lines): BlogPage (hero+eyebrow+search w/ focus-swapped placeholder, 12 category pills horizontally scrollable, FeaturedCard 57/43, 3-col grid + Load more 6/step, Editor's picks = tag-driven 1 large + 2 small, Explore-by-topic cards w/ counts, redesigned newsletter w/ illustration, professional empty state, skeletons, error retry) + BlogArticlePage (reading-progress bar, breadcrumb, centered header, featured image, 65/35 content + sticky TOC sidebar w/ active tracking, sidebar CTA, tags, author card w/ initials avatars + social icons, Continue reading, newsletter, per-article SEO: title/description/og:*/canonical + JSON-LD @graph Article/BreadcrumbList/Person/publisher Org).
+- Fixed critical bug: React re-set dangerouslySetInnerHTML on every scroll-driven re-render (MutationObserver-verified), wiping TOC heading ids → ids now baked into the HTML string via DOMParser memo + memoized prop object (0 resets after fix).
+- Fixed topic-card scroll overshoot (filter unmounts sections → 140ms post-layout scroll with 108px header offset).
+- globals.css: extended .mkt-prose (figure/figcaption/img/table/video/iframe/callout) + .mkt-article-body scroll-margin 7rem. Dev server had STALE Turbopack CSS cache → killed next-dev, cleared .next, dev-runner mini-service auto-restarted fresh.
+- i18n: replaced mkt.blog.* block in EN+FR (44 keys each, verified parity + zero used-but-undefined keys; pre-existing 929 dashboard-locale gaps untouched).
+
+E2E verification (agent-browser 1440x900 + 375x812):
+- Homepage: all sections render from live API (12 pills, featured, 6+5 grid, picks, 11 topic cards, newsletter). Search "SEO" → 1 result w/ count + featured/picks hidden; clear works. AI pill → 1 article. Load more 6→11, button disappears. Topic card click → filter + precise scroll (section top lands 108px). Empty state (all 14 platform items temporarily DRAFTed): "Fresh insights are on the way" + Explore resources → #/features + newsletter, no pills/topics (count 0) — then restored exactly 14 by slug (12 posts + 2 pages).
+- Article page: breadcrumb Blog/AI/title, progress bar scaleX tracks scroll, TOC click scrolls heading to exactly 112px + active follows (incl. bottom pin + first-entry default), callout/table/figure styles verified computed, tags + author card (Twitter/LinkedIn links from AuthorProfile), sidebar CTA, 3 related cards. JSON-LD @graph [Article, BreadcrumbList] + Person author + og:title/description/type/image/url + canonical verified in DOM.
+- Newsletter: subscribe "test-reader@example.com" → "Subscribed — welcome aboard." + NewsletterSubscriber row (source MARKETING_BLOG) created + test record cleaned up.
+- Mobile 375px: no horizontal overflow anywhere, search full-width, pills scrollable, 1-col grid, desktop aside hidden, collapsible TOC expands + item click auto-collapses + scrolls to 112px, H1 36px/30px.
+- FR (reload w/ cms_locale=fr): full FR homepage (hero/pills/latest/picks/topics/newsletter) + article chrome (Sur cette page, À propos de l'auteur, Poursuivre la lecture, min de lecture).
+- VLM reviews: homepage "High-quality, production-ready SaaS editorial design" / final pass 9/10 production-ready; article page "premium editorial publication", 65/35 balance confirmed; mobile clean. All flagged items were screenshot artifacts or intentional (line-clamps, seeded dates, author mix).
+- Zero console/page errors on final fresh visits; lint 0 errors on all 8 touched files; 42 pre-existing unrelated lint errors untouched; footer legal row intact ("Privacy Policy | Terms of Service | Security").
+
+Stage Summary:
+- The blog is now a complete, data-driven SaaS editorial publication: 12 real CMS articles (8 new Karmax-craft + 4 upgraded tech), 11 live categories, 3 authors, covers, tags — everything the admin publishes/unpublishes/recategorizes in the CMS reflects on the public blog automatically.
+- Featured = most recent published; Editor's picks = 'editors-choice' tag (admin-controllable from CMS); no isFeatured schema change needed (derived, honest).
+- Files: NEW src/app/api/public/newsletter/route.ts, .zscripts/seed-blog-editorial.ts, 13 images in public/uploads/blog/; REWRITTEN src/components/marketing/blog-page.tsx; MODIFIED /api/public/blog both routes, globals.css (.mkt-prose extensions), en+fr client-marketing.ts; base seed re-run to restore the wiped DB.
+- User's 3 reference screenshots never arrived (gateway issue, same as product-tour.mp4); implementation follows the detailed 22-point textual spec; watcher .zscripts/watch-blog-refs.sh still active (12h) if they arrive.
+- Pending from earlier tasks: product-tour.mp4 still not delivered.

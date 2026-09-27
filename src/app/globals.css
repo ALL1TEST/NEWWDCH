@@ -662,3 +662,65 @@
   color: var(--text-primary);
   margin: 1.5rem 0;
 }
+.mkt-prose blockquote p { margin-bottom: 0; }
+
+/* Figures with captions — editorial article images */
+.mkt-prose figure { margin: 2rem 0; }
+.mkt-prose figure img {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+.mkt-prose figcaption {
+  margin-top: 0.6rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.mkt-prose img { border-radius: 0.75rem; }
+
+/* Tables — compact, bordered, scannable */
+.mkt-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.75rem 0;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+.mkt-prose thead th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--border);
+  padding: 0.55rem 0.75rem;
+}
+.mkt-prose tbody td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.55rem 0.75rem;
+  vertical-align: top;
+  color: var(--text-secondary);
+}
+
+/* Video / iframe embeds */
+.mkt-prose video,
+.mkt-prose iframe {
+  width: 100%;
+  border-radius: 0.75rem;
+  margin: 1.75rem 0;
+}
+
+/* Callouts — curated highlight blocks inside article bodies */
+.mkt-prose .callout {
+  border: 1px solid var(--mkt-accent-border);
+  background: var(--mkt-accent-soft);
+  color: var(--mkt-accent-soft-fg);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.mkt-prose .callout p { margin-bottom: 0; }
+.mkt-prose .callout strong { color: var(--mkt-accent-soft-fg); }
+
+/* Sticky-TOC scroll offset for article section headings */
+.mkt-article-body :is(h2, h3) { scroll-margin-top: 7rem; }
