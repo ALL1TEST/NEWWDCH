@@ -669,7 +669,7 @@
 .mkt-prose figure img {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: 0.875rem;
 }
 .mkt-prose figcaption {
   margin-top: 0.6rem;
@@ -678,7 +678,19 @@
   line-height: 1.5;
   color: var(--text-muted);
 }
-.mkt-prose img { border-radius: 0.75rem; }
+/* Inline article images — always constrained to the content
+   measure, never overflowing, with the same soft editorial
+   rounding/shadow as the framed figures. */
+.mkt-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.875rem;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 12px 32px -20px rgb(0 0 0 / 0.16);
+}
+.mkt-prose figure img { box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 12px 32px -20px rgb(0 0 0 / 0.16); }
+/* A bare image wrapped alone in a paragraph becomes a block
+   figure with its own breathing room. */
+.mkt-prose p > img:only-child { display: block; margin: 1.75rem auto; }
 
 /* Tables — compact, bordered, scannable */
 .mkt-prose table {

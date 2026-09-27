@@ -328,6 +328,7 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.blog.noResultsTitle': 'Aucun article correspondant',
   'mkt.blog.noResultsBody': 'Essayez une autre recherche ou effacez les filtres actifs.',
   'mkt.blog.related': 'Poursuivre la lecture',
+  'mkt.blog.recent': 'Articles récents',
   'mkt.blog.aboutAuthor': 'À propos de l’auteur',
   'mkt.blog.newsletterTitle': 'Recevez de meilleures idées de contenu dans votre boîte mail',
   'mkt.blog.newsletterBody': 'Chaque semaine : SEO, IA, stratégie de contenu et automatisation. Pas de spam — désinscription à tout moment.',

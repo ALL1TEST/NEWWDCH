@@ -335,6 +335,7 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.blog.noResultsTitle': 'No matching articles',
   'mkt.blog.noResultsBody': 'Try a different search or clear the active filters.',
   'mkt.blog.related': 'Continue reading',
+  'mkt.blog.recent': 'Recent articles',
   'mkt.blog.aboutAuthor': 'About the author',
   'mkt.blog.newsletterTitle': 'Get better content ideas in your inbox',
   'mkt.blog.newsletterBody': 'Weekly insights on SEO, AI, content strategy and automation. No spam — unsubscribe anytime.',

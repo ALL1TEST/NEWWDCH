@@ -12525,3 +12525,34 @@ Stage Summary:
 - All 6 pending commits pushed to https://github.com/ALL1TEST/NEWWDCH.git
 - Remote and local are identical at commit 52c05d7 — latest source code confirmed on GitHub
 - Push verified end-to-end (git protocol + GitHub REST API)
+
+---
+Task ID: article-page-polish-1
+Agent: main (Z.ai Code)
+Task: Focused UI/UX improvements to the EXISTING Single Article page only, per 26-part spec (compact newsletter CTA + illustration, warm hero background, de-duplicated metadata, hero-only author, RECENT ARTICLES editorial list, content image constraints). No changes to homepage, header, footer, CMS.
+
+Work Log:
+- Reference screenshots did NOT reach upload/ (same gateway issue as before); implemented from the detailed 26-part text spec + live inspection of the current page (agent-browser + z-ai vision on the pre-change state)
+- Audited existing implementation: blog-page.tsx article page, /api/public/blog/[slug] (related already excludes current article — no backend change needed), i18n fragments, .mkt-prose CSS, mkt tokens (found existing warm off-white token mkt-surface-2 #faf5f0 ≈ requested #F8F5EF — reused it per "equivalent subtle neutral from existing design system")
+- HERO: wrapped breadcrumb + two-column hero in a full-bleed warm band (bg-mkt-surface-2, border-b border-border/70, pb-12/14 inside); breadcrumb simplified to "Blog / title" (category removed — it lives only in the pill above the headline; JSON-LD BreadcrumbList simplified to match); byline rebuilt compact: 40px round avatar (ring-1 ring-border) + "By {name}" + one metadata row with CalendarDays/Clock/History icons for date · reading time · Updated
+- NEWSLETTER: BlogNewsletter restyled compact editorial (rounded-2xl, mkt-accent-soft/35 bg, subtle shadow): desktop grid 1.6fr/1fr (61% text+form / 38% illustration, measured 984x202px card), mobile stacked text → column form → 176px image (object-cover, container-clipped corners); submit flow unchanged (/api/public/newsletter)
+- SECTION ORDER: content → newsletter → recent articles (spec item 19/25)
+- RECENT ARTICLES: "Continue reading" heading + ArticleCard image-card grid replaced with editorial 3-column text-only list — section border-t divider (1px) + eyebrow-caps heading (text-sm bold uppercase tracking) + "View all" link + new RecentArticleItem (thin per-item border-t, strong title, author · date · read-time via existing ReadingMeta); real CMS data, current article excluded by the API
+- AUTHOR: removed the bottom "ABOUT THE AUTHOR" card entirely (author displayed in hero byline only); removed socials const + socialHref + Twitter/Linkedin/Github/Globe imports; author data untouched in CMS
+- CSS: .mkt-prose img now max-width:100%, height:auto, border-radius 0.875rem (14px), subtle 2-layer shadow; figure img same treatment; p > img:only-child becomes centered block with 1.75rem vertical margins
+- i18n: added 'mkt.blog.recent' EN "Recent articles" / FR "Articles récents"
+- Fixed stale Turbopack CSS cache (prose img rules not applying): killed next-dev, cleared .next, dev-runner auto-restarted fresh
+- lint: 0 errors on all 4 modified files (blog-page.tsx, globals.css, en/fr client-marketing.ts); 42 pre-existing unrelated errors untouched
+
+E2E verification (agent-browser, fresh session):
+- Desktop 1440x900: hero warm band + 2-col (image spans full 405px grid height, perfectly aligned), exactly one H1; newsletter subscribe e2e-recent-check@example.com → POST 201 → "Subscribed — welcome aboard." → NewsletterSubscriber row (source MARKETING_BLOG) verified then cleaned up; recent articles 3 cols with 1px section + 3x item dividers, View all → #/blog, item link → real article slug; TOC click scrolls heading to 112px with active tracking; progress bar scaleX 0.39→1.0; sticky aside pinned at 114px; prose img CSS probe: borderRadius 14px + box-shadow + maxWidth 100% + block margins
+- Mobile 375x812: zero horizontal overflow (375=375); hero stacks category→title→description→author→image on warm band; newsletter stacks text→column form→image; recent articles single column; collapsible TOC expand→item click→auto-collapse→heading at 112px
+- FR locale (cms_locale=fr + reload): ARTICLES RÉCENTS, French newsletter/byline/min de lecture/Par Emma Rodriguez/Sur cette page/Tout voir all present; no English leftovers
+- Fresh browser session after all edits: ZERO page errors, ZERO console errors (earlier "Twitter is not defined" errors were stale mid-edit artifacts)
+- Homepage #/blog unaffected: Featured + Latest + Load more present, no newsletter/picks/topics/hero (item 23 respected); footer legal row intact "Privacy Policy | Terms of Service | Security" (item 24 respected)
+
+Stage Summary:
+- Single Article page final structure: HEADER → BREADCRUMB (Blog/title) → HERO on warm band (LEFT category/H1/description/compact author byline, RIGHT rounded 4/3 image) → editorial intro → CONTENT + sticky ON THIS PAGE + sidebar CTA + tags → compact NEWSLETTER (text+form LEFT, illustration RIGHT) → RECENT ARTICLES (divider, 3-col text list) → FOOTER
+- Author now appears exactly once (hero); category appears exactly once (pill); metadata row appears exactly once (byline); no Continue reading / ABOUT THE AUTHOR anywhere
+- Files changed: src/components/marketing/blog-page.tsx, src/app/globals.css, src/lib/i18n/fragments/{en,fr}/client-marketing.ts — no backend, no schema, no homepage/header/footer changes
+- Pending from earlier tasks: product-tour.mp4 still not delivered

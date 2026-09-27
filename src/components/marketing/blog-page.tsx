@@ -13,14 +13,17 @@
 //   → professional empty state when nothing is published yet
 //
 // Article page (#/blog/<slug>)
-//   reading-progress bar + breadcrumb
-//   → two-column editorial hero (title/description/author LEFT,
-//     large featured image RIGHT — one H1, nothing repeated)
+//   reading-progress bar + breadcrumb (Blog / title — the
+//     category lives only in the label pill, never duplicated)
+//   → two-column editorial hero on a warm off-white band
+//     (title/description/author LEFT, featured image RIGHT —
+//     one H1, compact byline with calendar/read/updated icons)
 //   → editorial intro (leading paragraphs + supporting visual)
 //   → content (65%) + sticky TOC sidebar (35%, active-section
-//     tracking like the legal pages) + sidebar CTA
-//   → tags → author card (social links when present)
-//   → "Continue reading" (3 related) → newsletter CTA
+//     tracking like the legal pages) + sidebar CTA + tags
+//   → compact newsletter CTA (text/form LEFT, illustration
+//     RIGHT) → "Recent articles" editorial 3-column list
+//     (title/author/read-time, thin divider, no image cards)
 //   → per-article SEO: title/description/OG/canonical + JSON-LD
 //     (Article, BreadcrumbList, Person, publisher Organization)
 //
@@ -36,12 +39,9 @@ import {
   CalendarDays,
   ChevronDown,
   Clock,
-  Github,
-  Globe,
-  Linkedin,
+  History,
   Loader2,
   RefreshCw,
-  Twitter,
 } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { MarketingButton, Reveal } from './primitives';
@@ -198,7 +198,10 @@ function ReadingMeta({
 }
 
 // ============================================================
-// Newsletter — real /api/subscribers flow
+// Newsletter — compact editorial CTA for the article page.
+// Real /api/public/newsletter subscribe flow. Horizontal on
+// desktop (~60% text+form / ~38% illustration, ≈240px tall);
+// stacked text → form → image on mobile.
 // ============================================================
 
 function BlogNewsletter() {
@@ -226,24 +229,25 @@ function BlogNewsletter() {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-mkt-accent-border bg-mkt-accent-soft/40">
-      <div className="grid items-center gap-8 p-8 sm:p-12 lg:grid-cols-[1.15fr_1fr]">
-        <div>
-          <h2 className="mkt-display text-3xl text-text-primary sm:text-4xl">
+    <div className="overflow-hidden rounded-2xl border border-mkt-accent-border bg-mkt-accent-soft/35 shadow-[0_1px_2px_rgb(0_0_0/0.03),0_16px_40px_-28px_rgb(0_0_0/0.18)]">
+      <div className="grid lg:grid-cols-[1.6fr_1fr]">
+        {/* Text + form — compact, vertically centered */}
+        <div className="flex flex-col justify-center px-6 py-7 sm:px-8 lg:px-10 lg:py-8">
+          <h2 className="text-xl font-bold leading-snug tracking-tight text-text-primary sm:text-[1.3125rem]">
             {t('mkt.blog.newsletterTitle')}
           </h2>
-          <p className="mt-3 max-w-md text-base leading-relaxed text-text-secondary">
+          <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
             {t('mkt.blog.newsletterBody')}
           </p>
           {state === 'done' ? (
             <p
-              className="mt-7 rounded-xl border border-mkt-accent-border bg-card px-4 py-3 text-sm font-medium text-mkt-accent-soft-fg"
+              className="mt-4 rounded-xl border border-mkt-accent-border bg-card px-4 py-2.5 text-sm font-medium text-mkt-accent-soft-fg"
               role="status"
             >
               {t('mkt.blog.newsletterSuccess')}
             </p>
           ) : (
-            <form onSubmit={submit} className="mt-7 flex flex-col gap-2.5 sm:flex-row">
+            <form onSubmit={submit} className="mt-4 flex flex-col gap-2.5 sm:flex-row">
               <label className="sr-only" htmlFor="blog-newsletter-email">
                 {t('mkt.blog.newsletterPlaceholder')}
               </label>
@@ -254,12 +258,12 @@ function BlogNewsletter() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={t('mkt.blog.newsletterPlaceholder')}
-                className="mkt-focus h-11 flex-1 rounded-full border border-border bg-card px-4 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-ring"
+                className="mkt-focus h-10 flex-1 rounded-full border border-border bg-card px-4 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-ring"
               />
               <button
                 type="submit"
                 disabled={state === 'sending'}
-                className="mkt-focus h-11 shrink-0 rounded-full bg-primary px-6 text-sm font-semibold text-primary-foreground transition-all duration-200 hover:opacity-90 disabled:opacity-60"
+                className="mkt-focus h-10 shrink-0 rounded-full bg-primary px-6 text-sm font-semibold text-primary-foreground transition-all duration-200 hover:opacity-90 disabled:opacity-60"
               >
                 {state === 'sending' ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -270,19 +274,20 @@ function BlogNewsletter() {
             </form>
           )}
           {state === 'error' && (
-            <p className="mt-3 text-xs text-destructive" role="alert">
+            <p className="mt-2.5 text-xs text-destructive" role="alert">
               {t('mkt.blog.newsletterError')}
             </p>
           )}
         </div>
-        {/* Branded editorial illustration (static marketing asset). */}
-        <figure className="mx-auto hidden w-full max-w-sm sm:block lg:max-w-none">
+        {/* Branded editorial illustration — fills the right column
+            on desktop, sits below the form on mobile. */}
+        <figure className="relative min-h-[11rem] lg:min-h-0" aria-hidden="true">
           <img
             src="/uploads/blog/newsletter-illustration.png"
-            alt="Illustration of a newsletter envelope surrounded by floating article cards"
+            alt=""
             loading="lazy"
             decoding="async"
-            className="w-full"
+            className="absolute inset-0 h-full w-full object-cover"
           />
         </figure>
       </div>
@@ -388,6 +393,27 @@ function FeaturedCard({ article }: { article: BlogArticle }) {
           />
         </span>
       </div>
+    </a>
+  );
+}
+
+/** Recent-articles list entry — editorial, text-only: strong
+ *  title + compact author/read-time meta. No card chrome, no
+ *  image (the "Recent articles" rail on the article page). */
+function RecentArticleItem({ article }: { article: BlogArticle }) {
+  return (
+    <a
+      href={`${MKT.blog}/${article.slug}`}
+      className="mkt-focus group flex flex-col gap-3 border-t border-border pt-5"
+    >
+      <h3 className="text-[1.0625rem] font-bold leading-snug text-text-primary transition-colors duration-200 group-hover:text-mkt-accent">
+        {article.title}
+      </h3>
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.8125rem] text-text-muted">
+        <span className="font-medium text-text-secondary">{article.author.name}</span>
+        <span aria-hidden="true">·</span>
+        <ReadingMeta article={article} />
+      </span>
     </a>
   );
 }
@@ -610,18 +636,6 @@ interface TocEntry {
   id: string;
   label: string;
   level: 2 | 3;
-}
-
-function socialHref(kind: 'twitter' | 'github' | 'linkedin', handle: string): string {
-  const clean = handle.replace(/^@/, '');
-  switch (kind) {
-    case 'twitter':
-      return `https://twitter.com/${clean}`;
-    case 'github':
-      return `https://github.com/${clean}`;
-    default:
-      return `https://www.linkedin.com/in/${clean}`;
-  }
 }
 
 /** Sticky TOC list (mirrors the legal-document pattern). */
@@ -905,26 +919,11 @@ export function BlogArticlePage({ slug }: { slug: string }) {
             name: t('mkt.blog.title'),
             item: new URL(`/#/blog`, window.location.origin).href,
           },
-          ...(article.category
-            ? [
-                {
-                  '@type': 'ListItem',
-                  position: 2,
-                  name: article.category.name,
-                },
-                {
-                  '@type': 'ListItem',
-                  position: 3,
-                  name: article.title,
-                },
-              ]
-            : [
-                {
-                  '@type': 'ListItem',
-                  position: 2,
-                  name: article.title,
-                },
-              ]),
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: article.title,
+          },
         ],
       },
     ];
@@ -1019,31 +1018,6 @@ export function BlogArticlePage({ slug }: { slug: string }) {
     }
   };
 
-  const socials = (
-    [
-      article.author.twitter && {
-        kind: 'twitter' as const,
-        href: socialHref('twitter', article.author.twitter),
-        label: 'Twitter / X',
-      },
-      article.author.linkedin && {
-        kind: 'linkedin' as const,
-        href: socialHref('linkedin', article.author.linkedin),
-        label: 'LinkedIn',
-      },
-      article.author.github && {
-        kind: 'github' as const,
-        href: socialHref('github', article.author.github),
-        label: 'GitHub',
-      },
-      article.author.website && {
-        kind: 'website' as const,
-        href: article.author.website,
-        label: 'Website',
-      },
-    ] as const
-  ).filter(Boolean);
-
   const significantUpdate =
     article.publishedAt &&
     new Date(article.updatedAt).getTime() - new Date(article.publishedAt).getTime() >
@@ -1058,94 +1032,105 @@ export function BlogArticlePage({ slug }: { slug: string }) {
         aria-hidden="true"
       />
 
-      {/* ============ Article hero — editorial two-column: title,
-                        description & author LEFT, image RIGHT ============ */}
-      <header className="pt-28 sm:pt-32">
-        <div className="mkt-container max-w-6xl">
-          {/* Breadcrumb */}
-          <nav aria-label={t('mkt.blog.breadcrumb')} className="text-sm">
-            <ol className="flex flex-wrap items-center gap-1.5 text-text-muted">
-              <li>
-                <a
-                  href={MKT.blog}
-                  className="mkt-focus font-medium transition-colors hover:text-text-primary"
-                >
-                  {t('mkt.blog.title')}
-                </a>
-              </li>
-              <li aria-hidden="true">/</li>
-              {article.category ? (
-                <>
-                  <li>
-                    <a
-                      href={MKT.blog}
-                      className="mkt-focus font-medium transition-colors hover:text-text-primary"
-                    >
-                      {article.category.name}
-                    </a>
-                  </li>
-                  <li aria-hidden="true">/</li>
-                </>
-              ) : null}
-              <li className="max-w-[16rem] truncate" aria-current="page">
-                {article.title}
-              </li>
-            </ol>
-          </nav>
+      {/* ============ Article hero — editorial two-column on a warm
+                        off-white band: text LEFT, image RIGHT ============ */}
+      <header className="border-b border-border/70 bg-mkt-surface-2">
+        <div className="pb-12 pt-28 sm:pb-14 sm:pt-32">
+          <div className="mkt-container max-w-6xl">
+            {/* Breadcrumb — Blog / title. The category appears only
+                as the small label above the headline (never as a
+                duplicated metadata item). */}
+            <nav aria-label={t('mkt.blog.breadcrumb')} className="text-sm">
+              <ol className="flex flex-wrap items-center gap-1.5 text-text-muted">
+                <li>
+                  <a
+                    href={MKT.blog}
+                    className="mkt-focus font-medium transition-colors hover:text-text-primary"
+                  >
+                    {t('mkt.blog.title')}
+                  </a>
+                </li>
+                <li aria-hidden="true">/</li>
+                <li className="max-w-[16rem] truncate" aria-current="page">
+                  {article.title}
+                </li>
+              </ol>
+            </nav>
 
-          <div className="mt-8 grid items-center gap-10 lg:mt-10 lg:grid-cols-2 lg:gap-14">
-            {/* Left — category, title, description, author */}
-            <div>
-              {article.category && (
-                <a
-                  href={MKT.blog}
-                  className="mkt-focus inline-block rounded-full bg-mkt-accent-soft px-3 py-1 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-mkt-accent-soft-fg transition-opacity hover:opacity-80"
-                >
-                  {article.category.name}
-                </a>
-              )}
-              <h1 className="mkt-display mt-5 text-[1.875rem] leading-[1.12] text-text-primary sm:text-[2.375rem]">
-                {article.title}
-              </h1>
-              <p className="mt-5 max-w-xl text-base leading-relaxed text-text-secondary sm:text-lg">
-                {article.excerpt}
-              </p>
-              <div className="mt-8 flex items-center gap-3.5">
-                <AuthorAvatar
-                  name={article.author.name}
-                  src={article.author.avatar}
-                  className="h-11 w-11"
-                  textClassName="text-sm"
-                />
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-text-primary">
-                    {t('mkt.blog.by')} {article.author.name}
-                  </p>
-                  <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-text-muted">
-                    <ReadingMeta article={article} />
-                    {significantUpdate && (
-                      <>
-                        <span aria-hidden="true">·</span>
-                        {t('mkt.blog.updated')} {formatDate(article.updatedAt, locale)}
-                      </>
-                    )}
-                  </p>
+            <div className="mt-8 grid items-center gap-10 lg:mt-10 lg:grid-cols-2 lg:gap-14">
+              {/* Left — category, title, description, author */}
+              <div>
+                {article.category && (
+                  <a
+                    href={MKT.blog}
+                    className="mkt-focus inline-block rounded-full bg-mkt-accent-soft px-3 py-1 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-mkt-accent-soft-fg transition-opacity hover:opacity-80"
+                  >
+                    {article.category.name}
+                  </a>
+                )}
+                <h1 className="mkt-display mt-5 text-[1.875rem] leading-[1.12] text-text-primary sm:text-[2.375rem]">
+                  {article.title}
+                </h1>
+                <p className="mt-5 max-w-xl text-base leading-relaxed text-text-secondary sm:text-lg">
+                  {article.excerpt}
+                </p>
+                {/* Compact byline — round avatar + name + one clean
+                    metadata row (calendar / reading time / updated) */}
+                <div className="mt-7 flex items-center gap-3">
+                  <AuthorAvatar
+                    name={article.author.name}
+                    src={article.author.avatar}
+                    className="h-10 w-10 ring-1 ring-border"
+                    textClassName="text-xs"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-text-primary">
+                      {t('mkt.blog.by')} {article.author.name}
+                    </p>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.8125rem] leading-relaxed text-text-muted">
+                      {article.publishedAt && (
+                        <>
+                          <span className="inline-flex items-center gap-1.5">
+                            <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
+                            {formatDate(article.publishedAt, locale)}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                        </>
+                      )}
+                      <span className="inline-flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                        {t('mkt.blog.readingTime').replace(
+                          '{minutes}',
+                          String(article.readingMinutes),
+                        )}
+                      </span>
+                      {significantUpdate && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <History className="h-3.5 w-3.5" aria-hidden="true" />
+                            {t('mkt.blog.updated')} {formatDate(article.updatedAt, locale)}
+                          </span>
+                        </>
+                      )}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Right — large featured image, aligned with the text */}
-            {article.image && (
-              <figure>
-                <img
-                  src={article.image.url}
-                  alt={article.image.alt}
-                  loading="eager"
-                  decoding="async"
-                  className="aspect-[4/3] w-full rounded-2xl border border-border object-cover shadow-[0_2px_6px_rgb(0_0_0/0.04),0_24px_60px_-28px_rgb(0_0_0/0.22)]"
-                />
-              </figure>
-            )}
+              {/* Right — large featured image, aligned with the text */}
+              {article.image && (
+                <figure>
+                  <img
+                    src={article.image.url}
+                    alt={article.image.alt}
+                    loading="eager"
+                    decoding="async"
+                    className="aspect-[4/3] w-full rounded-2xl border border-border object-cover shadow-[0_2px_6px_rgb(0_0_0/0.04),0_24px_60px_-28px_rgb(0_0_0/0.22)]"
+                  />
+                </figure>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -1250,59 +1235,9 @@ export function BlogArticlePage({ slug }: { slug: string }) {
               </div>
             )}
 
-            {/* About the author */}
-            <div className="mx-auto mt-12 max-w-[46rem]">
-              <div className="rounded-2xl border border-border bg-card p-6 sm:p-7">
-                <p className="text-[0.6875rem] font-semibold uppercase tracking-widest text-text-muted">
-                  {t('mkt.blog.aboutAuthor')}
-                </p>
-                <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
-                  <AuthorAvatar
-                    name={article.author.name}
-                    src={article.author.avatar}
-                    className="h-14 w-14"
-                    textClassName="text-lg"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-base font-bold text-text-primary">
-                      {article.author.name}
-                    </p>
-                    {article.author.bio && (
-                      <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
-                        {article.author.bio}
-                      </p>
-                    )}
-                    {socials.length > 0 && (
-                      <div className="mt-4 flex items-center gap-2">
-                        {socials.map((s) => (
-                          <a
-                            key={s.kind}
-                            href={s.href}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-label={s.label}
-                            className="mkt-focus flex h-9 w-9 items-center justify-center rounded-full border border-border text-text-secondary transition-colors hover:border-mkt-accent-border hover:bg-mkt-accent-soft/40 hover:text-mkt-accent-soft-fg"
-                          >
-                            {s.kind === 'twitter' && (
-                              <Twitter className="h-4 w-4" aria-hidden="true" />
-                            )}
-                            {s.kind === 'linkedin' && (
-                              <Linkedin className="h-4 w-4" aria-hidden="true" />
-                            )}
-                            {s.kind === 'github' && (
-                              <Github className="h-4 w-4" aria-hidden="true" />
-                            )}
-                            {s.kind === 'website' && (
-                              <Globe className="h-4 w-4" aria-hidden="true" />
-                            )}
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* The author is presented only in the hero byline —
+                no duplicated author card below the content. The
+                author data itself stays intact in the CMS. */}
           </div>
 
           {/* ---- Desktop sticky sidebar ---- */}
@@ -1341,16 +1276,27 @@ export function BlogArticlePage({ slug }: { slug: string }) {
         </div>
       </div>
 
-      {/* ============ Continue reading ============ */}
+      {/* ============ Newsletter CTA — compact editorial band
+                        (text + form LEFT, illustration RIGHT) ============ */}
+      <section className="mt-16 sm:mt-20">
+        <div className="mx-auto w-full max-w-[1064px] px-5 sm:px-8 lg:px-10">
+          <Reveal>
+            <BlogNewsletter />
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ============ Recent articles — editorial 3-column list
+                        (thin divider above, no image cards) ============ */}
       {related.length > 0 && (
-        <section className="mt-20 sm:mt-24" aria-labelledby="blog-related-heading">
-          <div className="mkt-container max-w-6xl">
+        <section className="mt-16 border-t border-border sm:mt-20" aria-labelledby="blog-related-heading">
+          <div className="mkt-container max-w-6xl pt-10 sm:pt-12">
             <div className="flex items-center justify-between gap-3">
               <h2
                 id="blog-related-heading"
-                className="mkt-h2 text-2xl text-text-primary sm:text-[1.75rem]"
+                className="text-sm font-bold uppercase tracking-[0.14em] text-text-primary"
               >
-                {t('mkt.blog.related')}
+                {t('mkt.blog.recent')}
               </h2>
               <a
                 href={MKT.blog}
@@ -1363,25 +1309,16 @@ export function BlogArticlePage({ slug }: { slug: string }) {
                 />
               </a>
             </div>
-            <div className="mt-7 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-7 grid gap-8 sm:grid-cols-2 lg:grid-cols-3 lg:gap-10">
               {related.map((a, i) => (
-                <Reveal key={a.slug} delay={i * 60} className="h-full">
-                  <ArticleCard article={a} />
+                <Reveal key={a.slug} delay={i * 60}>
+                  <RecentArticleItem article={a} />
                 </Reveal>
               ))}
             </div>
           </div>
         </section>
       )}
-
-      {/* ============ Newsletter ============ */}
-      <section className="mt-20 sm:mt-24">
-        <div className="mkt-container">
-          <Reveal>
-            <BlogNewsletter />
-          </Reveal>
-        </div>
-      </section>
     </article>
   );
 }
