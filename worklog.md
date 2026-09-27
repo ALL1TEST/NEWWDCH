@@ -12486,3 +12486,24 @@ Stage Summary:
 - Files: NEW src/app/api/public/newsletter/route.ts, .zscripts/seed-blog-editorial.ts, 13 images in public/uploads/blog/; REWRITTEN src/components/marketing/blog-page.tsx; MODIFIED /api/public/blog both routes, globals.css (.mkt-prose extensions), en+fr client-marketing.ts; base seed re-run to restore the wiped DB.
 - User's 3 reference screenshots never arrived (gateway issue, same as product-tour.mp4); implementation follows the detailed 22-point textual spec; watcher .zscripts/watch-blog-refs.sh still active (12h) if they arrive.
 - Pending from earlier tasks: product-tour.mp4 still not delivered.
+
+---
+Task ID: blog-focused-redesign-1
+Agent: main (orchestrator, direct implementation)
+Task: Focused redesign of Blog homepage + Single Article page per 22-part spec (remove hero/pills/picks/topics/newsletter from homepage; two-column editorial hero + intro block on article page). No changes to global header/footer, design system, CMS/database architecture.
+
+Work Log:
+- Confirmed the 2 newest reference screenshots did NOT reach /home/z/my-project/upload/ (same as product-tour.mp4 precedent); used the 3 previously-uploaded reference screenshots (analyzed via z-ai vision) + the detailed text spec instead
+- Audited existing implementation: src/components/marketing/blog-page.tsx (1671 lines), /api/public/blog + /api/public/blog/[slug] (real CMS data — no backend changes needed), i18n fragments (all needed keys already exist in EN+FR), .mkt-prose CSS
+- BLOG HOMEPAGE (BlogPage): removed entire hero section ("The Blog" eyebrow, "Insights, strategies & ideas for better content" H1, subtitle, search input, category pills), Editor's picks section, Explore-by-topic section, newsletter section, all search/filter state+logic; removed PickCardLarge/PickCardSmall/TopicCard components, BlogCategory interface, EDITORS_CHOICE_TAG; dropped unused imports (Search, X, ArrowUpRight, Eyebrow); new structure = sr-only H1 "Blog" → FeaturedCard (real articles[0]) → "Latest articles" 3-col grid → [ Load more ] (PAGE_SIZE 6, progressive reveal); skeleton/error/empty states keep their own top padding (pt-28/sm:pt-32) since hero is gone
+- SINGLE ARTICLE (BlogArticlePage): replaced centered header + centered 16/9 image with two-column editorial hero (breadcrumb above; LEFT: category pill, single H1 (text-[1.875rem]/sm:text-[2.375rem], left-aligned), excerpt lead, author avatar + "By {name}" + ReadingMeta + "Updated {date}"; RIGHT: featured image aspect-[4/3] rounded-2xl border soft-shadow, lg:grid-cols-2 items-center, mobile stacks text-then-image)
+- Article memo extended (same DOMParser pass that bakes TOC ids): extracts editorial intro = leading <p> elements (max 3, only when content remains below) into introHtml; extracts first inline <img> as intro visual (with figcaption) unless it repeats the hero cover (then removed from body to avoid double-render, cover backs the intro visual); falls back to featured image when body has no unique inline image; renders intro as two-column band (mkt-intro-lead text LEFT 1.15fr, framed matte-border visual aspect-[5/4] RIGHT 1fr), stacked on mobile; body container spacing mt-14/sm:mt-16
+- globals.css: added .mkt-intro-lead rules (1.125rem/1.8 lead typography, paragraph spacing, strong/link/code styling) next to .mkt-prose, reusing existing tokens
+- Updated file header comment to document the new structure; left all i18n fragments untouched (unused keys harmless, viewAll still used by article page)
+
+Stage Summary:
+- Blog homepage is now exactly HEADER → FEATURED → LATEST (3-col) → LOAD MORE → FOOTER (all 6 removals verified via DOM: no "The Blog", no "Insights..." headline, no pills, no Editor's picks, no topics, no newsletter, no search box)
+- Single article page: editorial two-column hero (title/description/author LEFT, 4/3 rounded image RIGHT, exactly ONE H1), editorial intro (opening paragraph LEFT + framed visual RIGHT), sticky "ON THIS PAGE" sidebar (top-25, active-section tracking), collapsible mobile TOC, author card, "Continue reading" (3 related), newsletter kept on article page only — all data 100% dynamic from /api/public/blog
+- E2E verified with agent-browser: Load more (6→11 cards, button hides), progress bar scaleX 0→0.96, TOC active tracking, sticky sidebar pinned at 100px, mobile 375px (no horizontal overflow, correct stacking, TOC expand/collapse/navigate), FR locale (Derniers articles / Charger plus / À la une / Par David Chen / Poursuivre la lecture), AI-article cover dedupe (image appears exactly 2×: hero + intro, 0 left in body), footer legal row intact (Privacy Policy | Terms of Service | Security, no Cookie Preferences), zero page/console errors
+- Lint: 42 pre-existing errors in unrelated files, 0 in modified files; dev.log clean after transient mid-edit Fast Refresh error
+- Files changed: src/components/marketing/blog-page.tsx (1388 lines now), src/app/globals.css (+23 lines)

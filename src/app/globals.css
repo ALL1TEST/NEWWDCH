@@ -724,3 +724,26 @@
 
 /* Sticky-TOC scroll offset for article section headings */
 .mkt-article-body :is(h2, h3) { scroll-margin-top: 7rem; }
+
+/* Editorial intro lead — the article's opening paragraphs,
+   set beside the intro visual on the single-article page */
+.mkt-intro-lead {
+  font-size: 1.125rem;
+  line-height: 1.8;
+  color: var(--text-secondary);
+}
+.mkt-intro-lead p { margin-bottom: 1.15rem; }
+.mkt-intro-lead p:last-child { margin-bottom: 0; }
+.mkt-intro-lead strong { color: var(--text-primary); font-weight: 600; }
+.mkt-intro-lead a {
+  color: var(--mkt-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.mkt-intro-lead code {
+  font-family: var(--font-geist-mono);
+  font-size: 0.875em;
+  background: var(--muted);
+  padding: 0.15em 0.4em;
+  border-radius: 0.375rem;
+}

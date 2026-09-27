@@ -7,37 +7,32 @@
 // platform's REAL editorial content (/api/public/blog — the
 // ContentItems the team publishes inside Karmax itself).
 //
-// Blog homepage
-//   compact editorial hero (eyebrow + title + search)
-//   → horizontally-scrollable category pills
-//   → featured article (image left, content right)
+// Blog homepage — clean and focused on article discovery:
+//   featured article (image left, content right)
 //   → "Latest articles" 3-col grid + Load more progressive reveal
-//   → "Editor's picks" (1 large + 2 small — tag 'editors-choice',
-//     controlled from the CMS)
-//   → "Explore by topic" category cards (live article counts)
-//   → newsletter CTA (real /api/subscribers flow)
 //   → professional empty state when nothing is published yet
 //
 // Article page (#/blog/<slug>)
-//   reading-progress bar + breadcrumb + centered editorial header
-//   → featured image → content (65%) + sticky TOC sidebar (35%,
-//     active-section tracking like the legal pages) + sidebar CTA
+//   reading-progress bar + breadcrumb
+//   → two-column editorial hero (title/description/author LEFT,
+//     large featured image RIGHT — one H1, nothing repeated)
+//   → editorial intro (leading paragraphs + supporting visual)
+//   → content (65%) + sticky TOC sidebar (35%, active-section
+//     tracking like the legal pages) + sidebar CTA
 //   → tags → author card (social links when present)
-//   → "Continue reading" (3 related) → newsletter
+//   → "Continue reading" (3 related) → newsletter CTA
 //   → per-article SEO: title/description/OG/canonical + JSON-LD
 //     (Article, BreadcrumbList, Person, publisher Organization)
 //
 // Everything is data-driven: publish, unpublish, recategorize or
 // re-author an article in the CMS and this page reflects it on
-// the next load. Featured = most recent; picks = the
-// 'editors-choice' tag. No hardcoded articles.
+// the next load. Featured = most recent. No hardcoded articles.
 // ============================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
-  ArrowUpRight,
   CalendarDays,
   ChevronDown,
   Clock,
@@ -46,12 +41,10 @@ import {
   Linkedin,
   Loader2,
   RefreshCw,
-  Search,
   Twitter,
-  X,
 } from 'lucide-react';
 import { useT } from '@/lib/i18n';
-import { Eyebrow, MarketingButton, Reveal } from './primitives';
+import { MarketingButton, Reveal } from './primitives';
 import { MKT } from './marketing-header';
 import { scrollToLegalId } from './legal-document';
 
@@ -80,13 +73,6 @@ interface BlogArticle {
   updatedAt: string;
   readingMinutes: number;
   image: { url: string; alt: string } | null;
-}
-
-interface BlogCategory {
-  slug: string;
-  name: string;
-  description: string;
-  count: number;
 }
 
 interface ArticleDetailAuthor extends BlogAuthor {
@@ -406,117 +392,6 @@ function FeaturedCard({ article }: { article: BlogArticle }) {
   );
 }
 
-/** Editor's pick — the large left card. */
-function PickCardLarge({ article }: { article: BlogArticle }) {
-  return (
-    <a
-      href={`${MKT.blog}/${article.slug}`}
-      className="mkt-focus group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_14px_36px_-18px_oklch(0.205_0_0/18%)]"
-    >
-      <div className="aspect-[16/9] overflow-hidden bg-muted">
-        {article.image ? (
-          <img
-            src={article.image.url}
-            alt={article.image.alt}
-            loading="lazy"
-            decoding="async"
-            className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
-          />
-        ) : (
-          <div className="mkt-dotgrid h-full w-full" aria-hidden="true" />
-        )}
-      </div>
-      <div className="flex flex-1 flex-col gap-2.5 p-6 sm:p-7">
-        {article.category && <CategoryLabel>{article.category.name}</CategoryLabel>}
-        <h3 className="text-xl font-bold leading-snug text-text-primary transition-colors duration-200 group-hover:text-mkt-accent sm:text-2xl">
-          {article.title}
-        </h3>
-        <p className="line-clamp-2 text-sm leading-relaxed text-text-secondary">
-          {article.excerpt}
-        </p>
-        <div className="mt-auto flex items-center gap-2.5 pt-2">
-          <AuthorAvatar name={article.author.name} src={article.author.avatar} />
-          <span className="truncate text-xs font-medium text-text-secondary">
-            {article.author.name}
-          </span>
-          <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-xs text-text-muted">
-            <ReadingMeta article={article} />
-          </span>
-        </div>
-      </div>
-    </a>
-  );
-}
-
-/** Editor's pick — the small horizontal cards on the right. */
-function PickCardSmall({ article }: { article: BlogArticle }) {
-  return (
-    <a
-      href={`${MKT.blog}/${article.slug}`}
-      className="mkt-focus group flex flex-1 gap-4 overflow-hidden rounded-2xl border border-border bg-card p-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-mkt-accent-border/70 hover:shadow-[0_10px_28px_-16px_oklch(0.205_0_0/16%)]"
-    >
-      <div className="aspect-[4/3] w-28 shrink-0 overflow-hidden rounded-xl bg-muted sm:w-36">
-        {article.image ? (
-          <img
-            src={article.image.url}
-            alt={article.image.alt}
-            loading="lazy"
-            decoding="async"
-            className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.05]"
-          />
-        ) : (
-          <div className="mkt-dotgrid h-full w-full" aria-hidden="true" />
-        )}
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5 py-1 pr-1">
-        {article.category && <CategoryLabel>{article.category.name}</CategoryLabel>}
-        <h3 className="line-clamp-2 text-[0.9375rem] font-bold leading-snug text-text-primary transition-colors duration-200 group-hover:text-mkt-accent">
-          {article.title}
-        </h3>
-        <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
-          <ReadingMeta article={article} />
-        </span>
-      </div>
-    </a>
-  );
-}
-
-/** Topic discovery card — name, description, live count, arrow. */
-function TopicCard({
-  category,
-  onNavigate,
-}: {
-  category: BlogCategory;
-  onNavigate: (slug: string) => void;
-}) {
-  const { t } = useT();
-  const countLabel =
-    category.count === 1
-      ? t('mkt.blog.articleCountOne').replace('{count}', '1')
-      : t('mkt.blog.articleCount').replace('{count}', String(category.count));
-  return (
-    <button
-      type="button"
-      onClick={() => onNavigate(category.slug)}
-      className="mkt-focus group flex h-full flex-col gap-2 rounded-2xl border border-border bg-card p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-mkt-accent-border hover:bg-mkt-accent-soft/25"
-    >
-      <span className="flex items-center justify-between gap-3">
-        <span className="font-bold text-text-primary">{category.name}</span>
-        <ArrowUpRight
-          className="h-4 w-4 shrink-0 text-text-muted transition-all duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-mkt-accent"
-          aria-hidden="true"
-        />
-      </span>
-      {category.description && (
-        <span className="line-clamp-2 text-[0.8125rem] leading-relaxed text-text-secondary">
-          {category.description}
-        </span>
-      )}
-      <span className="mt-auto pt-1 text-xs font-medium text-text-muted">{countLabel}</span>
-    </button>
-  );
-}
-
 // ============================================================
 // Loading skeletons
 // ============================================================
@@ -565,16 +440,11 @@ function BlogSkeleton() {
 // ============================================================
 
 const PAGE_SIZE = 6;
-const EDITORS_CHOICE_TAG = 'editors-choice';
 
 export function BlogPage() {
   const { t } = useT();
   const [articles, setArticles] = useState<BlogArticle[] | null>(null);
-  const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [error, setError] = useState(false);
-  const [activeCat, setActiveCat] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
-  const [searchFocused, setSearchFocused] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -585,10 +455,9 @@ export function BlogPage() {
       const res = await fetch('/api/public/blog');
       if (!res.ok) throw new Error('blog failed');
       const json = (await res.json()) as {
-        data?: { articles: BlogArticle[]; categories: BlogCategory[] };
+        data?: { articles: BlogArticle[] };
       };
       setArticles(json.data?.articles ?? []);
-      setCategories(json.data?.categories ?? []);
     } catch {
       setError(true);
     }
@@ -610,87 +479,19 @@ export function BlogPage() {
     };
   }, [t]);
 
-  // ---- Derived collections ----
-  const trimmedQuery = query.trim().toLowerCase();
-
-  const searched = useMemo(() => {
-    if (!articles || !trimmedQuery) return articles;
-    return articles.filter((a) =>
-      [
-        a.title,
-        a.excerpt,
-        a.author.name,
-        a.category?.name ?? '',
-        ...a.tags.map((tg) => tg.name),
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(trimmedQuery),
-    );
-  }, [articles, trimmedQuery]);
-
-  const filtered = useMemo(
-    () => (activeCat ? searched?.filter((a) => a.category?.slug === activeCat) : searched),
-    [searched, activeCat],
-  );
-
-  const isFiltering = Boolean(trimmedQuery || activeCat);
-
-  // Featured = the most recent article (unfiltered view only).
-  const featured = !isFiltering && filtered && filtered.length > 0 ? filtered[0] : null;
+  // Featured = the most recent published article; the grid below
+  // carries the rest.
+  const featured = articles && articles.length > 0 ? articles[0] : null;
 
   const gridItems = useMemo(() => {
-    if (!filtered) return [];
-    return featured ? filtered.slice(1) : filtered;
-  }, [filtered, featured]);
-
-  // Editor's picks = 'editors-choice' tag (CMS-controlled), filled
-  // with the most recent non-featured articles when fewer than 3.
-  const picks = useMemo(() => {
-    if (!filtered || isFiltering) return [];
-    const pool = featured ? filtered.slice(1) : filtered;
-    const chosen = pool.filter((a) => a.tags.some((tg) => tg.slug === EDITORS_CHOICE_TAG));
-    const rest = pool.filter((a) => !chosen.includes(a));
-    return [...chosen, ...rest].slice(0, 3);
-  }, [filtered, isFiltering, featured]);
+    if (!articles || articles.length === 0) return [];
+    return articles.slice(1);
+  }, [articles]);
 
   const shownGrid = gridItems.slice(0, visibleCount);
   const hasMore = gridItems.length > visibleCount;
 
-  // Categories that actually have published articles.
-  const liveCategories = useMemo(
-    () => categories.filter((c) => c.count > 0),
-    [categories],
-  );
-
-  const activeCatName = activeCat
-    ? (categories.find((c) => c.slug === activeCat)?.name ?? activeCat)
-    : null;
-
   // ---- Actions ----
-  const selectCategory = (slug: string | null) => {
-    setActiveCat(slug);
-    setVisibleCount(PAGE_SIZE);
-  };
-
-  const navigateToTopic = (slug: string) => {
-    setQuery('');
-    selectCategory(slug);
-    // Filtering unmounts the featured + picks sections, which
-    // shrinks the page — wait for the layout to settle, then bring
-    // the results grid just under the sticky header.
-    window.setTimeout(() => {
-      const target = document.getElementById('blog-latest');
-      const root = document.querySelector('.mkt-scroll-root');
-      if (!target || !root) return;
-      const reduced =
-        typeof window.matchMedia === 'function' &&
-        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const y = root.scrollTop + target.getBoundingClientRect().top - 108;
-      root.scrollTo({ top: Math.max(0, y), behavior: reduced ? 'auto' : 'smooth' });
-    }, 140);
-  };
-
   const loadMore = () => {
     setLoadingMore(true);
     // Brief perceived-delay so the reveal reads as intentional.
@@ -700,137 +501,37 @@ export function BlogPage() {
     }, 280);
   };
 
-  const resultsTitle = trimmedQuery
-    ? t('mkt.blog.resultsFor').replace('{query}', query.trim())
-    : activeCatName ?? t('mkt.blog.latest');
-
   return (
     <div className="pb-24">
-      {/* ============ Compact editorial hero ============ */}
-      <section className="relative overflow-hidden pt-28 sm:pt-32">
-        <div className="mkt-dotgrid pointer-events-none absolute inset-0" aria-hidden="true" />
-        <div className="mkt-container relative">
-          <Reveal>
-            <div className="flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-2xl">
-                <Eyebrow>{t('mkt.blog.eyebrow')}</Eyebrow>
-                <h1 className="mkt-display mt-4 text-4xl text-text-primary sm:text-5xl">
-                  {t('mkt.blog.heroTitle')}
-                </h1>
-                <p className="mt-4 text-base leading-relaxed text-text-secondary sm:text-lg">
-                  {t('mkt.blog.heroSubtitle')}
-                </p>
-              </div>
-
-              {/* Search — icon + collapsed label, expanding placeholder */}
-              <div className="w-full lg:mb-1 lg:w-[21rem] lg:shrink-0">
-                <div className="relative">
-                  <Search
-                    className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
-                    aria-hidden="true"
-                  />
-                  <label className="sr-only" htmlFor="blog-search">
-                    {t('mkt.blog.searchLabel')}
-                  </label>
-                  <input
-                    id="blog-search"
-                    type="text"
-                    value={query}
-                    onChange={(e) => {
-                      setQuery(e.target.value);
-                      setVisibleCount(PAGE_SIZE);
-                    }}
-                    onFocus={() => setSearchFocused(true)}
-                    onBlur={() => setSearchFocused(false)}
-                    placeholder={
-                      searchFocused
-                        ? t('mkt.blog.searchPlaceholder')
-                        : t('mkt.blog.searchLabel')
-                    }
-                    className="mkt-focus h-11 w-full rounded-full border border-border bg-card pl-11 pr-10 text-sm text-text-primary shadow-sm placeholder:text-text-muted focus:border-mkt-accent-border focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                  {query && (
-                    <button
-                      type="button"
-                      onClick={() => setQuery('')}
-                      aria-label={t('mkt.blog.clearSearch')}
-                      className="mkt-focus absolute right-2.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-muted hover:text-text-primary"
-                    >
-                      <X className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Reveal>
-
-          {/* Category pills — horizontally scrollable on mobile */}
-          {liveCategories.length > 0 && (
-            <Reveal delay={80}>
-              <div
-                role="tablist"
-                aria-label={t('mkt.blog.categories')}
-                className="mt-9 -mx-5 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-0"
-              >
-                <div className="flex w-max gap-2 sm:w-auto sm:flex-wrap">
-                  <button
-                    role="tab"
-                    aria-selected={activeCat === null}
-                    onClick={() => selectCategory(null)}
-                    className={`mkt-focus h-9 shrink-0 rounded-full border px-4 text-xs font-medium transition-colors duration-200 ${
-                      activeCat === null
-                        ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-border bg-card text-text-secondary hover:border-mkt-accent-border hover:text-text-primary'
-                    }`}
-                  >
-                    {t('mkt.blog.all')}
-                  </button>
-                  {liveCategories.map((c) => (
-                    <button
-                      key={c.slug}
-                      role="tab"
-                      aria-selected={activeCat === c.slug}
-                      onClick={() => selectCategory(activeCat === c.slug ? null : c.slug)}
-                      className={`mkt-focus h-9 shrink-0 rounded-full border px-4 text-xs font-medium transition-colors duration-200 ${
-                        activeCat === c.slug
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-border bg-card text-text-secondary hover:border-mkt-accent-border hover:text-text-primary'
-                      }`}
-                    >
-                      {c.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </Reveal>
-          )}
+      {error ? (
+        <div className="mkt-container flex flex-col items-center gap-4 pb-16 pt-32 text-center">
+          <p className="text-sm text-text-secondary">{t('mkt.blog.error')}</p>
+          <button
+            onClick={load}
+            className="mkt-focus inline-flex h-10 items-center gap-2 rounded-full border border-border px-5 text-sm font-medium text-text-primary hover:bg-muted"
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            {t('mkt.pricing.retry')}
+          </button>
         </div>
-      </section>
-
-      {/* ============ Content ============ */}
-      <div className="mkt-container mt-12 flex flex-col gap-20 sm:mt-14">
-        {error ? (
-          <div className="flex flex-col items-center gap-4 py-16 text-center">
-            <p className="text-sm text-text-secondary">{t('mkt.blog.error')}</p>
-            <button
-              onClick={load}
-              className="mkt-focus inline-flex h-10 items-center gap-2 rounded-full border border-border px-5 text-sm font-medium text-text-primary hover:bg-muted"
-            >
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
-              {t('mkt.pricing.retry')}
-            </button>
-          </div>
-        ) : !articles ? (
-          <div className="flex flex-col gap-8" role="status" aria-label={t('mkt.blog.loading')}>
+      ) : !articles ? (
+        <div
+          className="mkt-container pt-28 sm:pt-32"
+          role="status"
+          aria-label={t('mkt.blog.loading')}
+        >
+          <div className="flex flex-col gap-8">
             <BlogSkeleton />
           </div>
-        ) : articles.length === 0 ? (
-          /* ---- Professional empty state — the page stays complete ---- */
+        </div>
+      ) : articles.length === 0 ? (
+        /* ---- Professional empty state — the page stays complete ---- */
+        <div className="mkt-container pb-8 pt-28 sm:pt-32">
           <Reveal>
             <div className="rounded-2xl border border-border bg-card px-6 py-16 text-center sm:py-20">
-              <h2 className="mkt-h2 text-2xl text-text-primary sm:text-3xl">
+              <h1 className="mkt-h2 text-2xl text-text-primary sm:text-3xl">
                 {t('mkt.blog.emptyTitle')}
-              </h2>
+              </h1>
               <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-text-secondary">
                 {t('mkt.blog.emptyBody')}
               </p>
@@ -842,160 +543,61 @@ export function BlogPage() {
               </div>
             </div>
           </Reveal>
-        ) : (
-          <>
-            {/* ---- Featured article ---- */}
-            {featured && (
-              <Reveal>
-                <FeaturedCard article={featured} />
-              </Reveal>
-            )}
-
-            {/* ---- Latest articles grid ---- */}
-            {gridItems.length > 0 && (
-              <section id="blog-latest" aria-labelledby="blog-latest-heading" className="scroll-mt-24">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2
-                    id="blog-latest-heading"
-                    className="mkt-h2 text-2xl text-text-primary sm:text-[1.75rem]"
-                  >
-                    {resultsTitle}
-                    {isFiltering && filtered && (
-                      <span className="ml-3 align-middle text-sm font-normal text-text-muted">
-                        {filtered.length === 1
-                          ? t('mkt.blog.articleCountOne').replace('{count}', '1')
-                          : t('mkt.blog.articleCount').replace(
-                              '{count}',
-                              String(filtered.length),
-                            )}
-                      </span>
-                    )}
-                  </h2>
-                  {(isFiltering || hasMore) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (isFiltering) {
-                          setQuery('');
-                          selectCategory(null);
-                        } else {
-                          setVisibleCount(gridItems.length);
-                        }
-                      }}
-                      className="mkt-focus group inline-flex items-center gap-1.5 text-sm font-semibold text-mkt-accent transition-colors hover:text-mkt-accent-strong"
-                    >
-                      {isFiltering ? t('mkt.blog.viewAll') : t('mkt.blog.viewAll')}
-                      <ArrowRight
-                        className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5"
-                        aria-hidden="true"
-                      />
-                    </button>
-                  )}
-                </div>
-
-                <div className="mt-7 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                  {shownGrid.map((a, i) => (
-                    <Reveal key={a.slug} delay={Math.min(i, 3) * 60} className="h-full">
-                      <ArticleCard article={a} />
-                    </Reveal>
-                  ))}
-                </div>
-
-                {/* No-results (with a filter active) */}
-                {shownGrid.length === 0 && (
-                  <div className="rounded-2xl border border-border bg-card px-6 py-14 text-center">
-                    <h3 className="text-lg font-bold text-text-primary">
-                      {t('mkt.blog.noResultsTitle')}
-                    </h3>
-                    <p className="mt-2 text-sm text-text-secondary">
-                      {t('mkt.blog.noResultsBody')}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setQuery('');
-                        selectCategory(null);
-                      }}
-                      className="mkt-focus mt-6 inline-flex h-10 items-center gap-2 rounded-full border border-border px-5 text-sm font-medium text-text-primary hover:bg-muted"
-                    >
-                      <X className="h-4 w-4" aria-hidden="true" />
-                      {t('mkt.blog.clearSearch')}
-                    </button>
-                  </div>
-                )}
-
-                {hasMore && (
-                  <div className="mt-10 text-center">
-                    <button
-                      type="button"
-                      onClick={loadMore}
-                      disabled={loadingMore}
-                      className="mkt-focus inline-flex h-11 items-center gap-2 rounded-full border border-border bg-card px-7 text-sm font-semibold text-text-primary transition-all duration-200 hover:border-mkt-accent-border hover:bg-muted disabled:opacity-60"
-                    >
-                      {loadingMore && (
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                      )}
-                      {t('mkt.blog.loadMore')}
-                    </button>
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/* ---- Editor's picks — 1 large + 2 small ---- */}
-            {picks.length >= 2 && (
-              <section aria-labelledby="blog-picks-heading">
-                <h2
-                  id="blog-picks-heading"
-                  className="mkt-h2 text-2xl text-text-primary sm:text-[1.75rem]"
-                >
-                  {t('mkt.blog.editorsPicks')}
-                </h2>
-                <div className="mt-7 grid gap-6 lg:grid-cols-2">
-                  <Reveal className="h-full">
-                    <PickCardLarge article={picks[0]} />
-                  </Reveal>
-                  <div className="flex flex-col gap-6">
-                    {picks.slice(1).map((a, i) => (
-                      <Reveal key={a.slug} delay={60 + i * 60} className="flex-1">
-                        <PickCardSmall article={a} />
-                      </Reveal>
-                    ))}
-                  </div>
-                </div>
-              </section>
-            )}
-          </>
-        )}
-
-        {/* ---- Explore by topic (also enriches the empty state) ---- */}
-        {liveCategories.length > 0 && (
-          <section aria-labelledby="blog-topics-heading">
-            <h2
-              id="blog-topics-heading"
-              className="mkt-h2 text-2xl text-text-primary sm:text-[1.75rem]"
-            >
-              {t('mkt.blog.exploreTopics')}
-            </h2>
-            <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {liveCategories.map((c, i) => (
-                <Reveal key={c.slug} delay={Math.min(i, 4) * 40} className="h-full">
-                  <TopicCard category={c} onNavigate={navigateToTopic} />
-                </Reveal>
-              ))}
-            </div>
-          </section>
-        )}
-      </div>
-
-      {/* ============ Newsletter ============ */}
-      <section className="mt-20 sm:mt-24">
-        <div className="mkt-container">
-          <Reveal>
-            <BlogNewsletter />
-          </Reveal>
         </div>
-      </section>
+      ) : (
+        <div className="mkt-container flex flex-col gap-16 pt-28 sm:gap-20 sm:pt-32">
+          {/* The page keeps a proper document outline without a
+              visible marketing headline. */}
+          <h1 className="sr-only">{t('mkt.blog.title')}</h1>
+
+          {/* ---- Featured article ---- */}
+          {featured && (
+            <Reveal>
+              <FeaturedCard article={featured} />
+            </Reveal>
+          )}
+
+          {/* ---- Latest articles grid ---- */}
+          {gridItems.length > 0 && (
+            <section
+              id="blog-latest"
+              aria-labelledby="blog-latest-heading"
+              className="scroll-mt-24"
+            >
+              <h2
+                id="blog-latest-heading"
+                className="mkt-h2 text-2xl text-text-primary sm:text-[1.75rem]"
+              >
+                {t('mkt.blog.latest')}
+              </h2>
+
+              <div className="mt-7 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {shownGrid.map((a, i) => (
+                  <Reveal key={a.slug} delay={Math.min(i, 3) * 60} className="h-full">
+                    <ArticleCard article={a} />
+                  </Reveal>
+                ))}
+              </div>
+
+              {hasMore && (
+                <div className="mt-10 text-center">
+                  <button
+                    type="button"
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="mkt-focus inline-flex h-11 items-center gap-2 rounded-full border border-border bg-card px-7 text-sm font-semibold text-text-primary transition-all duration-200 hover:border-mkt-accent-border hover:bg-muted disabled:opacity-60"
+                  >
+                    {loadingMore && (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    )}
+                    {t('mkt.blog.loadMore')}
+                  </button>
+                </div>
+              )}
+            </section>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1071,25 +673,43 @@ export function BlogArticlePage({ slug }: { slug: string }) {
   const [tocOpen, setTocOpen] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
-  // ---- Body HTML + TOC, derived together ----
+  // ---- Body HTML + TOC + editorial intro, derived together ----
   // Section ids are baked INTO the HTML string (DOMParser), so they
   // survive any React re-render of the dangerouslySetInnerHTML div
   // (progress/active-state updates re-render this page constantly —
   // mutating the live DOM after render would be wiped). The parsed
   // TOC comes from the same pass. The prop object is memoized so
   // React never re-sets the innerHTML during those re-renders.
-  const { bodyHtml, toc } = useMemo<{
+  //
+  // Editorial intro: the article's leading paragraphs (before the
+  // first heading) are promoted into the two-column lead block, and
+  // the first inline image becomes that block's supporting visual —
+  // unless it merely repeats the hero cover, in which case it is
+  // dropped from the flow so nothing renders twice and the cover
+  // itself backs the intro visual.
+  const { bodyHtml, toc, introHtml, introImage } = useMemo<{
     bodyHtml: { __html: string } | null;
     toc: TocEntry[];
+    introHtml: string | null;
+    introImage: { url: string; alt: string; caption: string | null } | null;
   }>(() => {
-    if (!article?.html) return { bodyHtml: null, toc: [] };
+    if (!article?.html) {
+      return { bodyHtml: null, toc: [], introHtml: null, introImage: null };
+    }
     try {
       const doc = new DOMParser().parseFromString(
         `<div>${article.html}</div>`,
         'text/html',
       );
       const root = doc.body.firstElementChild;
-      if (!root) return { bodyHtml: { __html: article.html }, toc: [] };
+      if (!root) {
+        return {
+          bodyHtml: { __html: article.html },
+          toc: [],
+          introHtml: null,
+          introImage: null,
+        };
+      }
       const entries: TocEntry[] = [];
       root.querySelectorAll('h2, h3').forEach((h, i) => {
         if (!h.id) h.id = `article-sec-${i}`;
@@ -1098,9 +718,66 @@ export function BlogArticlePage({ slug }: { slug: string }) {
           entries.push({ id: h.id, label, level: h.tagName === 'H3' ? 3 : 2 });
         }
       });
-      return { bodyHtml: { __html: root.innerHTML }, toc: entries };
+
+      // Leading <p> elements (bounded) become the intro lead — but
+      // only when the article still has content below them, so a
+      // single-paragraph article stays a normal body.
+      const children = Array.from(root.children);
+      const lead: Element[] = [];
+      for (const child of children) {
+        if (child.tagName === 'P' && lead.length < 3) lead.push(child);
+        else break;
+      }
+      const hasRest = children.length - lead.length > 0;
+
+      let visual: { url: string; alt: string; caption: string | null } | null = null;
+      let intro: string | null = null;
+
+      if (lead.length > 0 && hasRest) {
+        intro = lead.map((p) => p.outerHTML).join('');
+        lead.forEach((p) => p.remove());
+
+        // The first inline image is promoted out of the flow into
+        // the intro visual slot — unless it just repeats the hero
+        // cover, in which case it is removed so it never shows
+        // twice on the page.
+        const firstImg = root.querySelector('img');
+        if (firstImg) {
+          const src = firstImg.getAttribute('src') ?? '';
+          if (src) {
+            const normalize = (u: string) => u.split('#')[0].split('?')[0];
+            const repeatsHero =
+              !!article.image && normalize(article.image.url) === normalize(src);
+            if (!repeatsHero) {
+              const fig = firstImg.closest('figure');
+              visual = {
+                url: src,
+                alt: firstImg.getAttribute('alt') ?? '',
+                caption:
+                  fig?.querySelector('figcaption')?.textContent?.trim() ?? null,
+              };
+            }
+            (firstImg.closest('figure') ?? firstImg).remove();
+          }
+        }
+        if (!visual && article.image) {
+          visual = { url: article.image.url, alt: article.image.alt, caption: null };
+        }
+      }
+
+      return {
+        bodyHtml: { __html: root.innerHTML },
+        toc: entries,
+        introHtml: intro,
+        introImage: visual,
+      };
     } catch {
-      return { bodyHtml: { __html: article.html }, toc: [] };
+      return {
+        bodyHtml: { __html: article.html },
+        toc: [],
+        introHtml: null,
+        introImage: null,
+      };
     }
   }, [article]);
 
@@ -1381,9 +1058,10 @@ export function BlogArticlePage({ slug }: { slug: string }) {
         aria-hidden="true"
       />
 
-      {/* ============ Article header ============ */}
+      {/* ============ Article hero — editorial two-column: title,
+                        description & author LEFT, image RIGHT ============ */}
       <header className="pt-28 sm:pt-32">
-        <div className="mkt-container max-w-4xl">
+        <div className="mkt-container max-w-6xl">
           {/* Breadcrumb */}
           <nav aria-label={t('mkt.blog.breadcrumb')} className="text-sm">
             <ol className="flex flex-wrap items-center gap-1.5 text-text-muted">
@@ -1415,61 +1093,100 @@ export function BlogArticlePage({ slug }: { slug: string }) {
             </ol>
           </nav>
 
-          <div className="mx-auto mt-8 max-w-3xl text-center">
-            {article.category && (
-              <a
-                href={MKT.blog}
-                className="mkt-focus inline-block rounded-full bg-mkt-accent-soft px-3 py-1 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-mkt-accent-soft-fg transition-opacity hover:opacity-80"
-              >
-                {article.category.name}
-              </a>
-            )}
-            <h1 className="mkt-display mt-5 text-3xl text-text-primary sm:text-[2.75rem] sm:leading-[1.12]">
-              {article.title}
-            </h1>
-            <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-text-secondary sm:text-lg">
-              {article.excerpt}
-            </p>
-            <div className="mt-7 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-text-muted">
-              <span className="inline-flex items-center gap-2">
+          <div className="mt-8 grid items-center gap-10 lg:mt-10 lg:grid-cols-2 lg:gap-14">
+            {/* Left — category, title, description, author */}
+            <div>
+              {article.category && (
+                <a
+                  href={MKT.blog}
+                  className="mkt-focus inline-block rounded-full bg-mkt-accent-soft px-3 py-1 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-mkt-accent-soft-fg transition-opacity hover:opacity-80"
+                >
+                  {article.category.name}
+                </a>
+              )}
+              <h1 className="mkt-display mt-5 text-[1.875rem] leading-[1.12] text-text-primary sm:text-[2.375rem]">
+                {article.title}
+              </h1>
+              <p className="mt-5 max-w-xl text-base leading-relaxed text-text-secondary sm:text-lg">
+                {article.excerpt}
+              </p>
+              <div className="mt-8 flex items-center gap-3.5">
                 <AuthorAvatar
                   name={article.author.name}
                   src={article.author.avatar}
-                  className="h-8 w-8"
-                  textClassName="text-xs"
+                  className="h-11 w-11"
+                  textClassName="text-sm"
                 />
-                <span className="font-medium text-text-secondary">
-                  {t('mkt.blog.by')} {article.author.name}
-                </span>
-              </span>
-              <ReadingMeta article={article} />
-              {significantUpdate && (
-                <span className="inline-flex items-center gap-1.5">
-                  {t('mkt.blog.updated')} {formatDate(article.updatedAt, locale)}
-                </span>
-              )}
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-text-primary">
+                    {t('mkt.blog.by')} {article.author.name}
+                  </p>
+                  <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-text-muted">
+                    <ReadingMeta article={article} />
+                    {significantUpdate && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        {t('mkt.blog.updated')} {formatDate(article.updatedAt, locale)}
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
             </div>
+
+            {/* Right — large featured image, aligned with the text */}
+            {article.image && (
+              <figure>
+                <img
+                  src={article.image.url}
+                  alt={article.image.alt}
+                  loading="eager"
+                  decoding="async"
+                  className="aspect-[4/3] w-full rounded-2xl border border-border object-cover shadow-[0_2px_6px_rgb(0_0_0/0.04),0_24px_60px_-28px_rgb(0_0_0/0.22)]"
+                />
+              </figure>
+            )}
           </div>
         </div>
       </header>
 
-      {/* ============ Featured image ============ */}
-      {article.image && (
-        <div className="mkt-container mt-10 max-w-5xl">
-          <figure>
-            <img
-              src={article.image.url}
-              alt={article.image.alt}
-              loading="eager"
-              decoding="async"
-              className="aspect-[16/9] w-full rounded-2xl border border-border object-cover"
-            />
-          </figure>
+      {/* ============ Editorial intro — opening text LEFT,
+                        supporting visual RIGHT ============ */}
+      {introHtml && (
+        <div className="mt-14 sm:mt-16 lg:mt-20">
+          <div className="mkt-container max-w-6xl">
+            <div className="grid items-center gap-10 lg:grid-cols-[1.15fr_1fr] lg:gap-14">
+              <div
+                className="mkt-intro-lead"
+                // Intro HTML is the article's own leading paragraphs
+                // (curated CMS content — no public input).
+                dangerouslySetInnerHTML={{ __html: introHtml }}
+              />
+              {introImage && (
+                <figure>
+                  <div className="rounded-2xl border border-border bg-card p-2.5 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_16px_40px_-24px_rgb(0_0_0/0.18)]">
+                    <img
+                      src={introImage.url}
+                      alt={introImage.alt}
+                      loading="lazy"
+                      decoding="async"
+                      className="aspect-[5/4] w-full rounded-xl object-cover"
+                    />
+                  </div>
+                  {introImage.caption && (
+                    <figcaption className="mt-3 text-center text-xs leading-relaxed text-text-muted">
+                      {introImage.caption}
+                    </figcaption>
+                  )}
+                </figure>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
       {/* ============ Body + sidebar ============ */}
-      <div className="mkt-container mt-12 max-w-6xl sm:mt-14">
+      <div className="mkt-container mt-14 max-w-6xl sm:mt-16">
         <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_16.5rem] lg:gap-14">
           {/* ---- Main column ---- */}
           <div>
