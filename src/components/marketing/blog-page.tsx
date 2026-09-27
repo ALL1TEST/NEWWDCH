@@ -13,11 +13,12 @@
 //   → professional empty state when nothing is published yet
 //
 // Article page (#/blog/<slug>)
-//   reading-progress bar + breadcrumb (Blog / title — the
-//     category lives only in the label pill, never duplicated)
+//   reading-progress bar + breadcrumb (Blog / title — no
+//     category label anywhere in the hero)
 //   → two-column editorial hero on a warm off-white band
 //     (title/description/author LEFT, featured image RIGHT —
-//     one H1, compact byline with calendar/read/updated icons)
+//     one H1; byline = round avatar + bold name + plain
+//     "Updated …" secondary text, no icons)
 //   → editorial intro (leading paragraphs + supporting visual)
 //   → content (65%) + sticky TOC sidebar (35%, active-section
 //     tracking like the legal pages) + sidebar CTA + tags
@@ -39,7 +40,6 @@ import {
   CalendarDays,
   ChevronDown,
   Clock,
-  History,
   Loader2,
   RefreshCw,
 } from 'lucide-react';
@@ -1058,24 +1058,19 @@ export function BlogArticlePage({ slug }: { slug: string }) {
             </nav>
 
             <div className="mt-8 grid items-center gap-10 lg:mt-10 lg:grid-cols-2 lg:gap-14">
-              {/* Left — category, title, description, author */}
+              {/* Left — title, description, author. No category
+                  label here (CMS data untouched): the headline starts
+                  directly under the breadcrumb spacing. */}
               <div>
-                {article.category && (
-                  <a
-                    href={MKT.blog}
-                    className="mkt-focus inline-block rounded-full bg-mkt-accent-soft px-3 py-1 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-mkt-accent-soft-fg transition-opacity hover:opacity-80"
-                  >
-                    {article.category.name}
-                  </a>
-                )}
-                <h1 className="mkt-display mt-5 text-[1.875rem] leading-[1.12] text-text-primary sm:text-[2.375rem]">
+                <h1 className="mkt-display text-[1.875rem] leading-[1.12] text-text-primary sm:text-[2.375rem]">
                   {article.title}
                 </h1>
                 <p className="mt-5 max-w-xl text-base leading-relaxed text-text-secondary sm:text-lg">
                   {article.excerpt}
                 </p>
-                {/* Compact byline — round avatar + name + one clean
-                    metadata row (calendar / reading time / updated) */}
+                {/* Byline — round avatar + bold name, with the
+                    last-updated date as plain secondary text below
+                    (no icons, no date / read-time clutter). */}
                 <div className="mt-7 flex items-center gap-3">
                   <AuthorAvatar
                     name={article.author.name}
@@ -1084,36 +1079,14 @@ export function BlogArticlePage({ slug }: { slug: string }) {
                     textClassName="text-xs"
                   />
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-text-primary">
+                    <p className="text-sm font-bold text-text-primary">
                       {t('mkt.blog.by')} {article.author.name}
                     </p>
-                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.8125rem] leading-relaxed text-text-muted">
-                      {article.publishedAt && (
-                        <>
-                          <span className="inline-flex items-center gap-1.5">
-                            <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
-                            {formatDate(article.publishedAt, locale)}
-                          </span>
-                          <span aria-hidden="true">·</span>
-                        </>
-                      )}
-                      <span className="inline-flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                        {t('mkt.blog.readingTime').replace(
-                          '{minutes}',
-                          String(article.readingMinutes),
-                        )}
-                      </span>
-                      {significantUpdate && (
-                        <>
-                          <span aria-hidden="true">·</span>
-                          <span className="inline-flex items-center gap-1.5">
-                            <History className="h-3.5 w-3.5" aria-hidden="true" />
-                            {t('mkt.blog.updated')} {formatDate(article.updatedAt, locale)}
-                          </span>
-                        </>
-                      )}
-                    </p>
+                    {significantUpdate && (
+                      <p className="mt-0.5 text-[0.8125rem] leading-relaxed text-text-muted">
+                        {t('mkt.blog.updated')} {formatDate(article.updatedAt, locale)}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

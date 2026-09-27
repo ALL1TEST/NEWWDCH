@@ -12556,3 +12556,29 @@ Stage Summary:
 - Author now appears exactly once (hero); category appears exactly once (pill); metadata row appears exactly once (byline); no Continue reading / ABOUT THE AUTHOR anywhere
 - Files changed: src/components/marketing/blog-page.tsx, src/app/globals.css, src/lib/i18n/fragments/{en,fr}/client-marketing.ts — no backend, no schema, no homepage/header/footer changes
 - Pending from earlier tasks: product-tour.mp4 still not delivered
+
+---
+Task ID: article-hero-meta-1
+Agent: main (Z.ai Code)
+Task: Precise Single Article page changes per 15-item spec: hero metadata reduction (remove DESIGN label, remove date/read-time/icons from byline, plain "Updated" text) + confirm newsletter→recent-articles ordering. Nothing else changed.
+
+Work Log:
+- Verified current state first: newsletter (line ~1279) already renders BEFORE Recent articles (~1289) from previous task — order items 1/3/4/11/12 already satisfied; only the hero needed changing
+- HERO LEFT COLUMN (blog-page.tsx): removed the category pill above the H1 ("DESIGN" — CMS category data untouched, only hidden from this position); h1 no longer has mt-5 so the title starts directly under the breadcrumb grid spacing; byline rebuilt: round 40px avatar (ring-1) + "By Emma Rodriguez" (text-sm font-bold) + "Updated Sep 27, 2026" as plain secondary text (text-[0.8125rem] text-text-muted) below the name — NO calendar/clock/history icons, NO published date, NO reading time in the hero (significantUpdate >24h guard kept so never-updated articles don't show a redundant line)
+- Removed now-unused History import (CalendarDays/Clock kept — still used by ReadingMeta for homepage cards + RecentArticleItem meta); updated file header comment
+- No other changes: body, TOC, sidebar CTA, newsletter design, Recent Articles design, header, footer, homepage, CMS, API all untouched
+
+E2E verification (agent-browser):
+- Desktop 1440x900 (article header.bg-mkt-surface-2 scoped): no DESIGN label, no "Sep 16/17, 2026", no "min read", "Updated Sep 27, 2026" present, ZERO svg icons in hero, byline "By Emma Rodriguez", title before description; newsletter card 984x202px, DOM order newsletter-then-recent, exactly 1 newsletter + 1 RECENT ARTICLES on the page
+- VLM visual confirmation: no category label, avatar "ER" + bold name + grey "Updated Sep 27, 2026" underneath, no icons anywhere in hero, two-column text-left/image-right on warm cream band
+- Mobile 375x812: no horizontal overflow, hero single-column stacked, no DESIGN, updated line present, zero icons
+- FR locale: "Par Emma Rodriguez" + "Mis à jour …" + "ARTICLES RÉCENTS" all correct, zero icons; reset to EN
+- Fresh reload: 0 page errors, 0 console errors
+- Homepage #/blog unchanged: Latest articles + Load more, no newsletter, 7 article links
+- Lint: 0 errors on blog-page.tsx
+
+Stage Summary:
+- Final hero: Breadcrumb → H1 "Building a Design System from Scratch" → description → [ER] By Emma Rodriguez / Updated Sep 27, 2026 (no category, no date, no read-time, no icons)
+- Final page flow confirmed: HEADER → BREADCRUMB → HERO (warm band, 2-col) → CONTENT (+TOC/sidebar) → NEWSLETTER → RECENT ARTICLES → FOOTER
+- Single file modified: src/components/marketing/blog-page.tsx (hero left column + imports + header comment)
+- Pending from earlier tasks: product-tour.mp4 still not delivered
