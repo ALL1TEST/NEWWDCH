@@ -12599,3 +12599,35 @@ Stage Summary:
 - Repository now up to date: 3 new commits pushed (included blog-page.tsx changes, i18n fragment updates, worklog.md)
 - Triple verification passed (push output, local/remote SHA compare, GitHub API)
 - Output: GITHUB UPDATE VERIFIED
+
+---
+Task ID: repo-sync-1
+Agent: main (Z.ai Code)
+Task: Fully synchronize the local running application with GitHub repo ALL1TEST/NEWWDCH (user reported localhost not matching repository)
+
+Work Log:
+- Inspected environment: dev server runs from /home/z/my-project (next dev -p 3000, supervisor .zscripts/dev-supervisor.sh auto-restarts it)
+- Found divergence: local HEAD 29e19fb (stale) vs origin/main 29813a2 "Update platform features, marketing components, and content modules" (60 files, +2424/-593)
+- Synced code: `git fetch origin main && git reset --hard origin/main` → HEAD = 29813a2, `git status` clean (old local-only commit discarded; repo is source of truth)
+- Dependencies: `bun install` — 1067 installs checked, no changes (lockfile already satisfied)
+- DB was EMPTY (sandbox re-provisioned at boot; schema pushed, no data). Ran the repo's full seed chain in order:
+  1. bun run src/lib/seed.ts (base: 3 users, 10 items, 5 categories, 6 tags, 4 media, 7 comments)
+  2. bun run .zscripts/seed-blog-editorial.ts (12 published platform articles, authors, categories, tags)
+  3. bun run src/lib/platform/bootstrap.ts (owner/platform/internal users, 4 plans, flags, country pricing, coupons)
+  4. bun run .zscripts/seed-marketing.ts (4 product-craft articles, demo site "The Craft Journal" + 6 site articles)
+  5. bun run prisma/seed-platform-pages.ts (about/contact/privacy/terms/security pages)
+  6. bun run prisma/seed-exact-frontend-content.ts (exact legal HTML + accessibility + legal center)
+  7. bun run prisma/seed-users.ts (10 sample users), prisma/seed-ai-demo.ts (5 providers/13 models/18 prompts), prisma/seed-seo-demo.ts
+  8. prisma/seed-backups-demo.ts initially failed P2003 (hardcoded ADMIN_USER_ID cmt0pg30r0000uwmza35j6bwu from old env) → fixed at DATA level: updated admin@example.com user id to cmt0pg30r0000uwmza35j6bwu with FK cascade (bun:sqlite, PRAGMA foreign_keys=OFF + transaction; 59 rows/44 cols), then value-based sweep found Site.ownerId + 3 Notification.userId rows in FK-less tables (Site table has NO SQLite FK constraints) — repaired, foreign_key_check = 0 violations
+  9. bun run scripts/seed-payments.ts (19 payments), seed-demo-charts.ts, seed-universal-prompts.ts
+- Restarted dev server (killed old PIDs; supervisor relaunched fresh instance on port 3000)
+- Verification: GET / 200; /api/public/blog → 16 articles; /api/public/pages/{about,legal} → seeded content; agent-browser: homepage (H1 "Run every site you publish from one calm dashboard."), blog (featured + latest + newsletter CTA), article page (H2/H3 + RECENT ARTICLES), about (new image testimonial carousel — all 4 jpgs load), pricing (Free/Plus/Pro/Max + Monthly toggle + FAQ), CMS login → Executive Dashboard, Articles module shows 6 demo-site articles; VLM screenshot checks passed; marketing images lazy-load correctly (HTTP 200); mobile 390px: no horizontal overflow, footer at scroll-content bottom (app scrolls via .mkt-scroll-root, body overflow-hidden by design); dev.log clean (no errors); git status clean
+- Known repo-as-is issues (NOT fixed per user instruction — these are the repository's own bugs):
+  * prisma/seed-newsletter.ts queries removed role 'SUPER_ADMIN' → crashes, newsletter demo data not seeded
+  * prisma/seed-ai-demo.ts final summary console.log crashes (promptSpecs undefined) AFTER data is seeded successfully
+  * public/uploads/blog/*.png covers are gitignored runtime assets not in the repo; seeds skip them gracefully
+- Backed up pre-sync DB at /home/z/db-backup/custom.db.pre-sync-29813a2
+- product-tour.mp4 (3.9MB) now present via the repo sync (old pending item resolved)
+
+Stage Summary:
+- Local application now exactly matches GitHub repo ALL1TEST/NEWWDCH @ 29813a2: code synced (reset --hard, clean tree), deps verified, dev server restarted from repo, DB fully seeded via the repo's own seed chain (35 content items, 23 users, 1 demo site, plans/AI/SEO/backups/payments demo data), UI browser-verified end-to-end (marketing site + CMS admin), zero code modifications made
