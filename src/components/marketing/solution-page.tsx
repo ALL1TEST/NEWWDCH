@@ -143,7 +143,9 @@ function SolutionHero({ def }: { def: SolutionDef }) {
 // -------------------- Alternating product stories --------------------
 // Editorial feature rhythm: alternating 50/50 rows — text left /
 // product UI right, then reversed — separated by generous
-// whitespace (no cards, no borders around the sections). Each
+// whitespace (no cards, no borders around the sections) and a
+// barely-there 1px center rule between the two columns
+// (desktop two-column layout only; hidden when stacked). Each
 // copy column opens with a tiny orange CHAPTER eyebrow (small
 // uppercase editorial label — not a pill or badge) directly
 // above the heading, and each screenshot is presented as a clean
@@ -185,6 +187,14 @@ function SolutionStories({ def }: { def: SolutionDef }) {
                   </p>
                   <PointList points={story.points.map((p) => t(p))} />
                 </div>
+
+                {/* Center rule — a barely-there editorial divider
+                    floating exactly between the two columns (in the
+                    middle of the gutter, attached to neither side).
+                    1px, hairline gray, near-full row height via
+                    self-stretch; renders only while the two-column
+                    layout is active — hidden on stacked layouts. */}
+                <div className="hidden w-px self-stretch bg-border lg:block" aria-hidden="true" />
 
                 {/* Visual — clean product showcase: rounded, soft
                     shadow, white surface; no chrome, no card wrap */}

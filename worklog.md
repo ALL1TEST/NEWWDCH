@@ -12728,3 +12728,31 @@ Stage Summary:
 - Feature sections keep the alternating 50/50 text/image rhythm with larger gaps and horizontal spacing; screenshots are clean product showcases (rounded, hairline, soft shadow, white surface, no browser chrome)
 - Change applies consistently to all 6 solution pages via the shared template; hero/benefits/CTA/header/footer and all content untouched
 - Verified end-to-end on content-publishing + integrations pages at desktop/tablet/mobile with VLM + DOM assertions; lint and dev.log clean
+
+---
+Task ID: solution-stories-2
+Agent: main (Z.ai Code)
+Task: Add ONLY a subtle vertical divider between the two columns of the alternating feature (story) sections on solution pages — ClickUp-reference style: 1px, light gray, low contrast, centered in the gutter, near-full row height, hidden when the layout stacks. No other changes.
+
+Work Log:
+- src/components/marketing/solution-page.tsx → SolutionStories: inserted a single divider element between the copy and visual flex children of each story row:
+  <div className="hidden w-px self-stretch bg-border lg:block" aria-hidden="true" />
+- Mechanics: the row's lg:gap-20 applies between ALL flex children, so the 1px element floats exactly in the middle of the gutter (80px | 1px | 80px) attached to neither column; with lg:flex-row-reverse the DOM order [copy, divider, visual] renders [visual, divider, copy] so the divider stays centered on flipped rows too
+- Style: 1px (w-px), bg-border hairline gray (#e4e4e4-ish — same token as all page hairlines, no dark/thick/colored/dashed/gradient/shadow/rounded), self-stretch = full row height (overrides lg:items-center for this item)
+- Responsive: hidden lg:block — divider only renders while the two-column layout is active; display:none below 1024px (tablet 768 stacks, mobile 390 stacks); no horizontal divider added to stacked layouts
+- Updated the SolutionStories comment block to document the center rule
+- Untouched: layout, gaps (spacing system), text, images, eyebrows, showcase figures, hero/benefits/CTA/header/footer
+- Lint: zero errors in the touched file
+- Browser verification (agent-browser + z-ai vision):
+  * Geometry (content-publishing, 1440px): rows 1/3 (normal) and row 2 (flipped) all report divider width=1px, height=full row height (343/305/317px), gapLeft=80 gapRight=80 (perfectly centered), bg=lab(90.95) hairline gray
+  * VLM (story 1 + flipped story 2): thin light-gray vertical line centered in the gap, subtle/barely noticeable, standalone (not attached to screenshot or text), composition clean and editorial, no problems introduced
+  * Tablet 768: 3 dividers present in DOM, none visible (display:none) — layout is stacked
+  * Mobile 390: dividers hidden, no horizontal overflow (scrollWidth 390 = clientWidth 390)
+  * Integrations page: both rows (screenshot + SceneStage illustration) divider centered, width 1px
+  * No console errors, no page errors, dev.log clean
+- Scope: git status shows only src/components/marketing/solution-page.tsx modified (+11/−1)
+
+Stage Summary:
+- A barely-there 1px hairline-gray center rule now separates the text and image columns of every alternating feature section on all solution pages, floating exactly in the middle of the gutter on both normal and flipped rows, spanning full row height
+- Hidden completely on stacked tablet/mobile layouts; no other element, spacing, or content touched
+- Verified geometrically (1px width, 80/80 centered gaps, full height) and visually (VLM) across both row orientations, three viewports, and two pages; lint and dev.log clean
