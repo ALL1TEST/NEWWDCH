@@ -12791,3 +12791,23 @@ Stage Summary:
 - CHAPTER labels replaced by minimal no-dot orange eyebrows across all 6 solution pages (Content/Media/Workflow/SEO/Automation/Scheduling/Sites/Teams/AI providers/Integrations), consistent typography via the shared mkt-eyebrow class
 - Every feature row now ends with a 1px light-gray full-width hairline; the vertical center divider is preserved; benefits band lost its border + eyebrow, gained a larger centered "What you get" heading and custom orange line-art icons per benefit in clean bordered cards
 - Verified end-to-end (DOM + VLM) on seo/content-publishing/integrations at desktop/tablet/mobile and in FR; lint and dev.log clean
+
+---
+Task ID: solution-stories-4
+Agent: main (Z.ai Code)
+Task: Fix the horizontal divider under each feature row on the Solutions detail pages — it floated far below the feature image/content row (mid-gap of the container's 112–128px section gap). Move it up so it sits directly under the feature row, keep the vertical divider, keep all content/layout untouched.
+
+Work Log:
+- solution-page.tsx SolutionStories: moved the existing hairline <div className="h-px w-full bg-border"> from being a separate flex child of the mkt-container (where the container's gap-16/sm:gap-28/lg:gap-32 put ~112–128px of empty space above it) INTO the feature section's own Reveal container, directly after the feature row div, with a small mt-10 sm:mt-12 (40/48px) offset — same 1px light-gray bg-border style, same full container width, no new component
+- Resulting rhythm per feature section: row bottom → 40/48px → hairline → container section gap (64/112/128px) → next feature section; vertical center rule (w-px self-stretch) untouched; last hairline before the benefits band also now closes its row tightly
+- Updated the block comments to document the new structure; zero changes to headings, copy, eyebrows, images, benefits, ordering, or any other section
+- Verified with agent-browser on #/solutions/content-publishing and #/solutions/seo:
+  * Desktop 1440: gap row-bottom → hairline = 48px on every row (was 128px); gap hairline → next row top = 128px (normal section spacing preserved); hairlines 1px × 1136px full container width; vertical dividers 1px × full row height
+  * Mobile 390: gap = 40px, hairline full width, vertical dividers hidden, no horizontal overflow
+  * VLM on screenshots: divider sits close under the feature row (no huge blank gap), vertical divider present, layout clean/balanced
+  * All story headings ("Write with AI that fits your workflow.", "MEDIA" eyebrow, etc.) and benefits intact; no console/page errors
+- Lint: 46 pre-existing problems, none in marketing files; dev.log clean
+
+Stage Summary:
+- The horizontal hairline is now part of the feature section container itself and closes each feature row a short step (40/48px) beneath the image/content bottom, instead of floating in the middle of the large section gap; spacing to the next feature section stays normal (container gap)
+- Single-file change (solution-page.tsx), applies uniformly to all 6 solution detail pages; no content, structure, or styling tokens were altered beyond the divider's position

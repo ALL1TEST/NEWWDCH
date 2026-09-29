@@ -144,8 +144,10 @@ function SolutionHero({ def }: { def: SolutionDef }) {
 // Editorial feature rhythm: alternating 50/50 rows — text left /
 // product UI right, then reversed — with a barely-there 1px center
 // rule between the two columns (two-column layout only) and a
-// subtle horizontal hairline below each feature row, spanning the
-// container, so the sections read as a calm structural sequence.
+// subtle horizontal hairline closing each feature section — it
+// belongs to the section itself, sitting a short step beneath the
+// row's content, while the container's section gap opens the
+// whitespace to the next story.
 // Each copy column opens with a tiny orange eyebrow — a minimal
 // uppercase section identifier (no dot, no number) — directly
 // above the heading, and each screenshot is presented as a clean
@@ -215,12 +217,16 @@ function SolutionStories({ def }: { def: SolutionDef }) {
                     )}
                   </div>
                 </div>
-              </Reveal>
 
-              {/* Hairline — a very subtle 1px structural separator
-                  below each feature row, spanning the container with
-                  generous whitespace on both sides. */}
-              <div className="h-px w-full bg-border" aria-hidden="true" />
+                {/* Hairline — a very subtle 1px structural separator
+                    that closes the feature section. It is part of the
+                    section container itself, placed a short step
+                    directly beneath the row (image/content bottom),
+                    so it reads as the row's bottom edge; the
+                    container's section gap then provides the
+                    breathing room to the next feature section. */}
+                <div className="mt-10 h-px w-full bg-border sm:mt-12" aria-hidden="true" />
+              </Reveal>
             </React.Fragment>
           );
         })}
