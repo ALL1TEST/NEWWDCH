@@ -420,8 +420,17 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.solp.exitFullscreen': 'Quitter le plein écran',
   'mkt.solp.seek': 'Rechercher',
   'mkt.solp.storiesTitle': 'Dans le produit',
-  'mkt.solp.storyLabel': 'Chapitre',
-  'mkt.solp.benefitsEyebrow': 'Avantages',
+  // Libellés éditoriaux minimaux — petits identifiants de section en majuscules.
+  'mkt.solp.label.content': 'Contenu',
+  'mkt.solp.label.media': 'Médias',
+  'mkt.solp.label.workflow': 'Workflow',
+  'mkt.solp.label.seo': 'SEO',
+  'mkt.solp.label.automation': 'Automatisation',
+  'mkt.solp.label.scheduling': 'Planification',
+  'mkt.solp.label.sites': 'Sites',
+  'mkt.solp.label.teams': 'Équipes',
+  'mkt.solp.label.aiProviders': 'Fournisseurs d’IA',
+  'mkt.solp.label.integrations': 'Intégrations',
   'mkt.solp.benefitsTitle': 'Ce que vous obtenez',
   'mkt.solp.usecasesTitle': 'Pensé pour votre façon de publier',
   'mkt.solp.usecasesSubtitle': 'Quoi que vous publiiez, le flux reste serein.',
@@ -463,9 +472,6 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.solp.seo.heroTitle': 'Un SEO que vous arrivez réellement à suivre.',
   'mkt.solp.seo.heroBody':
     'Quatorze outils SEO techniques par site — audits, schema, redirections, sitemaps, indexation — avec rapports par page et données Search Console au même endroit.',
-  'mkt.solp.seo.story1Title': 'Un score SEO vivant, pas un PDF trimestriel.',
-  'mkt.solp.seo.story1Body':
-    'La vue d’ensemble affiche le score, les problèmes associés et l’état des sitemaps et de la connexion Search Console — mis à jour à mesure que vous corrigez.',
   'mkt.solp.seo.story2Title': 'Le trafic à côté du travail.',
   'mkt.solp.seo.story2Body':
     'Tendances de visiteurs, volume de contenu et score de santé partagent le même tableau de bord que votre travail SEO — voyez ce qui est publié et ce que cela produit.',

@@ -427,8 +427,17 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.solp.exitFullscreen': 'Exit fullscreen',
   'mkt.solp.seek': 'Seek',
   'mkt.solp.storiesTitle': 'Inside the product',
-  'mkt.solp.storyLabel': 'Chapter',
-  'mkt.solp.benefitsEyebrow': 'Benefits',
+  // Minimal story eyebrow labels — small uppercase section identifiers.
+  'mkt.solp.label.content': 'Content',
+  'mkt.solp.label.media': 'Media',
+  'mkt.solp.label.workflow': 'Workflow',
+  'mkt.solp.label.seo': 'SEO',
+  'mkt.solp.label.automation': 'Automation',
+  'mkt.solp.label.scheduling': 'Scheduling',
+  'mkt.solp.label.sites': 'Sites',
+  'mkt.solp.label.teams': 'Teams',
+  'mkt.solp.label.aiProviders': 'AI providers',
+  'mkt.solp.label.integrations': 'Integrations',
   'mkt.solp.benefitsTitle': 'What you get',
   'mkt.solp.usecasesTitle': 'Built for the way you publish',
   'mkt.solp.usecasesSubtitle': 'Whatever you publish, the workflow stays calm.',
@@ -470,9 +479,6 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.solp.seo.heroTitle': 'SEO you can actually keep up with.',
   'mkt.solp.seo.heroBody':
     'Fourteen technical SEO tools per site — audits, schema, redirects, sitemaps, indexing — with per-page reports and Search Console data in one place.',
-  'mkt.solp.seo.story1Title': 'A living SEO score, not a quarterly PDF.',
-  'mkt.solp.seo.story1Body':
-    'The overview shows the score, the issues behind it and the status of sitemaps and Search Console connectivity — updated as you fix things.',
   'mkt.solp.seo.story2Title': 'Traffic next to the work.',
   'mkt.solp.seo.story2Body':
     'Visitor trends, content counts and health score sit on the same dashboard as your SEO work — see what ships and what it does.',

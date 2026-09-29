@@ -12756,3 +12756,38 @@ Stage Summary:
 - A barely-there 1px hairline-gray center rule now separates the text and image columns of every alternating feature section on all solution pages, floating exactly in the middle of the gutter on both normal and flipped rows, spanning full row height
 - Hidden completely on stacked tablet/mobile layouts; no other element, spacing, or content touched
 - Verified geometrically (1px width, 80/80 centered gaps, full height) and visually (VLM) across both row orientations, three viewports, and two pages; lint and dev.log clean
+
+---
+Task ID: solution-stories-3
+Agent: main (Z.ai Code)
+Task: Update the Solutions detail pages: (1) remove the SEO page's first story section ("A living SEO score, not a quarterly PDF."), (2) replace CHAPTER N labels with minimal orange eyebrow identifiers (no dot), (3) add a subtle horizontal hairline below each feature row, (4) remove the border above "What you get", (5) remove the BENEFITS eyebrow, (6) enlarge "What you get", (7) redesign benefit items with small custom orange SVG line icons. Preserve everything else.
+
+Work Log:
+- Created src/components/marketing/benefit-icons.tsx: 18 hand-composed inline SVG icons (24×24 grid, 1.8px rounded strokes, currentColor → rendered orange; makeIcon factory with displayName). Metaphors: Layers (site consistency), Radar (catch issues), Report (per-page reports + magnifier), Sitemap (node tree), Dashboard (panes + sparkline), Spark (AI prompts), PenCheck (checks in writing flow), Plug (CMS connect), Clock, Repeat, LogList (audit), Send, Globe, Shield (isolation + keyhole), Key, Infinity, CommentCheck (review), PlugCheck (verified connection)
+- solutions-data.tsx:
+  * Removed seo story1 (shot-seo "A living SEO score...") + now-unused SEO_POINTS const → SEO page has a single story ("Traffic next to the work.")
+  * SolutionStory gains required eyebrowKey; all stories labeled: cp = Content/Media/Workflow, seo = SEO, au = Automation/Scheduling, ms = Sites/Media, ag = Teams/Workflow, in = AI providers/Integrations
+  * SolutionDef.benefits: string[] → { icon: BenefitIcon; key: string }[]; all 24 benefits mapped to meaningful icons (shared where the metaphor repeats: Globe/Key/Repeat/Send/Plug)
+- solution-page.tsx:
+  * Stories: CHAPTER eyebrow (Eyebrow primitive with dot + number) → plain <span className="mkt-eyebrow">{t(story.eyebrowKey)}</span> (no dot, no number, no pill); vertical center divider kept; added a 1px full-width horizontal hairline (h-px w-full bg-border, aria-hidden) below EVERY feature row via React.Fragment — floats centered in the container gap with generous whitespace on both sides
+  * Benefits: removed border-y from the section (no divider touching the heading — natural whitespace via stories-section padding + py-20/24), removed the "Benefits" eyebrow, h2 "What you get" enlarged to text-[2.25rem] sm:text-5xl centered (was 1.75rem/2.25rem; still below the hero's lg size), benefit items keep white/1px-border/rounded/p-5 containers but the generic Check-in-orange-circle is replaced by the custom 24px orange line-art icon aligned with the first text line (mt-0.5, items-start) + soft shadow/hover from the design system; grid stays 2-col desktop / 1-col mobile
+  * Removed unused imports (Check, Eyebrow, SectionHeader)
+- i18n (en + fr client-marketing.ts): added 10 label keys (mkt.solp.label.*: Content/Media/Workflow/SEO/Automation/Scheduling/Sites/Teams/AI providers/Integrations + FR translations Contenu/Médias/Workflow/SEO/Automatisation/Planification/Sites/Équipes/Fournisseurs d'IA/Intégrations); removed mkt.solp.storyLabel (Chapter/Chapitre), mkt.solp.benefitsEyebrow (Benefits/Avantages) and mkt.solp.seo.story1Title/Body from both languages; verified only en/fr carry mkt.* marketing keys (other locales fall back via the documented t() chain)
+- Untouched: heroes, video previews, solutions overview, use-case cards, CTA, header/footer, all copy texts and screenshots, spacing tokens
+- Lint: zero errors in all touched files; no stale references (rg for storyLabel/benefitsEyebrow/seo.story1/SEO_POINTS = clean)
+- Browser verification (agent-browser + z-ai vision):
+  * SEO page DOM: story1 gone, single story, eyebrow "SEO" with no dot, 1 vertical divider kept, 1 horizontal hairline (1px), benefits section border 0px/0px, "What you get" 48px, no BENEFITS eyebrow, 4 items with 24px orange SVGs in 2-col grid
+  * VLM (SEO story + benefits): all checkpoints confirmed — SEO eyebrow, vertical divider, full-width hairline, no "living SEO score" section, large centered What you get, 2×2 white bordered cards with layers/radar/report-magnifier/sitemap icons, no border touching the band, no clipping/garbling
+  * CP page: eyebrows Content/Media/Workflow, 3 rows + 3 hairlines; VLM confirmed section-to-section hairline rhythm is "generous and balanced, not cramped, not absurdly large"
+  * Integrations: eyebrows AI providers/Integrations, 2 hairlines, 4 benefit icons render
+  * Mobile 390: stacked order label→heading→body→bullets→image, vertical dividers hidden, hairlines visible, benefits 1-col, no overflow
+  * Tablet 768: stacked, dividers hidden, hairlines visible, benefits 2-col, no overflow
+  * FR (cms_locale=fr): eyebrow "SEO" + "Ce que vous obtenez" + CP eyebrows Contenu/Médias/Workflow render; seo story1 also gone in FR; locale reset to en
+  * No console errors, no page errors, dev.log clean
+- Scope: 4 modified files + 1 new file (benefit-icons.tsx)
+
+Stage Summary:
+- SEO page's first story removed; spacing between hero → remaining story → What you get stays clean (section paddings + hairline rhythm)
+- CHAPTER labels replaced by minimal no-dot orange eyebrows across all 6 solution pages (Content/Media/Workflow/SEO/Automation/Scheduling/Sites/Teams/AI providers/Integrations), consistent typography via the shared mkt-eyebrow class
+- Every feature row now ends with a 1px light-gray full-width hairline; the vertical center divider is preserved; benefits band lost its border + eyebrow, gained a larger centered "What you get" heading and custom orange line-art icons per benefit in clean bordered cards
+- Verified end-to-end (DOM + VLM) on seo/content-publishing/integrations at desktop/tablet/mobile and in FR; lint and dev.log clean

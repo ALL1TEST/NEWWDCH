@@ -17,9 +17,9 @@
 // ============================================================
 
 import React from 'react';
-import { Check, Tag } from 'lucide-react';
+import { Tag } from 'lucide-react';
 import { useT } from '@/lib/i18n';
-import { Eyebrow, MarketingButton, PointList, Reveal, SectionHeader } from './primitives';
+import { MarketingButton, PointList, Reveal } from './primitives';
 import { MKT } from './marketing-header';
 import { SOLUTION_BY_SLUG, type SolutionDef } from './solutions-data';
 import { SceneStage } from './solution-illustrations';
@@ -142,12 +142,12 @@ function SolutionHero({ def }: { def: SolutionDef }) {
 
 // -------------------- Alternating product stories --------------------
 // Editorial feature rhythm: alternating 50/50 rows — text left /
-// product UI right, then reversed — separated by generous
-// whitespace (no cards, no borders around the sections) and a
-// barely-there 1px center rule between the two columns
-// (desktop two-column layout only; hidden when stacked). Each
-// copy column opens with a tiny orange CHAPTER eyebrow (small
-// uppercase editorial label — not a pill or badge) directly
+// product UI right, then reversed — with a barely-there 1px center
+// rule between the two columns (two-column layout only) and a
+// subtle horizontal hairline below each feature row, spanning the
+// container, so the sections read as a calm structural sequence.
+// Each copy column opens with a tiny orange eyebrow — a minimal
+// uppercase section identifier (no dot, no number) — directly
 // above the heading, and each screenshot is presented as a clean
 // product showcase: rounded corners, whisper hairline, soft
 // two-tier shadow, white surface — no browser chrome, no heavy
@@ -168,55 +168,60 @@ function SolutionStories({ def }: { def: SolutionDef }) {
         {def.stories.map((story, i) => {
           const flip = i % 2 === 1;
           return (
-            <Reveal key={story.titleKey}>
-              <div
-                className={`flex scroll-mt-28 flex-col gap-10 lg:items-center lg:gap-20 ${
-                  flip ? 'lg:flex-row-reverse' : 'lg:flex-row'
-                }`}
-              >
-                {/* Copy */}
-                <div className="flex flex-1 flex-col items-start gap-5">
-                  <Eyebrow>
-                    {t('mkt.solp.storyLabel')} {i + 1}
-                  </Eyebrow>
-                  <h3 className="mkt-h2 max-w-md text-2xl text-text-primary sm:text-[2rem]">
-                    {t(story.titleKey)}
-                  </h3>
-                  <p className="max-w-md text-base leading-relaxed text-text-secondary">
-                    {t(story.bodyKey)}
-                  </p>
-                  <PointList points={story.points.map((p) => t(p))} />
-                </div>
+            <React.Fragment key={story.titleKey}>
+              <Reveal>
+                <div
+                  className={`flex scroll-mt-28 flex-col gap-10 lg:items-center lg:gap-20 ${
+                    flip ? 'lg:flex-row-reverse' : 'lg:flex-row'
+                  }`}
+                >
+                  {/* Copy */}
+                  <div className="flex flex-1 flex-col items-start gap-5">
+                    <span className="mkt-eyebrow">{t(story.eyebrowKey)}</span>
+                    <h3 className="mkt-h2 max-w-md text-2xl text-text-primary sm:text-[2rem]">
+                      {t(story.titleKey)}
+                    </h3>
+                    <p className="max-w-md text-base leading-relaxed text-text-secondary">
+                      {t(story.bodyKey)}
+                    </p>
+                    <PointList points={story.points.map((p) => t(p))} />
+                  </div>
 
-                {/* Center rule — a barely-there editorial divider
-                    floating exactly between the two columns (in the
-                    middle of the gutter, attached to neither side).
-                    1px, hairline gray, near-full row height via
-                    self-stretch; renders only while the two-column
-                    layout is active — hidden on stacked layouts. */}
-                <div className="hidden w-px self-stretch bg-border lg:block" aria-hidden="true" />
+                  {/* Center rule — a barely-there editorial divider
+                      floating exactly between the two columns (in the
+                      middle of the gutter, attached to neither side).
+                      1px, hairline gray, near-full row height via
+                      self-stretch; renders only while the two-column
+                      layout is active — hidden on stacked layouts. */}
+                  <div className="hidden w-px self-stretch bg-border lg:block" aria-hidden="true" />
 
-                {/* Visual — clean product showcase: rounded, soft
-                    shadow, white surface; no chrome, no card wrap */}
-                <div className="flex-1">
-                  {story.shot ? (
-                    <figure className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04),0_16px_48px_-16px_rgb(0_0_0/0.16)]">
-                      <img
-                        src={story.shot}
-                        alt={`${t(story.titleKey)} — ${t('mkt.brand.name')}`}
-                        loading="lazy"
-                        decoding="async"
-                        className="block h-auto w-full"
-                        width={1440}
-                        height={900}
-                      />
-                    </figure>
-                  ) : (
-                    story.illustration && <SceneStage name={story.illustration} />
-                  )}
+                  {/* Visual — clean product showcase: rounded, soft
+                      shadow, white surface; no chrome, no card wrap */}
+                  <div className="flex-1">
+                    {story.shot ? (
+                      <figure className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04),0_16px_48px_-16px_rgb(0_0_0/0.16)]">
+                        <img
+                          src={story.shot}
+                          alt={`${t(story.titleKey)} — ${t('mkt.brand.name')}`}
+                          loading="lazy"
+                          decoding="async"
+                          className="block h-auto w-full"
+                          width={1440}
+                          height={900}
+                        />
+                      </figure>
+                    ) : (
+                      story.illustration && <SceneStage name={story.illustration} />
+                    )}
+                  </div>
                 </div>
-              </div>
-            </Reveal>
+              </Reveal>
+
+              {/* Hairline — a very subtle 1px structural separator
+                  below each feature row, spanning the container with
+                  generous whitespace on both sides. */}
+              <div className="h-px w-full bg-border" aria-hidden="true" />
+            </React.Fragment>
           );
         })}
       </div>
@@ -225,30 +230,41 @@ function SolutionStories({ def }: { def: SolutionDef }) {
 }
 
 // -------------------- Benefits --------------------
+// "What you get" — a quiet off-white band with no dividing
+// border (natural whitespace separates it from the feature
+// sections above). The heading is large and centered — a clean
+// hierarchy step below the hero — with no eyebrow. Each benefit
+// sits in its own minimal bordered container: white surface,
+// 1px hairline, rounded corners, comfortable padding, a small
+// custom orange line-art icon aligned with the first text line,
+// and the design system's soft hover. 2 columns on desktop,
+// 1 on mobile.
 
 function SolutionBenefits({ def }: { def: SolutionDef }) {
   const { t } = useT();
   return (
-    <section className="border-y border-border bg-mkt-surface" aria-labelledby="solution-benefits-heading">
-      <div className="mkt-container py-16 sm:py-20">
+    <section className="bg-mkt-surface" aria-labelledby="solution-benefits-heading">
+      <div className="mkt-container py-20 sm:py-24">
         <Reveal>
-          <SectionHeader
+          <h2
             id="solution-benefits-heading"
-            eyebrow={t('mkt.solp.benefitsEyebrow')}
-            title={t('mkt.solp.benefitsTitle')}
-          />
+            className="mkt-h2 text-center text-[2.25rem] text-text-primary sm:text-5xl"
+          >
+            {t('mkt.solp.benefitsTitle')}
+          </h2>
         </Reveal>
-        <div className="mx-auto mt-12 grid max-w-4xl gap-4 sm:grid-cols-2">
-          {def.benefits.map((b, i) => (
-            <Reveal key={b} delay={i * 60}>
-              <div className="mkt-card-hover flex h-full items-start gap-3.5 rounded-2xl border border-border bg-card p-5">
-                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-mkt-accent-soft text-mkt-accent-soft-fg">
-                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                </span>
-                <p className="text-sm leading-relaxed text-text-secondary">{t(b)}</p>
-              </div>
-            </Reveal>
-          ))}
+        <div className="mx-auto mt-12 grid max-w-4xl gap-4 sm:mt-14 sm:grid-cols-2">
+          {def.benefits.map((b, i) => {
+            const Icon = b.icon;
+            return (
+              <Reveal key={b.key} delay={i * 60}>
+                <div className="mkt-card-hover flex h-full items-start gap-3.5 rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgb(0_0_0/0.03)] transition-all duration-300 hover:shadow-md hover:border-border/80">
+                  <Icon className="mt-0.5 h-6 w-6 shrink-0 text-mkt-accent" aria-hidden="true" />
+                  <p className="text-sm leading-relaxed text-text-secondary">{t(b.key)}</p>
+                </div>
+              </Reveal>
+            );
+          })}
         </div>
       </div>
     </section>

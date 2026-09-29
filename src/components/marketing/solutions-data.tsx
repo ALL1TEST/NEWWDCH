@@ -28,10 +28,33 @@ import {
   Zap,
 } from 'lucide-react';
 import type { SceneName } from './solution-illustrations';
+import {
+  ClockIcon,
+  CommentCheckIcon,
+  DashboardIcon,
+  GlobeIcon,
+  InfinityIcon,
+  KeyIcon,
+  LayersIcon,
+  LogListIcon,
+  PenCheckIcon,
+  PlugCheckIcon,
+  PlugIcon,
+  RadarIcon,
+  RepeatIcon,
+  ReportIcon,
+  SendIcon,
+  ShieldIcon,
+  SitemapIcon,
+  SparkIcon,
+  type BenefitIcon,
+} from './benefit-icons';
 
 // ---- Story blocks (alternating storytelling sections) ----
 
 export interface SolutionStory {
+  /** Minimal editorial eyebrow label (e.g. "Media"). */
+  eyebrowKey: string;
   /** Real product screenshot (public/marketing/…). */
   shot?: string;
   /** BrowserFrame label key for the screenshot. */
@@ -57,14 +80,14 @@ export interface SolutionDef {
   stepsShot: string;
   /** Alternating [visual] [text] sections. */
   stories: SolutionStory[];
-  /** Practical benefits (factual, per-solution). */
-  benefits: string[];
+  /** Practical benefits (factual, per-solution), each with a
+      small custom line-art icon. */
+  benefits: { icon: BenefitIcon; key: string }[];
 }
 
 // Reusable point keys keep the catalog honest — these describe
 // capabilities that verifiably exist in the product today.
 const AI_POINTS = ['mkt.feat.ai.point1', 'mkt.feat.ai.point2', 'mkt.feat.ai.point3'];
-const SEO_POINTS = ['mkt.feat.seo.point1', 'mkt.feat.seo.point2', 'mkt.feat.seo.point3'];
 const AUTOMATION_POINTS = ['mkt.feat.automation.point1', 'mkt.feat.automation.point2', 'mkt.feat.automation.point3'];
 const MEDIA_POINTS = ['mkt.feat.media.point1', 'mkt.feat.media.point2'];
 
@@ -82,6 +105,7 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     stepsShot: '/marketing/shot-ai.png',
     stories: [
       {
+        eyebrowKey: 'mkt.solp.label.content',
         shot: '/marketing/shot-ai.png',
         shotLabelKey: 'mkt.showcase.ai',
         titleKey: 'mkt.solp.cp.story1Title',
@@ -89,6 +113,7 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
         points: AI_POINTS,
       },
       {
+        eyebrowKey: 'mkt.solp.label.media',
         shot: '/marketing/shot-media.png',
         shotLabelKey: 'mkt.showcase.media',
         titleKey: 'mkt.solp.cp.story2Title',
@@ -96,6 +121,7 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
         points: MEDIA_POINTS,
       },
       {
+        eyebrowKey: 'mkt.solp.label.workflow',
         shot: '/marketing/shot-articles.png',
         shotLabelKey: 'mkt.showcase.dashboard',
         titleKey: 'mkt.solp.cp.story3Title',
@@ -104,10 +130,10 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
       },
     ],
     benefits: [
-      'mkt.solp.cp.benefit1',
-      'mkt.solp.cp.benefit2',
-      'mkt.solp.cp.benefit3',
-      'mkt.solp.cp.benefit4',
+      { icon: DashboardIcon, key: 'mkt.solp.cp.benefit1' },
+      { icon: SparkIcon, key: 'mkt.solp.cp.benefit2' },
+      { icon: PenCheckIcon, key: 'mkt.solp.cp.benefit3' },
+      { icon: PlugIcon, key: 'mkt.solp.cp.benefit4' },
     ],
   },
 
@@ -124,13 +150,7 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     stepsShot: '/marketing/shot-seo.png',
     stories: [
       {
-        shot: '/marketing/shot-seo.png',
-        shotLabelKey: 'mkt.showcase.seo',
-        titleKey: 'mkt.solp.seo.story1Title',
-        bodyKey: 'mkt.solp.seo.story1Body',
-        points: SEO_POINTS,
-      },
-      {
+        eyebrowKey: 'mkt.solp.label.seo',
         shot: '/marketing/shot-dashboard.png',
         shotLabelKey: 'mkt.showcase.dashboard',
         titleKey: 'mkt.solp.seo.story2Title',
@@ -139,10 +159,10 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
       },
     ],
     benefits: [
-      'mkt.solp.seo.benefit1',
-      'mkt.solp.seo.benefit2',
-      'mkt.solp.seo.benefit3',
-      'mkt.solp.seo.benefit4',
+      { icon: LayersIcon, key: 'mkt.solp.seo.benefit1' },
+      { icon: RadarIcon, key: 'mkt.solp.seo.benefit2' },
+      { icon: ReportIcon, key: 'mkt.solp.seo.benefit3' },
+      { icon: SitemapIcon, key: 'mkt.solp.seo.benefit4' },
     ],
   },
 
@@ -159,6 +179,7 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     stepsShot: '/marketing/shot-automation.png',
     stories: [
       {
+        eyebrowKey: 'mkt.solp.label.automation',
         shot: '/marketing/shot-automation.png',
         shotLabelKey: 'mkt.showcase.automation',
         titleKey: 'mkt.solp.au.story1Title',
@@ -166,6 +187,7 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
         points: AUTOMATION_POINTS,
       },
       {
+        eyebrowKey: 'mkt.solp.label.scheduling',
         shot: '/marketing/shot-articles.png',
         shotLabelKey: 'mkt.showcase.dashboard',
         titleKey: 'mkt.solp.au.story2Title',
@@ -174,10 +196,10 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
       },
     ],
     benefits: [
-      'mkt.solp.au.benefit1',
-      'mkt.solp.au.benefit2',
-      'mkt.solp.au.benefit3',
-      'mkt.solp.au.benefit4',
+      { icon: ClockIcon, key: 'mkt.solp.au.benefit1' },
+      { icon: RepeatIcon, key: 'mkt.solp.au.benefit2' },
+      { icon: LogListIcon, key: 'mkt.solp.au.benefit3' },
+      { icon: SendIcon, key: 'mkt.solp.au.benefit4' },
     ],
   },
 
@@ -194,6 +216,7 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     stepsShot: '/marketing/shot-dashboard.png',
     stories: [
       {
+        eyebrowKey: 'mkt.solp.label.sites',
         shot: '/marketing/shot-dashboard.png',
         shotLabelKey: 'mkt.showcase.dashboard',
         titleKey: 'mkt.solp.ms.story1Title',
@@ -201,6 +224,7 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
         points: ['mkt.solp.ms.story1p1', 'mkt.solp.ms.story1p2', 'mkt.solp.ms.story1p3'],
       },
       {
+        eyebrowKey: 'mkt.solp.label.media',
         shot: '/marketing/shot-media.png',
         shotLabelKey: 'mkt.showcase.media',
         titleKey: 'mkt.solp.ms.story2Title',
@@ -209,10 +233,10 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
       },
     ],
     benefits: [
-      'mkt.solp.ms.benefit1',
-      'mkt.solp.ms.benefit2',
-      'mkt.solp.ms.benefit3',
-      'mkt.solp.ms.benefit4',
+      { icon: GlobeIcon, key: 'mkt.solp.ms.benefit1' },
+      { icon: ShieldIcon, key: 'mkt.solp.ms.benefit2' },
+      { icon: KeyIcon, key: 'mkt.solp.ms.benefit3' },
+      { icon: InfinityIcon, key: 'mkt.solp.ms.benefit4' },
     ],
   },
 
@@ -229,6 +253,7 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     stepsShot: '/marketing/shot-articles.png',
     stories: [
       {
+        eyebrowKey: 'mkt.solp.label.teams',
         shot: '/marketing/shot-dashboard.png',
         shotLabelKey: 'mkt.showcase.dashboard',
         titleKey: 'mkt.solp.ag.story1Title',
@@ -236,6 +261,7 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
         points: ['mkt.solp.ag.story1p1', 'mkt.solp.ag.story1p2', 'mkt.solp.ag.story1p3'],
       },
       {
+        eyebrowKey: 'mkt.solp.label.workflow',
         shot: '/marketing/shot-articles.png',
         shotLabelKey: 'mkt.showcase.dashboard',
         titleKey: 'mkt.solp.ag.story2Title',
@@ -244,10 +270,10 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
       },
     ],
     benefits: [
-      'mkt.solp.ag.benefit1',
-      'mkt.solp.ag.benefit2',
-      'mkt.solp.ag.benefit3',
-      'mkt.solp.ag.benefit4',
+      { icon: GlobeIcon, key: 'mkt.solp.ag.benefit1' },
+      { icon: KeyIcon, key: 'mkt.solp.ag.benefit2' },
+      { icon: CommentCheckIcon, key: 'mkt.solp.ag.benefit3' },
+      { icon: RepeatIcon, key: 'mkt.solp.ag.benefit4' },
     ],
   },
 
@@ -264,6 +290,7 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
     stepsShot: '/marketing/shot-automation.png',
     stories: [
       {
+        eyebrowKey: 'mkt.solp.label.aiProviders',
         shot: '/marketing/shot-ai.png',
         shotLabelKey: 'mkt.showcase.ai',
         titleKey: 'mkt.solp.in.story1Title',
@@ -271,6 +298,7 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
         points: ['mkt.solp.in.story1p1', 'mkt.solp.in.story1p2', 'mkt.solp.in.story1p3'],
       },
       {
+        eyebrowKey: 'mkt.solp.label.integrations',
         // The integrations story pair closes on the open-platform
         // card grid (real integration list) instead of a second
         // screenshot — an honest, info-dense visual.
@@ -281,10 +309,10 @@ export const SOLUTION_CATALOG: SolutionDef[] = [
       },
     ],
     benefits: [
-      'mkt.solp.in.benefit1',
-      'mkt.solp.in.benefit2',
-      'mkt.solp.in.benefit3',
-      'mkt.solp.in.benefit4',
+      { icon: PlugIcon, key: 'mkt.solp.in.benefit1' },
+      { icon: PlugCheckIcon, key: 'mkt.solp.in.benefit2' },
+      { icon: KeyIcon, key: 'mkt.solp.in.benefit3' },
+      { icon: SendIcon, key: 'mkt.solp.in.benefit4' },
     ],
   },
 ];
