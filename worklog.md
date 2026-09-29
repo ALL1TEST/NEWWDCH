@@ -12699,3 +12699,32 @@ Stage Summary:
 - Hero simplified to "Our mission." + supporting paragraph with pure whitespace (network decoration and duplicate heading both removed)
 - "What we believe" cards now carry four custom editorial line-art illustrations (neutral ink + single orange accent each, sized to the old icon footprint) instead of generic Lucide icons in orange squares
 - Verified end-to-end at desktop/tablet/mobile with VLM + DOM assertions; lint and dev.log clean
+
+---
+Task ID: solution-stories-1
+Agent: main (Z.ai Code)
+Task: Update the feature/content sections (the "Chapter N" story sections) on the solution detail pages to match the reference editorial style: replace the pill-style CHAPTER labels with small editorial eyebrows, keep the alternating text/image layout, present screenshots as clean product UI previews (no browser chrome), generous whitespace. Do not change hero, benefits, header, footer, content, images, colors, or typography system.
+
+Work Log:
+- Located the sections: src/components/marketing/solution-page.tsx → SolutionStories (shared template rendering all 6 solution pages incl. #/solutions/content-publishing whose stories are "Write with AI that fits your workflow." / "Every asset, organized." / "From draft to published, tracked.")
+- Confirmed the alternating layout already existed (lg:flex-row / lg:flex-row-reverse on odd index; DOM keeps copy first so mobile stacks label→heading→body→bullets→image) — structure preserved
+- Replaced the CHAPTER label: old pill (rounded-full border border-border bg-card px-3 py-1.5 + dot) → the shared `Eyebrow` primitive (mkt-eyebrow: 12px, 600 weight, 0.14em tracking, uppercase, orange + tiny dot) — a minimal editorial eyebrow, no pill/badge/background
+- Screenshot presentation: replaced `BrowserFrame` (window chrome with three dots + orange label pill + border + shadow) with a plain `<figure>` showcase: rounded-2xl, whisper hairline border-border/70, bg-card, soft two-tier shadow, lazy img — clean product UI preview, no chrome, no heavy card
+- Rhythm: section-to-section gap gap-16 sm:gap-24 → gap-16 sm:gap-28 lg:gap-32 (large gaps per reference); text↔image gap lg:gap-16 → lg:gap-20 (large horizontal spacing); 50/50 split (flex-1/flex-1) and lg:items-center kept
+- Removed now-unused BrowserFrame import; added Eyebrow import from ./primitives
+- Untouched: SolutionHero (video preview), SolutionBenefits, SolutionCta, solutions-data.tsx catalog (shotLabelKey stays as optional data), home-page.tsx showcase, header/footer, all copy and screenshots
+- Lint: zero errors in the touched file (46 pre-existing problems all in unrelated modules)
+- Browser verification (agent-browser + z-ai vision):
+  * DOM: eyebrows "Chapter 1/2/3" (uppercase via CSS), 0 old pills, row classes flex-row → flex-row-reverse → flex-row, 3 figures, 0 chrome bars, headings unchanged
+  * Desktop 1440 (content-publishing): Chapter 1 = text left + screenshot right; Chapter 2 = screenshot left + text right; Chapter 3 = text left + screenshot right — VLM confirmed eyebrow style (small/uppercase/orange, no pill), clean rounded screenshots with subtle shadow and no browser chrome, generous whitespace, no section-wrapping cards
+  * Tablet 768: sections stack cleanly with eyebrow visible (two-column activates at lg as before)
+  * Mobile 390: strict stack label → heading → description → bullets → screenshot; no horizontal overflow (scrollWidth 390 = clientWidth 390); no clipping
+  * Integrations page: Chapter 1 screenshot + Chapter 2 SceneStage illustration both render cleanly in the new layout
+  * No console errors, no page errors, dev.log clean
+- Scope: git status shows only src/components/marketing/solution-page.tsx modified (+29/−14)
+
+Stage Summary:
+- CHAPTER labels are now minimal editorial eyebrows (tiny orange uppercase text + dot — no pill, no badge, no background)
+- Feature sections keep the alternating 50/50 text/image rhythm with larger gaps and horizontal spacing; screenshots are clean product showcases (rounded, hairline, soft shadow, white surface, no browser chrome)
+- Change applies consistently to all 6 solution pages via the shared template; hero/benefits/CTA/header/footer and all content untouched
+- Verified end-to-end on content-publishing + integrations pages at desktop/tablet/mobile with VLM + DOM assertions; lint and dev.log clean

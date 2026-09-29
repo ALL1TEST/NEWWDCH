@@ -19,7 +19,7 @@
 import React from 'react';
 import { Check, Tag } from 'lucide-react';
 import { useT } from '@/lib/i18n';
-import { BrowserFrame, MarketingButton, PointList, Reveal, SectionHeader } from './primitives';
+import { Eyebrow, MarketingButton, PointList, Reveal, SectionHeader } from './primitives';
 import { MKT } from './marketing-header';
 import { SOLUTION_BY_SLUG, type SolutionDef } from './solutions-data';
 import { SceneStage } from './solution-illustrations';
@@ -141,14 +141,23 @@ function SolutionHero({ def }: { def: SolutionDef }) {
 }
 
 // -------------------- Alternating product stories --------------------
-// First section after the hero — carries the id the hero's
-// "Learn more" button scrolls to.
+// Editorial feature rhythm: alternating 50/50 rows — text left /
+// product UI right, then reversed — separated by generous
+// whitespace (no cards, no borders around the sections). Each
+// copy column opens with a tiny orange CHAPTER eyebrow (small
+// uppercase editorial label — not a pill or badge) directly
+// above the heading, and each screenshot is presented as a clean
+// product showcase: rounded corners, whisper hairline, soft
+// two-tier shadow, white surface — no browser chrome, no heavy
+// card container. Mobile stacks label → heading → body →
+// bullets → image. Carries the id the hero's "Learn more"
+// button scrolls to.
 
 function SolutionStories({ def }: { def: SolutionDef }) {
   const { t } = useT();
   return (
     <section id="inside-the-product" className="mkt-section scroll-mt-24" aria-labelledby="solution-stories-heading">
-      <div className="mkt-container flex flex-col gap-16 sm:gap-24">
+      <div className="mkt-container flex flex-col gap-16 sm:gap-28 lg:gap-32">
         <Reveal>
           <h2 id="solution-stories-heading" className="sr-only">
             {t('mkt.solp.storiesTitle')}
@@ -159,16 +168,15 @@ function SolutionStories({ def }: { def: SolutionDef }) {
           return (
             <Reveal key={story.titleKey}>
               <div
-                className={`flex scroll-mt-28 flex-col gap-10 lg:items-center lg:gap-16 ${
+                className={`flex scroll-mt-28 flex-col gap-10 lg:items-center lg:gap-20 ${
                   flip ? 'lg:flex-row-reverse' : 'lg:flex-row'
                 }`}
               >
                 {/* Copy */}
                 <div className="flex flex-1 flex-col items-start gap-5">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-widest text-mkt-accent">
-                    <span className="h-1 w-1 rounded-full bg-mkt-accent" aria-hidden="true" />
+                  <Eyebrow>
                     {t('mkt.solp.storyLabel')} {i + 1}
-                  </span>
+                  </Eyebrow>
                   <h3 className="mkt-h2 max-w-md text-2xl text-text-primary sm:text-[2rem]">
                     {t(story.titleKey)}
                   </h3>
@@ -178,14 +186,21 @@ function SolutionStories({ def }: { def: SolutionDef }) {
                   <PointList points={story.points.map((p) => t(p))} />
                 </div>
 
-                {/* Visual */}
+                {/* Visual — clean product showcase: rounded, soft
+                    shadow, white surface; no chrome, no card wrap */}
                 <div className="flex-1">
                   {story.shot ? (
-                    <BrowserFrame
-                      src={story.shot}
-                      alt={`${t(story.titleKey)} — ${t('mkt.brand.name')}`}
-                      label={story.shotLabelKey ? t(story.shotLabelKey) : undefined}
-                    />
+                    <figure className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04),0_16px_48px_-16px_rgb(0_0_0/0.16)]">
+                      <img
+                        src={story.shot}
+                        alt={`${t(story.titleKey)} — ${t('mkt.brand.name')}`}
+                        loading="lazy"
+                        decoding="async"
+                        className="block h-auto w-full"
+                        width={1440}
+                        height={900}
+                      />
+                    </figure>
                   ) : (
                     story.illustration && <SceneStage name={story.illustration} />
                   )}
