@@ -12631,3 +12631,37 @@ Work Log:
 
 Stage Summary:
 - Local application now exactly matches GitHub repo ALL1TEST/NEWWDCH @ 29813a2: code synced (reset --hard, clean tree), deps verified, dev server restarted from repo, DB fully seeded via the repo's own seed chain (35 content items, 23 users, 1 demo site, plans/AI/SEO/backups/payments demo data), UI browser-verified end-to-end (marketing site + CMS admin), zero code modifications made
+
+---
+Task ID: about-hero-1
+Agent: main (Z.ai Code)
+Task: Update ONLY the hero visual on the About/Mission page — remove the mountain illustration completely and replace it with a minimal, premium SaaS-style abstract workflow visual (subtle lines + small connected nodes + tiny orange accent). Do not change anything else on the page.
+
+Work Log:
+- Located hero: src/components/marketing/about-page.tsx — MountainScene SVG (layered peaks, snow cap, Karmax pennant) rendered below/over the "Our mission." headline (z-20, overlapping via -mt-16/24/32, bottom fade overlay h-[34%])
+- Replaced MountainScene with HeroFlowScene: quiet abstract publishing-workflow system in the SAME 1200x560 viewBox and same wrapper (-mt values, fade overlay) so hero height/footprint is unchanged
+  * Main chain: 5 nodes on gentle bezier curves beneath the headline; center node (600,420) is the single brand-orange accent (dot + ring + soft halo)
+  * Two dotted sub-flow branches hanging off the chain (dashed 2/6 curves + small end nodes)
+  * Side systems (left/right node clusters) converging into the chain ends — hidden on mobile (hidden md:block), dimmed on tablet (md:opacity-70 lg:opacity-100)
+  * Whisper-thin top arcs rising beside the headline flanks — desktop only (hidden lg:block), strokeOpacity 0.35
+  * Tiny satellite dots — tablet up (hidden sm:block)
+  * Hub centers of side clusters carry a whisper of orange (fillOpacity 0.55)
+- Z-order inverted vs old mountain: visual now z-0 BEHIND the headline; title's Reveal wrapper got "relative z-10" (Reveal forwards className) so the headline always paints above and stays clearly readable
+- globals.css: replaced .mkt-mountain palette with .mkt-hero-flow (--flow-line/--flow-node/--flow-fill, warm stone neutrals; light + .dark variants; accent via theme-aware var(--mkt-accent))
+- Updated file-header and component comments to describe the new visual
+- Lint: zero errors in touched files (46 pre-existing problems are all in unrelated modules, verified via grep)
+- Browser verification (agent-browser + z-ai vision) on #/about:
+  * Desktop 1440x900: headline dominant, NO mountain/pyramid/landscape, network-style thin lines + nodes + single orange center node, clean/minimal/premium, no glitches
+  * Tablet 768x1024: visual subtle and reduced, title dominant, no collisions
+  * Mobile 390x844: only a faint line-of-dots treatment + orange node remains, title undisputed focal point, no overflow
+  * DOM check: .mkt-mountain absent, .mkt-hero-flow present, aria-hidden=true, title "Our mission." intact
+  * Sections below hero verified unchanged: intro, mission/story editorial band (both photos load), 4 belief cards in a row, testimonial carousel, footer
+  * Dark media check: marketing site is always-light (no theme toggle); .dark palette kept as future-proofing, same pattern as the old mountain
+  * dev.log clean; no console/page errors
+- Scope discipline: git status shows ONLY src/components/marketing/about-page.tsx + src/app/globals.css (palette swap) modified; header/typography/sections/footer untouched
+
+Stage Summary:
+- Mountain illustration completely removed from the About hero; replaced with a minimal abstract workflow visual (thin connector lines, small connected nodes, single orange accent node) that sits behind/beneath "Our mission." with far less visual weight
+- Hero height/spacing preserved exactly (same viewBox, same overlap margins, same fade overlay); title readability guaranteed via z-10 wrapper
+- Responsive: full composition on desktop, reduced/dimmed on tablet, faint line treatment only on mobile
+- Verified end-to-end at 3 viewports with VLM screenshot analysis + DOM assertions; lint and dev.log clean

@@ -502,22 +502,18 @@
   font-optical-sizing: auto;
 }
 
-/* About-page mountain scene palette (light + dark). */
-.mkt-mountain {
-  --mtn-back: #ede7de;
-  --mtn-mid: #dcd3c6;
-  --mtn-face: #c9beac;
-  --mtn-ridge: #b3a48d;
-  --mtn-snow: #fdfbf7;
-  --mtn-pole: #57504a;
+/* About-page hero flow palette (light + dark) — thin connector
+   lines and small nodes in warm stone neutrals; the single
+   brand-orange accent flows in via --mkt-accent (theme-aware). */
+.mkt-hero-flow {
+  --flow-line: #cdc4b5;
+  --flow-node: #a89b85;
+  --flow-fill: #f1ece3;
 }
-.dark .mkt-mountain {
-  --mtn-back: #2a2620;
-  --mtn-mid: #37312a;
-  --mtn-face: #463e33;
-  --mtn-ridge: #5d5343;
-  --mtn-snow: #d9d3c9;
-  --mtn-pole: #c9c2b8;
+.dark .mkt-hero-flow {
+  --flow-line: #453f35;
+  --flow-node: #6a5f4e;
+  --flow-fill: #332e27;
 }
 
 /* Eyebrow label */

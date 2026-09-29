@@ -3,8 +3,10 @@
 // ============================================================
 // ABOUT — premium long-form editorial page
 // ============================================================
-// Hero ("Our mission." serif headline over an original mountain
-// scene with the Karmax flag at the summit) → a compact centered
+// Hero ("Our mission." serif headline layered over a quiet
+// abstract publishing-workflow scene — thin connector lines and
+// small nodes beneath and around the headline, ONE brand-orange
+// accent node) → a compact centered
 // intro ("One calm workflow for everything you publish.") → ONE
 // cohesive editorial band pairing the mission row and the story
 // row (alternating image/text, shared warm surface, no eyebrow
@@ -34,107 +36,141 @@ import {
 } from './primitives';
 import { TestimonialCarousel, type Testimonial } from './testimonial-carousel';
 
-// -------------------- Mountain scene --------------------
-// An original layered-peak illustration: warm stone tones, a
-// snow-capped summit flying the Karmax pennant, and mist that
-// dissolves into the page background (theme-aware via CSS vars
-// + a token-colored fade overlay). Pure SVG — no external asset.
+// -------------------- Hero flow scene --------------------
+// A quiet, abstract publishing-workflow system: hairline
+// connector curves join small nodes that flow beneath the
+// headline and rise gently around its flanks. Warm stone
+// neutrals with ONE brand-orange node as the only accent; the
+// lower edge dissolves into the page background (fade overlay).
+// Pure SVG, theme-aware via CSS vars — no external asset.
+// Responsive: side systems hide on mobile and dim on tablet;
+// the core chain stays as a subtle line treatment everywhere.
 
-function MountainScene() {
+function HeroFlowScene() {
   return (
     <svg
       viewBox="0 0 1200 560"
-      className="mkt-mountain h-auto w-full"
+      className="mkt-hero-flow h-auto w-full"
       aria-hidden="true"
       focusable="false"
     >
-      <defs>
-        <filter id="mkt-mtn-blur" x="-30%" y="-60%" width="160%" height="220%">
-          <feGaussianBlur stdDeviation="14" />
-        </filter>
-      </defs>
-
-      {/* Back range — soft distant masses */}
-      <path d="M-40 560 L300 244 L640 560 Z" fill="var(--mtn-back)" />
-      <path d="M560 560 L880 218 L1240 560 Z" fill="var(--mtn-back)" />
-      <path d="M170 560 L520 302 L870 560 Z" fill="var(--mtn-mid)" opacity="0.75" />
-
-      {/* Main peak — two faces for volume */}
-      <path d="M600 88 L340 560 L600 560 Z" fill="var(--mtn-face)" />
-      <path d="M600 88 L860 560 L600 560 Z" fill="var(--mtn-mid)" />
-
-      {/* Ridge lines */}
-      <path
-        d="M600 88 L340 560 M600 88 L860 560"
-        stroke="var(--mtn-ridge)"
-        strokeWidth="2"
-        strokeOpacity="0.45"
-        strokeLinecap="round"
-        fill="none"
-      />
-      <path
-        d="M600 96 L560 200 L586 268 M602 110 L648 214 L622 286"
-        stroke="var(--mtn-ridge)"
-        strokeWidth="1.6"
-        strokeOpacity="0.3"
-        strokeLinecap="round"
-        fill="none"
-      />
-
-      {/* Snow cap — jagged drape over the summit */}
-      <path
-        d="M600 88 L668 212 L650 198 L636 222 L620 204 L604 226 L588 206 L572 222 L556 200 L534 210 Z"
-        fill="var(--mtn-snow)"
-      />
-
-      {/* Karmax pennant at the summit */}
-      <path d="M600 88 L600 26" stroke="var(--mtn-pole)" strokeWidth="3.5" strokeLinecap="round" fill="none" />
-      <path
-        d="M600 28 C 622 21 640 33 666 26 L661 52 C 640 59 622 47 600 54 Z"
-        fill="var(--mkt-accent)"
-      />
-      <path
-        d="M611 33.5 L611 49.5 M626 34.5 L615.5 41.5 L626 48.5"
-        stroke="#ffffff"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-
-      {/* Atmospheric mist — theme-colored clouds blurring the base */}
-      <g filter="url(#mkt-mtn-blur)">
-        <ellipse cx="252" cy="352" rx="96" ry="22" fill="var(--background)" opacity="0.6" />
-        <ellipse cx="962" cy="384" rx="104" ry="24" fill="var(--background)" opacity="0.6" />
-        <ellipse cx="386" cy="436" rx="184" ry="38" fill="var(--background)" opacity="0.85" />
-        <ellipse cx="824" cy="472" rx="222" ry="44" fill="var(--background)" opacity="0.85" />
-        <ellipse cx="600" cy="506" rx="330" ry="50" fill="var(--background)" opacity="0.95" />
+      {/* Side systems — hidden on mobile, dimmed on tablet */}
+      <g className="hidden md:block md:opacity-70 lg:opacity-100">
+        {/* Connectors */}
+        <g fill="none" stroke="var(--flow-line)" strokeWidth="1.4" strokeLinecap="round">
+          <path d="M128 208 Q178 252 198 316" strokeOpacity="0.55" />
+          <path d="M198 316 Q140 344 92 356" strokeOpacity="0.45" />
+          <path d="M198 316 Q268 372 350 430" strokeOpacity="0.6" />
+          <path d="M1072 208 Q1022 252 1002 316" strokeOpacity="0.55" />
+          <path d="M1002 316 Q1060 344 1108 356" strokeOpacity="0.45" />
+          <path d="M1002 316 Q932 372 850 430" strokeOpacity="0.6" />
+        </g>
+        {/* Nodes */}
+        <g fill="none" stroke="var(--flow-node)" strokeWidth="1.3">
+          <circle cx="128" cy="208" r="5.5" strokeOpacity="0.8" />
+          <circle cx="198" cy="316" r="6.5" strokeOpacity="0.8" />
+          <circle cx="92" cy="356" r="2.6" strokeOpacity="0.6" />
+          <circle cx="1072" cy="208" r="5.5" strokeOpacity="0.8" />
+          <circle cx="1002" cy="316" r="6.5" strokeOpacity="0.8" />
+          <circle cx="1108" cy="356" r="2.6" strokeOpacity="0.6" />
+        </g>
+        {/* Hub centers — a whisper of brand accent */}
+        <g fill="var(--mkt-accent)">
+          <circle cx="198" cy="316" r="2" fillOpacity="0.55" />
+          <circle cx="1002" cy="316" r="2" fillOpacity="0.55" />
+        </g>
       </g>
+
+      {/* Top arcs — whisper lines rising beside the headline
+          (desktop only) */}
+      <g
+        className="hidden lg:block"
+        fill="none"
+        stroke="var(--flow-line)"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      >
+        <path d="M128 208 Q210 118 320 124" strokeOpacity="0.35" />
+        <path d="M1072 208 Q990 118 880 124" strokeOpacity="0.35" />
+      </g>
+      <g className="hidden lg:block" fill="var(--flow-node)">
+        <circle cx="320" cy="124" r="2.2" fillOpacity="0.5" />
+        <circle cx="880" cy="124" r="2.2" fillOpacity="0.5" />
+      </g>
+
+      {/* Satellites — tiny distant dots (tablet up) */}
+      <g className="hidden sm:block" fill="var(--flow-node)">
+        <circle cx="405" cy="335" r="2" fillOpacity="0.35" />
+        <circle cx="520" cy="292" r="1.8" fillOpacity="0.3" />
+        <circle cx="688" cy="305" r="2" fillOpacity="0.3" />
+        <circle cx="806" cy="348" r="1.8" fillOpacity="0.35" />
+        <circle cx="300" cy="486" r="1.8" fillOpacity="0.25" />
+        <circle cx="915" cy="478" r="2" fillOpacity="0.25" />
+      </g>
+
+      {/* Main chain — the calm publishing flow */}
+      <g fill="none" stroke="var(--flow-line)" strokeWidth="1.4" strokeLinecap="round">
+        <path d="M350 430 Q412 398 475 402" strokeOpacity="0.75" />
+        <path d="M475 402 Q537 418 600 420" strokeOpacity="0.75" />
+        <path d="M600 420 Q662 404 725 398" strokeOpacity="0.75" />
+        <path d="M725 398 Q787 406 850 428" strokeOpacity="0.75" />
+        {/* Quiet sub-flows (dotted) */}
+        <path d="M475 402 Q438 456 388 466" strokeOpacity="0.5" strokeDasharray="2 6" />
+        <path d="M725 398 Q762 452 812 462" strokeOpacity="0.5" strokeDasharray="2 6" />
+      </g>
+
+      {/* Sub-flow nodes */}
+      <g fill="none" stroke="var(--flow-node)" strokeWidth="1.2">
+        <circle cx="388" cy="466" r="4" strokeOpacity="0.55" />
+        <circle cx="812" cy="462" r="4" strokeOpacity="0.55" />
+      </g>
+
+      {/* Chain nodes — neutral */}
+      <g fill="var(--flow-fill)" stroke="var(--flow-node)" strokeWidth="1.4">
+        <circle cx="350" cy="430" r="7" strokeOpacity="0.8" />
+        <circle cx="475" cy="402" r="7" strokeOpacity="0.8" />
+        <circle cx="725" cy="398" r="7" strokeOpacity="0.8" />
+        <circle cx="850" cy="428" r="7" strokeOpacity="0.8" />
+      </g>
+      <g fill="var(--flow-node)">
+        <circle cx="350" cy="430" r="2.4" fillOpacity="0.65" />
+        <circle cx="475" cy="402" r="2.4" fillOpacity="0.65" />
+        <circle cx="725" cy="398" r="2.4" fillOpacity="0.65" />
+        <circle cx="850" cy="428" r="2.4" fillOpacity="0.65" />
+      </g>
+
+      {/* Chain center — the single brand accent */}
+      <circle cx="600" cy="420" r="13" fill="none" stroke="var(--mkt-accent)" strokeWidth="1" strokeOpacity="0.25" />
+      <circle cx="600" cy="420" r="7" fill="var(--flow-fill)" stroke="var(--mkt-accent)" strokeWidth="1.4" strokeOpacity="0.85" />
+      <circle cx="600" cy="420" r="3" fill="var(--mkt-accent)" />
     </svg>
   );
 }
 
 // -------------------- Hero / mission --------------------
 // Centered serif "Our mission." headline in the page's editorial
-// dark ink; the mountain rises IN FRONT of the headline's lower
-// portion (depth effect) and its base dissolves into the page
-// background. The brand-orange pennant carries the accent.
+// dark ink, layered ABOVE a quiet abstract workflow (thin lines
+// and small nodes) that sits behind and beneath it — far less
+// visual weight than an illustration, so the headline stays the
+// undisputed focus. A single brand-orange node carries the
+// accent; the lower edge dissolves into the page background.
 
 function AboutHero() {
   const { t } = useT();
   return (
     <section className="relative overflow-hidden pt-32 sm:pt-40">
       <div className="mkt-container relative">
-        <Reveal>
-          <h1 className="mkt-display mkt-serif relative z-10 mx-auto max-w-4xl text-center text-5xl leading-[1.05] text-text-primary sm:text-7xl lg:text-8xl">
+        <Reveal className="relative z-10">
+          <h1 className="mkt-display mkt-serif mx-auto max-w-4xl text-center text-5xl leading-[1.05] text-text-primary sm:text-7xl lg:text-8xl">
             {t('mkt.about.heroTitle')}
           </h1>
         </Reveal>
 
-        {/* Mountain scene — summit overlaps the headline bottom */}
-        <div className="pointer-events-none relative z-20 -mt-16 sm:-mt-24 lg:-mt-32">
-          <MountainScene />
-          {/* Fade the base into the page background */}
+        {/* Abstract workflow — a quiet node network behind and
+            beneath the headline */}
+        <div className="pointer-events-none relative z-0 -mt-16 sm:-mt-24 lg:-mt-32">
+          <HeroFlowScene />
+          {/* Fade the lower edge into the page background */}
           <div className="absolute inset-x-0 bottom-0 h-[34%] bg-gradient-to-b from-transparent to-background" />
         </div>
       </div>
