@@ -502,20 +502,6 @@
   font-optical-sizing: auto;
 }
 
-/* About-page hero flow palette (light + dark) — thin connector
-   lines and small nodes in warm stone neutrals; the single
-   brand-orange accent flows in via --mkt-accent (theme-aware). */
-.mkt-hero-flow {
-  --flow-line: #cdc4b5;
-  --flow-node: #a89b85;
-  --flow-fill: #f1ece3;
-}
-.dark .mkt-hero-flow {
-  --flow-line: #453f35;
-  --flow-node: #6a5f4e;
-  --flow-fill: #332e27;
-}
-
 /* Eyebrow label */
 .mkt-eyebrow {
   font-size: 0.75rem;

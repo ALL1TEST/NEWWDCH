@@ -12665,3 +12665,37 @@ Stage Summary:
 - Hero height/spacing preserved exactly (same viewBox, same overlap margins, same fade overlay); title readability guaranteed via z-10 wrapper
 - Responsive: full composition on desktop, reduced/dimmed on tablet, faint line treatment only on mobile
 - Verified end-to-end at 3 viewports with VLM screenshot analysis + DOM assertions; lint and dev.log clean
+
+---
+Task ID: about-hero-2
+Agent: main (Z.ai Code)
+Task: Update ONLY the About/Mission page: (1) remove the duplicate hero heading "One calm workflow for everything you publish." (keep the supporting paragraph), (2) remove the abstract network/line decoration from the hero entirely (added in about-hero-1), (3) replace the four Lucide icons in the "What we believe" cards with small custom editorial SVG illustrations. No other changes.
+
+Work Log:
+- src/components/marketing/about-page.tsx:
+  * Hero: deleted HeroFlowScene (the node/network SVG) and its fade overlay; hero is now purely typographic — "Our mission." h1 + the missionLead paragraph directly beneath (mt-8/10, max-w-xl centered), section spacing pt-32/40 + pb-20/24/28 for generous whitespace
+  * Removed the AboutIntro section entirely (the h2 "One calm workflow for everything you publish." / missionHead + its paragraph) — the paragraph was merged into the hero; dropped <AboutIntro /> from AboutPage. i18n keys left in place (missionHead now unused, harmless)
+  * Removed the lucide-react import (Feather/Zap/BadgeCheck/ShieldCheck no longer used)
+  * Added 4 hand-composed inline SVG illustrations (viewBox 64x64, rendered h-16 w-16 = previous icon footprint +8px, text-text-primary ink, ONE orange accent each via var(--mkt-accent)):
+    - SimplicityIllustration: page + text lines + one calm wave beneath ending in an orange dot
+    - AutomationIllustration: 3 connected nodes rising (with center dots) + dashed connector into a small orange document
+    - QualityIllustration: page + text lines + orange check-badge overlapping bottom-right corner (fill var(--card) to mask page lines beneath) + editorial crop marks
+    - ControlIllustration: page + text lines + orange key below ("your own keys" per the card copy)
+  * BELIEFS array now maps Illustration components; card markup swaps the old span (rounded-2xl bg-mkt-accent-soft + Lucide icon) for <Illustration className="mb-6 h-16 w-16 shrink-0 text-text-primary" />; titles/descriptions/cards untouched
+  * Updated file-header and section comments to describe the new structure
+- src/app/globals.css: removed the now-unused .mkt-hero-flow / .dark .mkt-hero-flow palette (14 lines)
+- Lint: zero errors in touched files (46 pre-existing problems all in unrelated modules)
+- Browser verification (agent-browser + z-ai vision):
+  * DOM: hero has NO svg; h2 list = mission row title / Our story / What we believe / What our customers say (duplicate heading gone); hero contains the lead paragraph
+  * DOM: 4/4 cards have custom 64x64 SVGs, zero Lucide icons, zero old orange icon backgrounds
+  * Desktop 1440: hero purely typographic, minimal/premium/editorial; cards equal height, illustrations clean (zoom-verified each card individually — automation nodes+doc, quality page+badge+crop marks, control page+key, simplicity page+wave+dot all render as designed)
+  * Tablet 768: typographic hero, 2x2 card grid, illustrations sharp
+  * Mobile 390: title dominant, paragraph below, no overflow (scrollWidth 390 = clientWidth 390)
+  * Mission/story band below hero transitions cleanly (photo + row title verified)
+  * No console errors, no page errors, dev.log clean
+- Scope: git status shows only about-page.tsx + globals.css modified; header/footer/section order/images/typography/colors untouched
+
+Stage Summary:
+- Hero simplified to "Our mission." + supporting paragraph with pure whitespace (network decoration and duplicate heading both removed)
+- "What we believe" cards now carry four custom editorial line-art illustrations (neutral ink + single orange accent each, sized to the old icon footprint) instead of generic Lucide icons in orange squares
+- Verified end-to-end at desktop/tablet/mobile with VLM + DOM assertions; lint and dev.log clean
