@@ -363,6 +363,7 @@ export function MediaListPage() {
 
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const currentModule = useNavigationStore((s) => s.currentModule);
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
 
@@ -400,24 +401,26 @@ export function MediaListPage() {
 
   const isAllSites = useSiteStore((s) => s.isAllSites());
   const isSiteInitialized = useSiteStore((s) => s.isInitialized);
+  const isPlatformStaff = currentModule.startsWith('platform-');
+  const canPerformAction = !isAllSites || isPlatformStaff;
 
   // Dialogs
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (isSiteInitialized && isAllSites) {
+    if (isSiteInitialized && isAllSites && !isPlatformStaff) {
       if (uploadDialogOpen) setUploadDialogOpen(false);
       if (currentSubPage === 'upload') {
         navigate('media');
       }
     }
-  }, [isSiteInitialized, isAllSites, uploadDialogOpen, currentSubPage, navigate]);
+  }, [isSiteInitialized, isAllSites, isPlatformStaff, uploadDialogOpen, currentSubPage, navigate]);
 
   useEffect(() => {
-    if (!isAllSites && currentSubPage === 'upload') {
+    if (canPerformAction && currentSubPage === 'upload') {
       setUploadDialogOpen(true);
     }
-  }, [currentSubPage, isAllSites]);
+  }, [currentSubPage, canPerformAction]);
   const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [newFolderParentId, setNewFolderParentId] = useState<string | null>(null);
@@ -854,13 +857,13 @@ export function MediaListPage() {
   }, []);
 
   const openAiDialog = useCallback(() => {
-    if (isAllSites) return;
+    if (isAllSites && !isPlatformStaff) return;
     setAiFolderId(currentFolderId ?? 'root');
     setAiPrompt('');
     setAiAspectRatio('1:1');
     setAiCount(1);
     setAiDialogOpen(true);
-  }, [currentFolderId, isAllSites]);
+  }, [currentFolderId, isAllSites, isPlatformStaff]);
 
   // ==================== Render ====================
 
@@ -901,7 +904,7 @@ export function MediaListPage() {
               {activeFilterLabel && t(activeFilterLabel)}
             </span>
           )}
-          {!isAllSites && (
+          {canPerformAction && (
             <Button
               variant="outline"
               size="sm"
@@ -915,7 +918,7 @@ export function MediaListPage() {
         </div>
         <div className="flex items-center gap-3">
           {/* FIX #8: AI Generate button - amber/gold color */}
-          {!isAllSites && (
+          {canPerformAction && (
             <>
               <button
                 onClick={openAiDialog}
@@ -1200,7 +1203,7 @@ export function MediaListPage() {
             setUploadDialogOpen(false);
             setUploadFiles([]);
             if (currentSubPage === 'upload') {
-              navigate('media');
+              navigate(isPlatformStaff ? 'platform-media' : 'media');
             }
           } else {
             setUploadDialogOpen(true);

@@ -16,7 +16,7 @@ import type { AuthUser } from '@/lib/platform/platform-auth';
  */
 export async function getSiteFromRequest(request: NextRequest): Promise<string | null> {
   const siteId = request.nextUrl.searchParams.get('siteId');
-  if (!siteId || siteId === 'all' || siteId === '') return null;
+  if (!siteId || siteId === 'all' || siteId === '' || siteId === 'platform') return null;
 
   // Check if it looks like a cuid (starts with 'c') — it's already a DB ID
   if (siteId.startsWith('c')) return siteId;
@@ -76,6 +76,12 @@ export async function getActivePlanSiteId(authUser: AuthUser): Promise<string | 
  * 3. Platform staff (OWNER / PLATFORM_ADMIN) have global visibility across all sites when in All Sites mode.
  */
 export async function getSiteWhere(request: NextRequest): Promise<Record<string, unknown>> {
+  const scope = request.nextUrl.searchParams.get('scope');
+  const siteParam = request.nextUrl.searchParams.get('siteId');
+  if (scope === 'platform' || siteParam === 'platform' || siteParam === 'null') {
+    return { siteId: null };
+  }
+
   const requestedSiteId = await getSiteFromRequest(request);
   const authUser = await getAuthUser(request);
 
@@ -120,6 +126,12 @@ export async function getSiteWhere(request: NextRequest): Promise<Record<string,
  * while respecting plan isolation.
  */
 export async function getSiteWhereIncludeGlobal(request: NextRequest): Promise<Record<string, unknown>> {
+  const scope = request.nextUrl.searchParams.get('scope');
+  const siteParam = request.nextUrl.searchParams.get('siteId');
+  if (scope === 'platform' || siteParam === 'platform' || siteParam === 'null') {
+    return { siteId: null };
+  }
+
   const where = await getSiteWhere(request);
   if ('siteId' in where) {
     const siteVal = where.siteId;

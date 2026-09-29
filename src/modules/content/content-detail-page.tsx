@@ -105,14 +105,18 @@ export function ContentDetailPage({ contentId, isPage: isPageProp }: { contentId
   const isPage = Boolean(
     isPageProp ||
     currentModule === 'pages' ||
+    currentModule === 'platform-pages' ||
     (content as any)?.type === 'PAGE' ||
     content?.contentType?.slug?.toLowerCase() === 'page' ||
     content?.contentType?.name?.toLowerCase() === 'page'
   );
+  const targetModule = currentModule.startsWith('platform-')
+    ? (isPage ? 'platform-pages' : 'platform-content')
+    : (isPage ? 'pages' : 'content');
 
   const goEdit = React.useCallback(
-    () => navigate(isPage ? 'pages' : 'content', contentId, 'edit'),
-    [navigate, contentId, isPage],
+    () => navigate(targetModule, contentId, 'edit'),
+    [navigate, contentId, targetModule],
   );
 
   // Loading state
@@ -148,7 +152,7 @@ export function ContentDetailPage({ contentId, isPage: isPageProp }: { contentId
         breadcrumbs={false}
         action={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate(isPage ? 'pages' : 'content')}>
+            <Button variant="outline" size="sm" onClick={() => navigate(targetModule)}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               {t('common.back')}
             </Button>
@@ -171,12 +175,7 @@ export function ContentDetailPage({ contentId, isPage: isPageProp }: { contentId
             </Badge>
           </div>
 
-          {/* Excerpt */}
-          {!isPage && content.excerpt && (
-            <p className="text-sm text-muted-foreground leading-relaxed border-l-2 border-muted-foreground/20 pl-4">
-              {content.excerpt}
-            </p>
-          )}
+
 
           {/* Content Body */}
           <div className="prose prose-gray prose-headings:font-bold prose-h2:text-2xl prose-h3:text-xl prose-p:leading-relaxed prose-a:text-primary dark:prose-invert max-w-none rounded-lg border bg-card p-6 min-h-[200px]">

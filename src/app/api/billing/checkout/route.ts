@@ -241,6 +241,12 @@ export async function POST(request: NextRequest) {
       },
     };
 
+    if (planConfig.freePlanDurationDays && planConfig.freePlanDurationDays > 0) {
+      sessionParams.subscription_data = {
+        trial_period_days: planConfig.freePlanDurationDays,
+      };
+    }
+
     if (couponRow) {
       // Push the local coupon to Stripe (lazy, cached on the local Coupon
       // row). If stripeCouponId is already set we reuse it; otherwise we

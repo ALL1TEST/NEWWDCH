@@ -302,7 +302,7 @@ function TocList({
               type="button"
               onClick={() => onNavigate(item.id)}
               aria-current={active ? 'location' : undefined}
-              className={`mkt-focus flex w-full items-start gap-2.5 border-l-2 py-[0.3rem] pl-3 pr-1 text-left text-[0.8125rem] leading-[1.4] transition-colors ${
+              className={`mkt-focus flex w-full items-start gap-2.5 border-l-2 py-[0.25rem] pl-3 pr-1 text-left text-[0.8125rem] leading-[1.35] transition-colors ${
                 active
                   ? 'border-mkt-accent font-medium text-mkt-accent'
                   : 'border-transparent text-text-secondary hover:text-text-primary'
@@ -460,7 +460,7 @@ export function LegalPageLayout({
                     {/* Collapsed list stays mounted for the height
                         animation but leaves the a11y tree via inert. */}
                     <div className="overflow-hidden" inert={!tocOpen}>
-                      <div className="max-h-80 overflow-y-auto px-5 pb-4 pt-1">
+                      <div className="max-h-80 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden px-5 pb-4 pt-1">
                         <TocList targets={tocTargets} activeId={activeId} onNavigate={navigate} />
                       </div>
                     </div>
@@ -480,14 +480,9 @@ export function LegalPageLayout({
             <aside className="hidden lg:block">
               <nav
                 aria-label={t(onThisPageKey)}
-                className="sticky top-25 max-h-[calc(100vh-9.5rem)] overflow-y-auto rounded-2xl border border-border bg-card p-5"
+                className="sticky top-25 rounded-2xl border border-border bg-card p-4"
               >
-                <p className="text-[0.6875rem] font-semibold uppercase tracking-widest text-text-muted">
-                  {t(onThisPageKey)}
-                </p>
-                <div className="mt-3">
-                  <TocList targets={tocTargets} activeId={activeId} onNavigate={navigate} />
-                </div>
+                <TocList targets={tocTargets} activeId={activeId} onNavigate={navigate} />
               </nav>
             </aside>
           </div>

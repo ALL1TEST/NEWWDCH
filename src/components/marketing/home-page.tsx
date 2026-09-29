@@ -33,8 +33,6 @@ import {
 import { useT } from '@/lib/i18n';
 import {
   BrowserFrame,
-  Eyebrow,
-  Logo,
   MarketingButton,
   PointList,
   Reveal,
@@ -104,16 +102,13 @@ function Hero() {
           </div>
         </Reveal>
 
-        {/* Product screenshot */}
+        {/* Product video tour */}
         <Reveal delay={240} className="mt-14 w-full sm:mt-20">
           <div className="mx-auto w-full max-w-5xl">
             <BrowserFrame
-              src="/marketing/shot-dashboard.png"
-              alt={t('mkt.hero.demoCaption')}
-              label={t('mkt.hero.demoLabel')}
+              videoSrc="/product-tour.mp4"
               loading="eager"
             />
-            <p className="mt-4 text-xs text-text-muted">{t('mkt.hero.demoCaption')}</p>
           </div>
         </Reveal>
       </div>
@@ -134,7 +129,6 @@ function ValueProposition() {
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
           <Reveal>
             <div className="flex flex-col items-start gap-5">
-              <Eyebrow>{t('mkt.value.eyebrow')}</Eyebrow>
               <h2 id="value-heading" className="mkt-h2 max-w-lg text-[1.75rem] text-text-primary sm:text-4xl">
                 {t('mkt.value.title')}
               </h2>
@@ -280,7 +274,6 @@ const FEATURES: FeatureBlock[] = [
 
 function FeatureBlockCard({ feature, index }: { feature: FeatureBlock; index: number }) {
   const { t } = useT();
-  const Icon = feature.icon;
   return (
     <Reveal>
       <div
@@ -291,10 +284,6 @@ function FeatureBlockCard({ feature, index }: { feature: FeatureBlock; index: nu
       >
         {/* Copy */}
         <div className="flex flex-1 flex-col items-start gap-5">
-          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-widest text-mkt-accent">
-            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-            {t(feature.labelKey)}
-          </span>
           <h3 className="mkt-h2 max-w-md text-2xl text-text-primary sm:text-[2rem]">{t(feature.titleKey)}</h3>
           <p className="max-w-md text-base leading-relaxed text-text-secondary">{t(feature.bodyKey)}</p>
           <PointList points={feature.points.map((p) => t(p))} />
@@ -326,7 +315,6 @@ function FeaturesSection() {
       <div className="mkt-container flex flex-col gap-16 sm:gap-20">
         <Reveal>
           <SectionHeader
-            eyebrow={t('mkt.features.eyebrow')}
             title={t('mkt.features.title')}
             subtitle={t('mkt.features.subtitle')}
           />
@@ -357,7 +345,6 @@ function WorkflowSection() {
       <div className="mkt-container">
         <Reveal>
           <SectionHeader
-            eyebrow={t('mkt.workflow.eyebrow')}
             title={t('mkt.workflow.title')}
             subtitle={t('mkt.workflow.subtitle')}
           />
@@ -423,7 +410,6 @@ function PlatformSection() {
       <div className="mkt-container">
         <Reveal>
           <SectionHeader
-            eyebrow={t('mkt.platform.eyebrow')}
             title={t('mkt.platform.title')}
             subtitle={t('mkt.platform.subtitle')}
           />
@@ -485,7 +471,6 @@ function UseCasesSection() {
       <div className="mkt-container">
         <Reveal>
           <SectionHeader
-            eyebrow={t('mkt.usecases.eyebrow')}
             title={t('mkt.usecases.title')}
             subtitle={t('mkt.usecases.subtitle')}
           />
@@ -518,51 +503,6 @@ function UseCasesSection() {
   );
 }
 
-// -------------------- Final CTA --------------------
-
-export function FinalCta({
-  titleKey = 'mkt.cta.title',
-  bodyKey = 'mkt.cta.body',
-}: {
-  titleKey?: string;
-  bodyKey?: string;
-}) {
-  const { t } = useT();
-  return (
-    <section className="mkt-section" aria-labelledby="final-cta-heading">
-      <div className="mkt-container">
-        <Reveal>
-          <div className="relative overflow-hidden rounded-3xl border border-border bg-card px-6 py-14 text-center sm:px-12 sm:py-20">
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={{
-                background:
-                  'radial-gradient(ellipse 60% 80% at 50% 120%, var(--mkt-hero-glow), transparent 70%)',
-              }}
-              aria-hidden="true"
-            />
-            <div className="relative flex flex-col items-center gap-5">
-              <Logo />
-              <h2 id="final-cta-heading" className="mkt-h2 max-w-xl text-[1.75rem] text-text-primary sm:text-4xl">
-                {t(titleKey)}
-              </h2>
-              <p className="max-w-md text-base leading-relaxed text-text-secondary">{t(bodyKey)}</p>
-              <div className="mt-3 flex flex-col items-center gap-3 sm:flex-row">
-                <MarketingButton href={MKT.signup} size="lg" withArrow>
-                  {t('mkt.cta.button')}
-                </MarketingButton>
-                <MarketingButton href={MKT.pricing} size="lg" variant="secondary">
-                  {t('mkt.cta.secondary')}
-                </MarketingButton>
-              </div>
-            </div>
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
 // -------------------- Page --------------------
 
 export function MarketingHome() {
@@ -575,7 +515,6 @@ export function MarketingHome() {
       <WorkflowSection />
       <PlatformSection />
       <UseCasesSection />
-      <FinalCta />
     </>
   );
 }

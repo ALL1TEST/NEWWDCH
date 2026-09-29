@@ -49,7 +49,7 @@ function parseHash(hash: string): {
 
   // Canonicalize legacy SEO standalone routes (e.g. "#seo/robots") to their
   // compound Settings form ("settings/robots") BEFORE any state is stored.
-  if (mod === 'seo' && second) {
+  if ((mod === 'seo' || mod === 'platform-seo') && second) {
     const lower = second.toLowerCase();
     if (lower === 'overview') {
       return { mod, itemId: null, subPage: null };
@@ -94,6 +94,8 @@ function parseHash(hash: string): {
     'maintenance', 'multi-site', 'import-export', 'advanced', 'smtp',
     // Audit
     'audit',
+    // Platform Blog
+    'posts', 'authors',
   ]);
 
   // Compound "settings/<tab>" sub-pages (e.g. SEO "settings/robots") — preserve

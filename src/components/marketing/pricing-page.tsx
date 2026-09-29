@@ -33,7 +33,8 @@ import { Check, ChevronDown, Loader2, Minus, RefreshCw } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { savePlanSelection } from '@/lib/checkout/plan-selection';
-import { Logo, MarketingButton, Reveal } from './primitives';
+import { MarketingButton, Reveal } from './primitives';
+import { currencySymbolOf } from '@/lib/platform/currency-catalog';
 import { MKT } from './marketing-header';
 
 interface PublicPlanFeatures {
@@ -55,6 +56,7 @@ interface PublicPlan {
   priceMonthly: number;
   priceYearly: number;
   isFree: boolean;
+  freePlanDurationDays?: number | null;
   badgeVariant: string;
   sortOrder: number;
   limits: {
@@ -68,6 +70,10 @@ interface PublicPlan {
 
 interface PlansResponse {
   currency: string;
+  yearlyDiscountBadge?: string | null;
+  trialEnabled?: boolean;
+  trialDays?: number;
+  trialCtaText?: string;
   plans: PublicPlan[];
 }
 
@@ -120,11 +126,15 @@ function PricingCard({
   currency,
   yearly,
   recommended,
+  isTrial = false,
+  trialCtaText,
 }: {
   plan: PublicPlan;
   currency: string;
   yearly: boolean;
   recommended: boolean;
+  isTrial?: boolean;
+  trialCtaText?: string;
 }) {
   const { t } = useT();
   // Authenticated visitors go STRAIGHT to the payment step for paid
@@ -132,23 +142,12 @@ function PricingCard({
   // create their account first. Free always opens Create Account.
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
-  const descKey =
-    plan.planId === 'free'
-      ? 'mkt.plan.free.desc'
-      : plan.planId === 'plus'
-        ? 'mkt.plan.plus.desc'
-        : plan.planId === 'pro'
-          ? 'mkt.plan.pro.desc'
-          : plan.planId === 'max'
-            ? 'mkt.plan.max.desc'
-            : 'mkt.plan.default.desc';
-  const description = plan.description?.trim() || t(descKey);
-
   // Yearly view shows the discounted MONTHLY EQUIVALENT — the
   // configured yearly price ÷ 12 — with the full annual amount
   // underneath. Both derive from the plan configuration; nothing is
   // hardcoded (the backend stays the single source of truth).
   const monthlyEquivalent = Math.round(plan.priceYearly / 12);
+  const symbol = (currency === 'USD' || !currency) ? '$' : currencySymbolOf(currency);
 
   return (
     <div
@@ -158,39 +157,40 @@ function PricingCard({
           : 'border-border'
       }`}
     >
-      {recommended && (
+      {recommended ? (
         <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-mkt-accent px-3.5 py-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-mkt-accent-fg">
           {t('mkt.pricing.popular')}
         </span>
-      )}
+      ) : isTrial ? (
+        <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-mkt-accent px-3.5 py-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-mkt-accent-fg">
+          {plan.freePlanDurationDays ? `${plan.freePlanDurationDays}-DAY FREE TRIAL` : 'FREE TRIAL'}
+        </span>
+      ) : null}
 
       <h3 className="text-lg font-bold text-text-primary">{plan.name}</h3>
-      <p className="mt-2 min-h-10 text-sm leading-relaxed text-text-secondary">{description}</p>
+      {plan.description ? (
+        <p className="mt-1 text-xs text-text-muted">{plan.description}</p>
+      ) : null}
 
-      {/* Price — large display. Monthly: “CHF X / month”. Yearly:
-          “CHF X /mo” (monthly equivalent) + “Billed CHF XXX yearly”.
-          The reserved min-height keeps CTAs aligned across cards in
-          both toggle states. */}
-      <div className="mt-6 min-h-[4.5rem]">
-        {plan.isFree ? (
+      {/* Price — large display. Shows actual price when configured, or $0 if free. */}
+      <div className="mt-5 min-h-[4.25rem]">
+        {(yearly ? plan.priceYearly === 0 : plan.priceMonthly === 0) ? (
           <div className="flex items-baseline">
-            <span className="mkt-display text-5xl text-text-primary">{t('mkt.pricing.free')}</span>
+            <span className="mkt-display text-5xl text-text-primary">$0</span>
           </div>
         ) : yearly ? (
           <>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-sm font-medium text-text-muted">{currency}</span>
-              <span className="mkt-display text-5xl text-text-primary">{monthlyEquivalent}</span>
-              <span className="text-sm text-text-muted">{t('mkt.pricing.perMonthShort')}</span>
+              <span className="mkt-display text-5xl text-text-primary">{symbol}{monthlyEquivalent}</span>
+              <span className="text-sm text-text-muted">{t('mkt.pricing.perMonth')}</span>
             </div>
             <p className="mt-1.5 text-xs text-text-muted">
-              {t('mkt.pricing.billedYearly').replace('{amount}', `${currency} ${plan.priceYearly}`)}
+              {t('mkt.pricing.billedYearly').replace('{amount}', `${symbol}${plan.priceYearly}`)}
             </p>
           </>
         ) : (
           <div className="flex items-baseline gap-1.5">
-            <span className="text-sm font-medium text-text-muted">{currency}</span>
-            <span className="mkt-display text-5xl text-text-primary">{plan.priceMonthly}</span>
+            <span className="mkt-display text-5xl text-text-primary">{symbol}{plan.priceMonthly}</span>
             <span className="text-sm text-text-muted">{t('mkt.pricing.perMonth')}</span>
           </div>
         )}
@@ -199,20 +199,26 @@ function PricingCard({
       <div className="mt-6">
         {/* Plan CTA — persists the selected plan + billing cycle
             BEFORE the navigation happens (the click handler runs
-            synchronously; the anchor then changes the hash). The
-            whole conversion journey reads it back: unauthenticated →
-            Create Account (paid continues to checkout afterwards,
-            free lands on the dashboard); ALREADY AUTHENTICATED + paid
-            → checkout directly, never signup again. */}
-        <MarketingButton
-          href={!plan.isFree && isAuthenticated ? MKT.checkout : MKT.signup}
-          variant={recommended ? 'primary' : 'secondary'}
-          className="w-full"
-          withArrow={!recommended}
-          onClick={() => savePlanSelection(plan.planId, yearly ? 'yearly' : 'monthly', plan.isFree)}
-        >
-          {plan.isFree ? t('mkt.pricing.cta.free') : t('mkt.pricing.cta').replace('{plan}', plan.name)}
-        </MarketingButton>
+            synchronously; the anchor then changes the hash). */}
+        {isTrial ? (
+          <a
+            href={MKT.signup}
+            onClick={() => savePlanSelection(plan.planId, yearly ? 'yearly' : 'monthly', false)}
+            className="mkt-focus inline-flex h-10 w-full items-center justify-center rounded-2xl border border-border bg-card/80 hover:bg-muted text-text-primary px-5 text-sm font-semibold transition-all duration-200 hover:shadow-xs"
+          >
+            {trialCtaText || (plan.freePlanDurationDays ? `Start ${plan.freePlanDurationDays}-day free trial` : 'Start free trial')}
+          </a>
+        ) : (
+          <MarketingButton
+            href={!plan.isFree && isAuthenticated ? MKT.checkout : MKT.signup}
+            variant={recommended ? 'primary' : 'secondary'}
+            className="w-full"
+            withArrow={!recommended}
+            onClick={() => savePlanSelection(plan.planId, yearly ? 'yearly' : 'monthly', plan.isFree)}
+          >
+            {plan.isFree ? t('mkt.pricing.cta.free') : t('mkt.pricing.cta').replace('{plan}', plan.name)}
+          </MarketingButton>
+        )}
       </div>
 
       <ul className="mt-7 flex flex-col gap-3 border-t border-border pt-6">
@@ -472,7 +478,7 @@ function FaqRow({ qKey, aKey }: { qKey: string; aKey: string }) {
         {/* Collapsed answers stay mounted for the height animation
             but leave the tab/a11y tree via inert. */}
         <div className="overflow-hidden" inert={!open}>
-          <p className="max-w-2xl pb-5 text-sm leading-relaxed text-text-secondary">{t(aKey)}</p>
+          <p className="max-w-4xl pb-5 text-sm leading-relaxed text-text-secondary sm:text-base">{t(aKey)}</p>
         </div>
       </div>
     </div>
@@ -533,10 +539,6 @@ export function PricingPage() {
     }
   }, []);
 
-  const scrollToPlans = () => {
-    plansSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   const visibleFaqKeys = faqExpanded ? FAQ_KEYS : FAQ_KEYS.slice(0, FAQ_INITIAL_COUNT);
 
   return (
@@ -548,7 +550,7 @@ export function PricingPage() {
           {/* Hero — strong centered headline only (no eyebrow, no
               description) per the reference structure */}
           <Reveal>
-            <div className="mx-auto max-w-3xl text-center">
+            <div className="mx-auto max-w-4xl lg:max-w-5xl text-center">
               <h1 id="pricing-heading" className="mkt-display text-4xl text-text-primary sm:text-5xl">
                 {t('mkt.pricing.heroTitle')}
               </h1>
@@ -565,6 +567,12 @@ export function PricingPage() {
               >
                 {(['monthly', 'yearly'] as const).map((mode) => {
                   const active = (mode === 'yearly') === yearly;
+                  const discountBadge =
+                    data?.yearlyDiscountBadge !== undefined && data?.yearlyDiscountBadge !== null
+                      ? data.yearlyDiscountBadge
+                      : yearlySavings > 0
+                        ? `-${yearlySavings}%`
+                        : null;
                   return (
                     <button
                       key={mode}
@@ -576,13 +584,13 @@ export function PricingPage() {
                       }`}
                     >
                       {mode === 'monthly' ? t('mkt.pricing.monthly') : t('mkt.pricing.yearly')}
-                      {mode === 'yearly' && yearlySavings > 0 && (
+                      {mode === 'yearly' && discountBadge && (
                         <span
                           className={`rounded-full px-2 py-0.5 text-[0.625rem] font-semibold ${
                             active ? 'bg-mkt-accent-fg/20 text-mkt-accent-fg' : 'bg-mkt-accent-soft text-mkt-accent-soft-fg'
                           }`}
                         >
-                          -{yearlySavings}%
+                          {discountBadge}
                         </span>
                       )}
                     </button>
@@ -612,16 +620,24 @@ export function PricingPage() {
               </div>
             ) : (
               <div className="grid gap-6 pt-3 sm:grid-cols-2 lg:grid-cols-4">
-                {plans.map((p, i) => (
-                  <Reveal key={p.planId} delay={i * 70} className="h-full">
-                    <PricingCard
-                      plan={p}
-                      currency={data.currency}
-                      yearly={yearly}
-                      recommended={p.planId === 'pro'}
-                    />
-                  </Reveal>
-                ))}
+                {plans.map((p, i) => {
+                  const isPlanTrial = Boolean(
+                    (p.isFree && (data.trialEnabled || (p.freePlanDurationDays && p.freePlanDurationDays > 0))) ||
+                    (p.freePlanDurationDays && p.freePlanDurationDays > 0)
+                  );
+                  return (
+                    <Reveal key={p.planId} delay={i * 70} className="h-full">
+                      <PricingCard
+                        plan={p}
+                        currency={data.currency}
+                        yearly={yearly}
+                        recommended={p.planId === 'pro'}
+                        isTrial={isPlanTrial}
+                        trialCtaText={data.trialCtaText}
+                      />
+                    </Reveal>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -666,60 +682,16 @@ export function PricingPage() {
         </div>
       </section>
 
-      {/* ================= CTA ================= */}
-      <section className="mkt-section" aria-labelledby="pricing-cta-heading">
-        <div className="mkt-container">
-          <Reveal>
-            <div className="relative overflow-hidden rounded-3xl border border-border bg-card px-6 py-14 text-center sm:px-12 sm:py-20">
-              <div
-                className="pointer-events-none absolute inset-0"
-                style={{
-                  background:
-                    'radial-gradient(ellipse 60% 80% at 50% 120%, var(--mkt-hero-glow), transparent 70%)',
-                }}
-                aria-hidden="true"
-              />
-              <div className="relative flex flex-col items-center gap-5">
-                <Logo />
-                <h2 id="pricing-cta-heading" className="mkt-h2 max-w-xl text-[1.75rem] text-text-primary sm:text-4xl">
-                  {t('mkt.pricing.ctaTitle')}
-                </h2>
-                <p className="max-w-md text-base leading-relaxed text-text-secondary">{t('mkt.pricing.subtitle')}</p>
-                <div className="mt-3 flex flex-col items-center gap-3 sm:flex-row">
-                  <MarketingButton href={MKT.signup} size="lg" withArrow>
-                    {t('mkt.cta.button')}
-                  </MarketingButton>
-                  {/* On the pricing page itself the route hash is
-                      already #/pricing — prevent the no-op navigation
-                      and scroll back to the cards instead. */}
-                  <MarketingButton
-                    href={MKT.pricing}
-                    size="lg"
-                    variant="secondary"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      scrollToPlans();
-                    }}
-                  >
-                    {t('mkt.cta.secondary')}
-                  </MarketingButton>
-                </div>
-              </div>
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
       {/* ================= FAQ ================= */}
       <section id="faq" className="mkt-section scroll-mt-24" aria-labelledby="faq-heading">
         <div className="mkt-container">
-          <div className="mx-auto max-w-3xl">
+          <div className="mx-auto max-w-4xl lg:max-w-5xl">
             <Reveal>
               <div className="flex flex-col items-center gap-4 text-center">
                 <h2 id="faq-heading" className="mkt-h2 text-3xl text-text-primary sm:text-4xl">
                   {t('mkt.faq.title')}
                 </h2>
-                <p className="max-w-xl text-base leading-relaxed text-text-secondary">
+                <p className="max-w-3xl text-base leading-relaxed text-text-secondary">
                   {t('mkt.faq.subtitle')}
                 </p>
                 <div className="mt-2">

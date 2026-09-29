@@ -47,6 +47,8 @@ interface RunRow {
 
 export function AutomationDetailsPage({ automationId }: { automationId: string }) {
   const { t } = useT();
+  const currentModule = useNavigationStore((s) => s.currentModule);
+  const targetMod = currentModule.startsWith('platform-') ? 'platform-automation' : 'automation';
   const navigate = useNavigationStore((s) => s.navigate);
   const queryClient = useQueryClient();
 
@@ -105,7 +107,7 @@ export function AutomationDetailsPage({ automationId }: { automationId: string }
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate('automation')}><ArrowLeft className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" onClick={() => navigate(targetMod)}><ArrowLeft className="h-4 w-4" /></Button>
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold tracking-tight text-foreground">{automation.name}</h1>

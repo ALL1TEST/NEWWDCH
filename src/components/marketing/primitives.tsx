@@ -252,13 +252,15 @@ export function Reveal({
 
 export function BrowserFrame({
   src,
-  alt,
+  videoSrc,
+  alt = '',
   label,
   className = '',
   loading = 'lazy',
 }: {
-  src: string;
-  alt: string;
+  src?: string;
+  videoSrc?: string;
+  alt?: string;
   label?: string;
   className?: string;
   loading?: 'lazy' | 'eager';
@@ -281,15 +283,27 @@ export function BrowserFrame({
         )}
       </div>
       <div className="bg-card">
-        <img
-          src={src}
-          alt={alt}
-          loading={loading}
-          decoding="async"
-          className="w-full h-auto"
-          width={1440}
-          height={900}
-        />
+        {videoSrc ? (
+          <video
+            src={videoSrc}
+            autoPlay
+            loop
+            muted
+            playsInline
+            controls={false}
+            className="w-full h-auto block"
+          />
+        ) : src ? (
+          <img
+            src={src}
+            alt={alt}
+            loading={loading}
+            decoding="async"
+            className="w-full h-auto"
+            width={1440}
+            height={900}
+          />
+        ) : null}
       </div>
     </figure>
   );

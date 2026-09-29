@@ -910,9 +910,10 @@ export function ContentEditPage({ contentId, isPage: isPageProp }: { contentId: 
   const deleteMutation = useMutation({
     mutationFn: () => deleteApi(`/api/content/${contentId}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
-      toast.success(t('articles.deletedToast'));
-      navigate(isPage || currentModule === 'pages' ? 'pages' : 'content');
+      const targetMod = currentModule.startsWith('platform-')
+        ? (isPage || currentModule === 'platform-pages' ? 'platform-pages' : 'platform-content')
+        : (isPage || currentModule === 'pages' ? 'pages' : 'content');
+      navigate(targetMod);
     },
     onError: () => toast.error(t('articles.deleteFailedToast')),
   });
@@ -1298,7 +1299,16 @@ export function ContentEditPage({ contentId, isPage: isPageProp }: { contentId: 
     setFeaturedImage(media);
   }, []);
 
-  const goBack = useCallback(() => navigate(isPage || currentModule === 'pages' ? 'pages' : 'content'), [navigate, isPage, currentModule]);
+  const goBack = useCallback(() => {
+    const targetMod = currentModule.startsWith('platform-')
+      ? (isPage || currentModule === 'platform-pages' ? 'platform-pages' : 'platform-content')
+      : (isPage || currentModule === 'pages' ? 'pages' : 'content');
+    if (contentId) {
+      navigate(targetMod, contentId);
+    } else {
+      navigate(targetMod);
+    }
+  }, [navigate, isPage, currentModule, contentId]);
 
   const addTag = useCallback((tagId: string) => {
     if (!selectedTagIds.includes(tagId)) {

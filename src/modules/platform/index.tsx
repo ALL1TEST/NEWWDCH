@@ -23,11 +23,22 @@ const emailTemplates = dynamic(() => import('./platform-email-templates').then(m
 const smtp = dynamic(() => import('./platform-smtp').then(m => ({ default: m.PlatformSmtpModule as ComponentType })), { loading: ModuleFallback });
 const backups = dynamic(() => import('./platform-backups').then(m => ({ default: m.PlatformBackupsModule as ComponentType })), { loading: ModuleFallback });
 const ai = dynamic(() => import('./platform-ai').then(m => ({ default: m.PlatformAiModule as ComponentType })), { loading: ModuleFallback });
+const content = dynamic(() => import('@/modules/content').then(m => ({ default: m.ContentModule as ComponentType })), { loading: ModuleFallback });
+const pages = dynamic(() => import('@/modules/pages').then(m => ({ default: m.PagesModule as ComponentType })), { loading: ModuleFallback });
+const calendar = dynamic(() => import('@/modules/calendar').then(m => ({ default: m.CalendarModule as ComponentType })), { loading: ModuleFallback });
+const media = dynamic(() => import('@/modules/media').then(m => ({ default: m.MediaModule as ComponentType })), { loading: ModuleFallback });
+const newsletter = dynamic(() => import('@/modules/newsletter').then(m => ({ default: m.NewsletterModule as ComponentType })), { loading: ModuleFallback });
+const seo = dynamic(() => import('@/modules/seo').then(m => ({ default: m.SeoModule as ComponentType })), { loading: ModuleFallback });
+const automation = dynamic(() => import('@/modules/automation').then(m => ({ default: m.AutomationModule as ComponentType })), { loading: ModuleFallback });
+const tasks = dynamic(() => import('@/modules/tasks').then(m => ({ default: m.TasksModule as ComponentType })), { loading: ModuleFallback });
 
 export const platformModuleRegistry: Record<string, ComponentType> = {
   'platform-overview': overview,
   'platform-customers': customers,
   'platform-customer-detail': customerDetail,
+  'platform-tasks': tasks,
+  'platform-payments-group': payments,
+  'platform-billing': payments,
   'platform-payments': payments,
   'platform-plans': plans,
   'platform-coupons': coupons,
@@ -37,4 +48,14 @@ export const platformModuleRegistry: Record<string, ComponentType> = {
   'platform-smtp': smtp,
   'platform-backups': backups,
   'platform-ai': ai,
+  'platform-blogs': content,
+  'platform-blog': content,
+  'platform-content': content,
+  'platform-pages': pages,
+  'platform-calendar': calendar,
+  'platform-media': media,
+  'platform-newsletter': newsletter,
+  'platform-seo': seo,
+  'platform-automation': automation,
 };
+

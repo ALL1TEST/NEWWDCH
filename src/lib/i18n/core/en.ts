@@ -97,6 +97,8 @@ export const coreEn: Record<string, string> = {
   'nav.plans': 'Plans & Pricing',
   'nav.coupons': 'Coupons',
   'nav.stripeSettings': 'Stripe Settings',
+  'nav.blog': 'Blogs',
+  'nav.blogs': 'Blogs',
   // Internal Account (dedicated internal-account sidebar item)
   'nav.internalDashboard': 'Dashboard',
 

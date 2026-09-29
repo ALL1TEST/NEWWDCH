@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useT } from '@/lib/i18n';
 import { getApi, postApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
+import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { toast } from 'sonner';
 
 export interface CategoriesTagsDialogProps {
@@ -55,21 +56,24 @@ export function CategoriesTagsDialog({
     }
   }, [open, initialTab]);
 
+  const currentModule = useNavigationStore((s) => s.currentModule);
+  const isPlatformModule = currentModule.startsWith('platform-');
+
   const { data: categoriesData, isLoading: catLoading } = useQuery({
-    queryKey: queryKeys.categories.all,
+    queryKey: [...queryKeys.categories.all, isPlatformModule ? 'platform' : 'client'],
     queryFn: () =>
       getApi<{ data: { id: string; name: string; slug?: string }[] } | { id: string; name: string; slug?: string }[]>(
-        '/api/categories?pageSize=200',
+        `/api/categories?pageSize=200${isPlatformModule ? '&scope=platform' : ''}`,
       ),
     enabled: open,
     staleTime: 30_000,
   });
 
   const { data: tagsData, isLoading: tagsLoading } = useQuery({
-    queryKey: queryKeys.tags.all,
+    queryKey: [...queryKeys.tags.all, isPlatformModule ? 'platform' : 'client'],
     queryFn: () =>
       getApi<{ data: { id: string; name: string; slug?: string; color?: string }[] } | { id: string; name: string; slug?: string; color?: string }[]>(
-        '/api/tags?pageSize=200',
+        `/api/tags?pageSize=200${isPlatformModule ? '&scope=platform' : ''}`,
       ),
     enabled: open,
     staleTime: 30_000,
@@ -94,7 +98,7 @@ export function CategoriesTagsDialog({
   }, [tagsData]);
 
   const createCategoryMutation = useMutation({
-    mutationFn: (name: string) => postApi('/api/categories', { name }),
+    mutationFn: (name: string) => postApi('/api/categories', { name, ...(isPlatformModule ? { siteId: null, scope: 'platform' } : {}) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.categories.all });
       toast.success(t('articles.categoryCreated') || 'Category created');
@@ -105,7 +109,7 @@ export function CategoriesTagsDialog({
   });
 
   const createTagMutation = useMutation({
-    mutationFn: (name: string) => postApi('/api/tags', { name }),
+    mutationFn: (name: string) => postApi('/api/tags', { name, ...(isPlatformModule ? { siteId: null, scope: 'platform' } : {}) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tags.all });
       toast.success(t('articles.tagCreated') || 'Tag created');

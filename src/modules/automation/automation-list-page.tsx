@@ -33,6 +33,8 @@ interface AutomationRow {
 
 export function AutomationListPage({ showRunsOnly = false }: { showRunsOnly?: boolean }) {
   const { t } = useT();
+  const currentModule = useNavigationStore((s) => s.currentModule);
+  const targetMod = currentModule.startsWith('platform-') ? 'platform-automation' : 'automation';
   const navigate = useNavigationStore((s) => s.navigate);
   const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<AutomationRow | null>(null);
@@ -102,7 +104,7 @@ export function AutomationListPage({ showRunsOnly = false }: { showRunsOnly?: bo
           <h1 className="text-xl font-bold tracking-tight text-foreground">{t('title.automation')}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t('automation.description')}</p>
         </div>
-        <Button onClick={() => navigate('automation', null, 'create')} className="gap-2">
+        <Button onClick={() => navigate(targetMod, null, 'create')} className="gap-2">
           <Plus className="h-4 w-4" />
           {t('automation.createAutomation')}
         </Button>
@@ -162,7 +164,7 @@ export function AutomationListPage({ showRunsOnly = false }: { showRunsOnly?: bo
                     <p className="text-xs text-muted-foreground mt-1">{t('automation.emptyHint')}</p>
                   </td></tr>
                 ) : automations.map((a: AutomationRow) => (
-                  <tr key={a.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => navigate('automation', a.id, 'details')}>
+                  <tr key={a.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => navigate(targetMod, a.id, 'details')}>
                     <td className="px-4 py-3">
                       <p className="text-sm font-medium">{a.name}</p>
                       {a.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{a.description}</p>}
@@ -182,7 +184,7 @@ export function AutomationListPage({ showRunsOnly = false }: { showRunsOnly?: bo
                     <td className="hidden lg:table-cell px-4 py-3 text-right text-xs text-muted-foreground">{a.totalRuns}</td>
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-0.5">
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => navigate('automation', a.id, 'details')} title={t('common.view')}><Eye className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => navigate(targetMod, a.id, 'details')} title={t('common.view')}><Eye className="h-3.5 w-3.5" /></Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400" onClick={() => runMutation.mutate(a.id)} disabled={runMutation.isPending} title={t('automation.runNow')}><Play className="h-3.5 w-3.5" /></Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-amber-600 hover:text-amber-700 dark:text-amber-400" onClick={() => toggleMutation.mutate({ id: a.id, status: a.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' })} title={a.status === 'ACTIVE' ? t('automation.pause') : t('automation.activate')}>
                           {a.status === 'ACTIVE' ? <Pause className="h-3.5 w-3.5" /> : <CirclePlay className="h-3.5 w-3.5" />}

@@ -76,6 +76,7 @@ import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { CategoriesTagsDialog } from './categories-tags-dialog';
 import { useSiteStore } from '@/lib/stores/site-store';
 import { useSubscriptionStore } from '@/lib/stores/subscription-store';
+import { useAuthStore } from '@/lib/stores/auth-store';
 import { useT } from '@/lib/i18n';
 import { cn, formatRelativeTime, truncate } from '@/lib/utils';
 import type { PaginatedResponse, PostStatus } from '@/shared/types';
@@ -135,6 +136,7 @@ export interface ArticleIdea {
   targetDate?: string;
   planId?: string;
   siteId?: string;
+  id?: string;
 }
 
 // localStorage key for persisting saved ideas across sessions
@@ -163,7 +165,7 @@ const STATUS_BADGE_STYLES: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'articles.statusDraft',
   IN_REVIEW: 'articles.statusInReview',
-  APPROVED: 'articles.statusApproved',
+  APPROVED: 'articles.tabScheduled',
   PUBLISHED: 'articles.statusPublished',
   UNPUBLISHED: 'articles.statusUnpublished',
   ARCHIVED: 'articles.statusArchived',
@@ -412,12 +414,16 @@ export function ContentListPage({ contentType = 'post' }: { contentType?: 'post'
   // AI Ideas state
   const [aiIdeasOpen, setAiIdeasOpen] = useState(false);
   const [ideas, setIdeas] = useState<ArticleIdea[]>([]);
-  const [expandedIdea, setExpandedIdea] = useState<number | null>(null);
   const [ideasEmpty, setIdeasEmpty] = useState(false);
+  const [expandedIdea, setExpandedIdea] = useState<number | null>(null);
+  const currentModule = useNavigationStore((s) => s.currentModule);
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
+  const user = useAuthStore((s) => s.user);
+  const isPlatformStaff = user?.role === 'PLATFORM_ADMIN' || user?.role === 'OWNER' || currentModule.startsWith('platform-');
   const [ideaNiche, setIdeaNiche] = useState('');
   const [ideaKeywords, setIdeaKeywords] = useState('');
   const isAllSites = useSiteStore((s) => s.isAllSites());
+  const canCreate = !isAllSites || isPlatformStaff;
   const activeSiteDbId = useSiteStore((s) => s.activeSiteDbId);
   const activeSiteSlug = useSiteStore((s) => s.activeSiteSlug);
   const activeSite = useSiteStore((s) => s.getActiveSite());
@@ -451,28 +457,28 @@ export function ContentListPage({ contentType = 'post' }: { contentType?: 'post'
   }, [activeSiteDbId, queryClient]);
 
   useEffect(() => {
-    if (isAllSites) {
+    if (isAllSites && !isPlatformStaff) {
       if (aiIdeasOpen) setAiIdeasOpen(false);
       if (catTagOpen) setCatTagOpen(false);
       if (currentSubPage === 'categories' || currentSubPage === 'tags' || currentSubPage === 'create' || currentSubPage === 'new') {
         navigate(contentType === 'page' ? 'pages' : 'content');
       }
     }
-  }, [isAllSites, aiIdeasOpen, catTagOpen, currentSubPage, navigate, contentType]);
+  }, [isAllSites, isPlatformStaff, aiIdeasOpen, catTagOpen, currentSubPage, navigate, contentType]);
 
   useEffect(() => {
-    if (!isAllSites && (currentSubPage === 'categories' || currentSubPage === 'tags')) {
+    if (canCreate && (currentSubPage === 'categories' || currentSubPage === 'tags')) {
       setCatTagTab(currentSubPage);
       setCatTagOpen(true);
     }
-  }, [currentSubPage, isAllSites]);
+  }, [currentSubPage, canCreate]);
 
   const handleCatTagOpenChange = useCallback((open: boolean) => {
     setCatTagOpen(open);
     if (!open && (currentSubPage === 'categories' || currentSubPage === 'tags')) {
-      navigate(contentType === 'page' ? 'pages' : 'content');
+      navigate(contentType === 'page' ? (isPlatformStaff ? 'platform-pages' : 'pages') : (isPlatformStaff ? 'platform-content' : 'content'));
     }
-  }, [currentSubPage, navigate, contentType]);
+  }, [currentSubPage, navigate, contentType, isPlatformStaff]);
 
   // Saved ideas — strictly isolated by active plan and active site, persisted to localStorage.
   const [savedTitles, setSavedTitles] = useState<Set<string>>(() => {
@@ -612,6 +618,7 @@ export function ContentListPage({ contentType = 'post' }: { contentType?: 'post'
   );
 
   // Build query params
+  const isPlatformModule = currentModule.startsWith('platform-');
   const queryParams = useMemo(
     () => ({
       page,
@@ -621,9 +628,11 @@ export function ContentListPage({ contentType = 'post' }: { contentType?: 'post'
       search: search || undefined,
       type: contentType,
       ...(statusTab !== 'all' ? { status: statusTab } : {}),
-      ...(!isAllSites && activeSiteDbId ? { siteId: activeSiteDbId } : {}),
+      ...(isPlatformModule
+        ? { scope: 'platform' }
+        : (!isAllSites && activeSiteDbId ? { siteId: activeSiteDbId } : {})),
     }),
-    [page, pageSize, sortField, sortOrder, search, contentType, statusTab, isAllSites, activeSiteDbId],
+    [page, pageSize, sortField, sortOrder, search, contentType, statusTab, isAllSites, activeSiteDbId, isPlatformModule],
   );
 
   // Fetch content list
@@ -648,6 +657,31 @@ export function ContentListPage({ contentType = 'post' }: { contentType?: 'post'
     mutationFn: (id: string) => deleteApi(`/api/content/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      const clean = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      try {
+        const raw = window.localStorage.getItem(SAVED_IDEAS_STORAGE_KEY);
+        if (raw && deleteTarget) {
+          const stored: ArticleIdea[] = JSON.parse(raw);
+          const targetTitle = clean(deleteTarget.title);
+          const filtered = stored.filter(
+            (item) => clean(item.title) !== targetTitle,
+          );
+          window.localStorage.setItem(SAVED_IDEAS_STORAGE_KEY, JSON.stringify(filtered));
+          window.dispatchEvent(new Event('cms_saved_ideas_updated'));
+        }
+      } catch {
+        // ignore
+      }
+      try {
+        const draftRaw = window.localStorage.getItem('cms_article_new_draft');
+        if (draftRaw && deleteTarget) {
+          const draft = JSON.parse(draftRaw);
+          if (clean(draft.title) === clean(deleteTarget.title)) {
+            window.localStorage.removeItem('cms_article_new_draft');
+          }
+        }
+      } catch {}
       setDeleteTarget(null);
     },
   });
@@ -658,6 +692,7 @@ export function ContentListPage({ contentType = 'post' }: { contentType?: 'post'
       postApi('/api/content/bulk-status', { ids, status }),
     onSuccess: (result, vars) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
       const count = (result as { updatedCount?: number })?.updatedCount ?? vars.ids.length;
       toast.success(`${count} ${t('articles.setToInfix')} ${t(STATUS_LABELS[vars.status] ?? vars.status)}`);
       setSelectedIds([]);
@@ -672,6 +707,7 @@ export function ContentListPage({ contentType = 'post' }: { contentType?: 'post'
     },
     onSuccess: (_data, ids) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
       toast.success(`${ids.length} ${t('articles.deletedToastSuffix')}`);
       setSelectedIds([]);
     },
@@ -724,7 +760,9 @@ export function ContentListPage({ contentType = 'post' }: { contentType?: 'post'
   });
 
   // Navigation
-  const moduleName = contentType === 'page' ? 'pages' : 'content';
+  const moduleName = isPlatformStaff
+    ? (contentType === 'page' ? 'platform-pages' : 'platform-content')
+    : (contentType === 'page' ? 'pages' : 'content');
   const goToDetail = useCallback((id: string) => navigate(moduleName, id), [navigate, moduleName]);
   const goToEdit = useCallback((id: string) => navigate(moduleName, id, 'edit'), [navigate, moduleName]);
   const goToCreate = useCallback(() => navigate(moduleName, null, 'create'), [navigate, moduleName]);
@@ -825,7 +863,7 @@ export function ContentListPage({ contentType = 'post' }: { contentType?: 'post'
               : t('articles.description')}
           </p>
         </div>
-        {!isAllSites && (
+        {canCreate && (
           <div className="flex items-center gap-2">
             {contentType !== 'page' && (
               <>

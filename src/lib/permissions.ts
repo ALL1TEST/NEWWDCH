@@ -33,6 +33,18 @@ export const BUILTIN_PAGES = [
 export const PLATFORM_PAGES = [
   { key: 'platform-overview', label: 'Overview', icon: 'LayoutDashboard' },
   { key: 'platform-customers', label: 'Customers', icon: 'Users' },
+  { key: 'platform-tasks', label: 'Tasks', icon: 'ListTodo' },
+  { key: 'platform-blogs', label: 'Blogs', icon: 'BookOpen' },
+  { key: 'platform-blog', label: 'Blogs', icon: 'BookOpen' },
+  { key: 'platform-content', label: 'Articles', icon: 'FileText' },
+  { key: 'platform-pages', label: 'Pages', icon: 'Files' },
+  { key: 'platform-calendar', label: 'Calendar', icon: 'Calendar' },
+  { key: 'platform-media', label: 'Media', icon: 'Image' },
+  { key: 'platform-newsletter', label: 'Newsletters', icon: 'Mail' },
+  { key: 'platform-seo', label: 'SEO', icon: 'Search' },
+  { key: 'platform-automation', label: 'Automation', icon: 'Workflow' },
+  { key: 'platform-payments-group', label: 'Billing', icon: 'Receipt' },
+  { key: 'platform-billing', label: 'Billing', icon: 'Receipt' },
   // NOTE: 'platform-sites' (Sites page) was intentionally removed from the
   // Platform Admin navigation per the latest request. Per-customer site
   // counts are still shown on each Customer Detail page (SITES KPI +

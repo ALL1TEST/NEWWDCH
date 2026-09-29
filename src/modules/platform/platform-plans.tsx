@@ -33,7 +33,7 @@
 // on the next request.
 // ============================================================
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApi, postApi, putApi, deleteApi } from '@/lib/api-client';
 import { toast } from 'sonner';
@@ -103,6 +103,7 @@ import {
 } from '@/lib/platform/currency-catalog';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useT } from '@/lib/i18n';
+import type { PricingPromotionSettings } from '@/lib/platform/pricing-settings';
 
 type PlanPatch = Partial<PlanConfigData>;
 
@@ -878,6 +879,42 @@ function EditPlanDialog({
     plan.stripePriceIdsByCurrency ?? {},
   );
 
+  const promoQuery = useQuery({
+    queryKey: ['platform-pricing-promotions'],
+    queryFn: () => getApi<PricingPromotionSettings>('/api/platform/admin/pricing-settings'),
+  });
+
+  const [yearlyDiscountBadge, setYearlyDiscountBadge] = useState('-79%');
+  const [freePlanMode, setFreePlanMode] = useState<'lifetime' | 'trial'>(
+    plan.freePlanDurationDays && plan.freePlanDurationDays > 0 ? 'trial' : 'lifetime',
+  );
+  const [trialDurationDays, setTrialDurationDays] = useState(
+    plan.freePlanDurationDays ? String(plan.freePlanDurationDays) : '3',
+  );
+  const [trialCtaText, setTrialCtaText] = useState('Start 3-day free trial');
+  const [trialCtaCustom, setTrialCtaCustom] = useState(false);
+
+  useEffect(() => {
+    if (promoQuery.data?.yearlyDiscountBadge) {
+      setYearlyDiscountBadge(promoQuery.data.yearlyDiscountBadge);
+    }
+    if (promoQuery.data?.trialCtaText) {
+      setTrialCtaText(promoQuery.data.trialCtaText);
+    }
+  }, [promoQuery.data]);
+
+  useEffect(() => {
+    if (plan.freePlanDurationDays && plan.freePlanDurationDays > 0) {
+      setFreePlanMode('trial');
+      setTrialDurationDays(String(plan.freePlanDurationDays));
+      setFreePlanDurationDays(String(plan.freePlanDurationDays));
+    } else {
+      setFreePlanMode('lifetime');
+      setTrialDurationDays('3');
+      setFreePlanDurationDays('');
+    }
+  }, [plan.freePlanDurationDays]);
+
   // The EditPlanDialog is conditionally rendered by the parent (mounted
   // fresh each time the user opens it), so the useState initializers
   // above already seed local state from the latest server snapshot.
@@ -903,6 +940,8 @@ function EditPlanDialog({
     setLimits(plan.limits);
     setFreePlanDurationDays(plan.freePlanDurationDays == null ? '' : String(plan.freePlanDurationDays));
     setWiredMap(plan.stripePriceIdsByCurrency ?? {});
+    setFreePlanMode(plan.freePlanDurationDays && plan.freePlanDurationDays > 0 ? 'trial' : 'lifetime');
+    setTrialDurationDays(plan.freePlanDurationDays ? String(plan.freePlanDurationDays) : '3');
   };
 
   const saveMutation = useMutation({
@@ -978,15 +1017,14 @@ function EditPlanDialog({
       // Enabled billing periods — the backend derives the default
       // cadence from them (single-period plans are pinned to their
       // only period). NO interval field: the old Billing Interval
-      // dropdown logic is gone.
       billingMonthly,
       billingYearly,
       isFree: isFreeDerived,
-      freePlanDurationDays: isFreeDerived ? (freePlanDurationDays.trim() === '' ? null : Number(freePlanDurationDays) || null) : null,
-      // No pricesByCurrency / stripePriceIdsByCurrency in the patch:
+      freePlanDurationDays:
+        freePlanMode === 'trial' ? Number(trialDurationDays) || 3 : null,
+      active,
       // per-currency prices are platform-level config and Stripe Price
       // IDs are managed by the sync (both preserved on save).
-      active,
       // features intentionally omitted — the backend derives the
       // marketing copy from entitlements on the client side now.
       // savePlanConfig preserves the existing value when omitted.
@@ -1104,6 +1142,27 @@ function EditPlanDialog({
               idPrefix={`edit-${plan.planId}`}
             />
 
+            {/* Yearly Discount Badge */}
+            {billingYearly && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor={`edit-yearly-discount-${plan.planId}`} className="text-xs">
+                    Yearly Discount Badge
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    e.g. -79%
+                  </span>
+                </div>
+                <Input
+                  id={`edit-yearly-discount-${plan.planId}`}
+                  value={yearlyDiscountBadge}
+                  onChange={(e) => setYearlyDiscountBadge(e.target.value)}
+                  placeholder="-79%"
+                  className="h-9 font-mono text-xs"
+                />
+              </div>
+            )}
+
             {/* Auto Currency — the customer's currency is detected from
                 their location and used when a price exists for it. The
                 admin never picks the customer's currency; this toggle
@@ -1142,25 +1201,98 @@ function EditPlanDialog({
               />
             </div>
 
-            {/* Free plan trial duration — shown only when the base
-                price is 0 (i.e. this is a free plan). Empty = unlimited. */}
-            {isFreeDerived && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">{t('platformPlans.freeDuration')}</Label>
-                  <Input
-                    type="number"
-                    value={freePlanDurationDays}
-                    onChange={(e) => setFreePlanDurationDays(e.target.value)}
-                    className="h-9"
-                    placeholder={t('platformPlans.emptyEqualsUnlimited')}
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    {t('platformPlans.freeDurationHint')}
-                  </p>
-                </div>
+            {/* Free Trial / Access Options */}
+            <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">
+                  {isFreeDerived ? 'Free Plan Access' : 'Free Trial Option'}
+                </Label>
+                <span className="text-[11px] font-semibold text-primary">
+                  {freePlanMode === 'trial'
+                    ? `${trialDurationDays}-Day Free Trial`
+                    : isFreeDerived
+                      ? 'Lifetime Free ($0 forever)'
+                      : 'No Trial (Direct checkout)'}
+                </span>
               </div>
-            )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFreePlanMode('lifetime');
+                    setFreePlanDurationDays('');
+                  }}
+                  className={`h-8 rounded-md border text-xs font-medium transition-colors ${
+                    freePlanMode !== 'trial'
+                      ? 'border-primary bg-primary text-primary-foreground shadow-xs'
+                      : 'border-input bg-background hover:bg-accent text-muted-foreground'
+                  }`}
+                >
+                  {isFreeDerived ? 'Lifetime Free ($0)' : 'No Trial'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFreePlanMode('trial');
+                    if (!trialDurationDays || trialDurationDays === '') {
+                      setTrialDurationDays('3');
+                    }
+                    setFreePlanDurationDays(trialDurationDays || '3');
+                  }}
+                  className={`h-8 rounded-md border text-xs font-medium transition-colors ${
+                    freePlanMode === 'trial'
+                      ? 'border-black bg-black text-white shadow-xs dark:border-white dark:bg-white dark:text-black'
+                      : 'border-input bg-background hover:bg-accent text-muted-foreground'
+                  }`}
+                >
+                  Days Free Trial
+                </button>
+              </div>
+
+              {freePlanMode === 'trial' && (
+                <div className="space-y-2 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Duration (Days)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={trialDurationDays}
+                        onChange={(e) => {
+                          const d = e.target.value;
+                          setTrialDurationDays(d);
+                          setFreePlanDurationDays(d);
+                          if (!trialCtaCustom) {
+                            setTrialCtaText(`Start ${d || 3}-day free trial`);
+                          }
+                        }}
+                        className="h-8 text-xs font-mono"
+                        placeholder="3"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">CTA Button Text</Label>
+                      <Input
+                        value={trialCtaText}
+                        onChange={(e) => {
+                          setTrialCtaText(e.target.value);
+                          setTrialCtaCustom(true);
+                        }}
+                        className="h-8 text-xs"
+                        placeholder="Start free trial"
+                      />
+                    </div>
+                  </div>
+
+                  {!isFreeDerived && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Customer starts with a <span className="font-semibold text-foreground">{trialDurationDays || 3}-day free trial</span>, then bills at <span className="font-semibold text-foreground">{currency} {billingMonthly ? `${monthlyNum}/mo` : `${yearlyNum}/yr`}</span>.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           </section>
 
           {/* -------------------- Stripe Billing -------------------- */}
@@ -1270,7 +1402,16 @@ function EditPlanDialog({
           </Button>
           <Button
             size="sm"
-            onClick={() => saveMutation.mutate(buildPatch())}
+            onClick={() => {
+              putApi('/api/platform/admin/pricing-settings', {
+                yearlyDiscountBadge: yearlyDiscountBadge.trim() || '-79%',
+                yearlyDiscountCustom: true,
+                trialEnabled: isFreeDerived && freePlanMode === 'trial',
+                trialDays: Number(trialDurationDays) || 3,
+                trialCtaText: trialCtaText.trim() || `Start ${trialDurationDays || 3}-day free trial`,
+              }).catch(() => {});
+              saveMutation.mutate(buildPatch());
+            }}
             disabled={saveMutation.isPending || !periodsValid}
           >
             {saveMutation.isPending ? (
@@ -1355,6 +1496,26 @@ function CreatePlanDialog({
   // Free-trial duration (only used when the base price is 0).
   const [freePlanDurationDays, setFreePlanDurationDays] = useState('');
 
+  const promoQuery = useQuery({
+    queryKey: ['platform-pricing-promotions'],
+    queryFn: () => getApi<PricingPromotionSettings>('/api/platform/admin/pricing-settings'),
+  });
+
+  const [yearlyDiscountBadge, setYearlyDiscountBadge] = useState('-79%');
+  const [freePlanMode, setFreePlanMode] = useState<'lifetime' | 'trial'>('lifetime');
+  const [trialDurationDays, setTrialDurationDays] = useState('3');
+  const [trialCtaText, setTrialCtaText] = useState('Start 3-day free trial');
+  const [trialCtaCustom, setTrialCtaCustom] = useState(false);
+
+  useEffect(() => {
+    if (promoQuery.data?.yearlyDiscountBadge) {
+      setYearlyDiscountBadge(promoQuery.data.yearlyDiscountBadge);
+    }
+    if (promoQuery.data?.trialCtaText) {
+      setTrialCtaText(promoQuery.data.trialCtaText);
+    }
+  }, [promoQuery.data]);
+
   // The platform's default currency (from the default CountryPricing
   // row) — the INITIAL selection in the Default Currency selector
   // until the admin picks another one.
@@ -1400,6 +1561,18 @@ function CreatePlanDialog({
 
   const createMutation = useMutation({
     mutationFn: () => {
+      const finalDuration =
+        freePlanMode === 'trial' ? Number(trialDurationDays) || 3 : null;
+
+      // Sync promotion settings
+      putApi('/api/platform/admin/pricing-settings', {
+        yearlyDiscountBadge: yearlyDiscountBadge.trim() || '-79%',
+        yearlyDiscountCustom: true,
+        trialEnabled: freePlanMode === 'trial',
+        trialDays: Number(trialDurationDays) || 3,
+        trialCtaText: trialCtaText.trim() || `Start ${trialDurationDays || 3}-day free trial`,
+      }).catch(() => {});
+
       return postApi<PlanConfigData>('/api/platform/admin/plans', {
         planId: effectivePlanId,
         name,
@@ -1414,7 +1587,7 @@ function CreatePlanDialog({
         billingMonthly,
         billingYearly,
         isFree: isFreeDerived,
-        freePlanDurationDays: isFreeDerived && freePlanDurationDays.trim() !== '' ? Number(freePlanDurationDays) || null : null,
+        freePlanDurationDays: finalDuration,
         active,
         // features intentionally omitted — the backend derives the
         // marketing copy from entitlements on the client side now.
@@ -1589,6 +1762,27 @@ function CreatePlanDialog({
               idPrefix="create"
             />
 
+            {/* Yearly Discount Badge */}
+            {billingYearly && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="create-yearly-discount" className="text-xs">
+                    Yearly Discount Badge
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    e.g. -79%
+                  </span>
+                </div>
+                <Input
+                  id="create-yearly-discount"
+                  value={yearlyDiscountBadge}
+                  onChange={(e) => setYearlyDiscountBadge(e.target.value)}
+                  placeholder="-79%"
+                  className="h-9 font-mono text-xs"
+                />
+              </div>
+            )}
+
             {/* Auto Currency — same setting as the Edit Plan modal. */}
             <div className="flex items-start justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2.5">
               <div className="space-y-0.5">
@@ -1610,25 +1804,98 @@ function CreatePlanDialog({
               />
             </div>
 
-            {/* Free plan trial duration — shown only when the base
-                price is 0 (i.e. this is a free plan). Empty = unlimited. */}
-            {isFreeDerived && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">{t('platformPlans.freeDuration')}</Label>
-                  <Input
-                    type="number"
-                    value={freePlanDurationDays}
-                    onChange={(e) => setFreePlanDurationDays(e.target.value)}
-                    className="h-9"
-                    placeholder={t('platformPlans.emptyEqualsUnlimited')}
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    {t('platformPlans.freeDurationHint')}
-                  </p>
-                </div>
+            {/* Free Trial / Access Options */}
+            <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">
+                  {isFreeDerived ? 'Free Plan Access' : 'Free Trial Option'}
+                </Label>
+                <span className="text-[11px] font-semibold text-primary">
+                  {freePlanMode === 'trial'
+                    ? `${trialDurationDays}-Day Free Trial`
+                    : isFreeDerived
+                      ? 'Lifetime Free ($0 forever)'
+                      : 'No Trial (Direct checkout)'}
+                </span>
               </div>
-            )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFreePlanMode('lifetime');
+                    setFreePlanDurationDays('');
+                  }}
+                  className={`h-8 rounded-md border text-xs font-medium transition-colors ${
+                    freePlanMode !== 'trial'
+                      ? 'border-primary bg-primary text-primary-foreground shadow-xs'
+                      : 'border-input bg-background hover:bg-accent text-muted-foreground'
+                  }`}
+                >
+                  {isFreeDerived ? 'Lifetime Free ($0)' : 'No Trial'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFreePlanMode('trial');
+                    if (!trialDurationDays || trialDurationDays === '') {
+                      setTrialDurationDays('3');
+                    }
+                    setFreePlanDurationDays(trialDurationDays || '3');
+                  }}
+                  className={`h-8 rounded-md border text-xs font-medium transition-colors ${
+                    freePlanMode === 'trial'
+                      ? 'border-black bg-black text-white shadow-xs dark:border-white dark:bg-white dark:text-black'
+                      : 'border-input bg-background hover:bg-accent text-muted-foreground'
+                  }`}
+                >
+                  Days Free Trial
+                </button>
+              </div>
+
+              {freePlanMode === 'trial' && (
+                <div className="space-y-2 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Duration (Days)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={trialDurationDays}
+                        onChange={(e) => {
+                          const d = e.target.value;
+                          setTrialDurationDays(d);
+                          setFreePlanDurationDays(d);
+                          if (!trialCtaCustom) {
+                            setTrialCtaText(`Start ${d || 3}-day free trial`);
+                          }
+                        }}
+                        className="h-8 text-xs font-mono"
+                        placeholder="3"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">CTA Button Text</Label>
+                      <Input
+                        value={trialCtaText}
+                        onChange={(e) => {
+                          setTrialCtaText(e.target.value);
+                          setTrialCtaCustom(true);
+                        }}
+                        className="h-8 text-xs"
+                        placeholder="Start free trial"
+                      />
+                    </div>
+                  </div>
+
+                  {!isFreeDerived && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Customer starts with a <span className="font-semibold text-foreground">{trialDurationDays || 3}-day free trial</span>, then bills at <span className="font-semibold text-foreground">{currency} {billingMonthly ? `${monthlyNum}/mo` : `${yearlyNum}/yr`}</span>.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           </section>
 
           {/* -------------------- Stripe Billing -------------------- */}

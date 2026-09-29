@@ -14,8 +14,10 @@ const AUTOMATION_TABS = [
 ] as const;
 
 function AutomationSubNav() {
+  const currentModule = useNavigationStore((s) => s.currentModule);
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
+  const targetMod = currentModule.startsWith('platform-') ? 'platform-automation' : 'automation';
 
   return (
     <div className="mb-6 overflow-x-auto -mx-1 px-1">
@@ -26,7 +28,7 @@ function AutomationSubNav() {
           return (
             <button
               key={tab.key ?? 'automations'}
-              onClick={() => navigate('automation', null, tab.key)}
+              onClick={() => navigate(targetMod, null, tab.key)}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap',
                 isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted',

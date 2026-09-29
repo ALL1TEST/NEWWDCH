@@ -135,6 +135,14 @@ const INITIAL_CAMPAIGN_FORM: CampaignForm = {
   selectedSubscriberIds: [],
 };
 
+// -------------------- Subscriber Status Options --------------------
+
+const SUBSCRIBER_STATUS_OPTIONS: { label: string; value: string }[] = [
+  { label: 'All Statuses', value: 'all' },
+  { label: 'Subscribed', value: 'SUBSCRIBED' },
+  { label: 'Unsubscribed', value: 'UNSUBSCRIBED' },
+];
+
 // -------------------- Campaign Status Options --------------------
 
 const CAMPAIGN_STATUS_OPTIONS: { label: string; value: string }[] = [
@@ -154,8 +162,10 @@ type NewsletterSubPage = 'subscribers' | 'campaigns';
 export function NewsletterPage() {
   const queryClient = useQueryClient();
   const { t } = useT();
+  const currentModule = useNavigationStore((s) => s.currentModule);
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
+  const targetMod = currentModule.startsWith('platform-') ? 'platform-newsletter' : 'newsletter';
 
   const activeTab: NewsletterSubPage =
     currentSubPage === 'create' || currentSubPage === 'campaigns'
@@ -163,14 +173,14 @@ export function NewsletterPage() {
       : (currentSubPage as NewsletterSubPage) || 'subscribers';
 
   const handleTabChange = (value: string) => {
-    navigate('newsletter', null, value);
+    navigate(targetMod, null, value);
   };
 
   useEffect(() => {
     if (!currentSubPage) {
-      navigate('newsletter', null, 'subscribers');
+      navigate(targetMod, null, 'subscribers');
     }
-  }, [currentSubPage, navigate]);
+  }, [currentSubPage, navigate, targetMod]);
 
   // ======================== SUBSCRIBERS ========================
 
@@ -180,6 +190,8 @@ export function NewsletterPage() {
     initialPageSize: DEFAULT_PAGE_SIZE,
   });
 
+  const [subscriberStatusFilter, setSubscriberStatusFilter] = useState('all');
+
   const subQueryParams = useMemo(
     () => ({
       page: subTable.currentPage,
@@ -187,8 +199,9 @@ export function NewsletterPage() {
       sort: subTable.sortField,
       order: subTable.sortOrder,
       search: subTable.searchValue || undefined,
+      ...(subscriberStatusFilter !== 'all' ? { status: subscriberStatusFilter } : {}),
     }),
-    [subTable.currentPage, subTable.pageSize, subTable.sortField, subTable.sortOrder, subTable.searchValue],
+    [subTable.currentPage, subTable.pageSize, subTable.sortField, subTable.sortOrder, subTable.searchValue, subscriberStatusFilter],
   );
 
   const { data: subRaw, isLoading: subLoading } = useQuery({
@@ -219,12 +232,6 @@ export function NewsletterPage() {
         header: t('common.status'),
         accessorKey: 'status',
         renderStatus: (status) => <StatusBadge status={status} size="sm" />,
-      }),
-      ColumnDefHelper.textColumn<SubscriberRow>({
-        id: 'source',
-        header: t('newsletter.source'),
-        accessorKey: 'source',
-        enableSorting: false,
       }),
       ColumnDefHelper.dateColumn<SubscriberRow>({
         id: 'subscribedAt',
@@ -334,21 +341,23 @@ export function NewsletterPage() {
   const [schedulePopoverOpen, setSchedulePopoverOpen] = useState(false);
   const [campaignForm, setCampaignForm] = useState<CampaignForm>(INITIAL_CAMPAIGN_FORM);
   const authUser = useAuthStore((s) => s.user);
+  const isPlatformStaff = authUser?.role === 'PLATFORM_ADMIN' || authUser?.role === 'OWNER' || currentModule.startsWith('platform-');
+  const canCreate = !isAllSites || isPlatformStaff;
 
   useEffect(() => {
-    if (isAllSites) {
+    if (isAllSites && !isPlatformStaff) {
       if (createOpen) setCreateOpen(false);
       if (currentSubPage === 'create') {
-        navigate('newsletter', null, 'campaigns');
+        navigate(isPlatformStaff ? 'platform-newsletter' : 'newsletter', null, 'campaigns');
       }
     }
-  }, [isAllSites, createOpen, currentSubPage, navigate]);
+  }, [isAllSites, isPlatformStaff, createOpen, currentSubPage, navigate]);
 
   useEffect(() => {
-    if (!isAllSites && currentSubPage === 'create') {
+    if (canCreate && currentSubPage === 'create') {
       setCreateOpen(true);
     }
-  }, [currentSubPage, isAllSites]);
+  }, [currentSubPage, canCreate]);
 
   // Compute the live recipient count for the Create Campaign dialog
   // (must be after campaignForm state declaration)
@@ -653,6 +662,32 @@ export function NewsletterPage() {
     [duplicateCampaignMutation, cancelCampaignMutation, retryCampaignMutation, t],
   );
 
+  // Subscriber filter content
+  const subscriberFilterContent = (
+    <Select
+      value={subscriberStatusFilter}
+      onValueChange={(v) => {
+        setSubscriberStatusFilter(v);
+        subTable.setCurrentPage(1);
+      }}
+    >
+      <SelectTrigger size="sm" className="w-[140px] h-9">
+        <SelectValue placeholder={t('newsletter.allStatuses')} />
+      </SelectTrigger>
+      <SelectContent>
+        {SUBSCRIBER_STATUS_OPTIONS.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value}>
+            {opt.value === 'all'
+              ? t('newsletter.allStatuses')
+              : opt.value === 'SUBSCRIBED'
+                ? (t('newsletter.statusSubscribed') || 'Subscribed')
+                : (t('newsletter.statusUnsubscribed') || 'Unsubscribed')}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
   // Campaign filter content
   const campaignFilterContent = (
     <Select
@@ -723,6 +758,7 @@ export function NewsletterPage() {
             searchPlaceholder={t('newsletter.searchByEmail')}
             searchValue={subTable.searchValue}
             onSearch={(v) => { subTable.setSearchValue(v); subTable.setCurrentPage(1); }}
+            filterContent={subscriberFilterContent}
             getRowId={(row) => row.id}
             emptyMessage={t('newsletter.noSubscribers')}
           />
@@ -730,14 +766,14 @@ export function NewsletterPage() {
 
         {/* Campaigns Tab */}
         <TabsContent value="campaigns" className="mt-4">
-          {!isAllSites && (
+          {canCreate && (
             <div className="flex justify-end mb-0">
             <Dialog
               open={createOpen}
               onOpenChange={(open) => {
                 setCreateOpen(open);
                 if (!open && currentSubPage === 'create') {
-                  navigate('newsletter', null, 'campaigns');
+                  navigate(isPlatformStaff ? 'platform-newsletter' : 'newsletter', null, 'campaigns');
                 }
               }}
             >

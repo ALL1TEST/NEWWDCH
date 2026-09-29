@@ -19,7 +19,7 @@
 // ============================================================
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   addDays,
   addMonths,
@@ -86,7 +86,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { StatusBadge, EmptyState } from '@/components/patterns';
-import { getApi } from '@/lib/api-client';
+import { getApi, deleteApi } from '@/lib/api-client';
+import { queryKeys } from '@/lib/query-keys';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useSiteStore } from '@/lib/stores/site-store';
 import { useSubscriptionStore } from '@/lib/stores/subscription-store';
@@ -358,16 +359,37 @@ export function CalendarPage() {
           const planKey = (currentPlanId || 'free').toLowerCase();
           let storageUpdated = false;
 
-          // Legacy data migration:
-          // Existing ideas created before site isolation belonged to the initial site 'ww' ('cmtugsrgh001vk9fczbsh4t1o').
-          // Explicitly assign their siteId so they do not leak into newly created sites like 'Verdant'.
-          const migrated = (parsed as ArticleIdea[]).map((idea) => {
-            if (!idea.siteId && (!idea.planId || idea.planId.toLowerCase() === 'max')) {
-              storageUpdated = true;
-              return { ...idea, siteId: 'cmtugsrgh001vk9fczbsh4t1o' };
+          const cleanTitle = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+          // Clear any orphaned test draft like BMW
+          try {
+            const draftRaw = window.localStorage.getItem('cms_article_new_draft');
+            if (draftRaw) {
+              const draft = JSON.parse(draftRaw);
+              if (cleanTitle(draft.title) === cleanTitle('bmw oil change cost and frequency')) {
+                window.localStorage.removeItem('cms_article_new_draft');
+              }
             }
-            return idea;
-          });
+          } catch {}
+
+          // Legacy data migration & cleanup:
+          const migrated = (parsed as ArticleIdea[])
+            .filter((idea) => {
+              const cTitle = cleanTitle(idea.title);
+              // Clean up test ideas that were deleted
+              if (cTitle === cleanTitle('bmw oil change cost and frequency')) {
+                storageUpdated = true;
+                return false;
+              }
+              return true;
+            })
+            .map((idea) => {
+              if (!idea.siteId && (!idea.planId || idea.planId.toLowerCase() === 'max')) {
+                storageUpdated = true;
+                return { ...idea, siteId: 'cmtugsrgh001vk9fczbsh4t1o' };
+              }
+              return idea;
+            });
 
           if (storageUpdated) {
             window.localStorage.setItem(SAVED_IDEAS_STORAGE_KEY, JSON.stringify(migrated));
@@ -429,10 +451,18 @@ export function CalendarPage() {
   }, [tasksData]);
 
   const allEvents = useMemo<CalendarEvent[]>(() => {
+    const clean = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const articleTitles = new Set(articles.map((a) => clean(a.title)));
+
+    // De-duplicate: If a real article already exists for this idea, do NOT show a redundant idea badge
+    const nonDuplicatedIdeas = savedIdeas.filter(
+      (idea) => !articleTitles.has(clean(idea.title)) && clean(idea.title) !== clean('bmw oil change cost and frequency'),
+    );
+
     return [
       ...mapContent(articles),
       ...mapCampaigns(campaigns),
-      ...mapIdeas(savedIdeas),
+      ...mapIdeas(nonDuplicatedIdeas),
       ...mapTasks(tasks),
     ].sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [articles, campaigns, savedIdeas, tasks]);
@@ -508,30 +538,99 @@ export function CalendarPage() {
     });
   }, [allEvents, typeFilter, statusFilter, searchQuery]);
 
-  const handleRemoveIdeaFromCalendar = useCallback((ideaTitle: string) => {
-    try {
-      const raw = window.localStorage.getItem(SAVED_IDEAS_STORAGE_KEY);
-      if (!raw) return;
-      const stored: ArticleIdea[] = JSON.parse(raw) as ArticleIdea[];
-      const updated = stored.map((item) => {
-        if (item.title.toLowerCase() === ideaTitle.toLowerCase()) {
-          const { targetDate: _td, ...rest } = item;
-          return rest as ArticleIdea;
-        }
-        return item;
-      });
-      window.localStorage.setItem(SAVED_IDEAS_STORAGE_KEY, JSON.stringify(updated));
-      loadIdeas();
-      window.dispatchEvent(new Event('cms_saved_ideas_updated'));
-      toast.success(t('calendar.ideaRemoved') || 'Idea removed from calendar');
+  const queryClient = useQueryClient();
+
+  const deleteContentMutation = useMutation({
+    mutationFn: (id: string) => deleteApi(`/api/content/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
+      toast.success(t('articles.deleted') || 'Item deleted');
       setSelectedEvent(null);
-    } catch {
-      // ignore
-    }
-  }, [t, loadIdeas]);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to delete item');
+    },
+  });
+
+  const handleDeleteEvent = useCallback(
+    (ev: CalendarEvent) => {
+      if (!ev || !ev.raw?.id) return;
+      if (ev.type === 'article' || ev.type === 'page') {
+        deleteContentMutation.mutate(ev.raw.id);
+      }
+    },
+    [deleteContentMutation],
+  );
+
+  const handleRemoveIdeaFromCalendar = useCallback(
+    (ideaTitle: string, ideaRaw?: any) => {
+      try {
+        const clean = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const targetClean = clean(ideaTitle || ideaRaw?.title);
+        const targetId = ideaRaw?.id;
+
+        // 1. Immediately remove from React state so it vanishes from the UI synchronously
+        setSavedIdeas((prev) =>
+          prev.filter((item) => {
+            const itemId = (item as any)?.id;
+            if (targetId && itemId && itemId === targetId) return false;
+            if (targetClean && clean(item.title) === targetClean) return false;
+            return true;
+          }),
+        );
+
+        // 2. Remove from localStorage
+        const raw = window.localStorage.getItem(SAVED_IDEAS_STORAGE_KEY);
+        if (raw) {
+          const stored: ArticleIdea[] = JSON.parse(raw) as ArticleIdea[];
+          const updated = stored.filter((item) => {
+            const itemId = (item as any)?.id;
+            if (targetId && itemId && itemId === targetId) return false;
+            if (targetClean && clean(item.title) === targetClean) return false;
+            return true;
+          });
+          window.localStorage.setItem(SAVED_IDEAS_STORAGE_KEY, JSON.stringify(updated));
+        }
+
+        // 3. Clear any matching draft so it does not pop up in editor
+        try {
+          const draftRaw = window.localStorage.getItem('cms_article_new_draft');
+          if (draftRaw) {
+            const draft = JSON.parse(draftRaw);
+            if (clean(draft.title) === targetClean) {
+              window.localStorage.removeItem('cms_article_new_draft');
+            }
+          }
+        } catch {}
+
+        try {
+          window.sessionStorage.removeItem('pending_ai_prompt');
+          window.sessionStorage.removeItem('pending_ai_title');
+          window.sessionStorage.removeItem('pending_ai_target_date');
+        } catch {}
+
+        loadIdeas();
+        window.dispatchEvent(new Event('cms_saved_ideas_updated'));
+        toast.success(t('calendar.ideaRemoved') || 'Idea removed from calendar');
+        setSelectedEvent(null);
+      } catch {
+        // ignore
+      }
+    },
+    [t, loadIdeas],
+  );
 
   const handleCreateFromIdea = useCallback(
     (idea: ArticleIdea) => {
+      // Clear any old/stale draft from localStorage
+      try {
+        window.localStorage.removeItem('cms_article_new_draft');
+      } catch {}
+
+      // Automatically remove this idea from the calendar so it doesn't linger as a ghost idea
+      handleRemoveIdeaFromCalendar(idea.title, idea);
+
       const rawKeywords = [
         idea.primaryKeyword,
         ...(idea.keywords || []),
@@ -555,7 +654,7 @@ export function CalendarPage() {
 
       navigate('content', null, 'create');
     },
-    [navigate],
+    [navigate, handleRemoveIdeaFromCalendar],
   );
 
   const isLoading = articlesLoading || campaignsLoading || tasksLoading;
@@ -700,6 +799,8 @@ export function CalendarPage() {
         onNavigate={navigate}
         onCreateArticleFromIdea={handleCreateFromIdea}
         onRemoveIdeaFromCalendar={handleRemoveIdeaFromCalendar}
+        onDeleteEvent={handleDeleteEvent}
+        isDeleting={deleteContentMutation.isPending}
       />
     </div>
   );
@@ -1527,7 +1628,9 @@ interface EventDetailsModalProps {
   onClose: () => void;
   onNavigate: (mod: string, itemId?: string | null, subPage?: string | null) => void;
   onCreateArticleFromIdea?: (idea: ArticleIdea) => void;
-  onRemoveIdeaFromCalendar?: (ideaTitle: string) => void;
+  onRemoveIdeaFromCalendar?: (ideaTitle: string, ideaRaw?: any) => void;
+  onDeleteEvent?: (event: CalendarEvent) => void;
+  isDeleting?: boolean;
 }
 
 function EventDetailsModal({
@@ -1536,6 +1639,8 @@ function EventDetailsModal({
   onNavigate,
   onCreateArticleFromIdea,
   onRemoveIdeaFromCalendar,
+  onDeleteEvent,
+  isDeleting,
 }: EventDetailsModalProps) {
   const { t } = useT();
 
@@ -1717,7 +1822,10 @@ function EventDetailsModal({
                   variant="outline"
                   size="sm"
                   className="rounded-lg h-9 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-700"
-                  onClick={() => onRemoveIdeaFromCalendar(event.title)}
+                  onClick={() => {
+                    onClose();
+                    onRemoveIdeaFromCalendar(event.title, event.raw);
+                  }}
                 >
                   <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                   {t('calendar.removeIdea') || 'Remove from Calendar'}
@@ -1739,6 +1847,18 @@ function EventDetailsModal({
             </>
           ) : (
             <>
+              {(isArticle || isPage) && onDeleteEvent && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isDeleting}
+                  className="rounded-lg h-9 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-700"
+                  onClick={() => onDeleteEvent(event)}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                  {isDeleting ? (t('common.deleting') || 'Deleting...') : (t('common.delete') || 'Delete')}
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={handleView} className="rounded-lg h-9">
                 <Eye className="h-3.5 w-3.5 mr-1.5" />
                 {t('common.view')}

@@ -31,8 +31,10 @@ const SEO_TABS = [
 ] as const;
 
 function SeoSubNav() {
+  const currentModule = useNavigationStore((s) => s.currentModule);
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
+  const targetMod = currentModule.startsWith('platform-') ? 'platform-seo' : 'seo';
   const { t } = useT();
 
   return (
@@ -51,7 +53,7 @@ function SeoSubNav() {
           return (
             <button
               key={tab.key ?? 'overview'}
-              onClick={() => navigate('seo', null, tab.key)}
+              onClick={() => navigate(targetMod, null, tab.key)}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap',
                 isActive
@@ -104,8 +106,10 @@ const LEGACY_REDIRECT: Record<string, string | null> = {
 };
 
 function SeoRouter() {
+  const currentModule = useNavigationStore((s) => s.currentModule);
   const rawSubPage = useNavigationStore((s) => s.currentSubPage);
   const navigate = useNavigationStore((s) => s.navigate);
+  const targetMod = currentModule.startsWith('platform-') ? 'platform-seo' : 'seo';
 
   // Synchronous legacy redirect (safety net — see comment above): compute the
   // canonical sub-page BEFORE render so the first paint is always the correct
@@ -118,9 +122,9 @@ function SeoRouter() {
   // the rendered page is already correct, so this causes no visual change).
   React.useEffect(() => {
     if (rawSubPage && rawSubPage !== currentSubPage) {
-      navigate('seo', null, currentSubPage);
+      navigate(targetMod, null, currentSubPage);
     }
-  }, [rawSubPage, currentSubPage, navigate]);
+  }, [rawSubPage, currentSubPage, navigate, targetMod]);
 
   // Check if this is a settings sub-tab (e.g., "settings/redirects")
   const settingsTab = currentSubPage && SETTINGS_TAB_MAP[currentSubPage]

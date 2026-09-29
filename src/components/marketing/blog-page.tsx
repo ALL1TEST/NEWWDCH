@@ -401,6 +401,8 @@ function FeaturedCard({ article }: { article: BlogArticle }) {
  *  title + compact author/read-time meta. No card chrome, no
  *  image (the "Recent articles" rail on the article page). */
 function RecentArticleItem({ article }: { article: BlogArticle }) {
+  const { t, locale } = useT();
+  const dateStr = formatDate(article.updatedAt || article.publishedAt, locale);
   return (
     <a
       href={`${MKT.blog}/${article.slug}`}
@@ -412,7 +414,7 @@ function RecentArticleItem({ article }: { article: BlogArticle }) {
       <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.8125rem] text-text-muted">
         <span className="font-medium text-text-secondary">{article.author.name}</span>
         <span aria-hidden="true">·</span>
-        <ReadingMeta article={article} />
+        <span>{t('mkt.blog.updated')} {dateStr}</span>
       </span>
     </a>
   );
@@ -622,6 +624,15 @@ export function BlogPage() {
               )}
             </section>
           )}
+
+          {/* Newsletter subscription */}
+          <section className="mt-4 sm:mt-6">
+            <div className="mx-auto w-full max-w-[1064px]">
+              <Reveal>
+                <BlogNewsletter />
+              </Reveal>
+            </div>
+          </section>
         </div>
       )}
     </div>
@@ -638,7 +649,7 @@ interface TocEntry {
   level: 2 | 3;
 }
 
-/** Sticky TOC list (mirrors the legal-document pattern). */
+/** Sticky TOC list */
 function ArticleToc({
   toc,
   activeId,
@@ -658,12 +669,12 @@ function ArticleToc({
               type="button"
               onClick={() => onNavigate(item.id)}
               aria-current={active ? 'location' : undefined}
-              className={`mkt-focus flex w-full items-start gap-2.5 border-l-2 py-[0.3rem] pr-1 text-left text-[0.8125rem] leading-[1.4] transition-colors ${
+              className={`mkt-focus flex w-full items-start border-l-2 py-1.5 text-left text-[0.8125rem] leading-[1.38] transition-colors ${
                 item.level === 3 ? 'pl-6' : 'pl-3'
               } ${
                 active
                   ? 'border-mkt-accent font-medium text-mkt-accent'
-                  : 'border-transparent text-text-secondary hover:text-text-primary'
+                  : 'border-transparent text-text-secondary hover:border-border hover:text-text-primary'
               }`}
             >
               {item.label}
@@ -685,6 +696,7 @@ export function BlogArticlePage({ slug }: { slug: string }) {
   const [progress, setProgress] = useState(0);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [tocOpen, setTocOpen] = useState(false);
+  const [desktopTocOpen, setDesktopTocOpen] = useState(true);
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   // ---- Body HTML + TOC + editorial intro, derived together ----
@@ -1099,7 +1111,7 @@ export function BlogArticlePage({ slug }: { slug: string }) {
                     alt={article.image.alt}
                     loading="eager"
                     decoding="async"
-                    className="aspect-[4/3] w-full rounded-2xl border border-border object-cover shadow-[0_2px_6px_rgb(0_0_0/0.04),0_24px_60px_-28px_rgb(0_0_0/0.22)]"
+                    className="aspect-[4/3] w-full rounded-lg border border-border object-cover shadow-[0_2px_6px_rgb(0_0_0/0.04),0_20px_50px_-24px_rgb(0_0_0/0.18)]"
                   />
                 </figure>
               )}
@@ -1151,18 +1163,16 @@ export function BlogArticlePage({ slug }: { slug: string }) {
             {/* Mobile / tablet — collapsible "On this page" */}
             {toc.length > 0 && (
               <div className="mb-10 lg:hidden">
-                <div className="rounded-2xl border border-border bg-card">
+                <div className="rounded-2xl border border-border bg-card p-2 sm:p-3">
                   <button
                     type="button"
                     onClick={() => setTocOpen((v) => !v)}
                     aria-expanded={tocOpen}
-                    className="mkt-focus flex w-full items-center justify-between gap-3 rounded-2xl px-5 py-4 text-left"
+                    className="mkt-focus flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs font-bold uppercase tracking-wider text-mkt-accent"
                   >
-                    <span className="text-[0.6875rem] font-semibold uppercase tracking-widest text-text-muted">
-                      {t('mkt.blog.toc')}
-                    </span>
+                    <span>TABLE OF CONTENTS</span>
                     <ChevronDown
-                      className={`h-4 w-4 shrink-0 text-text-muted transition-transform duration-200 ${
+                      className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
                         tocOpen ? 'rotate-180' : ''
                       }`}
                       aria-hidden="true"
@@ -1174,7 +1184,7 @@ export function BlogArticlePage({ slug }: { slug: string }) {
                     }`}
                   >
                     <div className="overflow-hidden" inert={!tocOpen}>
-                      <div className="max-h-80 overflow-y-auto px-5 pb-4 pt-1">
+                      <div className="max-h-72 overflow-y-auto px-2 pb-3 pt-2">
                         <ArticleToc toc={toc} activeId={activeId} onNavigate={navigateToc} />
                       </div>
                     </div>
@@ -1188,7 +1198,7 @@ export function BlogArticlePage({ slug }: { slug: string }) {
                 scroll-driven re-renders never re-set it) */}
             <div
               ref={bodyRef}
-              className="mkt-prose mkt-article-body mx-auto max-w-[46rem]"
+              className="mkt-prose mkt-article-body max-w-[46rem]"
               // Article HTML is authored in the product's own Tiptap
               // editor + curated seed content (no public input).
               dangerouslySetInnerHTML={bodyHtml ?? undefined}
@@ -1196,7 +1206,7 @@ export function BlogArticlePage({ slug }: { slug: string }) {
 
             {/* Tags */}
             {article.tags.length > 0 && (
-              <div className="mx-auto mt-10 flex max-w-[46rem] flex-wrap items-center gap-2">
+              <div className="mt-10 flex max-w-[46rem] flex-wrap items-center gap-2">
                 {article.tags.map((tg) => (
                   <span
                     key={tg.slug}
@@ -1215,18 +1225,30 @@ export function BlogArticlePage({ slug }: { slug: string }) {
 
           {/* ---- Desktop sticky sidebar ---- */}
           <aside className="hidden lg:block">
-            <div className="sticky top-25 flex max-h-[calc(100vh-9.5rem)] flex-col gap-6 overflow-y-auto">
+            <div className="sticky top-25 flex flex-col gap-6">
               {toc.length > 0 && (
                 <nav
-                  aria-label={t('mkt.blog.toc')}
-                  className="rounded-2xl border border-border bg-card p-5"
+                  aria-label="Table of contents"
+                  className="rounded-2xl border border-border bg-card p-4 sm:p-5"
                 >
-                  <p className="text-[0.6875rem] font-semibold uppercase tracking-widest text-text-muted">
-                    {t('mkt.blog.toc')}
-                  </p>
-                  <div className="mt-3">
-                    <ArticleToc toc={toc} activeId={activeId} onNavigate={navigateToc} />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDesktopTocOpen((v) => !v)}
+                    className="flex w-full items-center justify-between text-left text-xs font-bold uppercase tracking-wider text-mkt-accent transition-colors hover:opacity-80"
+                  >
+                    <span>TABLE OF CONTENTS</span>
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
+                        desktopTocOpen ? 'rotate-180' : ''
+                      }`}
+                      aria-hidden="true"
+                    />
+                  </button>
+                  {desktopTocOpen && (
+                    <div className="mt-3.5 max-h-[280px] overflow-y-auto pr-1">
+                      <ArticleToc toc={toc} activeId={activeId} onNavigate={navigateToc} />
+                    </div>
+                  )}
                 </nav>
               )}
 
@@ -1249,21 +1271,11 @@ export function BlogArticlePage({ slug }: { slug: string }) {
         </div>
       </div>
 
-      {/* ============ Newsletter CTA — compact editorial band
-                        (text + form LEFT, illustration RIGHT) ============ */}
-      <section className="mt-16 sm:mt-20">
-        <div className="mx-auto w-full max-w-[1064px] px-5 sm:px-8 lg:px-10">
-          <Reveal>
-            <BlogNewsletter />
-          </Reveal>
-        </div>
-      </section>
-
       {/* ============ Recent articles — editorial 3-column list
                         (thin divider above, no image cards) ============ */}
       {related.length > 0 && (
-        <section className="mt-16 border-t border-border sm:mt-20" aria-labelledby="blog-related-heading">
-          <div className="mkt-container max-w-6xl pt-10 sm:pt-12">
+        <section className="mt-16 sm:mt-20" aria-labelledby="blog-related-heading">
+          <div className="mkt-container max-w-6xl border-t border-border pt-10 sm:pt-12">
             <div className="flex items-center justify-between gap-3">
               <h2
                 id="blog-related-heading"
@@ -1292,6 +1304,16 @@ export function BlogArticlePage({ slug }: { slug: string }) {
           </div>
         </section>
       )}
+
+      {/* ============ Newsletter CTA — compact editorial band
+                        (text + form LEFT, illustration RIGHT) ============ */}
+      <section className="mt-16 sm:mt-20">
+        <div className="mx-auto w-full max-w-[1064px] px-5 sm:px-8 lg:px-10">
+          <Reveal>
+            <BlogNewsletter />
+          </Reveal>
+        </div>
+      </section>
     </article>
   );
 }

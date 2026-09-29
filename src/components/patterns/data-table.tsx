@@ -554,16 +554,6 @@ function DataTablePagination({
             variant="outline"
             size="icon"
             className="h-8 w-8"
-            onClick={() => onPageChange(1)}
-            disabled={currentPage <= 1}
-          >
-            <ChevronsLeft className="h-4 w-4" />
-            <span className="sr-only">{t('app.firstPage')}</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage <= 1}
           >
@@ -582,16 +572,6 @@ function DataTablePagination({
           >
             <ChevronRight className="h-4 w-4" />
             <span className="sr-only">{t('app.nextPage')}</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => onPageChange(totalPages)}
-            disabled={currentPage >= totalPages}
-          >
-            <ChevronsRight className="h-4 w-4" />
-            <span className="sr-only">{t('app.lastPage')}</span>
           </Button>
         </div>
       </div>

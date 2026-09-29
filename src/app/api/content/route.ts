@@ -11,6 +11,7 @@ import { z } from 'zod/v4';
 import { getSiteWhere, getSiteFromRequest, getActivePlanSiteId } from '@/lib/site-context';
 import { getAuthUser } from '@/lib/platform/platform-auth';
 import { publishArticleToConnectedSite } from '@/lib/connection/site-publisher';
+import { publishDueScheduledArticles, ensureScheduledPublisherDaemon } from '@/lib/publishing/scheduled-publisher';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -32,31 +33,25 @@ const contentIncludes = {
 
 const createSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200, 'Title must be 200 characters or less').trim(),
-  slug: z
-    .string()
-    .min(1)
-    .max(255)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-    .trim()
-    .optional(),
-  contentTypeId: z.string().optional().or(z.literal('')),
-  authorId: z.string().min(1, 'Author ID is required').optional(),
-  categoryId: z.string().optional().or(z.literal('')),
-  featuredImageId: z.string().optional().or(z.literal('')),
-  content: z.string().trim().optional().or(z.literal('')),
-  excerpt: z.string().max(1000).optional().or(z.literal('')),
+  slug: z.string().max(255).nullable().optional().or(z.literal('')),
+  contentTypeId: z.string().nullable().optional().or(z.literal('')),
+  authorId: z.string().nullable().optional().or(z.literal('')),
+  categoryId: z.string().nullable().optional().or(z.literal('')),
+  featuredImageId: z.string().nullable().optional().or(z.literal('')),
+  content: z.string().trim().nullable().optional().or(z.literal('')),
+  excerpt: z.string().max(1000).nullable().optional().or(z.literal('')),
   status: z
     .enum(['DRAFT', 'IN_REVIEW', 'APPROVED', 'PUBLISHED', 'UNPUBLISHED', 'ARCHIVED'])
     .default('DRAFT'),
-  seoTitle: z.string().max(70).optional().or(z.literal('')),
-  seoDescription: z.string().max(160).optional().or(z.literal('')),
-  focusKeyword: z.string().trim().optional().or(z.literal('')),
-  scheduledAt: z.string().datetime({ offset: true }).optional().or(z.literal('')),
-  expiresAt: z.string().datetime({ offset: true }).optional().or(z.literal('')),
-  siteId: z.string().optional().or(z.literal('')),
+  seoTitle: z.string().max(70).nullable().optional().or(z.literal('')),
+  seoDescription: z.string().max(160).nullable().optional().or(z.literal('')),
+  focusKeyword: z.string().trim().nullable().optional().or(z.literal('')),
+  scheduledAt: z.string().datetime({ offset: true }).nullable().optional().or(z.literal('')),
+  expiresAt: z.string().datetime({ offset: true }).nullable().optional().or(z.literal('')),
+  siteId: z.string().nullable().optional().or(z.literal('')),
   tagIds: z.array(z.string()).optional(),
-  seoReport: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
-  editorialReport: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
+  seoReport: z.union([z.string(), z.record(z.string(), z.any())]).nullable().optional(),
+  editorialReport: z.union([z.string(), z.record(z.string(), z.any())]).nullable().optional(),
 });
 
 // ---------- allowed sort columns -------------------------------------
@@ -71,6 +66,9 @@ export async function GET(request: NextRequest) {
   const id = reqId();
 
   try {
+    ensureScheduledPublisherDaemon();
+    await publishDueScheduledArticles();
+
     const sp = new URL(request.url).searchParams;
     const page = Math.max(1, Number(sp.get('page')) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(sp.get('pageSize')) || 25));
@@ -170,7 +168,7 @@ export async function POST(request: NextRequest) {
     }
 
     const d = parsed.data;
-    const slug = d.slug || slugify(d.title);
+    const slug = slugify(d.slug?.trim() || d.title) || ('article-' + nanoid(6));
 
     // Resolve authorId — fall back to first available user if not provided
     let authorId = d.authorId;
@@ -213,11 +211,20 @@ export async function POST(request: NextRequest) {
     const finalSlug = existing ? `${slug}-${nanoid(4)}` : slug;
 
     // Resolve siteId from request body, query params, or fallback to active plan site
-    let siteId = (d.siteId && d.siteId !== 'all') ? d.siteId : await getSiteFromRequest(request);
-    if (!siteId) {
-      const authUser = await getAuthUser(request);
-      if (authUser) {
-        siteId = await getActivePlanSiteId(authUser);
+    const isPlatformScope =
+      d.siteId === 'platform' ||
+      (body as any)?.scope === 'platform' ||
+      (body as any)?.siteId === 'platform' ||
+      request.nextUrl.searchParams.get('scope') === 'platform';
+
+    let siteId: string | null = null;
+    if (!isPlatformScope) {
+      siteId = (d.siteId && d.siteId !== 'all') ? d.siteId : await getSiteFromRequest(request);
+      if (!siteId) {
+        const authUser = await getAuthUser(request);
+        if (authUser && authUser.role !== 'PLATFORM_ADMIN' && authUser.role !== 'OWNER') {
+          siteId = await getActivePlanSiteId(authUser);
+        }
       }
     }
 
@@ -225,7 +232,7 @@ export async function POST(request: NextRequest) {
       data: {
         title: d.title,
         slug: finalSlug,
-        siteId: siteId || undefined,
+        siteId: siteId ?? null,
         contentTypeId,
         authorId,
         categoryId: d.categoryId === '' ? null : d.categoryId ?? null,

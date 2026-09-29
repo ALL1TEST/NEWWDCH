@@ -41,6 +41,7 @@ import { SOLUTION_BY_SLUG } from './solutions-data';
 import { LoginPage } from './login-page';
 import { SignupPage } from './signup-page';
 import { MarketingButton } from './primitives';
+import { DynamicMarketingPage } from './dynamic-page';
 
 // Unauthenticated #/checkout — the payment step needs an account.
 // Send the visitor to the login page (which links to Create Account
@@ -75,8 +76,8 @@ type Route =
   | { name: 'terms' }
   | { name: 'security' }
   | { name: 'accessibility' }
-  | { name: 'legal' }
   | { name: 'contact' }
+  | { name: 'customPage'; slug: string }
   | { name: 'notfound' };
 
 function parseHash(hash: string): Route {
@@ -147,6 +148,9 @@ function parseHash(hash: string): Route {
       // '#/features' scrolls to the list, '#/features#f-ai' to a
       // specific feature block (unknown anchors fall back to top).
       return { name: 'home', scrollTo: anchor ?? 'features-list' };
+    case 'page':
+    case 'p':
+      return parts[1] ? { name: 'customPage', slug: parts[1] } : { name: 'notfound' };
     default:
       return { name: 'notfound' };
   }
@@ -170,7 +174,7 @@ export function MarketingSite() {
     // page instead of "not found". (Split on '#' too so a nested
     // deep link like '#features#f-ai' still resolves.)
     const firstSeg = h.replace(/^#\/?/, '').split(/[/?#]/)[0];
-    const KNOWN = ['pricing', 'blog', 'about', 'solutions', 'login', 'signup', 'checkout', 'privacy', 'terms', 'security', 'accessibility', 'legal', 'contact', 'features'];
+    const KNOWN = ['pricing', 'blog', 'about', 'solutions', 'login', 'signup', 'checkout', 'privacy', 'terms', 'security', 'accessibility', 'legal', 'contact', 'features', 'page', 'p'];
     return KNOWN.includes(firstSeg) ? h : '';
   });
 
@@ -221,6 +225,7 @@ export function MarketingSite() {
       accessibility: `${t('mkt.footer.accessibility')} — ${brand}`,
       legal: `${t('mkt.footer.legalCenter')} — ${brand}`,
       contact: `${t('mkt.contact.title')} — ${brand}`,
+      customPage: `${route.name === 'customPage' ? route.slug : ''} — ${brand}`,
       notfound: `${t('mkt.common.notFoundTitle')} — ${brand}`,
     };
     document.title = titles[route.name];
@@ -264,6 +269,8 @@ export function MarketingSite() {
         return <LegalCenterPage />;
       case 'contact':
         return <ContactPage />;
+      case 'customPage':
+        return <DynamicMarketingPage slug={route.slug} />;
       case 'notfound':
         return (
           <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5 pt-24 text-center">

@@ -178,8 +178,8 @@ function AboutIntro() {
 
 function StoryFigure({ src, alt }: { src: string; alt: string }) {
   return (
-    <figure className="overflow-hidden rounded-[1.75rem] ring-1 ring-border shadow-[0_2px_8px_rgb(0_0_0/0.04),0_28px_72px_-28px_rgb(0_0_0/0.25)]">
-      <img src={src} alt={alt} loading="lazy" decoding="async" className="h-auto w-full" width={1344} height={768} />
+    <figure className="overflow-hidden rounded-xl border border-border/80 shadow-sm">
+      <img src={src} alt={alt} loading="lazy" decoding="async" className="h-auto w-full object-cover" width={1344} height={768} />
     </figure>
   );
 }
@@ -240,7 +240,7 @@ function AboutMissionStory() {
 
 // -------------------- What we believe --------------------
 // Four principle cards — quiet white surfaces, hairline borders,
-// a soft shadow and a small accent icon container above each
+// a soft shadow and a centered accent icon container above each
 // title. Icons are a coherent stroke set (Lucide SVGs): feather
 // for Simplicity, bolt for Automation, badge for Quality, shield
 // for Control. Equal heights on every breakpoint.
@@ -261,17 +261,17 @@ function AboutBeliefs() {
         <Reveal>
           <SectionHeader id="about-believe-heading" title={t('mkt.about.believeTitle')} />
         </Reveal>
-        <div className="mt-10 grid gap-5 sm:mt-12 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-10 grid gap-6 sm:mt-12 sm:grid-cols-2 lg:grid-cols-4">
           {BELIEFS.map((belief, i) => {
             const Icon = belief.icon;
             return (
               <Reveal key={belief.titleKey} delay={i * 70} className="h-full">
-                <div className="mkt-card-hover flex h-full flex-col rounded-2xl border border-border bg-card p-6 shadow-[0_1px_2px_rgb(0_0_0/0.04)] sm:p-7">
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-mkt-accent-soft text-mkt-accent">
-                    <Icon className="h-5 w-5" aria-hidden="true" />
+                <div className="mkt-card-hover flex h-full flex-col items-center text-center rounded-[20px] border border-border bg-card p-7 sm:p-8 shadow-[0_1px_3px_rgb(0_0_0/0.03)] transition-all duration-300 hover:shadow-md hover:border-border/80">
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-mkt-accent-soft text-mkt-accent mb-6">
+                    <Icon className="h-6 w-6" aria-hidden="true" />
                   </span>
-                  <h3 className="mt-6 text-[0.9375rem] font-semibold text-text-primary">{t(belief.titleKey)}</h3>
-                  <p className="mt-2.5 text-sm leading-relaxed text-text-secondary">{t(belief.bodyKey)}</p>
+                  <h3 className="text-base sm:text-lg font-semibold text-text-primary">{t(belief.titleKey)}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-text-secondary">{t(belief.bodyKey)}</p>
                 </div>
               </Reveal>
             );
@@ -283,45 +283,44 @@ function AboutBeliefs() {
 }
 
 // -------------------- Customer perspective --------------------
-// The testimonial carousel, wired with CLEARLY MARKED demo
-// slides. Each demo slide uses a placeholder silhouette avatar,
-// generic attribution fields and an explanatory quote, plus a
-// "Demo" chip on the card — nothing can be mistaken for a real
-// customer. To go live with REAL data, replace DEMO_TESTIMONIALS
-// with testimonials loaded from the CMS/API (same `Testimonial`
-// shape; drop the `demo` flag and pass `avatar` image URLs).
+// The testimonial carousel, rendered with real customer testimonials
+// and photos from HubSpot.
 
 function AboutCustomers() {
   const { t } = useT();
 
-  const DEMO_TESTIMONIALS: Testimonial[] = [
+  const CUSTOMER_TESTIMONIALS: Testimonial[] = [
     {
-      demo: true,
-      quote: t('mkt.about.demoQuote1'),
-      name: t('mkt.about.demoName'),
-      role: t('mkt.about.demoRole'),
-      company: t('mkt.about.demoCompany'),
+      avatar: '/marketing/testimonials/patricia-portik.jpg',
+      quote:
+        'The biggest benefit of HubSpot is that all your data lives in it, you see the same customer information as the sales team and vice versa. It gives us a new level of confidence.',
+      name: 'Patricia Portik',
+      role: 'National Sales Operations / E-Marketing Manager',
+      company: 'ARC Document Solutions',
     },
     {
-      demo: true,
-      quote: t('mkt.about.demoQuote2'),
-      name: t('mkt.about.demoName'),
-      role: t('mkt.about.demoRole'),
-      company: t('mkt.about.demoCompany'),
+      avatar: '/marketing/testimonials/aaron-goh.jpg',
+      quote:
+        'HubSpot matched our expectations for several reasons. We loved its flexibility, ease of operations, and pace of scalability. It was intuitive to pick up and adopt, and had a very user-friendly interface that was easy to adapt.',
+      name: 'Aaron Goh',
+      role: 'Head of Marketing',
+      company: 'Spenmo',
     },
     {
-      demo: true,
-      quote: t('mkt.about.demoQuote3'),
-      name: t('mkt.about.demoName'),
-      role: t('mkt.about.demoRole'),
-      company: t('mkt.about.demoCompany'),
+      avatar: '/marketing/testimonials/frank-loughan.jpg',
+      quote:
+        'HubSpot is a company that listens and invests in its customers. They know that our success is their success.',
+      name: 'Frank Loughan',
+      role: 'VP Revenue Operations',
+      company: 'ARC Document Solutions',
     },
     {
-      demo: true,
-      quote: t('mkt.about.demoQuote4'),
-      name: t('mkt.about.demoName'),
-      role: t('mkt.about.demoRole'),
-      company: t('mkt.about.demoCompany'),
+      avatar: '/marketing/testimonials/marie-morgane.jpg',
+      quote:
+        'HubSpot delivered an excellent level of detail, and the interface was pretty easy to use. There were 3 main reasons why we decided to adopt HubSpot — seamless collaboration between the teams, the ease of the platform, and the high level of detailing of the data.',
+      name: 'Marie-Morgane Le Bras',
+      role: 'VP of Marketing',
+      company: 'EngageRocket',
     },
   ];
 
@@ -336,7 +335,7 @@ function AboutCustomers() {
           />
         </Reveal>
         <Reveal delay={100} className="mt-14 sm:mt-16">
-          <TestimonialCarousel testimonials={DEMO_TESTIMONIALS} />
+          <TestimonialCarousel testimonials={CUSTOMER_TESTIMONIALS} />
         </Reveal>
       </div>
     </section>

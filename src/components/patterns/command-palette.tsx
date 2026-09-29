@@ -28,6 +28,8 @@ import {
   Ticket,
   Zap,
   Loader2,
+  BookOpen,
+  ListTodo,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -156,6 +158,14 @@ const PLATFORM_ACTION_ITEMS: CommandItemDef[] = [
 const PLATFORM_NAV_ITEMS: CommandItemDef[] = [
   { id: 'plat-overview', label: 'Overview', icon: LayoutDashboard, module: 'platform-overview' },
   { id: 'plat-customers', label: 'Customers', icon: Users, module: 'platform-customers' },
+  { id: 'plat-tasks', label: 'Tasks', icon: ListTodo, module: 'platform-tasks' },
+  { id: 'plat-articles', label: 'Articles', icon: FileText, module: 'platform-content' },
+  { id: 'plat-pages', label: 'Pages', icon: BookOpen, module: 'platform-pages' },
+  { id: 'plat-calendar', label: 'Calendar', icon: Calendar, module: 'platform-calendar' },
+  { id: 'plat-media', label: 'Media', icon: Image, module: 'platform-media' },
+  { id: 'plat-newsletter', label: 'Newsletters', icon: Mail, module: 'platform-newsletter' },
+  { id: 'plat-seo', label: 'SEO', icon: Search, module: 'platform-seo' },
+  { id: 'plat-automation', label: 'Automation', icon: Zap, module: 'platform-automation' },
   { id: 'plat-payments', label: 'Payments', icon: Receipt, module: 'platform-payments' },
   { id: 'plat-plans', label: 'Plans & Pricing', icon: Tag, module: 'platform-plans' },
   { id: 'plat-coupons', label: 'Coupons', icon: Ticket, module: 'platform-coupons' },

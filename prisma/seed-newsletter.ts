@@ -102,7 +102,7 @@ async function main() {
     { email: 'james.park@outlook.com', name: 'James Park', status: 'SUBSCRIBED' as const, source: 'IMPORT', subscribedAt: new Date(Date.now() - 5 * 24 * 3600 * 1000) },
     { email: 'sophia.brown@protonmail.com', name: 'Sophia Brown', status: 'UNSUBSCRIBED' as const, source: 'FORM', subscribedAt: new Date(Date.now() - 12 * 24 * 3600 * 1000), unsubscribedAt: new Date(Date.now() - 3 * 24 * 3600 * 1000) },
     { email: 'daniel.kim@fastmail.com', name: 'Daniel Kim', status: 'SUBSCRIBED' as const, source: 'API', subscribedAt: new Date(Date.now() - 1 * 24 * 3600 * 1000) },
-    { email: 'emma.wilson@hey.com', name: 'Emma Wilson', status: 'BOUNCED' as const, source: 'IMPORT', subscribedAt: new Date(Date.now() - 20 * 24 * 3600 * 1000) },
+    { email: 'emma.wilson@hey.com', name: 'Emma Wilson', status: 'UNSUBSCRIBED' as const, source: 'IMPORT', subscribedAt: new Date(Date.now() - 20 * 24 * 3600 * 1000) },
     { email: 'liam.anderson@yahoo.com', name: 'Liam Anderson', status: 'SUBSCRIBED' as const, source: 'FORM', subscribedAt: new Date(Date.now() - 6 * 3600 * 1000) },
   ];
 

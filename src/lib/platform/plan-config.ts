@@ -946,7 +946,8 @@ function mergePlanPatch(current: PlanConfigData, patch: PlanConfigInput, default
     billingYearly,
     interval,
     isFree,
-    freePlanDurationDays: patch.freePlanDurationDays ?? current.freePlanDurationDays,
+    freePlanDurationDays:
+      patch.freePlanDurationDays !== undefined ? patch.freePlanDurationDays : current.freePlanDurationDays,
     stripePriceIdMonthly,
     stripePriceIdYearly,
     active: patch.active ?? current.active,

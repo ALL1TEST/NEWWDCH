@@ -241,3 +241,95 @@ export async function publishArticleToConnectedSite(
     externalData,
   };
 }
+
+/**
+ * Deletes or unpublishes an article from its connected external site (e.g. Verdant, WordPress, Standard CMS).
+ */
+export async function deleteArticleFromConnectedSite(
+  contentItemId: string,
+  explicitSiteId?: string | null,
+): Promise<{ deleted: boolean; siteName?: string; reason?: string }> {
+  const item = await db.contentItem.findUnique({
+    where: { id: contentItemId },
+    include: {
+      contentType: { select: { id: true, name: true, slug: true } },
+    },
+  });
+
+  if (!item) {
+    return { deleted: false, reason: 'ITEM_NOT_FOUND' };
+  }
+
+  const targetSiteId = explicitSiteId || item.siteId;
+  if (!targetSiteId) {
+    return { deleted: false, reason: 'NO_SITE_ATTACHED' };
+  }
+
+  const site = await db.site.findUnique({
+    where: { id: targetSiteId },
+  });
+
+  if (!site || !site.config) {
+    return { deleted: false, reason: 'SITE_NOT_FOUND' };
+  }
+
+  let config: any = {};
+  try {
+    config = typeof site.config === 'string' ? JSON.parse(site.config) : site.config;
+  } catch {
+    return { deleted: false, reason: 'MALFORMED_SITE_CONFIG' };
+  }
+
+  const conn = config?.connection;
+  if (!conn || conn.status !== 'CONNECTED' || !conn.encryptedCredentials) {
+    return { deleted: false, reason: 'SITE_NOT_CONNECTED' };
+  }
+
+  let token = '';
+  try {
+    token = await decrypt(conn.encryptedCredentials);
+  } catch (err: any) {
+    console.error(`Failed to decrypt credentials for site "${site.name}":`, err);
+    return { deleted: false, reason: 'DECRYPTION_FAILED' };
+  }
+
+  const rawBaseUrl = conn.apiBaseUrl || `${conn.siteUrl || site.domain}/api`;
+  const apiBaseUrl = rawBaseUrl.replace(/\/+$/, '');
+  const contentTypeSlug = item.contentType?.slug?.toLowerCase() || 'post';
+
+  // For Standard / Verdant: endpoint is ${apiBaseUrl}/articles/${item.slug} or ${apiBaseUrl}/pages/${item.slug}
+  // For WordPress: endpoint is ${apiBaseUrl}/wp/v2/posts/${item.id}
+  const baseResource = contentTypeSlug === 'page' ? 'pages' : 'articles';
+
+  const deleteUrls = conn.platform === 'wordpress'
+    ? [`${apiBaseUrl}/wp/v2/${contentTypeSlug === 'page' ? 'pages' : 'posts'}/${item.id}?force=true`]
+    : [
+        `${apiBaseUrl}/${baseResource}/${encodeURIComponent(item.slug)}`,
+        `${apiBaseUrl}/${baseResource}/${encodeURIComponent(item.id)}`,
+      ];
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    'X-API-Key': token,
+    'User-Agent': 'Antigravity-CMS-Connection/1.0',
+  };
+
+  for (const url of deleteUrls) {
+    try {
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers,
+      });
+      if (response.ok) {
+        console.log(`[SITE:PUBLISHER] Successfully deleted article "${item.slug}" from ${site.name} (${url})`);
+        return { deleted: true, siteName: site.name };
+      }
+    } catch (err) {
+      console.warn(`[SITE:PUBLISHER] Failed delete request to ${url}:`, err);
+    }
+  }
+
+  return { deleted: false, siteName: site.name, reason: 'DELETE_REQUEST_FAILED' };
+}

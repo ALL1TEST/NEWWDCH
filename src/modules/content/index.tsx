@@ -17,21 +17,26 @@ import { ContentDetailPage } from './content-detail-page';
 //   #content/:id          → Detail
 //   #content/:id/edit     → Edit
 
+import { useAuthStore } from '@/lib/stores/auth-store';
+
 export function ContentModule() {
+  const currentModule = useNavigationStore((s) => s.currentModule);
   const currentSubPage = useNavigationStore((s) => s.currentSubPage);
   const currentItemId = useNavigationStore((s) => s.currentItemId);
   const navigate = useNavigationStore((s) => s.navigate);
   const isAllSites = useSiteStore((s) => s.isAllSites());
   const isSiteInitialized = useSiteStore((s) => s.isInitialized);
+  const user = useAuthStore((s) => s.user);
+  const isPlatformStaff = user?.role === 'PLATFORM_ADMIN' || user?.role === 'OWNER' || currentModule.startsWith('platform-');
 
   useEffect(() => {
-    if (isSiteInitialized && isAllSites && (currentSubPage === 'new' || currentSubPage === 'create')) {
+    if (!isPlatformStaff && isSiteInitialized && isAllSites && (currentSubPage === 'new' || currentSubPage === 'create')) {
       navigate('content');
     }
-  }, [isSiteInitialized, isAllSites, currentSubPage, navigate]);
+  }, [isPlatformStaff, isSiteInitialized, isAllSites, currentSubPage, navigate]);
 
-  // Create page (disallowed in All Sites mode)
-  if (!isAllSites && (currentSubPage === 'new' || currentSubPage === 'create')) {
+  // Create page (allowed when not All Sites mode OR for Platform Admin)
+  if ((!isAllSites || isPlatformStaff) && (currentSubPage === 'new' || currentSubPage === 'create')) {
     return <ContentCreatePage />;
   }
 

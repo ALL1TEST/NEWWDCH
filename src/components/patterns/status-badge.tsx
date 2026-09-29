@@ -13,6 +13,7 @@ interface StatusBadgeProps {
   status: string;
   size?: StatusBadgeSize;
   className?: string;
+  label?: string;
 }
 
 // -------------------- Size Classes --------------------
@@ -41,9 +42,9 @@ const AMBIGUOUS_DEFAULTS: Record<string, string> = {
   // FAILED appears in multiple
   FAILED: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   // APPROVED appears in PostStatus, ReviewStatus, CommentStatus
-  APPROVED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  APPROVED: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
   // PUBLISHED appears in PostStatus
-  PUBLISHED: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  PUBLISHED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
   // DRAFT appears in PostStatus, FormStatus, CampaignStatus
   DRAFT: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
   // ARCHIVED appears in PostStatus, FormStatus
@@ -62,10 +63,10 @@ const AMBIGUOUS_DEFAULTS: Record<string, string> = {
 
 // -------------------- Component --------------------
 
-export function StatusBadge({ status, size = 'sm', className }: StatusBadgeProps) {
+export function StatusBadge({ status, size = 'sm', className, label }: StatusBadgeProps) {
   const colorClass = STATUS_COLORS[status] ?? AMBIGUOUS_DEFAULTS[status] ?? 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300';
 
-  const label = labelize(status);
+  const displayLabel = label ?? (status === 'APPROVED' ? 'Scheduled' : labelize(status));
 
   return (
     <Badge
@@ -77,7 +78,7 @@ export function StatusBadge({ status, size = 'sm', className }: StatusBadgeProps
         className,
       )}
     >
-      {label}
+      {displayLabel}
     </Badge>
   );
 }

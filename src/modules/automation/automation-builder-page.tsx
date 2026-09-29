@@ -72,6 +72,9 @@ function ConditionalBlock({ children }: { children: React.ReactNode }) {
 
 export function AutomationBuilderPage({ mode }: { mode?: 'generate' }) {
   const { t } = useT();
+  const currentModule = useNavigationStore((s) => s.currentModule);
+  const targetAutoMod = currentModule.startsWith('platform-') ? 'platform-automation' : 'automation';
+  const targetContentMod = currentModule.startsWith('platform-') ? 'platform-content' : 'content';
   const navigate = useNavigationStore((s) => s.navigate);
   const queryClient = useQueryClient();
   const isGenerateMode = mode === 'generate';
@@ -241,14 +244,14 @@ export function AutomationBuilderPage({ mode }: { mode?: 'generate' }) {
         setGenerating(false);
         if (result?.articleId) {
           toast.success(t('automation.builder.toastArticleGenerated'));
-          navigate('content', result.articleId);
+          navigate(targetContentMod, result.articleId);
         } else {
           toast.success(t('automation.builder.toastGenerationCompleted'));
-          navigate('content');
+          navigate(targetContentMod);
         }
       } else {
         toast.success(t('automation.builder.toastAutomationCreated'));
-        navigate('automation');
+        navigate(targetAutoMod);
       }
     },
     onError: (err: Error) => {
@@ -281,7 +284,7 @@ export function AutomationBuilderPage({ mode }: { mode?: 'generate' }) {
       <div>
         <button
           type="button"
-          onClick={() => navigate(isGenerateMode ? 'content' : 'automation')}
+          onClick={() => navigate(isGenerateMode ? targetContentMod : targetAutoMod)}
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -628,7 +631,7 @@ export function AutomationBuilderPage({ mode }: { mode?: 'generate' }) {
         )}
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground tabular-nums hidden sm:inline">{isGenerateMode ? `${t('automation.builder.stepLabel')} ${step - 1} ${t('automation.builder.of3')}` : `${t('automation.builder.stepLabel')} ${step} ${t('automation.builder.of4')}`}</span>
-          <Button variant="ghost" onClick={() => navigate(isGenerateMode ? 'content' : 'automation')}>{t('automation.builder.cancel')}</Button>
+          <Button variant="ghost" onClick={() => navigate(isGenerateMode ? targetContentMod : targetAutoMod)}>{t('automation.builder.cancel')}</Button>
           {step < 4 ? (
             <Button onClick={() => setStep(step + 1)} disabled={!canProceed} className="gap-1.5">
               {t('automation.builder.next')} <ChevronRight className="h-4 w-4" />

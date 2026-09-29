@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { ok, fail } from '@/lib/platform/platform-auth';
 import { aiModeOfEntitlements } from '@/lib/platform/feature-config';
+import { getPricingPromotionSettings } from '@/lib/platform/pricing-settings';
 
 // ============================================================
 // GET /api/plans — PUBLIC pricing data for the marketing site.
@@ -56,6 +57,7 @@ interface PublicPlan {
   priceMonthly: number;
   priceYearly: number;
   isFree: boolean;
+  freePlanDurationDays: number | null;
   badgeVariant: string;
   sortOrder: number;
   limits: {
@@ -69,6 +71,8 @@ interface PublicPlan {
 
 export async function GET() {
   try {
+    const promoSettings = await getPricingPromotionSettings().catch(() => null);
+
     const rows = await db.planConfig.findMany({
       where: { active: true },
       orderBy: { sortOrder: 'asc' },
@@ -81,6 +85,7 @@ export async function GET() {
         priceYearly: true,
         currency: true,
         isFree: true,
+        freePlanDurationDays: true,
         badgeVariant: true,
         sortOrder: true,
         limits: true,
@@ -153,6 +158,7 @@ export async function GET() {
         priceMonthly: r.priceMonthly,
         priceYearly: r.priceYearly,
         isFree: r.isFree,
+        freePlanDurationDays: r.freePlanDurationDays,
         badgeVariant: r.badgeVariant,
         sortOrder: r.sortOrder,
         limits,
@@ -160,7 +166,14 @@ export async function GET() {
       };
     });
 
-    return ok({ currency, plans });
+    return ok({
+      currency,
+      yearlyDiscountBadge: promoSettings?.yearlyDiscountCustom ? promoSettings.yearlyDiscountBadge : null,
+      trialEnabled: promoSettings?.trialEnabled ?? false,
+      trialDays: promoSettings?.trialDays ?? 3,
+      trialCtaText: promoSettings?.trialCtaText ?? 'Start 3-day free trial',
+      plans,
+    });
   } catch {
     return fail('PLANS_UNAVAILABLE', 'Pricing is temporarily unavailable', 503);
   }

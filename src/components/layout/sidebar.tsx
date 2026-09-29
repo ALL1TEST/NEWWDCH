@@ -55,6 +55,7 @@ import {
   Ticket,
   Flag,
   ShieldCheck,
+  PlusCircle,
   type LucideIcon,
 } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
@@ -180,6 +181,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'Ticket': Ticket,
   'Flag': Flag,
   'ShieldCheck': ShieldCheck,
+  'PlusCircle': PlusCircle,
 };
 
 function getIcon(iconName?: string): LucideIcon {
@@ -281,6 +283,18 @@ const NAV_LABEL_KEYS: Record<string, string> = {
   '#platform-smtp': 'nav.smtpSettings',
   '#platform-ai': 'nav.ai',
   '#platform-backups': 'nav.backups',
+  '#platform-tasks': 'nav.tasks',
+  '#platform-blogs': 'nav.blogs',
+  '#platform-blog': 'nav.blogs',
+  '#platform-content': 'nav.articles',
+  '#platform-pages': 'nav.pages',
+  '#platform-calendar': 'nav.calendar',
+  '#platform-media': 'nav.media',
+  '#platform-newsletter': 'nav.newsletter',
+  '#platform-seo': 'nav.seo',
+  '#platform-automation': 'nav.automation',
+  '#platform-payments-group': 'nav.billing',
+  '#platform-billing': 'nav.billing',
   // Internal Account nav
   '#internal-dashboard': 'nav.internalDashboard',
   '#analytics': 'nav.analytics',
@@ -386,24 +400,34 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     icon: 'Users',
   },
   {
-    label: 'Payments',
-    href: '#platform-payments',
+    label: 'Tasks',
+    href: '#platform-tasks',
+    icon: 'ListTodo',
+  },
+  {
+    label: 'Blogs',
+    href: '#platform-blogs',
+    icon: 'BookOpen',
+    children: [
+      { label: 'Articles', href: '#platform-content', icon: 'FileText' },
+      { label: 'Pages', href: '#platform-pages', icon: 'Files' },
+      { label: 'Calendar', href: '#platform-calendar', icon: 'Calendar' },
+      { label: 'Media', href: '#platform-media', icon: 'Image' },
+      { label: 'Newsletters', href: '#platform-newsletter', icon: 'Mail' },
+      { label: 'SEO', href: '#platform-seo', icon: 'Search' },
+      { label: 'Automation', href: '#platform-automation', icon: 'Workflow' },
+    ],
+  },
+  {
+    label: 'Billing',
+    href: '#platform-billing',
     icon: 'Receipt',
-  },
-  {
-    label: 'Plans & Pricing',
-    href: '#platform-plans',
-    icon: 'Tags',
-  },
-  {
-    label: 'Coupons',
-    href: '#platform-coupons',
-    icon: 'Ticket',
-  },
-  {
-    label: 'Stripe Settings',
-    href: '#platform-stripe-settings',
-    icon: 'CreditCard',
+    children: [
+      { label: 'Payments', href: '#platform-payments', icon: 'Receipt' },
+      { label: 'Plans & Pricing', href: '#platform-plans', icon: 'Tags' },
+      { label: 'Coupons', href: '#platform-coupons', icon: 'Ticket' },
+      { label: 'Stripe Settings', href: '#platform-stripe-settings', icon: 'CreditCard' },
+    ],
   },
   {
     label: 'Notifications',
@@ -485,6 +509,21 @@ const ROUTE_PREFIX_TO_SECTION: Record<string, string> = {
   'backups': 'Settings',
   'email-templates': 'Settings',
   'notifications': 'Settings',
+  'platform-blogs': 'Blogs',
+  'platform-blog': 'Blogs',
+  'platform-content': 'Blogs',
+  'platform-pages': 'Blogs',
+  'platform-calendar': 'Blogs',
+  'platform-media': 'Blogs',
+  'platform-newsletter': 'Blogs',
+  'platform-seo': 'Blogs',
+  'platform-automation': 'Blogs',
+  'platform-payments': 'Billing',
+  'platform-plans': 'Billing',
+  'platform-coupons': 'Billing',
+  'platform-stripe-settings': 'Billing',
+  'platform-payments-group': 'Billing',
+  'platform-billing': 'Billing',
 };
 
 /**

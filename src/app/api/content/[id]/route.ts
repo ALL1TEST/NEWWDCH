@@ -9,8 +9,9 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { slugify } from '@/lib/utils';
 import { z } from 'zod/v4';
-import { publishArticleToConnectedSite } from '@/lib/connection/site-publisher';
+import { publishArticleToConnectedSite, deleteArticleFromConnectedSite } from '@/lib/connection/site-publisher';
 import { sanitizeContentForStorage } from '@/lib/pipeline/content-item-pipeline';
+import { publishDueScheduledArticles } from '@/lib/publishing/scheduled-publisher';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -89,6 +90,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   const id = reqId();
 
   try {
+    await publishDueScheduledArticles();
+
     const { id: contentId } = await context.params;
 
     const item = await db.contentItem.findFirst({
@@ -290,6 +293,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           { status: 502 },
         );
       }
+    } else if ((d.status === 'UNPUBLISHED' || d.status === 'DRAFT') && existing.status === 'PUBLISHED') {
+      try {
+        await deleteArticleFromConnectedSite(contentId, existing.siteId);
+      } catch (delErr) {
+        console.warn(`[CONTENT:UPDATE:EXTERNAL_UNPUBLISH_FAILED] ${id} —`, delErr);
+      }
     }
 
     return NextResponse.json({ data: item, meta: { requestId: id } });
@@ -326,6 +335,14 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       where: { id: contentId },
       data: { deletedAt: new Date() },
     });
+
+    if (existing.siteId) {
+      try {
+        await deleteArticleFromConnectedSite(contentId, existing.siteId);
+      } catch (delErr) {
+        console.warn(`[CONTENT:DELETE:EXTERNAL_SYNC] Failed to delete from connected site:`, delErr);
+      }
+    }
 
     return NextResponse.json({ data: { id: contentId, deleted: true }, meta: { requestId: id } });
   } catch (error) {

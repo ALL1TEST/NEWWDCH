@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
-import { publishArticleToConnectedSite } from '@/lib/connection/site-publisher';
+import { publishArticleToConnectedSite, deleteArticleFromConnectedSite } from '@/lib/connection/site-publisher';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -70,6 +70,14 @@ export async function POST(request: NextRequest) {
           await publishArticleToConnectedSite(contentId);
         } catch (publishErr) {
           console.warn(`[CONTENT:BULK_STATUS:PUBLISH] Failed to sync ${contentId}:`, publishErr);
+        }
+      }
+    } else if (status === 'UNPUBLISHED' || status === 'DRAFT' || status === 'ARCHIVED') {
+      for (const contentId of ids) {
+        try {
+          await deleteArticleFromConnectedSite(contentId);
+        } catch (delErr) {
+          console.warn(`[CONTENT:BULK_STATUS:UNPUBLISH] Failed to delete/unpublish ${contentId}:`, delErr);
         }
       }
     }

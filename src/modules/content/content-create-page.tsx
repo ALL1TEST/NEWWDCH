@@ -75,6 +75,7 @@ import { useT } from '@/lib/i18n';
 import { slugify, cn } from '@/lib/utils';
 import { sanitizeContentForStorage } from '@/lib/pipeline/content-item-pipeline';
 import { toast } from 'sonner';
+import { ArticleIdea, SAVED_IDEAS_STORAGE_KEY } from './content-list-page';
 
 // -------------------- Types ----------------
 
@@ -978,7 +979,8 @@ export function ContentCreatePage({ fixedContentType }: { fixedContentType?: 'po
       return postApi<CreatedContent>('/api/content', {
         title: data.title,
         slug,
-        siteId: !isAllSites && activeSiteDbId ? activeSiteDbId : undefined,
+        siteId: currentModule.startsWith('platform-') ? 'platform' : (!isAllSites && activeSiteDbId ? activeSiteDbId : undefined),
+        scope: currentModule.startsWith('platform-') ? 'platform' : undefined,
         excerpt: isPage ? '' : (data.excerpt !== undefined ? data.excerpt : ''),
         content: editorContent !== undefined ? sanitizeContentForStorage(editorContent) : (data.content || ''),
         status: data.status,
@@ -996,11 +998,31 @@ export function ContentCreatePage({ fixedContentType }: { fixedContentType?: 'po
     },
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
-      toast.success(t('articles.createdToast'));
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+
+      // Clean up localStorage draft so it does not persist after creation
       try {
         window.localStorage.removeItem(DRAFT_STORAGE_KEY);
       } catch {}
-      navigate(fixedContentType === 'page' || isPage || currentModule === 'pages' ? 'pages' : 'content', created.id);
+
+      // Clean up matching idea from saved ideas so it does not duplicate on the calendar
+      try {
+        const raw = window.localStorage.getItem(SAVED_IDEAS_STORAGE_KEY);
+        if (raw) {
+          const stored: ArticleIdea[] = JSON.parse(raw);
+          const clean = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const createdTitleClean = clean(created.title || getValues('title'));
+          const filtered = stored.filter((item) => clean(item.title) !== createdTitleClean);
+          window.localStorage.setItem(SAVED_IDEAS_STORAGE_KEY, JSON.stringify(filtered));
+          window.dispatchEvent(new Event('cms_saved_ideas_updated'));
+        }
+      } catch {}
+
+      toast.success(t('articles.createdToast'));
+      const targetMod = currentModule.startsWith('platform-')
+        ? (fixedContentType === 'page' || isPage || currentModule === 'platform-pages' ? 'platform-pages' : 'platform-content')
+        : (fixedContentType === 'page' || isPage || currentModule === 'pages' ? 'pages' : 'content');
+      navigate(targetMod, created.id);
     },
     onError: (err: Error) => toast.error(err.message || t('articles.createFailedToast')),
   });
@@ -1372,7 +1394,12 @@ export function ContentCreatePage({ fixedContentType }: { fixedContentType?: 'po
     }
   }, [savedSelectedText, clearSavedSelection, handleAiImageGenerate, aiEditSelectionMutation, generateAiArticleStream]);
 
-  const goBack = useCallback(() => navigate(fixedContentType === 'page' || isPage || currentModule === 'pages' ? 'pages' : 'content'), [navigate, fixedContentType, isPage, currentModule]);
+  const goBack = useCallback(() => {
+    const targetMod = currentModule.startsWith('platform-')
+      ? (fixedContentType === 'page' || isPage || currentModule === 'platform-pages' ? 'platform-pages' : 'platform-content')
+      : (fixedContentType === 'page' || isPage || currentModule === 'pages' ? 'pages' : 'content');
+    navigate(targetMod);
+  }, [navigate, fixedContentType, isPage, currentModule]);
 
   const addTag = useCallback((tagId: string) => {
     if (!selectedTagIds.includes(tagId)) {
