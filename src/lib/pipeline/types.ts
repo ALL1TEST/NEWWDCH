@@ -25,6 +25,7 @@ export interface ArticlePipelineInput {
   siteId?: string | null;
   numberOfDrafts?: number;
   includeCta?: boolean;
+  language?: string;
 }
 
 export interface ArticlePipelineContext {

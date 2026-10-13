@@ -9,6 +9,10 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { getSiteWhere } from '@/lib/site-context';
 import { requireFeature } from '@/lib/platform/platform-auth';
+import {
+  syncVerdantSubscribers,
+  persistSubscriberToProduction,
+} from '@/lib/services/production-subscriber-service';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -47,6 +51,14 @@ export async function GET(request: NextRequest) {
     const search = sp.get('search') || '';
 
     const siteFilter = await getSiteWhere(request);
+    const siteParam = request.nextUrl.searchParams.get('siteId');
+
+    // Reconcile with canonical production database so subscribers created
+    // on the public Verdant website immediately appear in CMS
+    await syncVerdantSubscribers(siteParam ?? undefined).catch((err) => {
+      console.warn('[SUBSCRIBERS:GET] Production sync warning:', err);
+    });
+
     const where: Record<string, unknown> = { ...siteFilter };
     if (status) where.status = status;
     if (search) {
@@ -139,6 +151,16 @@ export async function POST(request: NextRequest) {
         name: d.name === '' ? null : d.name ?? null,
         source: d.source,
       },
+    });
+
+    // Mirror to canonical production database if Verdant site
+    await persistSubscriberToProduction({
+      email: d.email,
+      name: d.name,
+      siteId: siteId || (typeof siteFilter.siteId === 'string' ? siteFilter.siteId : undefined),
+      source: d.source,
+    }).catch((err) => {
+      console.warn('[SUBSCRIBERS:CREATE] Production mirror warning:', err);
     });
 
     return NextResponse.json({ data: item, meta: { requestId: id } }, { status: 201 });

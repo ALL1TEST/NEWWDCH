@@ -8,6 +8,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
+import {
+  updateSubscriberInProduction,
+  deleteSubscriberFromProduction,
+} from '@/lib/services/production-subscriber-service';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -105,6 +109,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       if (d.status === 'UNSUBSCRIBED') {
         updateData.unsubscribedAt = new Date();
       }
+      await updateSubscriberInProduction(existing.email, d.status === 'SUBSCRIBED').catch((err) => {
+        console.warn('[SUBSCRIBERS:PATCH] Production status update warning:', err);
+      });
     }
 
     const item = await db.newsletterSubscriber.update({
@@ -141,6 +148,9 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     }
 
     await db.newsletterSubscriber.delete({ where: { id: subscriberId } });
+    await deleteSubscriberFromProduction(existing.email).catch((err) => {
+      console.warn('[SUBSCRIBERS:DELETE] Production delete warning:', err);
+    });
 
     return NextResponse.json({ data: { id: subscriberId, deleted: true }, meta: { requestId: id } });
   } catch (error) {

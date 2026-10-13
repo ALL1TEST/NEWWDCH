@@ -130,9 +130,9 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.feat.engagement.label': 'Newsletter & Commentaires',
   'mkt.feat.engagement.title': 'Faitz grandir l’audience que vous avez déjà.',
   'mkt.feat.engagement.body':
-    'Gérez les abonnés, envoyez des campagnes via votre propre SMTP et modérez les commentaires avec la protection antispam Akismet — l’engagement vit à côté du contenu auquel il appartient.',
+    'Gérez les abonnés, envoyez des campagnes via votre propre SMTP et modérez les commentaires — l’engagement vit à côté du contenu auquel il appartient.',
   'mkt.feat.engagement.point1': 'Gestion des abonnés et envoi de campagnes',
-  'mkt.feat.engagement.point2': 'File de modération des commentaires avec antispam',
+  'mkt.feat.engagement.point2': 'File de modération des commentaires',
   'mkt.feat.engagement.cta': 'Découvrir l’engagement',
 
   'mkt.feat.multisite.label': 'Multi-sites',
@@ -170,8 +170,6 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.platform.smtpDesc': 'Votre propre serveur de messagerie pour newsletters et notifications',
   'mkt.platform.ai': 'Fournisseurs d’IA',
   'mkt.platform.aiDesc': 'Vos propres clés et modèles',
-  'mkt.platform.akismet': 'Akismet',
-  'mkt.platform.akismetDesc': 'Protection antispam des commentaires',
   'mkt.platform.webhooks': 'Webhooks',
   'mkt.platform.webhooksDesc': 'Webhooks sortants pour les événements de contenu',
 
@@ -553,13 +551,13 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.solp.in.story1p3': 'Statut et latence des fournisseurs en un coup d’œil',
   'mkt.solp.in.story2Title': 'Une surface d’API documentée.',
   'mkt.solp.in.story2Body':
-    'WordPress via le client REST natif, tout CMS standard via l’adaptateur, SMTP pour les campagnes, Akismet pour les commentaires et webhooks pour les événements.',
+    'WordPress via le client REST natif, tout CMS standard via l’adaptateur, SMTP pour les campagnes et webhooks pour les événements.',
   'mkt.solp.in.story2p1': 'Client API REST WordPress avec vérification de connexion',
   'mkt.solp.in.story2p2': 'Adaptateur CMS REST standard avec authentification par clé',
   'mkt.solp.in.story2p3': 'Webhooks sortants pour les événements de contenu',
   'mkt.solp.in.benefit1': 'Connectez WordPress ou n’importe quel CMS REST compatible',
   'mkt.solp.in.benefit2': 'Vérification de connexion avant toute publication',
-  'mkt.solp.in.benefit3': 'Votre propre SMTP, vos clés IA et la protection anti-spam',
+  'mkt.solp.in.benefit3': 'Votre propre SMTP et vos clés IA',
   'mkt.solp.in.benefit4': 'Webhooks sortants pour les événements de contenu',
 
   // ---- Page de connexion ----
@@ -757,7 +755,7 @@ export const clientMarketingFr: Record<string, string> = {
     'Les cookies strictement nécessaires (session, langue, thème) fonctionnent toujours. Les cookies d’analyse ne se chargent qu’après votre acceptation dans le bandeau. Vous pouvez changer d’avis à tout moment via « Préférences de cookies » dans le pied de page.',
   'mkt.privacy.thirdTitle': 'Tiers',
   'mkt.privacy.thirdBody':
-    'Les paiements sont traités par Stripe. Si vous connectez des fournisseurs d’IA, votre propre serveur SMTP ou Akismet, ces services reçoivent les données que leur intégration exige. Nous ne vendons pas de données et n’exploitons aucun traceur publicitaire.',
+    'Les paiements sont traités par Stripe. Si vous connectez des fournisseurs d’IA, ou votre propre serveur SMTP, ces services reçoivent les données que leur intégration exige. Nous ne vendons pas de données et n’exploitons aucun traceur publicitaire.',
   'mkt.privacy.rightsTitle': 'Vos droits',
   'mkt.privacy.rightsBody':
     'Vous pouvez exporter ou supprimer votre contenu depuis le tableau de bord à tout moment. Supprimer votre compte efface vos données utilisateur. Contactez-nous pour tout le reste, nous vous aiderons.',
@@ -783,7 +781,7 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.privacy.s1P1':
     'La présente politique de confidentialité s’applique au site web, aux applications et au service hébergé de Karmax (ensemble, le « Service »), exploités par [Company Legal Name] (« nous », « notre »). Elle décrit la manière dont nous traitons les informations personnelles lorsque vous consultez notre site, créez un compte ou utilisez le Service.',
   'mkt.privacy.s1P2':
-    'Elle ne s’applique pas aux services exploités par des tiers. Lorsque vous connectez une intégration — un fournisseur d’IA, votre propre serveur SMTP ou Akismet — ce service traite les informations selon sa propre politique de confidentialité. Votre utilisation du Service est régie plus généralement par nos {terms}.',
+    'Elle ne s’applique pas aux services exploités par des tiers. Lorsque vous connectez une intégration — un fournisseur d’IA, ou votre propre serveur SMTP — ce service traite les informations selon sa propre politique de confidentialité. Votre utilisation du Service est régie plus généralement par nos {terms}.',
 
   'mkt.privacy.s2Title': 'Quelles informations collectons-nous ?',
   'mkt.privacy.s2P1':
@@ -827,7 +825,7 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.privacy.s6P1':
     'Nous n’achetons pas d’informations personnelles auprès de courtiers en données et nous ne les collectons pas auprès de sources tierces pour nos propres finalités.',
   'mkt.privacy.s6P2':
-    'Lorsque vous connectez une intégration — un fournisseur d’IA, votre propre serveur SMTP ou Akismet — nous pouvons recevoir les informations limitées que l’intégration renvoie pour fonctionner, telles que les résultats de remise ou de contrôle de spam des contenus que vous y envoyez.',
+    'Lorsque vous connectez une intégration — un fournisseur d’IA, ou votre propre serveur SMTP — nous pouvons recevoir les informations limitées que l’intégration renvoie pour fonctionner, telles que les résultats de remise ou de contrôle de spam des contenus que vous y envoyez.',
 
   'mkt.privacy.s7Title': 'Comment nous utilisons vos informations',
   'mkt.privacy.s7P1': 'Nous utilisons les informations décrites dans cette politique pour :',
@@ -867,7 +865,7 @@ export const clientMarketingFr: Record<string, string> = {
   'mkt.privacy.s10L1':
     'Paiements — les plans payants sont facturés via Stripe, qui traite vos informations de paiement selon ses propres règles.',
   'mkt.privacy.s10L2':
-    'Intégrations que vous connectez — si vous connectez un fournisseur d’IA, votre propre serveur SMTP ou Akismet, ces services reçoivent les données que leur intégration exige.',
+    'Intégrations que vous connectez — si vous connectez un fournisseur d’IA, ou votre propre serveur SMTP, ces services reçoivent les données que leur intégration exige.',
   'mkt.privacy.s10P2':
     'Nous ne partageons avec ces prestataires que ce qui est nécessaire à leur mission.',
 
@@ -1037,7 +1035,7 @@ export const clientMarketingFr: Record<string, string> = {
 
   'mkt.terms.s9Title': 'Services tiers',
   'mkt.terms.s9P1':
-    'Le Service prend en charge des intégrations avec des services tiers — par exemple les fournisseurs d’IA que vous connectez, votre propre serveur SMTP ou Akismet. Lorsque vous connectez une intégration, elle reçoit les données nécessaires à son fonctionnement, et votre utilisation de ce service est régie par ses propres conditions et politiques.',
+    'Le Service prend en charge des intégrations avec des services tiers — par exemple les fournisseurs d’IA que vous connectez, ou votre propre serveur SMTP. Lorsque vous connectez une intégration, elle reçoit les données nécessaires à son fonctionnement, et votre utilisation de ce service est régie par ses propres conditions et politiques.',
   'mkt.terms.s9P2':
     'Nous ne contrôlons pas les services tiers et ne sommes pas responsables de leurs actions ou de leur disponibilité. Les paiements des plans payants sont traités par Stripe selon ses propres conditions.',
 
@@ -1249,7 +1247,7 @@ export const clientMarketingFr: Record<string, string> = {
 
   'mkt.security.s12Title': 'Services tiers',
   'mkt.security.s12P1':
-    'Le Service s’appuie sur un petit nombre de prestataires tiers pour des fonctions précises : le traitement des paiements (Stripe), les fonctionnalités dopées à l’IA (notre fournisseur d’IA), l’envoi d’e-mails (SMTP) et la détection de spam (Akismet). Chaque prestataire ne traite que les données nécessaires à sa fonction.',
+    'Le Service s’appuie sur un petit nombre de prestataires tiers pour des fonctions précises : le traitement des paiements (Stripe), les fonctionnalités dopées à l’IA (notre fournisseur d’IA) et l’envoi d’e-mails (SMTP). Chaque prestataire ne traite que les données nécessaires à sa fonction.',
   'mkt.security.s12P2':
     'Pour en savoir plus, consultez la section Prestataires de services de notre {privacy}.',
 

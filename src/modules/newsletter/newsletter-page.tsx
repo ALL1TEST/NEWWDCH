@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { PublishTimePicker } from '@/modules/content/publishing-datetime-pickers';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import {
@@ -680,8 +681,8 @@ export function NewsletterPage() {
             {opt.value === 'all'
               ? t('newsletter.allStatuses')
               : opt.value === 'SUBSCRIBED'
-                ? (t('newsletter.statusSubscribed') || 'Subscribed')
-                : (t('newsletter.statusUnsubscribed') || 'Unsubscribed')}
+                ? (t('newsletter.statusSubscribed') !== 'newsletter.statusSubscribed' ? t('newsletter.statusSubscribed') : 'Subscribed')
+                : (t('newsletter.statusUnsubscribed') !== 'newsletter.statusUnsubscribed' ? t('newsletter.statusUnsubscribed') : 'Unsubscribed')}
           </SelectItem>
         ))}
       </SelectContent>
@@ -918,92 +919,40 @@ export function NewsletterPage() {
                     <Label htmlFor="camp-schedule">
                       {t('newsletter.schedule')} <span className="text-muted-foreground font-normal">{t('newsletter.optional')}</span>
                     </Label>
-                    <Popover open={schedulePopoverOpen} onOpenChange={setSchedulePopoverOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          id="camp-schedule"
-                          type="button"
-                          variant="outline"
-                          className={cn(
-                            'w-full justify-between text-left font-normal h-9 px-3',
-                            !campaignForm.scheduledAt && 'text-muted-foreground'
-                          )}
-                        >
-                          <span>
-                            {campaignForm.scheduledAt && !isNaN(new Date(campaignForm.scheduledAt).getTime())
-                              ? format(new Date(campaignForm.scheduledAt), "PPP 'at' HH:mm")
-                              : (t('newsletter.selectDateTime') || 'mm/dd/yyyy --:-- --')}
-                          </span>
-                          <CalendarIcon className="h-4 w-4 opacity-50 shrink-0" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-3" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={
-                            campaignForm.scheduledAt && !isNaN(new Date(campaignForm.scheduledAt).getTime())
-                              ? new Date(campaignForm.scheduledAt)
-                              : undefined
-                          }
-                          onSelect={(date) => {
-                            if (!date) {
-                              setCampaignForm((f) => ({ ...f, scheduledAt: '' }));
-                              return;
-                            }
-                            const current = campaignForm.scheduledAt ? new Date(campaignForm.scheduledAt) : null;
-                            const h = current && !isNaN(current.getTime()) ? current.getHours() : 9;
-                            const m = current && !isNaN(current.getTime()) ? current.getMinutes() : 0;
-                            date.setHours(h, m, 0, 0);
-                            setCampaignForm((f) => ({
-                              ...f,
-                              scheduledAt: format(date, "yyyy-MM-dd'T'HH:mm"),
-                            }));
-                          }}
-                          initialFocus
-                        />
-                        <div className="border-t border-border/60 pt-2.5 mt-2 flex items-center justify-between gap-2 px-1">
-                          <div className="flex items-center gap-1.5">
-                            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                            <Input
-                              type="time"
-                              value={
-                                campaignForm.scheduledAt && !isNaN(new Date(campaignForm.scheduledAt).getTime())
-                                  ? format(new Date(campaignForm.scheduledAt), 'HH:mm')
-                                  : '09:00'
-                              }
-                              onChange={(e) => {
-                                const timeVal = e.target.value;
-                                if (!timeVal) return;
-                                const [h, m] = timeVal.split(':').map(Number);
-                                const baseDate =
-                                  campaignForm.scheduledAt && !isNaN(new Date(campaignForm.scheduledAt).getTime())
-                                    ? new Date(campaignForm.scheduledAt)
-                                    : new Date();
-                                baseDate.setHours(h, m, 0, 0);
-                                setCampaignForm((f) => ({
-                                  ...f,
-                                  scheduledAt: format(baseDate, "yyyy-MM-dd'T'HH:mm"),
-                                }));
-                              }}
-                              className="h-8 w-24 text-xs font-mono"
-                            />
-                          </div>
-                          {campaignForm.scheduledAt && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
-                              onClick={() => {
-                                setCampaignForm((f) => ({ ...f, scheduledAt: '' }));
-                              }}
-                            >
-                              {t('common.clear') || 'Clear'}
-                            </Button>
-                          )}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
+                    <PublishTimePicker
+                      id="camp-schedule"
+                      className="w-full h-9"
+                      dateValue={
+                        campaignForm.scheduledAt && !isNaN(new Date(campaignForm.scheduledAt).getTime())
+                          ? format(new Date(campaignForm.scheduledAt), 'yyyy-MM-dd')
+                          : ''
+                      }
+                      value={
+                        campaignForm.scheduledAt && !isNaN(new Date(campaignForm.scheduledAt).getTime())
+                          ? format(new Date(campaignForm.scheduledAt), 'HH:mm')
+                          : ''
+                      }
+                      placeholder={t('newsletter.selectDateTime') || 'mm/dd/yyyy --:-- --'}
+                      showIcon
+                      showClear
+                      onClear={() => setCampaignForm((f) => ({ ...f, scheduledAt: '' }))}
+                      onDateChange={(dStr) => {
+                        if (!dStr) {
+                          setCampaignForm((f) => ({ ...f, scheduledAt: '' }));
+                          return;
+                        }
+                        const curTime = campaignForm.scheduledAt && !isNaN(new Date(campaignForm.scheduledAt).getTime())
+                          ? format(new Date(campaignForm.scheduledAt), 'HH:mm')
+                          : '09:00';
+                        setCampaignForm((f) => ({ ...f, scheduledAt: `${dStr}T${curTime}` }));
+                      }}
+                      onChange={(tStr) => {
+                        const curDate = campaignForm.scheduledAt && !isNaN(new Date(campaignForm.scheduledAt).getTime())
+                          ? format(new Date(campaignForm.scheduledAt), 'yyyy-MM-dd')
+                          : format(new Date(), 'yyyy-MM-dd');
+                        setCampaignForm((f) => ({ ...f, scheduledAt: `${curDate}T${tStr}` }));
+                      }}
+                    />
                   </div>
                 </div>
                 <DialogFooter>
@@ -1195,92 +1144,40 @@ export function NewsletterPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-schedule">{t('newsletter.schedule')} <span className="text-muted-foreground font-normal">{t('newsletter.optional')}</span></Label>
-              <Popover open={editSchedulePopoverOpen} onOpenChange={setEditSchedulePopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    id="edit-schedule"
-                    type="button"
-                    variant="outline"
-                    className={cn(
-                      'w-full justify-between text-left font-normal h-9 px-3',
-                      !editForm.scheduledAt && 'text-muted-foreground'
-                    )}
-                  >
-                    <span>
-                      {editForm.scheduledAt && !isNaN(new Date(editForm.scheduledAt).getTime())
-                        ? format(new Date(editForm.scheduledAt), "PPP 'at' HH:mm")
-                        : (t('newsletter.selectDateTime') || 'mm/dd/yyyy --:-- --')}
-                    </span>
-                    <CalendarIcon className="h-4 w-4 opacity-50 shrink-0" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-3" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={
-                      editForm.scheduledAt && !isNaN(new Date(editForm.scheduledAt).getTime())
-                        ? new Date(editForm.scheduledAt)
-                        : undefined
-                    }
-                    onSelect={(date) => {
-                      if (!date) {
-                        setEditForm((f) => ({ ...f, scheduledAt: '' }));
-                        return;
-                      }
-                      const current = editForm.scheduledAt ? new Date(editForm.scheduledAt) : null;
-                      const h = current && !isNaN(current.getTime()) ? current.getHours() : 9;
-                      const m = current && !isNaN(current.getTime()) ? current.getMinutes() : 0;
-                      date.setHours(h, m, 0, 0);
-                      setEditForm((f) => ({
-                        ...f,
-                        scheduledAt: format(date, "yyyy-MM-dd'T'HH:mm"),
-                      }));
-                    }}
-                    initialFocus
-                  />
-                  <div className="border-t border-border/60 pt-2.5 mt-2 flex items-center justify-between gap-2 px-1">
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                      <Input
-                        type="time"
-                        value={
-                          editForm.scheduledAt && !isNaN(new Date(editForm.scheduledAt).getTime())
-                            ? format(new Date(editForm.scheduledAt), 'HH:mm')
-                            : '09:00'
-                        }
-                        onChange={(e) => {
-                          const timeVal = e.target.value;
-                          if (!timeVal) return;
-                          const [h, m] = timeVal.split(':').map(Number);
-                          const baseDate =
-                            editForm.scheduledAt && !isNaN(new Date(editForm.scheduledAt).getTime())
-                              ? new Date(editForm.scheduledAt)
-                              : new Date();
-                          baseDate.setHours(h, m, 0, 0);
-                          setEditForm((f) => ({
-                            ...f,
-                            scheduledAt: format(baseDate, "yyyy-MM-dd'T'HH:mm"),
-                          }));
-                        }}
-                        className="h-8 w-24 text-xs font-mono"
-                      />
-                    </div>
-                    {editForm.scheduledAt && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => {
-                          setEditForm((f) => ({ ...f, scheduledAt: '' }));
-                        }}
-                      >
-                        {t('common.clear') || 'Clear'}
-                      </Button>
-                    )}
-                  </div>
-                </PopoverContent>
-              </Popover>
+              <PublishTimePicker
+                id="edit-schedule"
+                className="w-full h-9"
+                dateValue={
+                  editForm.scheduledAt && !isNaN(new Date(editForm.scheduledAt).getTime())
+                    ? format(new Date(editForm.scheduledAt), 'yyyy-MM-dd')
+                    : ''
+                }
+                value={
+                  editForm.scheduledAt && !isNaN(new Date(editForm.scheduledAt).getTime())
+                    ? format(new Date(editForm.scheduledAt), 'HH:mm')
+                    : ''
+                }
+                placeholder={t('newsletter.selectDateTime') || 'mm/dd/yyyy --:-- --'}
+                showIcon
+                showClear
+                onClear={() => setEditForm((f) => ({ ...f, scheduledAt: '' }))}
+                onDateChange={(dStr) => {
+                  if (!dStr) {
+                    setEditForm((f) => ({ ...f, scheduledAt: '' }));
+                    return;
+                  }
+                  const curTime = editForm.scheduledAt && !isNaN(new Date(editForm.scheduledAt).getTime())
+                    ? format(new Date(editForm.scheduledAt), 'HH:mm')
+                    : '09:00';
+                  setEditForm((f) => ({ ...f, scheduledAt: `${dStr}T${curTime}` }));
+                }}
+                onChange={(tStr) => {
+                  const curDate = editForm.scheduledAt && !isNaN(new Date(editForm.scheduledAt).getTime())
+                    ? format(new Date(editForm.scheduledAt), 'yyyy-MM-dd')
+                    : format(new Date(), 'yyyy-MM-dd');
+                  setEditForm((f) => ({ ...f, scheduledAt: `${curDate}T${tStr}` }));
+                }}
+              />
             </div>
           </div>
           <DialogFooter>

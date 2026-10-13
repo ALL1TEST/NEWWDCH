@@ -7,6 +7,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { requireFeature } from '@/lib/platform/platform-auth';
+import { bulkUpdateVerdantCommentStatus } from '@/lib/services/production-comment-service';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -18,7 +19,7 @@ function reqId() {
 
 const bulkStatusSchema = z.object({
   ids: z.array(z.string().min(1)).min(1, 'At least one ID is required'),
-  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'FLAGGED', 'SPAM']),
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'FLAGGED', 'SPAM', 'TRASH']),
 });
 
 // =====================================================================
@@ -60,16 +61,30 @@ export async function PATCH(request: NextRequest) {
 
     const { ids, status } = parsed.data;
 
-    const count = await db.comment.updateMany({
-      where: { id: { in: ids } },
-      data: { status },
+    let updatedCount = 0;
+    if (status === 'TRASH') {
+      const placeholders = ids.map(() => '?').join(', ');
+      updatedCount = await (db as any).$executeRawUnsafe(
+        `UPDATE Comment SET status = 'TRASH', updatedAt = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`,
+        ...ids,
+      );
+    } else {
+      const count = await db.comment.updateMany({
+        where: { id: { in: ids } },
+        data: { status },
+      });
+      updatedCount = count.count;
+    }
+
+    await bulkUpdateVerdantCommentStatus(ids, status).catch((err) => {
+      console.warn(`[COMMENTS:BULK_STATUS] ${id} — production Postgres status sync warning:`, err);
     });
 
-    return NextResponse.json({ data: { updatedCount: count.count }, meta: { requestId: id } });
+    return NextResponse.json({ data: { updatedCount }, meta: { requestId: id } });
   } catch (error) {
     console.error(`[COMMENTS:BULK_STATUS] ${id} —`, error);
     return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: 'Failed to update comment statuses' }, meta: { requestId: id } },
+      { error: { code: 'INTERNAL_ERROR', message: (error as Error)?.message || 'Failed to update comment statuses' }, meta: { requestId: id } },
       { status: 500 },
     );
   }

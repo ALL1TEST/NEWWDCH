@@ -46,10 +46,15 @@ import { logAdminAction } from '@/lib/platform/audit';
 // saves a paid plan with empty Stripe Price IDs (see plan-config.ts).
 // ============================================================
 
-export async function POST(request: NextRequest) {
+type RouteContext = { params: Promise<{ planId: string }> };
+
+export async function POST(request: NextRequest, context: RouteContext) {
   const auth = await requireOwner(request);
   if ('response' in auth) return auth.response;
-  const planId = request.nextUrl.pathname.split('/').filter(Boolean).at(-2)!;
+  const { planId: rawPlanId } = await context.params;
+  const planId = (
+    rawPlanId ? decodeURIComponent(rawPlanId) : request.nextUrl.pathname.split('/').filter(Boolean).at(-2)!
+  ).trim().toLowerCase();
   if (!planId) return fail('VALIDATION_ERROR', 'planId is required.', 400);
 
   if (!(await isStripeConfiguredAsync())) {

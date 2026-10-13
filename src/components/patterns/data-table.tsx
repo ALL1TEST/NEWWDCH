@@ -83,6 +83,7 @@ export interface DataTableProps<TData, TValue> {
   searchPlaceholder?: string;
   onSearch?: (value: string) => void;
   searchValue?: string;
+  searchClassName?: string;
   filterContent?: React.ReactNode;
   getRowId?: (row: TData) => string;
   /** Page-size change handler — when provided, the rows-per-page selector becomes functional */
@@ -585,6 +586,7 @@ function TableToolbar<TData, TValue>({
   searchPlaceholder,
   searchValue,
   onSearch,
+  searchClassName,
   selectedIds,
   bulkActions,
   onBulkAction,
@@ -594,6 +596,7 @@ function TableToolbar<TData, TValue>({
   searchPlaceholder?: string;
   searchValue?: string;
   onSearch?: (value: string) => void;
+  searchClassName?: string;
   selectedIds?: string[];
   bulkActions?: BulkAction[];
   onBulkAction?: (action: string, ids: string[]) => void;
@@ -607,7 +610,7 @@ function TableToolbar<TData, TValue>({
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 pb-2">
       <div className="flex items-center gap-2 flex-1">
         {(onSearch || searchValue !== undefined) && (
-          <div className="relative max-w-sm w-full">
+          <div className={cn('relative w-full', searchClassName ?? 'max-w-sm')}>
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder={searchPlaceholder ?? t('common.search')}
@@ -682,6 +685,7 @@ export function DataTable<TData, TValue>({
   searchPlaceholder,
   onSearch,
   searchValue,
+  searchClassName,
   filterContent,
   getRowId,
   onPageSizeChange,
@@ -809,6 +813,7 @@ export function DataTable<TData, TValue>({
           searchPlaceholder={searchPlaceholder}
           searchValue={searchValue}
           onSearch={onSearch}
+          searchClassName={searchClassName}
           selectedIds={selectedIds}
           bulkActions={bulkActions}
           onBulkAction={onBulkAction}

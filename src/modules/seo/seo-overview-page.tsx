@@ -17,6 +17,8 @@ import { getApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { useSiteStore } from '@/lib/stores/site-store';
+import { buildPublicUrl } from '@/lib/seo/url-utils';
 import { useT } from '@/lib/i18n';
 
 // ==================== Types ====================
@@ -54,8 +56,16 @@ interface SeoIssue {
 }
 
 interface SeoOverviewData {
-  stats: SeoStats;
+  stats: SeoStats & { categoryScores?: Record<string, any> | null };
   recentIssues: SeoIssue[];
+  drift?: {
+    hasDrift: boolean;
+    scoreDelta: number;
+    newIssuesCount: number;
+    resolvedIssuesCount: number;
+    regressedCategories: string[];
+  } | null;
+  latestSnapshot?: any;
 }
 
 interface SearchConsoleSummary {
@@ -205,6 +215,7 @@ interface NavigateFn {
 
 function RecentIssuesSummary({ issues, navigate }: { issues: SeoIssue[]; navigate: NavigateFn }) {
   const { t } = useT();
+  const activeSite = useSiteStore((s) => s.getActiveSite());
   // Unresolved counts by severity
   const unresolved = issues.filter((i) => !i.isResolved);
   const criticalCount = unresolved.filter((i) => i.severity === 'CRITICAL').length;
@@ -239,7 +250,7 @@ function RecentIssuesSummary({ issues, navigate }: { issues: SeoIssue[]; navigat
           {recent.map((issue) => {
             const sev = SEVERITY_CONFIG[issue.severity] ?? SEVERITY_CONFIG.INFO;
             const SevIcon = sev.icon;
-            const fullUrl = issue.pageUrl.startsWith('http') ? issue.pageUrl : `https://cms.example.com${issue.pageUrl}`;
+            const fullUrl = buildPublicUrl(issue.pageUrl, activeSite);
             return (
               <li
                 key={issue.id}
@@ -384,8 +395,25 @@ export function SeoOverviewPage() {
         ) : stats ? (
           <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-6">
             {/* Score Ring */}
-            <Card className="p-6 flex items-center justify-center">
+            <Card className="p-6 flex flex-col items-center justify-center">
               <ScoreRing score={stats.overallScore ?? 0} />
+              {data?.drift && (
+                <div className="mt-3 flex items-center gap-1.5 text-xs">
+                  {data.drift.scoreDelta > 0 ? (
+                    <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1">
+                      <TrendingUp className="h-3 w-3" />
+                      +{data.drift.scoreDelta} pts
+                    </Badge>
+                  ) : data.drift.scoreDelta < 0 ? (
+                    <Badge className="bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/20 gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {data.drift.scoreDelta} pts drift
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground text-[11px]">Score stable vs previous</span>
+                  )}
+                </div>
+              )}
             </Card>
 
             {/* KPI Grid */}

@@ -15,8 +15,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { encrypt } from '@/lib/encryption';
-import { getSiteWhere } from '@/lib/site-context';
-import { requireAnyFeatureAllowStaff } from '@/lib/platform/platform-auth';
+import { getSiteWhere, getSiteFromRequest, getActivePlanSiteId } from '@/lib/site-context';
+import { requireAnyFeatureAllowStaff, getAuthUser } from '@/lib/platform/platform-auth';
 import { SMTP_DEPENDENT_FEATURES } from '@/lib/platform/feature-config';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
@@ -28,6 +28,31 @@ function reqId() {
 }
 
 const PASSWORD_MASK = '••••••••';
+
+async function resolveTargetSiteId(
+  request: NextRequest,
+  siteFilter: Record<string, unknown>,
+): Promise<string | null> {
+  if (typeof siteFilter.siteId === 'string' && siteFilter.siteId !== '__FORBIDDEN_SITE__') {
+    return siteFilter.siteId;
+  }
+  if (
+    siteFilter.siteId &&
+    typeof siteFilter.siteId === 'object' &&
+    Array.isArray((siteFilter.siteId as any).in) &&
+    (siteFilter.siteId as any).in.length > 0
+  ) {
+    return (siteFilter.siteId as any).in[0];
+  }
+  const explicitSite = await getSiteFromRequest(request);
+  if (explicitSite) return explicitSite;
+
+  const authUser = await getAuthUser(request);
+  if (authUser && authUser.role !== 'PLATFORM_ADMIN' && authUser.role !== 'OWNER') {
+    return await getActivePlanSiteId(authUser);
+  }
+  return null;
+}
 
 // -------------------- validation --------------------
 
@@ -58,7 +83,17 @@ export async function GET(request: NextRequest) {
     const siteFilter = await getSiteWhere(request);
     const where: Record<string, unknown> = { isDefault: true, ...siteFilter };
 
-    const record = await db.smtpSetting.findFirst({ where });
+    let record = await db.smtpSetting.findFirst({
+      where,
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    if (!record && siteFilter.siteId) {
+      record = await db.smtpSetting.findFirst({
+        where: { isDefault: true, siteId: null },
+        orderBy: { updatedAt: 'desc' },
+      });
+    }
 
     if (!record) {
       // Return a default config (no saved record yet)
@@ -165,15 +200,35 @@ export async function PUT(request: NextRequest) {
     const where: Record<string, unknown> = { isDefault: true, ...siteFilter };
 
     // Find existing record to decide whether to update the password.
-    const existing = await db.smtpSetting.findFirst({ where });
+    let existing = await db.smtpSetting.findFirst({
+      where,
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (!existing && siteFilter.siteId) {
+      existing = await db.smtpSetting.findFirst({
+        where: { isDefault: true, siteId: null },
+        orderBy: { updatedAt: 'desc' },
+      });
+    }
 
     // Password handling: if the user submitted the masked placeholder (or empty),
-    // keep the existing saved password. Otherwise encrypt and store the new one.
+    // keep the existing saved password. Otherwise normalize, encrypt and store the new one.
     let passwordToStore = existing?.password ?? '';
     const isMaskedPlaceholder = !d.password || d.password.includes('•');
     if (!isMaskedPlaceholder) {
-      passwordToStore = await encrypt(d.password);
+      let cleanPass = d.password.trim();
+      const withoutSpaces = cleanPass.replace(/\s+/g, '');
+      const isGmail =
+        Boolean(d.host && (d.host.toLowerCase().includes('gmail') || d.host.toLowerCase().includes('googlemail'))) ||
+        Boolean(d.username && d.username.toLowerCase().includes('@gmail.com'));
+      if (isGmail || withoutSpaces.length === 16) {
+        cleanPass = withoutSpaces;
+      }
+      passwordToStore = await encrypt(cleanPass);
     }
+
+    const targetSiteId = await resolveTargetSiteId(request, siteFilter);
+    const resolvedSiteId = existing ? existing.siteId : targetSiteId;
 
     // Build the upsert payload.
     const data = {
@@ -190,7 +245,7 @@ export async function PUT(request: NextRequest) {
       replyTo: d.replyTo,
       isActive: d.isActive,
       isDefault: true,
-      ...(siteFilter.siteId ? { siteId: siteFilter.siteId as string } : {}),
+      siteId: resolvedSiteId,
     };
 
     let record;

@@ -31,14 +31,23 @@ const TYPE_TO_STATUS: Record<string, number> = {
 export async function GET(request: NextRequest, context: RouteContext) {
   const { slug } = await context.params;
   // Reconstruct the pathname from the catch-all segments.
-  const pathname = '/' + slug.join('/');
+  const pathname = '/' + (slug || []).join('/');
+
+  if (slug?.[0] === 'api' || pathname.startsWith('/api')) {
+    return NextResponse.json(
+      { error: { code: 'NOT_FOUND', message: 'API endpoint not found' } },
+      { status: 404 },
+    );
+  }
+
+  const normPath = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
 
   // Look up an active redirect for this path. Inactive redirects are
   // intentionally ignored — the toggle in the admin UI controls whether
   // the redirect actually fires.
   const redirect = await db.redirect.findFirst({
     where: {
-      fromPath: pathname,
+      fromPath: { in: [pathname, normPath] },
       isActive: true,
     },
     select: {
@@ -73,3 +82,32 @@ export async function GET(request: NextRequest, context: RouteContext) {
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   });
 }
+
+async function handleNonGet(request: NextRequest, context: RouteContext) {
+  const { slug } = await context.params;
+  const pathname = '/' + (slug || []).join('/');
+  if (slug?.[0] === 'api' || pathname.startsWith('/api')) {
+    return NextResponse.json(
+      { error: { code: 'NOT_FOUND', message: 'API endpoint not found' } },
+      { status: 404 },
+    );
+  }
+  return new NextResponse('Method Not Allowed', { status: 405 });
+}
+
+export async function POST(request: NextRequest, context: RouteContext) {
+  return handleNonGet(request, context);
+}
+
+export async function PUT(request: NextRequest, context: RouteContext) {
+  return handleNonGet(request, context);
+}
+
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  return handleNonGet(request, context);
+}
+
+export async function PATCH(request: NextRequest, context: RouteContext) {
+  return handleNonGet(request, context);
+}
+

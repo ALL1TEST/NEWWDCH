@@ -35,7 +35,6 @@ import { PrivacyPage } from './privacy-page';
 import { TermsPage } from './terms-page';
 import { SecurityPage } from './security-page';
 import { AccessibilityPage, LegalCenterPage, ContactPage } from './content-pages';
-import { SolutionsOverview } from './solutions-overview';
 import { SolutionPage } from './solution-page';
 import { SOLUTION_BY_SLUG } from './solutions-data';
 import { LoginPage } from './login-page';
@@ -67,7 +66,6 @@ type Route =
   | { name: 'blog' }
   | { name: 'article'; slug: string }
   | { name: 'about' }
-  | { name: 'solutions'; focus: string | null }
   | { name: 'solution'; slug: string }
   | { name: 'login' }
   | { name: 'signup' }
@@ -107,18 +105,17 @@ function parseHash(hash: string): Route {
     case 'about':
       return { name: 'about' };
     case 'solutions': {
-      // #/solutions              → overview landing page
-      // #/solutions/<slug>       → solution story page (catalog-
-      //                            validated; unknown → not found)
-      // #/solutions?for=<aud>    → overview + audience highlight
-      //                            (legacy deep links keep working)
+      // #/solutions/<slug>       → solution story page
+      // Bare #/solutions          → redirect to first solution
       if (parts[1]) {
         return SOLUTION_BY_SLUG[parts[1]]
           ? { name: 'solution', slug: parts[1] }
           : { name: 'notfound' };
       }
-      const focus = query ? new URLSearchParams(query).get('for') : null;
-      return { name: 'solutions', focus };
+      if (typeof window !== 'undefined' && (window.location.hash === '#/solutions' || window.location.hash.startsWith('#/solutions?') || window.location.hash === '#solutions')) {
+        window.location.replace('#/solutions/content-publishing');
+      }
+      return { name: 'solution', slug: 'content-publishing' };
     }
     case 'login':
       return { name: 'login' };
@@ -214,7 +211,6 @@ export function MarketingSite() {
       blog: `${t('mkt.blog.title')} — ${brand}`,
       article: `${t('mkt.blog.title')} — ${brand}`,
       about: `${t('mkt.about.eyebrow')} ${brand}`,
-      solutions: `${t('mkt.sol.title')} — ${brand}`,
       solution: `${t(SOLUTION_BY_SLUG[solutionSlug]?.heroTitleKey ?? 'mkt.nav.solutions')} — ${brand}`,
       login: `${t('mkt.nav.login')} — ${brand}`,
       signup: `${t('mkt.signup.title')} — ${brand}`,
@@ -247,8 +243,6 @@ export function MarketingSite() {
         return <BlogArticlePage slug={route.slug} />;
       case 'about':
         return <AboutPage />;
-      case 'solutions':
-        return <SolutionsOverview focus={route.focus} />;
       case 'solution':
         return <SolutionPage slug={route.slug} />;
       case 'login':

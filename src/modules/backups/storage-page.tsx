@@ -25,6 +25,8 @@ import {
   RefreshCw,
   Lock,
   FolderOpen,
+  ShieldCheck,
+  KeyRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -70,6 +72,7 @@ import {
 } from '@/lib/backup/provider-registry';
 import { PlatformPageHeader } from '@/modules/platform/shared';
 import { useT } from '@/lib/i18n';
+import { useSiteStore } from '@/lib/stores/site-store';
 
 // -------------------- Types --------------------
 
@@ -156,8 +159,11 @@ function ConnectionStatus({ state, message }: { state: ConnectionState; message:
       <AlertCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
       <div className="min-w-0">
         <p className="font-medium text-red-700 dark:text-red-300">{t('backups.connectionFailed')}</p>
-        {message && <p className="text-red-600/80 dark:text-red-400/80 break-words">{message}</p>}
-        <p className="text-red-600/60 dark:text-red-400/60 mt-0.5">{t('backups.connectionFailedHint')}</p>
+        {message ? (
+          <p className="text-red-600/80 dark:text-red-400/80 break-words mt-0.5">{message}</p>
+        ) : (
+          <p className="text-red-600/60 dark:text-red-400/60 mt-0.5">{t('backups.connectionFailedHint')}</p>
+        )}
       </div>
     </div>
   );
@@ -565,39 +571,49 @@ function NoStorageSearchEmpty({ onClear }: { onClear: () => void }) {
 // -------------------- Validation helpers --------------------
 
 /** True when the Name field is non-empty AND every required field for the
- *  currently-selected provider has a non-empty value. For providers that
- *  require a validated connection, the connection state must also be
- *  'connected'. */
-function isFormValid(form: StorageForm): boolean {
+ *  currently-selected provider has a valid value.
+ *  For Create: requires all credentials and destination folder.
+ *  For Update (isEditing): allows password/secret fields to remain blank to keep
+ *  the existing saved secret. */
+function isFormValid(form: StorageForm, isEditing = false): boolean {
   if (!form.name.trim()) return false;
   const def = getProviderDefinition(form.provider);
   if (!def) return false;
 
   const allFieldsFilled = def.fields.every((f) => {
     if (!f.required) return true;
+    if (f.type === 'switch') return true;
+    // In edit mode, secret password fields may be left blank to preserve saved values
+    if (isEditing && f.type === 'password') return true;
     const v = form.config[f.key];
     if (v == null) return false;
-    return f.type === 'switch' ? true : v.trim() !== '';
+    return v.trim() !== '';
   });
   if (!allFieldsFilled) return false;
 
-  if (def.requiresConnection && form.connection !== 'connected') return false;
+  if (def.requiresConnection) {
+    if (isEditing) {
+      if (form.connection === 'failed') return false;
+    } else {
+      if (form.connection !== 'connected') return false;
+    }
+  }
   return true;
 }
 
-/** Returns the inline error message for a single field, or '' when the
- *  field is valid. Required fields that are empty show their message only
- *  after the user has blurred the field OR attempted to submit — we never
- *  surface a generic aggregate "N issues" summary. The Name field follows
- *  the same rule. */
+/** Returns the inline error message for a single field, or '' when valid.
+ *  In edit mode, secret fields left blank do NOT produce a validation error. */
 function fieldError(
   form: StorageForm,
   field: { key: string; label: string; required: boolean; type: string },
   submitAttempted: boolean,
   t: (key: string) => string,
+  isEditing = false,
 ): string {
   if (!field.required) return '';
   if (field.type === 'switch') return '';
+  // In edit mode, secret fields are optional if keeping existing saved secrets
+  if (isEditing && field.type === 'password') return '';
   const v = form.config[field.key];
   const isEmpty = v == null || v.trim() === '';
   if (!isEmpty) return '';
@@ -621,8 +637,9 @@ function connectionSignature(form: StorageForm): string {
 }
 
 /** True when all required connection/credential fields are filled, so the
- *  Test/Connect button can be enabled. */
-function canValidateConnection(form: StorageForm): boolean {
+ *  Test/Connect button can be enabled. In edit mode, existing secrets are
+ *  considered fulfilled. */
+function canValidateConnection(form: StorageForm, isEditing = false): boolean {
   const def = getProviderDefinition(form.provider);
   if (!def || def.connectionType === 'none') return false;
   const groups: FieldGroup[] =
@@ -631,6 +648,7 @@ function canValidateConnection(form: StorageForm): boolean {
     .filter((f) => groups.includes(f.group))
     .every((f) => {
       if (!f.required) return true;
+      if (isEditing && f.type === 'password') return true;
       const v = form.config[f.key];
       return v != null && v.trim() !== '';
     });
@@ -682,12 +700,14 @@ function buildConfigObject(form: StorageForm): Record<string, unknown> {
 
 export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform' } = {}) {
   const queryClient = useQueryClient();
+  const activeSiteDbId = useSiteStore((s) => s.activeSiteDbId);
   const isPlatform = scope === 'platform';
   const { t } = useT();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<StorageForm>(initialForm);
   const [deleteTarget, setDeleteTarget] = useState<StorageRow | null>(null);
+  const [replaceCredentials, setReplaceCredentials] = useState(false);
   // Captures the connection signature at the moment of the last successful
   // validation. If the user edits any connection field afterwards, the
   // signature no longer matches and the 'connected' state is invalidated.
@@ -733,10 +753,14 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
     // /api/backups/storage POST route gates with requirePlatformAdmin
     // and forces siteId=null + uses the authenticated admin as
     // createdById.
-    mutationFn: (body: { name: string; provider: BackupStorageProvider; config: string; isActive: boolean }) =>
+    mutationFn: (body: { name: string; provider: BackupStorageProvider; config: string; isActive: boolean; siteId?: string | null }) =>
       postApi('/api/backups/storage', isPlatform ? { ...body, scope: 'platform' } : body),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all }),
+        queryClient.invalidateQueries({ queryKey: ['backup-storage-destinations'] }),
+      ]);
+      await queryClient.refetchQueries({ queryKey: queryKeys.backupStorage.all });
       toast.success(t('backups.storageCreated'));
       closeDialog();
     },
@@ -746,10 +770,14 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
   const updateMutation = useMutation({
     // For platform scope, add `scope: 'platform'` to the body so the
     // PATCH route gates with requirePlatformAdmin.
-    mutationFn: ({ id, body }: { id: string; body: { name: string; provider: BackupStorageProvider; config: string; isActive: boolean } }) =>
+    mutationFn: ({ id, body }: { id: string; body: { name: string; provider: BackupStorageProvider; config: string; isActive: boolean; siteId?: string | null } }) =>
       patchApi(`/api/backups/storage/${id}`, isPlatform ? { ...body, scope: 'platform' } : body),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all }),
+        queryClient.invalidateQueries({ queryKey: ['backup-storage-destinations'] }),
+      ]);
+      await queryClient.refetchQueries({ queryKey: queryKeys.backupStorage.all });
       toast.success(t('backups.storageUpdated'));
       closeDialog();
     },
@@ -760,8 +788,12 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
     // For platform scope, pass `?scope=platform` query param so the API
     // gates the DELETE with requirePlatformAdmin.
     mutationFn: (id: string) => deleteApi(`/api/backups/storage/${id}${isPlatform ? '?scope=platform' : ''}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all }),
+        queryClient.invalidateQueries({ queryKey: ['backup-storage-destinations'] }),
+      ]);
+      await queryClient.refetchQueries({ queryKey: queryKeys.backupStorage.all });
       setDeleteTarget(null);
       toast.success(t('backups.storageDeleted'));
     },
@@ -774,11 +806,23 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
   const testRowMutation = useMutation({
     // For platform scope, pass `?scope=platform` query param so the
     // per-id test-connection route gates with requirePlatformAdmin.
-    mutationFn: (id: string) => postApi(`/api/backups/storage/${id}/test-connection${isPlatform ? '?scope=platform' : ''}`),
-    onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.detail(id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all });
-      toast.success(t('backups.connectionTestPassed'));
+    mutationFn: (id: string) =>
+      postApi<{ data?: { success: boolean; message: string; testedAt?: string }; success?: boolean; message?: string }>(
+        `/api/backups/storage/${id}/test-connection${isPlatform ? '?scope=platform' : ''}`
+      ),
+    onSuccess: async (res, id) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.detail(id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.backupStorage.all }),
+        queryClient.invalidateQueries({ queryKey: ['backup-storage-destinations'] }),
+      ]);
+      await queryClient.refetchQueries({ queryKey: queryKeys.backupStorage.all });
+      const testResult = (res as { data?: { success: boolean; message: string } })?.data ?? (res as { success?: boolean; message?: string });
+      if (testResult && testResult.success === false) {
+        toast.error(testResult.message || t('backups.connectionTestFailed'));
+      } else {
+        toast.success(testResult?.message || t('backups.connectionTestPassed'));
+      }
     },
     onError: (err: Error) => toast.error(err.message || t('backups.connectionTestFailed')),
   });
@@ -821,58 +865,64 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
     setForm(initialForm);
     setValidatedSignature('');
     setSubmitAttempted(false);
+    setReplaceCredentials(false);
     setDialogOpen(true);
   };
 
   const openEdit = (row: StorageRow) => {
     setEditingId(row.id);
     setSubmitAttempted(false);
-    // Flatten the stored config object into a string map for form inputs.
-    // Secrets come back masked from the API ('••••••••'); show them as
-    // the mask so the user knows a value is stored, and rely on the
-    // backend merge-on-PATCH to preserve them if left unchanged.
-    const storedConfig = row.config ?? {};
+    setReplaceCredentials(false);
+
+    // Parse the stored config (handles JSON string or parsed object).
+    let storedConfig: Record<string, unknown> = {};
+    if (typeof row.config === 'string') {
+      try {
+        storedConfig = JSON.parse(row.config);
+      } catch {
+        storedConfig = {};
+      }
+    } else if (row.config && typeof row.config === 'object') {
+      storedConfig = row.config as Record<string, unknown>;
+    }
+
+    const def = getProviderDefinition(row.provider);
     const formConfig: Record<string, string> = {};
-    for (const [k, v] of Object.entries(storedConfig)) {
-      if (typeof v === 'boolean') {
-        formConfig[k] = v ? 'true' : 'false';
-      } else {
-        formConfig[k] = v == null ? '' : String(v);
+
+    // Populate non-secret fields with saved values (e.g. folderId, clientId, bucket).
+    // Leave password/secret fields blank in the form state so that empty means
+    // "keep existing saved value" and inputs show the secure placeholder.
+    if (def) {
+      for (const field of def.fields) {
+        const val = storedConfig[field.key];
+        if (field.type === 'password') {
+          formConfig[field.key] = '';
+        } else if (typeof val === 'boolean') {
+          formConfig[field.key] = val ? 'true' : 'false';
+        } else {
+          formConfig[field.key] = val == null ? '' : String(val);
+        }
+      }
+    } else {
+      for (const [k, v] of Object.entries(storedConfig)) {
+        if (typeof v === 'boolean') {
+          formConfig[k] = v ? 'true' : 'false';
+        } else {
+          formConfig[k] = v == null ? '' : String(v);
+        }
       }
     }
 
-    // Derive the initial connection state from the stored row.
-    let initialConnection: ConnectionState = 'idle';
-    let initialMessage = '';
-    const def = getProviderDefinition(row.provider);
-    if (def && def.requiresConnection) {
-      const groups: FieldGroup[] =
-        def.connectionType === 'oauth' ? ['connection'] : ['credentials'];
-      const hasCreds = def.fields
-        .filter((f) => groups.includes(f.group) && f.required)
-        .every((f) => {
-          const v = formConfig[f.key];
-          return v != null && v.trim() !== '';
-        });
-      if (hasCreds) {
-        if (def.connectionType === 'credentials') {
-          let testResult: { success?: boolean; message?: string } | null = null;
-          try {
-            testResult = row.lastTestResult ? JSON.parse(row.lastTestResult) : null;
-          } catch {
-            testResult = null;
-          }
-          if (testResult && testResult.success === true) {
-            initialConnection = 'connected';
-            initialMessage = testResult.message ?? '';
-          } else if (row.isActive) {
-            initialConnection = 'connected';
-          }
-        } else {
-          // OAuth — credentials present implies a prior successful Connect.
-          initialConnection = 'connected';
-          initialMessage = t('backups.credentialsConfigured');
-        }
+    // Existing saved destination begins in connected state
+    let initialConnection: ConnectionState = 'connected';
+    let initialMessage = t('backups.credentialsConfigured');
+    if (row.lastTestResult) {
+      try {
+        const parsed = JSON.parse(row.lastTestResult);
+        if (parsed?.message) initialMessage = parsed.message;
+        if (parsed?.success === false) initialConnection = 'failed';
+      } catch {
+        // ignore
       }
     }
 
@@ -901,6 +951,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
     setForm(initialForm);
     setValidatedSignature('');
     setSubmitAttempted(false);
+    setReplaceCredentials(false);
   };
 
   // Mark a field as touched on blur so its inline validation message
@@ -975,7 +1026,8 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
   };
 
   const handleSubmit = () => {
-    if (!isFormValid(form)) {
+    const isEditing = Boolean(editingId);
+    if (!isFormValid(form, isEditing)) {
       // Surface every empty required field at once via inline messages
       // instead of a generic aggregate error.
       setSubmitAttempted(true);
@@ -989,6 +1041,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
       provider: form.provider,
       config: JSON.stringify(configObj),
       isActive,
+      ...(!isPlatform && activeSiteDbId ? { siteId: activeSiteDbId } : {}),
     };
     if (editingId) {
       updateMutation.mutate({ id: editingId, body });
@@ -1006,9 +1059,10 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
   const handleTestOrConnect = async () => {
     const def = getProviderDefinition(form.provider);
     if (!def || def.connectionType === 'none') return;
+    const isEditing = Boolean(editingId);
     // Surface inline field errors rather than a generic toast when the
     // required credential fields aren't filled yet.
-    if (!form.name.trim() || !canValidateConnection(form)) {
+    if (!form.name.trim() || !canValidateConnection(form, isEditing)) {
       setSubmitAttempted(true);
       return;
     }
@@ -1018,21 +1072,47 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
       return;
     }
     setForm((prev) => ({ ...prev, connection: 'testing', connectionMessage: '' }));
+
+    // If editing and no new secrets were entered in the form, test the saved credentials via the per-id test route
+    const hasNewSecrets = def.fields.some(
+      (f) => f.type === 'password' && form.config[f.key] && form.config[f.key].trim() !== ''
+    );
+
     try {
-      const res = await testFlowMutation.mutateAsync(form);
-      const result = res?.data ?? res;
-      const success = result?.success === true;
-      const message = result?.message ?? '';
-      setForm((prev) => ({
-        ...prev,
-        connection: success ? 'connected' : 'failed',
-        connectionMessage: message,
-      }));
-      setValidatedSignature(connectionSignature(form));
-      if (success) {
-        toast.success(def.connectionType === 'oauth' ? `${def.name} ${t('backups.connectedSuffix')}` : t('backups.connectionTestPassed'));
+      if (isEditing && !hasNewSecrets && editingId) {
+        const res = await postApi<{ data?: { success: boolean; message: string }; success?: boolean; message?: string }>(
+          `/api/backups/storage/${editingId}/test-connection${isPlatform ? '?scope=platform' : ''}`
+        );
+        const result = (res as { data?: { success: boolean; message: string } })?.data ?? (res as { success?: boolean; message?: string });
+        const success = result?.success === true;
+        const message = result?.message ?? '';
+        setForm((prev) => ({
+          ...prev,
+          connection: success ? 'connected' : 'failed',
+          connectionMessage: message,
+        }));
+        setValidatedSignature(connectionSignature(form));
+        if (success) {
+          toast.success(def.connectionType === 'oauth' ? `${def.name} ${t('backups.connectedSuffix')}` : t('backups.connectionTestPassed'));
+        } else {
+          toast.error(message || t('backups.connectionTestFailed'));
+        }
       } else {
-        toast.error(message || t('backups.connectionTestFailed'));
+        const res = await testFlowMutation.mutateAsync(form);
+        const result = res?.data ?? res;
+        const success = result?.success === true;
+        const message = result?.message ?? '';
+        setForm((prev) => ({
+          ...prev,
+          connection: success ? 'connected' : 'failed',
+          connectionMessage: message,
+        }));
+        setValidatedSignature(connectionSignature(form));
+        if (success) {
+          toast.success(def.connectionType === 'oauth' ? `${def.name} ${t('backups.connectedSuffix')}` : t('backups.connectionTestPassed'));
+        } else {
+          toast.error(message || t('backups.connectionTestFailed'));
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : t('backups.connectionTestFailed');
@@ -1068,6 +1148,19 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
       header: t('common.name'),
       accessorKey: 'name',
       className: 'font-medium',
+      render: (row) => {
+        const isSystem = row.provider === 'LOCAL';
+        return (
+          <div className="flex items-center gap-2">
+            <span>{row.name}</span>
+            {isSystem && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal border-zinc-200 dark:border-zinc-700">
+                System
+              </Badge>
+            )}
+          </div>
+        );
+      },
     }),
     {
       id: 'provider',
@@ -1199,18 +1292,21 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
       groupsUsed.push('destination');
     }
 
+    const isEditing = Boolean(editingId);
+
     return (
       <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
         {groupsUsed.map((group) => {
           const fields = currentDef.fields.filter((f) => f.group === group);
           if (fields.length === 0) return null;
 
-          // For OAuth, only render the destination group AFTER a
-          // successful (non-stale) connection. Before connecting, show
-          // a "connect first" hint instead of the folder field.
+          // For OAuth in create mode, only render destination group AFTER a
+          // successful (non-stale) connection. In edit mode, the destination folder
+          // is already configured and must always be rendered.
           if (
             group === 'destination' &&
             currentDef.connectionType === 'oauth' &&
+            !isEditing &&
             (form.connection !== 'connected' || connectionStale)
           ) {
             return (
@@ -1224,10 +1320,83 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
             );
           }
 
-          // For OAuth, when connected (non-stale), collapse the
-          // connection group into a compact "Connected ✓" summary with
-          // a Disconnect affordance — the user doesn't need to see the
-          // raw credential fields once linked.
+          // For OAuth in edit mode:
+          if (
+            group === 'connection' &&
+            currentDef.connectionType === 'oauth' &&
+            isEditing
+          ) {
+            if (!replaceCredentials) {
+              return (
+                <div key={group} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <SectionLabel label={t(SECTION_LABEL[group])} />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-primary hover:text-primary/80"
+                      onClick={() => setReplaceCredentials(true)}
+                    >
+                      <KeyRound className="h-3.5 w-3.5 mr-1" />
+                      {t('backups.replaceCredentials')}
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 px-3 py-2.5">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
+                      <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                        {currentDef.name} {t('backups.connectedSuffix')}
+                      </p>
+                      <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80 truncate">
+                        {form.config.clientId ? `Client ID: ${form.config.clientId} • ` : ''}
+                        {t('backups.credentialsConfigured')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            } else {
+              return (
+                <div key={group} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <SectionLabel label={t(SECTION_LABEL[group])} />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-muted-foreground"
+                      onClick={() => setReplaceCredentials(false)}
+                    >
+                      {t('backups.keepSavedCredentials')}
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-md border border-emerald-200/60 bg-emerald-50/50 dark:bg-emerald-900/10 dark:border-emerald-800/60 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-300">
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>{t('backups.credentialsSavedSecurelyHint')}</span>
+                  </div>
+                  <div className="space-y-3">
+                    {fields.map((f) => (
+                      <ConfigField
+                        key={f.key}
+                        field={f}
+                        value={form.config[f.key] ?? ''}
+                        onChange={(v) => updateConfigField(f.key, v)}
+                        onBlur={() => markFieldTouched(f.key)}
+                        error={fieldError(form, f, submitAttempted, t, isEditing)}
+                        disabled={isTesting}
+                        isEditing={isEditing}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+          }
+
+          // For OAuth in create mode when connected:
           if (
             group === 'connection' &&
             currentDef.connectionType === 'oauth' &&
@@ -1268,6 +1437,12 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
           return (
             <div key={group} className="space-y-2">
               <SectionLabel label={t(SECTION_LABEL[group])} />
+              {isEditing && group === 'credentials' && (
+                <div className="flex items-center gap-2 rounded-md border border-emerald-200/60 bg-emerald-50/50 dark:bg-emerald-900/10 dark:border-emerald-800/60 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-300">
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>{t('backups.credentialsSavedSecurelyHint')}</span>
+                </div>
+              )}
               <div className="space-y-3">
                 {fields.map((f) => (
                   <ConfigField
@@ -1276,8 +1451,9 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
                     value={form.config[f.key] ?? ''}
                     onChange={(v) => updateConfigField(f.key, v)}
                     onBlur={() => markFieldTouched(f.key)}
-                    error={fieldError(form, f, submitAttempted, t)}
+                    error={fieldError(form, f, submitAttempted, t, isEditing)}
                     disabled={isTesting}
+                    isEditing={isEditing}
                   />
                 ))}
               </div>
@@ -1451,7 +1627,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
                   onClick={handleTestOrConnect}
                   disabled={
                     isTesting ||
-                    !canValidateConnection(form) ||
+                    !canValidateConnection(form, Boolean(editingId)) ||
                     (currentDef.connectionType === 'credentials' && !form.name.trim())
                   }
                 >
@@ -1475,7 +1651,7 @@ export function StoragePage({ scope = 'client' }: { scope?: 'client' | 'platform
               <Button
                 size="sm"
                 onClick={handleSubmit}
-                disabled={isSaving || !isFormValid(form)}
+                disabled={isSaving || !isFormValid(form, Boolean(editingId))}
               >
                 {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 {editingId ? t('backups.update') : t('common.create')}
@@ -1520,8 +1696,9 @@ function SectionLabel({ label }: { label: string }) {
 // Renders a single provider field generically. Password fields mask
 // their value (type=password + a lock affordance). Switch fields use
 // the Switch component. Multiline password fields (e.g. GCS private
-// key) render as a masked Textarea. The component is fully driven by
-// the ProviderField definition — it has no provider-specific logic.
+// key) render as a masked Textarea. In edit mode, password fields
+// display a secure placeholder indicating that leaving them blank preserves
+// the current saved credentials.
 
 function ConfigField({
   field,
@@ -1530,6 +1707,7 @@ function ConfigField({
   onBlur,
   error,
   disabled,
+  isEditing = false,
 }: {
   field: ProviderField;
   value: string;
@@ -1537,15 +1715,22 @@ function ConfigField({
   onBlur?: () => void;
   error?: string;
   disabled?: boolean;
+  isEditing?: boolean;
 }) {
   const inputId = `storage-config-${field.key}`;
   const showError = !!error;
   const { t } = useT();
+  const isSecret = field.type === 'password';
+  const effectivePlaceholder =
+    isEditing && isSecret
+      ? (t('backups.savedSecurelyPlaceholder') || 'Saved securely — leave blank to keep current value')
+      : field.placeholder;
+
   return (
     <div className="space-y-1.5">
       <Label htmlFor={inputId} className="text-xs">
         {field.label}
-        {field.required && <span className="text-destructive ml-0.5">*</span>}
+        {field.required && !isEditing && <span className="text-destructive ml-0.5">*</span>}
       </Label>
       {field.type === 'switch' ? (
         <div className="flex items-center gap-2 h-9">
@@ -1562,7 +1747,7 @@ function ConfigField({
       ) : field.type === 'password' && field.multiline ? (
         <Textarea
           id={inputId}
-          placeholder={field.placeholder}
+          placeholder={effectivePlaceholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
@@ -1576,7 +1761,7 @@ function ConfigField({
           <Input
             id={inputId}
             type={field.type === 'password' ? 'password' : field.type === 'number' ? 'number' : 'text'}
-            placeholder={field.placeholder}
+            placeholder={effectivePlaceholder}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onBlur={onBlur}
@@ -1588,7 +1773,16 @@ function ConfigField({
           {field.type === 'password' && value && (
             <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60 pointer-events-none" />
           )}
+          {field.type === 'password' && isEditing && !value && (
+            <ShieldCheck className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 pointer-events-none" />
+          )}
         </div>
+      )}
+      {isSecret && isEditing && !value && (
+        <p className="text-[11px] text-muted-foreground/80 flex items-center gap-1 mt-0.5">
+          <ShieldCheck className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span>{t('backups.leaveBlankToKeep') || 'Saved securely — leave blank to keep current value'}</span>
+        </p>
       )}
       {showError ? (
         <p className="text-xs text-destructive">{error}</p>

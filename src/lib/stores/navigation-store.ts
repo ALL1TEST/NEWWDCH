@@ -13,6 +13,7 @@ interface NavigationState {
 
   setInitialAiPrompt: (prompt: string | null, title?: string | null) => void;
   navigate: (mod: string, itemId?: string | null, subPage?: string | null) => void;
+  goBack: (fallbackMod?: string, fallbackItemId?: string | null, fallbackSubPage?: string | null) => void;
   readFromHash: () => void;
 }
 
@@ -89,7 +90,7 @@ function parseHash(hash: string): {
     // Media
     'folders', 'upload',
     // Settings — ALL children must be here
-    'settings', 'general', 'localization', 'reading', 'discussion',
+    'settings', 'general', 'localization', 'reading', 'discussion', 'spam',
     'seo', 'media', 'search', 'email', 'security', 'api', 'ai', 'cache',
     'maintenance', 'multi-site', 'import-export', 'advanced', 'smtp',
     // Audit
@@ -169,9 +170,20 @@ if (typeof window !== 'undefined') {
   }
 }
 
+// -------------------- Internal History Tracking --------------------
+
+interface HistoryEntry {
+  mod: string;
+  itemId: string | null;
+  subPage: string | null;
+}
+
+let isNavigatingBack = false;
+const internalHistoryStack: HistoryEntry[] = [];
+
 // -------------------- Store --------------------
 
-export const useNavigationStore = create<NavigationState>((set) => ({
+export const useNavigationStore = create<NavigationState>((set, get) => ({
   currentModule: initialState.mod,
   currentItemId: initialState.itemId,
   currentSubPage: initialState.subPage,
@@ -194,6 +206,21 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       targetSubPage = 'tags';
     }
 
+    const current = get();
+    if (!isNavigatingBack && current) {
+      if (
+        current.currentModule !== targetMod ||
+        current.currentItemId !== targetItemId ||
+        current.currentSubPage !== targetSubPage
+      ) {
+        internalHistoryStack.push({
+          mod: current.currentModule,
+          itemId: current.currentItemId,
+          subPage: current.currentSubPage,
+        });
+      }
+    }
+
     set({
       currentModule: targetMod,
       currentItemId: targetItemId,
@@ -212,6 +239,27 @@ export const useNavigationStore = create<NavigationState>((set) => ({
     }
   },
 
+  goBack: (fallbackMod = 'dashboard', fallbackItemId = null, fallbackSubPage = null) => {
+    if (typeof window !== 'undefined' && internalHistoryStack.length > 0) {
+      const prev = internalHistoryStack.pop();
+      isNavigatingBack = true;
+      window.history.back();
+
+      setTimeout(() => {
+        if (isNavigatingBack) {
+          isNavigatingBack = false;
+          if (prev) {
+            get().navigate(prev.mod, prev.itemId, prev.subPage);
+          }
+        }
+      }, 150);
+      return;
+    }
+
+    // Fallback if no in-app history exists
+    get().navigate(fallbackMod, fallbackItemId, fallbackSubPage);
+  },
+
   readFromHash: () => {
     const hash = window.location.hash;
     const parsed = parseHash(hash);
@@ -228,6 +276,25 @@ export const useNavigationStore = create<NavigationState>((set) => ({
 function syncHashToStore() {
   const hash = window.location.hash;
   const parsed = parseHash(hash);
+  const current = useNavigationStore.getState();
+
+  if (!isNavigatingBack) {
+    if (
+      current &&
+      (current.currentModule !== parsed.mod ||
+        current.currentItemId !== parsed.itemId ||
+        current.currentSubPage !== parsed.subPage)
+    ) {
+      internalHistoryStack.push({
+        mod: current.currentModule,
+        itemId: current.currentItemId,
+        subPage: current.currentSubPage,
+      });
+    }
+  } else {
+    isNavigatingBack = false;
+  }
+
   useNavigationStore.setState({
     currentModule: parsed.mod,
     currentItemId: parsed.itemId,

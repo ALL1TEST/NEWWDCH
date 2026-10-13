@@ -345,7 +345,7 @@ export function NotificationsPage() {
   // Comment Notifications setting (Admin User setting — preserved)
   const { data: commentNotifData } = useQuery({
     queryKey: ['settings', 'discussion', 'comment-notification'],
-    queryFn: () => getApi<Record<string, string> | null>('/api/settings?category=DISCUSSION'),
+    queryFn: () => getApi<Record<string, string> | null>('/api/settings', { category: 'DISCUSSION' }),
     staleTime: 10_000,
   });
   const commentNotifsOn = commentNotifData?.comment_notification !== 'false';

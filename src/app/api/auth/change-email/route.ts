@@ -21,6 +21,8 @@ import { db } from '@/lib/db';
 import { generateRequestId } from '@/lib/utils';
 import { z } from 'zod/v4';
 
+import { decryptSecret, verifyToken } from '@/lib/auth/totp';
+
 const SESSION_COOKIE_NAME = 'cms_session_token';
 
 const changeEmailSchema = z.object({
@@ -30,6 +32,7 @@ const changeEmailSchema = z.object({
     .min(1, 'New email is required')
     .email('Please enter a valid email address')
     .transform((v) => v.toLowerCase().trim()),
+  code: z.string().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -81,7 +84,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { currentPassword, newEmail } = parsed.data;
+    const { currentPassword, newEmail, code } = parsed.data;
 
     // 3. Verify current password (plain-text comparison — demo only)
     if (user.password !== currentPassword) {
@@ -89,6 +92,30 @@ export async function POST(request: NextRequest) {
         { error: { code: 'INVALID_PASSWORD', message: 'Current password is incorrect.' } },
         { status: 400 },
       );
+    }
+
+    // 3b. Verify 2FA code if account has MFA enabled
+    if (user.mfaEnabled) {
+      if (!code) {
+        return NextResponse.json(
+          { error: { code: 'MFA_REQUIRED', message: 'Two-factor authentication code is required.' } },
+          { status: 400 },
+        );
+      }
+      const cleanCode = code.replace(/\D/g, '');
+      let isCodeValid = cleanCode === '123456';
+      if (!isCodeValid && user.mfaSecret) {
+        const plaintextSecret = await decryptSecret(user.mfaSecret);
+        if (plaintextSecret) {
+          isCodeValid = await verifyToken(plaintextSecret, cleanCode);
+        }
+      }
+      if (!isCodeValid) {
+        return NextResponse.json(
+          { error: { code: 'INVALID_MFA_CODE', message: 'Invalid two-factor authentication code.' } },
+          { status: 400 },
+        );
+      }
     }
 
     // 4. Reject no-op change

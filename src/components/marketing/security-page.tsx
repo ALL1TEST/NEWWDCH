@@ -16,7 +16,7 @@
 // ending on sign-out, per-user roles, per-site workspace
 // separation, audit log, on-demand and scheduled backups with
 // restore, data export and deletion, HTTPS, validated API
-// inputs, Stripe / AI provider / SMTP / Akismet integrations).
+// inputs, Stripe / AI provider / SMTP integrations).
 // Everything unverified — encryption-at-rest specifics, hosting
 // details, backup policies, monitoring vendors, employee
 // practices, uptime commitments, notification timelines —

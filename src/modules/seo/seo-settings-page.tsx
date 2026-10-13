@@ -42,6 +42,7 @@ export function SeoSettingsPage({ initialTab = 'sitemap' }: { initialTab?: Setti
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const { t } = useT();
   const navigate = useNavigationStore((s) => s.navigate);
+  const goBack = useNavigationStore((s) => s.goBack);
   const meta = TAB_META[activeTab];
 
   // Lightweight redirect count for the Redirects tab badge. Shares the
@@ -61,7 +62,7 @@ export function SeoSettingsPage({ initialTab = 'sitemap' }: { initialTab?: Setti
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate('seo')}><ArrowLeft className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" onClick={() => goBack('seo')}><ArrowLeft className="h-4 w-4" /></Button>
         <div>
           <h1 className="text-xl font-bold tracking-tight text-foreground">{t(meta.titleKey)}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t(meta.descriptionKey)}</p>

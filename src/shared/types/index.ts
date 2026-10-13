@@ -88,7 +88,8 @@ export type CommentStatus =
   | 'APPROVED'
   | 'REJECTED'
   | 'FLAGGED'
-  | 'SPAM';
+  | 'SPAM'
+  | 'TRASH';
 
 export type FormStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 

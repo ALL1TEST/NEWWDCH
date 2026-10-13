@@ -20,10 +20,12 @@ import {
   XCircle,
   Clock,
   ArrowUpRight,
-  ChevronUp,
-  ChevronDown,
   ExternalLink,
   ArrowLeft,
+  UserCheck,
+  Copy,
+  Check,
+  ShieldCheck,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,12 +47,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Separator } from '@/components/ui/separator';
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useChartTheme } from '@/lib/chart-theme';
 import { useT } from '@/lib/i18n';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
+import { useSiteStore } from '@/lib/stores/site-store';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -69,10 +71,12 @@ interface SearchConsoleConnection {
   id: string;
   siteUrl: string;
   status: string;
-  connectedAt: string | null;
+  accountEmail?: string | null;
+  statusMessage?: string | null;
+  connectedAt?: string | null;
   lastSyncAt: string | null;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
 }
 
 interface SearchConsoleSummary {
@@ -82,8 +86,20 @@ interface SearchConsoleSummary {
   averagePosition: number;
 }
 
+interface PendingVerification {
+  manualRequired: boolean;
+  token?: string;
+  metaTag?: string;
+  targetPropertyUrl?: string;
+  accountEmail?: string;
+  error?: string;
+}
+
 interface SearchConsoleData {
-  connection: SearchConsoleConnection;
+  connected: boolean;
+  targetSiteUrl?: string;
+  pendingVerification?: PendingVerification | null;
+  connection: SearchConsoleConnection | null;
   summary: SearchConsoleSummary;
 }
 
@@ -141,7 +157,7 @@ function formatPosition(n: number | null | undefined): string {
 }
 
 function formatDate(dateStr: string | null, t: (key: string) => string): string {
-  if (!dateStr) return t('seo.never');
+  if (!dateStr) return t('seo.never') || 'Never';
   try {
     return new Date(dateStr).toLocaleString(undefined, {
       month: 'short',
@@ -151,7 +167,7 @@ function formatDate(dateStr: string | null, t: (key: string) => string): string 
       minute: '2-digit',
     });
   } catch {
-    return t('seo.unknown');
+    return t('seo.unknown') || 'Unknown';
   }
 }
 
@@ -166,33 +182,132 @@ function formatShortDate(dateStr: string): string {
   }
 }
 
-// ==================== Connection Badge ====================
+// ==================== Connection Badge & Progress ====================
 
 function ConnectionBadge({ status }: { status: string }) {
-  const { t } = useT();
   switch (status) {
     case 'CONNECTED':
       return (
-        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-transparent font-medium gap-1">
-          <CheckCircle2 className="h-3 w-3" />
-          {t('seo.connected')}
+        <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 font-medium gap-1.5 px-2.5 py-0.5">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Connected
+        </Badge>
+      );
+    case 'MANUAL_VERIFICATION_REQUIRED':
+      return (
+        <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 font-medium gap-1.5 px-2.5 py-0.5">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          Verification Required
+        </Badge>
+      );
+    case 'VERIFICATION_FAILED':
+      return (
+        <Badge variant="destructive" className="font-medium gap-1.5 px-2.5 py-0.5">
+          <XCircle className="h-3.5 w-3.5" />
+          Verification Failed
+        </Badge>
+      );
+    case 'PROPERTY_NOT_ACCESSIBLE':
+      return (
+        <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 font-medium gap-1.5 px-2.5 py-0.5">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          Property Not Accessible
         </Badge>
       );
     case 'EXPIRED':
       return (
-        <Badge variant="destructive" className="font-medium gap-1">
-          <XCircle className="h-3 w-3" />
-          {t('seo.expired')}
+        <Badge variant="destructive" className="font-medium gap-1.5 px-2.5 py-0.5">
+          <XCircle className="h-3.5 w-3.5" />
+          Expired
         </Badge>
       );
     default:
       return (
-        <Badge variant="secondary" className="font-medium gap-1">
-          <XCircle className="h-3 w-3" />
-          {t('seo.disconnected')}
+        <Badge variant="secondary" className="font-medium gap-1.5 px-2.5 py-0.5">
+          <XCircle className="h-3.5 w-3.5" />
+          Disconnected
         </Badge>
       );
   }
+}
+
+const VERIFICATION_STEPS = [
+  { id: 'connect_account', label: 'Connecting Google account...' },
+  { id: 'check_access', label: 'Checking Search Console access...' },
+  { id: 'verify_site', label: 'Verifying website...' },
+  { id: 'publish_tag', label: 'Publishing verification...' },
+  { id: 'confirm_live', label: 'Confirming live verification...' },
+  { id: 'connect_property', label: 'Connecting Search Console property...' },
+  { id: 'connected', label: 'Connected successfully.' },
+];
+
+function VerificationProgressCard({
+  activeStepIndex,
+  isFinished,
+}: {
+  activeStepIndex: number;
+  isFinished?: boolean;
+}) {
+  return (
+    <Card className="border-primary/20 bg-primary/[0.02] shadow-sm">
+      <CardContent className="p-5 sm:p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+            {isFinished ? (
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+            ) : (
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            )}
+          </div>
+          <div>
+            <h4 className="text-sm font-semibold text-foreground">
+              {isFinished ? 'Search Console Connected' : 'Connecting Search Console...'}
+            </h4>
+            <p className="text-xs text-muted-foreground">
+              {isFinished
+                ? 'Your website has been verified and Search Console connected successfully.'
+                : 'Verifying website and establishing secure Search Console connection.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-2.5 pl-2 border-l-2 border-muted ml-3 pt-1 pb-1">
+          {VERIFICATION_STEPS.map((step, idx) => {
+            const isDone = isFinished || idx < activeStepIndex;
+            const isCurrent = !isFinished && idx === activeStepIndex;
+            return (
+              <div
+                key={step.id}
+                className={cn(
+                  'flex items-center gap-2.5 text-xs transition-colors duration-200 -ml-[9px]',
+                  isDone
+                    ? 'text-emerald-600 dark:text-emerald-400 font-medium'
+                    : isCurrent
+                      ? 'text-primary font-semibold'
+                      : 'text-muted-foreground/50',
+                )}
+              >
+                <div
+                  className={cn(
+                    'h-3.5 w-3.5 rounded-full flex items-center justify-center shrink-0 text-[9px] font-bold',
+                    isDone
+                      ? 'bg-emerald-500 text-white'
+                      : isCurrent
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted border border-muted-foreground/30',
+                  )}
+                >
+                  {isDone ? '✓' : isCurrent ? '●' : ''}
+                </div>
+                <span>{step.label}</span>
+                {isCurrent && <Loader2 className="h-3 w-3 animate-spin text-primary ml-1" />}
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 // ==================== KPI Card ====================
@@ -236,13 +351,10 @@ function KpiCard({ icon: Icon, label, value, iconColor, iconBg, loading }: KpiCa
 interface PerformanceChartProps {
   stats: DailyStat[];
   isLoading: boolean;
-  /** Called when the user clicks "Sync Now" inside the empty state. */
   onSync?: () => void;
-  /** Whether a sync is currently in progress (disables the Sync button). */
   isSyncing?: boolean;
 }
 
-// Custom recharts tooltip — shows the exact date + per-day values.
 function ChartTooltip({
   active,
   payload,
@@ -296,8 +408,6 @@ function ChartTooltip({
 
 function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceChartProps) {
   const { t } = useT();
-  // Shared theme-aware chart palette (see lib/chart-theme.ts). Named `chart`
-  // (like usage-page.tsx) so the i18n `t` stays available in this component.
   const chart = useChartTheme();
 
   if (isLoading) {
@@ -339,8 +449,6 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
     );
   }
 
-  // Defensive chronological sort (oldest → newest). The API already returns
-  // ascending by date, but a mis-sorted payload must never scramble the X-axis.
   const data = [...stats]
     .map((s) => ({
       date: s.date,
@@ -351,9 +459,6 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
     }))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
-  // Theme-aware axis tick style — NEVER `hsl(var(--token))`: the design
-  // tokens hold plain oklch values and re-wrapping them is invalid CSS
-  // that silently falls back to black in recharts.
   const axisTick = chart.axisTick(10);
 
   return (
@@ -369,13 +474,6 @@ function PerformanceChart({ stats, isLoading, onSync, isSyncing }: PerformanceCh
         </span>
       </div>
 
-      {/*
-        Dual Y-axis area chart: left axis = Impressions (large numbers),
-        right axis = Clicks (small numbers). Without two axes the Clicks series
-        would collapse to a flat line at the bottom and be unreadable. Colors
-        stay on the existing `primary` hue to preserve the page palette and the
-        manual legend above.
-      */}
       <div className="h-56 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -560,8 +658,6 @@ function PagesTable({ pages, isLoading }: { pages: PageItem[]; isLoading: boolea
               <TableCell className="max-w-[280px]">
                 {(() => {
                   const isAbsolute = /^https?:\/\//i.test(item.pageUrl);
-                  // Internal article link → SPA hash route to the content detail.
-                  // External URL → opens in a new tab. Bare path → exact path link.
                   const href = item.contentId
                     ? `#content/${item.contentId}`
                     : item.pageUrl;
@@ -607,14 +703,12 @@ function PagesTable({ pages, isLoading }: { pages: PageItem[]; isLoading: boolea
 function SearchConsoleSkeleton() {
   return (
     <div className="space-y-6">
-      {/* Connection card skeleton */}
       <Card className="p-6">
         <div className="flex items-center justify-between">
           <Skeleton className="h-5 w-48" />
           <Skeleton className="h-6 w-28" />
         </div>
       </Card>
-      {/* KPI cards skeleton */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <Card key={i} className="p-4">
@@ -628,7 +722,6 @@ function SearchConsoleSkeleton() {
           </Card>
         ))}
       </div>
-      {/* Chart skeleton */}
       <Card className="p-6">
         <Skeleton className="h-5 w-40 mb-4" />
         <Skeleton className="h-48 w-full" />
@@ -646,12 +739,28 @@ export function SeoSearchConsolePage() {
 function SeoSearchConsolePageInner() {
   const { t } = useT();
   const navigate = useNavigationStore((s) => s.navigate);
+  const goBack = useNavigationStore((s) => s.goBack);
+  const activeSite = useSiteStore((s) => s.getActiveSite());
   const queryClient = useQueryClient();
-  const [connectUrl, setConnectUrl] = useState('');
-  // Performance Chart date range. `rangePreset` is one of the preset day
-  // counts ('7' | '14' | '28' | '90' | '180') or 'custom'. When 'custom' is
-  // picked we auto-seed from/to to the last 14 days so the chart always has
-  // a usable span immediately.
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [showProgress, setShowProgress] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('success') === 'connected';
+  });
+  const [progressStep, setProgressStep] = useState(() => {
+    if (typeof window === 'undefined') return 0;
+    return new URLSearchParams(window.location.search).get('success') === 'connected' ? 6 : 0;
+  });
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    toast.success('Copied to clipboard');
+    setTimeout(() => setCopiedKey(null), 2500);
+  };
+
+  // Performance Chart date range. Preset ('7' | '14' | '28' | '90' | '180') or 'custom'.
   const [rangePreset, setRangePreset] = useState('14');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -669,24 +778,105 @@ function SeoSearchConsolePageInner() {
     }
   };
 
-  // Query params for the stats endpoint. Preset → { days }; custom → { from, to }.
-  const statsParams = useMemo<Record<string, string | number | undefined>>(
-    () => (rangePreset === 'custom' ? { from: customFrom, to: customTo } : { days: Number(rangePreset) }),
-    [rangePreset, customFrom, customTo],
-  );
-
-  // Main query
+  // Main status query
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.seoSearchConsole.all,
     queryFn: () => getApi<SearchConsoleData>('/api/seo/search-console'),
     staleTime: 30_000,
   });
 
-  // Stats query — uses the user-selected range (preset days or custom span).
-  const isConnected = data?.connection?.status === 'CONNECTED';
-  // Don't fetch stats for a half-filled custom range.
-  const statsEnabled =
-    isConnected && (rangePreset !== 'custom' || (!!customFrom && !!customTo));
+  // Verify mutation for manual fallback or retrying live public verification
+  const verifyMutation = useMutation({
+    mutationFn: () => postApi<{ data: any }>('/api/seo/search-console/verify'),
+    onMutate: () => {
+      setShowProgress(true);
+      setProgressStep(4); // "Confirming live verification..."
+    },
+    onSuccess: (res: any) => {
+      setProgressStep(6); // "Connected successfully."
+      toast.success(res?.data?.message || 'Google Search Console verified and connected successfully!');
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsole.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsoleStats.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsoleQueries.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsolePages.all });
+      setTimeout(() => setShowProgress(false), 3500);
+    },
+    onError: (err: any) => {
+      setShowProgress(false);
+      toast.error(err?.message || 'Verification could not be confirmed on live website.');
+    },
+  });
+
+  // Query params for stats endpoint
+  const statsParams = useMemo<Record<string, string | number | undefined>>(
+    () => (rangePreset === 'custom' ? { from: customFrom, to: customTo } : { days: Number(rangePreset) }),
+    [rangePreset, customFrom, customTo],
+  );
+
+  // Handle OAuth callback parameters on mount
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sp = new URLSearchParams(window.location.search);
+    const success = sp.get('success');
+    const err = sp.get('error');
+    const msg = sp.get('message');
+    const account = sp.get('account');
+    const property = sp.get('property');
+
+    if (success === 'connected') {
+      toast.success(
+        `Google Search Console connected! ${property ? `(${property})` : ''} ${account ? `• ${account}` : ''}`,
+      );
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsole.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsoleStats.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsoleQueries.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsolePages.all });
+      window.history.replaceState(null, '', window.location.pathname);
+      const timer = setTimeout(() => setShowProgress(false), 4500);
+      return () => clearTimeout(timer);
+    } else if (err === 'manual_verification_required') {
+      toast.info(msg || "Automatic verification isn't available for this site yet. Please add the meta tag to verify.");
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsole.all });
+      window.history.replaceState(null, '', window.location.pathname);
+    } else if (err === 'verification_failed') {
+      toast.error(msg || 'Website verification could not be completed.');
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsole.all });
+      window.history.replaceState(null, '', window.location.pathname);
+    } else if (err === 'property_not_accessible') {
+      toast.error(
+        msg ||
+          'Google account connected, but this account does not have access to the configured Search Console property.',
+      );
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsole.all });
+      window.history.replaceState(null, '', window.location.pathname);
+    } else if (err) {
+      toast.error(msg || 'Google Search Console connection is temporarily unavailable. Please try again later.');
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, [queryClient]);
+
+  const connection = data?.connection;
+  const isConnected = data?.connected === true && connection?.status === 'CONNECTED';
+  const isPropertyNotAccessible = connection?.status === 'PROPERTY_NOT_ACCESSIBLE';
+  const pendingVerification = data?.pendingVerification;
+  const isManualVerificationRequired =
+    connection?.status === 'MANUAL_VERIFICATION_REQUIRED' ||
+    (pendingVerification?.manualRequired === true && !isConnected);
+  const isVerificationFailed =
+    connection?.status === 'VERIFICATION_FAILED' ||
+    (!!pendingVerification && !pendingVerification.manualRequired && !isConnected);
+
+  // Automatic target site URL from CMS site configuration
+  const targetSiteUrl =
+    data?.targetSiteUrl ||
+    (activeSite?.domain
+      ? activeSite.domain.startsWith('http')
+        ? activeSite.domain
+        : `https://${activeSite.domain}/`
+      : 'https://verdantt.vercel.app/');
+
+  // Stats query
+  const statsEnabled = isConnected && (rangePreset !== 'custom' || (!!customFrom && !!customTo));
   const { data: statsData, isLoading: statsLoading } = useQuery({
     queryKey: queryKeys.seoSearchConsoleStats.list(statsParams),
     queryFn: () => getApi<DailyStat[]>('/api/seo/search-console/stats', statsParams),
@@ -694,9 +884,7 @@ function SeoSearchConsolePageInner() {
     enabled: statsEnabled,
   });
 
-  // Summary (KPI cards) is derived from the SAME daily stats that feed the
-  // chart, so the cards always match the selected range — never a 30-day
-  // mismatch between the summary and the chart.
+  // KPI summary derived from daily stats
   const rangeSummary = useMemo(() => {
     const stats = statsData ?? [];
     const totalClicks = stats.reduce((s, x) => s + x.clicks, 0);
@@ -719,7 +907,7 @@ function SeoSearchConsolePageInner() {
     queryKey: queryKeys.seoSearchConsoleQueries.list({ page: 1, pageSize: 10 }),
     queryFn: () => getApi<PaginatedList<QueryItem>>('/api/seo/search-console/queries', { page: 1, pageSize: 10 }),
     staleTime: 60_000,
-    enabled: data?.connection?.status === 'CONNECTED',
+    enabled: isConnected,
   });
 
   // Pages query
@@ -727,29 +915,33 @@ function SeoSearchConsolePageInner() {
     queryKey: queryKeys.seoSearchConsolePages.list({ page: 1, pageSize: 10 }),
     queryFn: () => getApi<PaginatedList<PageItem>>('/api/seo/search-console/pages', { page: 1, pageSize: 10 }),
     staleTime: 60_000,
-    enabled: data?.connection?.status === 'CONNECTED',
+    enabled: isConnected,
   });
 
-  const connection = data?.connection;
-
-  // Connect mutation
-  const connectMutation = useMutation({
-    mutationFn: () => postApi('/api/seo/search-console', { siteUrl: connectUrl }),
-    onSuccess: () => {
-      setConnectUrl('');
-      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsole.all });
-      toast.success(t('seo.scConnected'));
-    },
-    onError: () => {
-      toast.error(t('seo.scConnectFailed'));
-    },
-  });
+  // Initiate server-side Google OAuth flow
+  const handleConnect = (isSwitch = false) => {
+    setIsConnecting(true);
+    setShowProgress(true);
+    setProgressStep(0);
+    const params = new URLSearchParams();
+    if (activeSite?.id) params.set('siteId', activeSite.id);
+    if (isSwitch) {
+      params.set('switch', 'true');
+      params.set('prompt', 'select_account');
+    }
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.href = `/api/integrations/google/search-console/connect${qs}`;
+  };
 
   // Disconnect mutation
   const disconnectMutation = useMutation({
     mutationFn: () => deleteApi('/api/seo/search-console'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsole.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsoleStats.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsoleQueries.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsolePages.all });
       toast.success(t('seo.scDisconnected'));
     },
     onError: () => {
@@ -767,22 +959,25 @@ function SeoSearchConsolePageInner() {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsolePages.all });
       toast.success(t('seo.scSynced'));
     },
-    onError: () => {
-      toast.error(t('seo.scSyncFailed'));
+    onError: (err: any) => {
+      toast.error(err?.message || t('seo.scSyncFailed'));
     },
   });
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate('seo')}><ArrowLeft className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" onClick={() => goBack('seo')}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
         <div>
           <h1 className="text-xl font-bold tracking-tight text-foreground">{t('seo.searchConsole')}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t('seo.scDescription')}</p>
         </div>
       </div>
 
-      {/* Error state */}
+      {/* Network / Load Error state */}
       {error && (
         <Card className="border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20">
           <CardContent className="p-4 flex items-center gap-3">
@@ -794,296 +989,519 @@ function SeoSearchConsolePageInner() {
         </Card>
       )}
 
+      {/* Verification Progress Stepper */}
+      {showProgress && (
+        <VerificationProgressCard activeStepIndex={progressStep} isFinished={progressStep >= 6} />
+      )}
+
       {isLoading ? (
         <SearchConsoleSkeleton />
-      ) : data ? (
-        <>
-          {/* Connection Status Card */}
-          <Card className="p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className={cn(
-                  'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
-                  isConnected
-                    ? 'bg-green-100 dark:bg-green-900/30'
-                    : 'bg-zinc-100 dark:bg-zinc-800',
-                )}>
-                  <Plug className={cn(
-                    'h-5 w-5',
-                    isConnected
-                      ? 'text-green-600 dark:text-green-400'
-                      : 'text-muted-foreground',
-                  )} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-sm">{t('seo.connectionStatus')}</h3>
-                    <ConnectionBadge status={connection?.status ?? 'DISCONNECTED'} />
-                  </div>
-                  {connection?.siteUrl && isConnected && (
-                    <a
-                      href={connection.siteUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-muted-foreground mt-0.5 font-mono hover:text-foreground hover:underline underline-offset-2 transition-colors max-w-full"
-                      title={`${t('seo.openInNewTabPrefix')} ${connection.siteUrl} ${t('seo.openInNewTabSuffix')}`}
-                    >
-                      <span className="truncate max-w-[280px]">{connection.siteUrl}</span>
-                      <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
-                    </a>
-                  )}
-                  {connection?.lastSyncAt && isConnected && (
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Clock className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">
-                        {t('seo.lastSynced')} {formatDate(connection.lastSyncAt, t)}
-                      </span>
-                    </div>
-                  )}
-                </div>
+      ) : isManualVerificationRequired ? (
+        /* ==================== STATE: MANUAL VERIFICATION FALLBACK ==================== */
+        <Card className="border-amber-300 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 shadow-sm">
+          <CardContent className="p-6 sm:p-8 space-y-6">
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="h-6 w-6" />
               </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                {isConnected ? (
-                  <>
-                    <Button
-                      onClick={() => syncMutation.mutate()}
-                      disabled={syncMutation.isPending}
-                    >
-                      {syncMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                      )}
-                      {t('seo.syncNow')}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => disconnectMutation.mutate()}
-                      disabled={disconnectMutation.isPending}
-                    >
-                      {disconnectMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Unplug className="h-4 w-4 mr-2" />
-                      )}
-                      {t('seo.disconnect')}
-                    </Button>
-                  </>
-                ) : (
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <Input
-                      placeholder="https://yourdomain.com"
-                      value={connectUrl}
-                      onChange={(e) => setConnectUrl(e.target.value)}
-                      className="h-9 w-full sm:w-64 font-mono text-sm"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && connectUrl.trim()) {
-                          connectMutation.mutate();
-                        }
-                      }}
-                    />
-                    <Button
-                      onClick={() => connectMutation.mutate()}
-                      disabled={connectMutation.isPending || !connectUrl.trim()}
-                    >
-                      {connectMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Plug className="h-4 w-4 mr-2" />
-                      )}
-                      {t('seo.connect')}
-                    </Button>
-                  </div>
-                )}
+              <div className="space-y-1">
+                <h3 className="text-base font-semibold text-foreground">
+                  Automatic verification isn't available for this site yet.
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
+                  Add the Google verification meta tag to your website's &lt;head&gt; section to confirm ownership.
+                </p>
               </div>
             </div>
-          </Card>
 
-          {/* KPI Stats Cards — Only when connected. Derived from the same
-              daily stats as the chart so totals always match the selected range. */}
-          {isConnected && (
-            <section>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <KpiCard
-                  icon={MousePointerClick}
-                  label={t('seo.totalClicks')}
-                  value={formatNumber(rangeSummary.totalClicks)}
-                  iconColor="text-green-600 dark:text-green-400"
-                  iconBg="bg-green-100 dark:bg-green-900/30"
-                  loading={statsLoading && !statsData}
-                />
-                <KpiCard
-                  icon={Eye}
-                  label={t('seo.totalImpressions')}
-                  value={formatNumber(rangeSummary.totalImpressions)}
-                  iconColor="text-emerald-600 dark:text-emerald-400"
-                  iconBg="bg-emerald-100 dark:bg-emerald-900/30"
-                  loading={statsLoading && !statsData}
-                />
-                <KpiCard
-                  icon={TrendingUp}
-                  label={t('seo.averageCtr')}
-                  value={formatPercent(rangeSummary.averageCtr)}
-                  iconColor="text-amber-600 dark:text-amber-400"
-                  iconBg="bg-amber-100 dark:bg-amber-900/30"
-                  loading={statsLoading && !statsData}
-                />
-                <KpiCard
-                  icon={Target}
-                  label={t('seo.averagePosition')}
-                  value={formatPosition(rangeSummary.averagePosition)}
-                  iconColor="text-sky-600 dark:text-sky-400"
-                  iconBg="bg-sky-100 dark:bg-sky-900/30"
-                  loading={statsLoading && !statsData}
-                />
-              </div>
-            </section>
-          )}
-
-          {/* Disconnected empty state — replace chart / queries / pages with a single CTA */}
-          {!isConnected && (
-            <Card className="border-dashed">
-              <CardContent className="p-10 sm:p-16 flex flex-col items-center justify-center text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 mb-4">
-                  <Search className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
+            <div className="space-y-4 pt-2">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  1. Meta Tag (Place inside &lt;head&gt;)
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="font-mono text-xs bg-muted/80 dark:bg-muted/40 p-2.5 rounded-md border flex-1 break-all select-all">
+                    {pendingVerification?.metaTag ||
+                      `<meta name="google-site-verification" content="${pendingVerification?.token || ''}" />`}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-1.5"
+                    onClick={() =>
+                      handleCopy(
+                        pendingVerification?.metaTag ||
+                          `<meta name="google-site-verification" content="${pendingVerification?.token || ''}" />`,
+                        'meta_tag',
+                      )
+                    }
+                  >
+                    {copiedKey === 'meta_tag' ? (
+                      <Check className="h-3.5 w-3.5 text-emerald-600" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                    {copiedKey === 'meta_tag' ? 'Copied' : 'Copy Tag'}
+                  </Button>
                 </div>
-                <h3 className="text-lg font-semibold">{t('seo.connectGoogleSc')}</h3>
-                <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                  {t('seo.connectPrompt')}
-                </p>
-                <Button
-                  className="mt-5"
-                  onClick={() => connectMutation.mutate()}
-                  disabled={connectMutation.isPending || !connectUrl.trim()}
-                >
-                  {connectMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Plug className="h-4 w-4 mr-2" />
-                  )}
-                  {t('seo.connectSearchConsole')}
-                </Button>
-                <p className="text-xs text-muted-foreground mt-3">
-                  {t('seo.enterSiteUrlHint')}
-                </p>
-              </CardContent>
-            </Card>
-          )}
+              </div>
 
-          {/* Performance Chart — only when connected */}
-          {isConnected && (
-            <Card>
-              <CardHeader className="pb-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <CardTitle className="text-base font-semibold">{t('seo.performanceChart')}</CardTitle>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-muted-foreground hidden sm:inline">{t('seo.range')}</span>
-                    <Select value={rangePreset} onValueChange={handleRangeChange}>
-                      <SelectTrigger className="h-8 w-[140px] text-xs">
-                        <SelectValue placeholder={t('seo.selectRange')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="7">{t('seo.last7Days')}</SelectItem>
-                        <SelectItem value="14">{t('seo.last14Days')}</SelectItem>
-                        <SelectItem value="28">{t('seo.last28Days')}</SelectItem>
-                        <SelectItem value="90">{t('seo.last3Months')}</SelectItem>
-                        <SelectItem value="180">{t('seo.last6Months')}</SelectItem>
-                        <SelectItem value="custom">{t('seo.customRange')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {rangePreset === 'custom' && (
-                      <div className="flex items-center gap-1.5">
-                        <Input
-                          type="date"
-                          value={customFrom}
-                          onChange={(e) => setCustomFrom(e.target.value)}
-                          className="h-8 w-[150px] text-xs"
-                          aria-label={t('seo.customRangeStart')}
-                        />
-                        <span className="text-xs text-muted-foreground">→</span>
-                        <Input
-                          type="date"
-                          value={customTo}
-                          onChange={(e) => setCustomTo(e.target.value)}
-                          className="h-8 w-[150px] text-xs"
-                          aria-label={t('seo.customRangeEnd')}
-                        />
+              {pendingVerification?.token && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">
+                    2. Verification Token
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <div className="font-mono text-xs bg-muted/80 dark:bg-muted/40 p-2.5 rounded-md border flex-1 break-all select-all">
+                      {pendingVerification.token}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 gap-1.5"
+                      onClick={() => handleCopy(pendingVerification.token!, 'token')}
+                    >
+                      {copiedKey === 'token' ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                      {copiedKey === 'token' ? 'Copied' : 'Copy Token'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="p-3.5 rounded-lg bg-background/80 border text-xs text-muted-foreground space-y-1">
+                <p className="font-medium text-foreground">Exact verification location:</p>
+                <p>
+                  Deploy your website at <span className="font-mono text-primary">{targetSiteUrl}</span> with the meta tag inside the <span className="font-mono">&lt;head&gt;</span> section.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <Button
+                  onClick={() => verifyMutation.mutate()}
+                  disabled={verifyMutation.isPending}
+                  className="gap-2 font-medium"
+                >
+                  {verifyMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="h-4 w-4" />
+                  )}
+                  {verifyMutation.isPending ? 'Confirming Live Website...' : 'Verify'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => disconnectMutation.mutate()}
+                  disabled={disconnectMutation.isPending}
+                  className="text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+                >
+                  <Unplug className="h-3.5 w-3.5 mr-1.5" />
+                  Cancel Connection
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : isVerificationFailed ? (
+        /* ==================== STATE: VERIFICATION FAILED ==================== */
+        <Card className="border-red-200 dark:border-red-900/50 bg-red-50/40 dark:bg-red-950/20 shadow-sm">
+          <CardContent className="p-6 sm:p-8 space-y-5">
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-600 dark:text-red-400">
+                <XCircle className="h-6 w-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-semibold text-foreground">
+                  Website verification failed
+                </h3>
+                <p className="text-sm text-red-800 dark:text-red-300 leading-relaxed max-w-2xl">
+                  {pendingVerification?.error ||
+                    connection?.statusMessage ||
+                    'We checked the live public website, but the verification meta tag was not found in the rendered <head>.'}
+                </p>
+                <p className="text-xs text-muted-foreground pt-1">
+                  Target Property: <span className="font-mono text-foreground">{targetSiteUrl}</span>
+                </p>
+              </div>
+            </div>
+
+            {pendingVerification?.metaTag && (
+              <div className="space-y-1.5 pt-1">
+                <label className="text-xs font-semibold text-foreground">
+                  Verification Meta Tag:
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="font-mono text-xs bg-muted/80 dark:bg-muted/40 p-2.5 rounded-md border flex-1 break-all select-all">
+                    {pendingVerification.metaTag}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-1.5"
+                    onClick={() => handleCopy(pendingVerification.metaTag!, 'failed_meta')}
+                  >
+                    {copiedKey === 'failed_meta' ? (
+                      <Check className="h-3.5 w-3.5 text-emerald-600" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                    Copy Tag
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              <Button
+                onClick={() => verifyMutation.mutate()}
+                disabled={verifyMutation.isPending}
+                className="gap-2 font-medium"
+              >
+                {verifyMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                {verifyMutation.isPending ? 'Verifying Live Website...' : 'Retry Verification'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleConnect(true)}
+                disabled={isConnecting}
+                className="gap-1.5 text-xs font-medium"
+              >
+                <UserCheck className="h-3.5 w-3.5" />
+                Reconnect Google Account
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => disconnectMutation.mutate()}
+                disabled={disconnectMutation.isPending}
+                className="text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+              >
+                <Unplug className="h-3.5 w-3.5 mr-1.5" />
+                Disconnect
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : isPropertyNotAccessible ? (
+        /* ==================== STATE: PROPERTY NOT ACCESSIBLE ==================== */
+        <Card className="border-amber-300 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 shadow-sm">
+          <CardContent className="p-6 sm:p-8">
+            <div className="flex flex-col sm:flex-row items-start justify-between gap-6">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="h-6 w-6" />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <h3 className="text-base font-semibold text-amber-900 dark:text-amber-200">
+                      ⚠ Google account does not have access to this property.
+                    </h3>
+                  </div>
+                  <p className="text-sm text-amber-800 dark:text-amber-300 leading-relaxed max-w-2xl">
+                    Google account connected, but this account does not have access to the configured Search Console property.
+                  </p>
+
+                  <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs">
+                    {connection?.accountEmail && (
+                      <div className="flex items-center gap-1.5 text-amber-900 dark:text-amber-200">
+                        <span className="font-medium">Google Account:</span>
+                        <span className="font-mono bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 rounded">
+                          {connection.accountEmail}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1.5 text-amber-900 dark:text-amber-200">
+                      <span className="font-medium">Property:</span>
+                      <a
+                        href={targetSiteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+                      >
+                        {targetSiteUrl}
+                        <ExternalLink className="h-3 w-3 opacity-60" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-center">
+                <Button
+                  onClick={() => handleConnect(true)}
+                  disabled={isConnecting}
+                  className="bg-primary text-primary-foreground font-medium text-xs gap-1.5"
+                >
+                  {isConnecting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <UserCheck className="h-3.5 w-3.5" />
+                  )}
+                  {isConnecting ? 'Connecting to Google...' : 'Switch Google Account'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+                  onClick={() => disconnectMutation.mutate()}
+                  disabled={disconnectMutation.isPending}
+                >
+                  {disconnectMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Unplug className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  Disconnect
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : isConnected ? (
+        /* ==================== STATE: CONNECTED ==================== */
+        <>
+          {/* Connection Overview Card */}
+          <Card className="p-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <Plug className="h-5 w-5" />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="font-semibold text-sm">Status:</span>
+                    <ConnectionBadge status="CONNECTED" />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 pt-1 text-xs">
+                    {connection?.accountEmail && (
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <span className="font-medium text-foreground">Google Account:</span>
+                        <span className="font-mono text-foreground/90">{connection.accountEmail}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <span className="font-medium text-foreground">Property:</span>
+                      <a
+                        href={connection?.siteUrl || targetSiteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+                      >
+                        {connection?.siteUrl || targetSiteUrl}
+                        <ExternalLink className="h-3 w-3 opacity-60" />
+                      </a>
+                    </div>
+                    {connection?.lastSyncAt && (
+                      <div className="flex items-center gap-1.5 text-muted-foreground sm:col-span-2">
+                        <Clock className="h-3.5 w-3.5" />
+                        <span>Last Synced: {formatDate(connection.lastSyncAt, t)}</span>
                       </div>
                     )}
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <PerformanceChart
-                  stats={statsData ?? []}
-                  isLoading={statsLoading}
-                  onSync={() => syncMutation.mutate()}
-                  isSyncing={syncMutation.isPending}
-                />
-              </CardContent>
-            </Card>
-          )}
+              </div>
 
-          {/* Top Search Queries — only when connected */}
-          {isConnected && (
-            <Card>
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-semibold">{t('seo.topSearchQueries')}</CardTitle>
-                  <Badge variant="outline" className="text-[10px] font-normal">
-                    {t('seo.top')} {queriesData?.data?.length ?? 10}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <QueriesTable
-                  queries={queriesData?.data ?? []}
-                  isLoading={queriesLoading}
-                />
-              </CardContent>
-            </Card>
-          )}
+              {/* Action Buttons */}
+              <div className="flex items-center gap-3 shrink-0 self-start lg:self-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => syncMutation.mutate()}
+                  disabled={syncMutation.isPending}
+                >
+                  {syncMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  Refresh Data
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                  onClick={() => disconnectMutation.mutate()}
+                  disabled={disconnectMutation.isPending}
+                >
+                  {disconnectMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Unplug className="h-4 w-4 mr-2" />
+                  )}
+                  Disconnect
+                </Button>
+              </div>
+            </div>
+          </Card>
 
-          {/* Top Pages — only when connected */}
-          {isConnected && (
-            <Card>
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-semibold">{t('seo.topPages')}</CardTitle>
-                  <Badge variant="outline" className="text-[10px] font-normal">
-                    {t('seo.top')} {pagesData?.data?.length ?? 10}
-                  </Badge>
+          {/* KPI Stats Cards */}
+          <section>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <KpiCard
+                icon={MousePointerClick}
+                label={t('seo.totalClicks')}
+                value={formatNumber(rangeSummary.totalClicks)}
+                iconColor="text-green-600 dark:text-green-400"
+                iconBg="bg-green-100 dark:bg-green-900/30"
+                loading={statsLoading && !statsData}
+              />
+              <KpiCard
+                icon={Eye}
+                label={t('seo.totalImpressions')}
+                value={formatNumber(rangeSummary.totalImpressions)}
+                iconColor="text-emerald-600 dark:text-emerald-400"
+                iconBg="bg-emerald-100 dark:bg-emerald-900/30"
+                loading={statsLoading && !statsData}
+              />
+              <KpiCard
+                icon={TrendingUp}
+                label={t('seo.averageCtr')}
+                value={formatPercent(rangeSummary.averageCtr)}
+                iconColor="text-amber-600 dark:text-amber-400"
+                iconBg="bg-amber-100 dark:bg-amber-900/30"
+                loading={statsLoading && !statsData}
+              />
+              <KpiCard
+                icon={Target}
+                label={t('seo.averagePosition')}
+                value={formatPosition(rangeSummary.averagePosition)}
+                iconColor="text-sky-600 dark:text-sky-400"
+                iconBg="bg-sky-100 dark:bg-sky-900/30"
+                loading={statsLoading && !statsData}
+              />
+            </div>
+          </section>
+
+          {/* Performance Chart */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <CardTitle className="text-base font-semibold">{t('seo.performanceChart')}</CardTitle>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground hidden sm:inline">{t('seo.range')}</span>
+                  <Select value={rangePreset} onValueChange={handleRangeChange}>
+                    <SelectTrigger className="h-8 w-[140px] text-xs">
+                      <SelectValue placeholder={t('seo.selectRange')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="7">{t('seo.last7Days')}</SelectItem>
+                      <SelectItem value="14">{t('seo.last14Days')}</SelectItem>
+                      <SelectItem value="28">{t('seo.last28Days')}</SelectItem>
+                      <SelectItem value="90">{t('seo.last3Months')}</SelectItem>
+                      <SelectItem value="180">{t('seo.last6Months')}</SelectItem>
+                      <SelectItem value="custom">{t('seo.customRange')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {rangePreset === 'custom' && (
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        type="date"
+                        value={customFrom}
+                        onChange={(e) => setCustomFrom(e.target.value)}
+                        className="h-8 w-[150px] text-xs"
+                        aria-label={t('seo.customRangeStart')}
+                      />
+                      <span className="text-xs text-muted-foreground">→</span>
+                      <Input
+                        type="date"
+                        value={customTo}
+                        onChange={(e) => setCustomTo(e.target.value)}
+                        className="h-8 w-[150px] text-xs"
+                        aria-label={t('seo.customRangeEnd')}
+                      />
+                    </div>
+                  )}
                 </div>
-              </CardHeader>
-              <CardContent>
-                <PagesTable
-                  pages={pagesData?.data ?? []}
-                  isLoading={pagesLoading}
-                />
-              </CardContent>
-            </Card>
-          )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <PerformanceChart
+                stats={statsData ?? []}
+                isLoading={statsLoading}
+                onSync={() => syncMutation.mutate()}
+                isSyncing={syncMutation.isPending}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Top Search Queries */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-semibold">{t('seo.topSearchQueries')}</CardTitle>
+                <Badge variant="outline" className="text-[10px] font-normal">
+                  {t('seo.top')} {queriesData?.data?.length ?? 10}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <QueriesTable
+                queries={queriesData?.data ?? []}
+                isLoading={queriesLoading}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Top Pages */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-semibold">{t('seo.topPages')}</CardTitle>
+                <Badge variant="outline" className="text-[10px] font-normal">
+                  {t('seo.top')} {pagesData?.data?.length ?? 10}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <PagesTable
+                pages={pagesData?.data ?? []}
+                isLoading={pagesLoading}
+              />
+            </CardContent>
+          </Card>
         </>
       ) : (
-        /* 2c: data is null and not loading — show a proper empty state instead of a blank page */
+        /* ==================== STATE: DISCONNECTED (TRUE SAAS 1-CLICK) ==================== */
         <Card className="border-dashed">
           <CardContent className="p-10 sm:p-16 flex flex-col items-center justify-center text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mb-4">
-              <Globe className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-5 shadow-sm">
+              <Search className="h-8 w-8" strokeWidth={1.75} />
             </div>
-            <h3 className="text-lg font-semibold">{t('seo.noScData')}</h3>
-            <p className="text-sm text-muted-foreground mt-1 max-w-md">
-              {t('seo.scRetryHint')}
+            <h2 className="text-xl font-semibold tracking-tight">Connect Search Console</h2>
+            <p className="text-sm text-muted-foreground mt-2 max-w-md leading-relaxed">
+              Connect your Google Search Console account with one click to view search performance, clicks, impressions, and top search queries for your website.
             </p>
             <Button
-              variant="outline"
-              className="mt-5"
-              onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.seoSearchConsole.all })}
+              size="lg"
+              className="mt-6 gap-2 font-medium shadow-sm"
+              onClick={() => handleConnect(false)}
+              disabled={isConnecting}
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              {t('common.retry')}
+              {isConnecting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Connecting to Google...
+                </>
+              ) : (
+                <>
+                  <Plug className="h-4 w-4" />
+                  Connect Search Console
+                </>
+              )}
             </Button>
+            <p className="text-xs text-muted-foreground mt-4 font-mono">
+              Configured Property: {targetSiteUrl}
+            </p>
           </CardContent>
         </Card>
       )}

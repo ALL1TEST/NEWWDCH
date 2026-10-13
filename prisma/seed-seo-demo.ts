@@ -13,7 +13,7 @@
 
 import { db } from '../src/lib/db';
 
-const SITE_URL = 'https://cms.example.com';
+const SITE_URL = 'https://verdantt.vercel.app';
 
 // Realistic article URLs from existing content slugs
 const ARTICLE_URLS = [

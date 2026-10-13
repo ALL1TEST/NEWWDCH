@@ -244,4 +244,10 @@ export const clientBackupsEn: Record<string, string> = {
   'backups.deleteStorageTitle': 'Delete Storage Configuration',
   'backups.deleteStorageConfirmPrefix': 'Are you sure you want to delete "',
   'backups.deleteStorageConfirmSuffix': '"? Existing backups stored via this configuration will not be affected.',
+  'backups.savedSecurelyPlaceholder': 'Saved securely — leave blank to keep current value',
+  'backups.replaceCredentials': 'Replace credentials',
+  'backups.keepSavedCredentials': 'Keep saved credentials',
+  'backups.credentialsSavedSecurelyHint': 'Credentials are saved securely. Leave blank to keep existing values.',
+  'backups.leaveBlankToKeep': 'Saved securely — leave blank to keep current value',
+  'backups.update': 'Update Storage',
 };

@@ -1,6 +1,6 @@
 // ============================================================
 // GET  /api/comments      — List comments (paginated, filterable)
-// POST /api/comments      — Create a comment (with auto spam detection)
+// POST /api/comments      — Create a comment
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -9,8 +9,8 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { getSiteWhere } from '@/lib/site-context';
 import { getSettingValue } from '@/lib/settings-service';
-import { checkCommentSpam } from '@/lib/akismet';
 import { requireFeature } from '@/lib/platform/platform-auth';
+import { syncVerdantComments } from '@/lib/services/production-comment-service';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -58,29 +58,140 @@ export async function GET(request: NextRequest) {
     const contentItemId = sp.get('contentItemId') || undefined;
     const status = sp.get('status') || undefined;
 
+    const siteParam = request.nextUrl.searchParams.get('siteId');
+    await syncVerdantComments(siteParam ?? undefined).catch((err) => {
+      console.warn('[COMMENTS:GET] Production sync warning:', err);
+    });
+
     const siteFilter = await getSiteWhere(request);
-    const where: Record<string, unknown> = { ...siteFilter };
-    if (contentItemId) where.contentItemId = contentItemId;
-    if (status) where.status = status;
+    const baseWhere: Record<string, unknown> = { ...siteFilter };
+    if (contentItemId) baseWhere.contentItemId = contentItemId;
 
-    const orderBy: Record<string, string> = { [sort]: order };
+    let items: any[] = [];
+    let total = 0;
 
-    const [items, total] = await Promise.all([
-      db.comment.findMany({
-        where,
-        include: commentIncludes,
-        orderBy,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      db.comment.count({ where }),
+    let filterClause = '';
+    const filterParams: any[] = [];
+
+    if (typeof siteFilter.siteId === 'string') {
+      filterClause += ' AND c.siteId = ?';
+      filterParams.push(siteFilter.siteId);
+    } else if (siteFilter.siteId && typeof siteFilter.siteId === 'object' && Array.isArray((siteFilter.siteId as any).in)) {
+      const inIds = (siteFilter.siteId as any).in;
+      if (inIds.length === 0) {
+        filterClause += ' AND 1 = 0';
+      } else {
+        filterClause += ` AND c.siteId IN (${inIds.map(() => '?').join(', ')})`;
+        filterParams.push(...inIds);
+      }
+    } else if (siteFilter.siteId === null) {
+      filterClause += ' AND c.siteId IS NULL';
+    }
+
+    if (contentItemId) {
+      filterClause += ' AND c.contentItemId = ?';
+      filterParams.push(contentItemId);
+    }
+
+    const safeSort = sort === 'content' ? 'content' : sort === 'updatedAt' ? 'updatedAt' : 'createdAt';
+    const safeOrder = order === 'asc' ? 'ASC' : 'DESC';
+
+    if (status === 'TRASH') {
+      const countSql = `SELECT COUNT(*) as count FROM Comment c WHERE c.status = 'TRASH'${filterClause}`;
+      const countRes: Array<{ count: number | bigint }> = await (db as any).$queryRawUnsafe(
+        countSql,
+        ...filterParams,
+      ).catch(() => [{ count: 0 }]);
+      total = Number(countRes[0]?.count ?? 0);
+
+      const itemsSql = `
+        SELECT 
+          c.id, c.content, c.status, c.createdAt, c.updatedAt, c.parentId,
+          u.id as author_id, u.name as author_name, u.email as author_email, u.avatar as author_avatar, u.website as author_website,
+          ci.id as contentItem_id, ci.title as contentItem_title, ci.slug as contentItem_slug
+        FROM Comment c
+        LEFT JOIN User u ON c.authorId = u.id
+        LEFT JOIN ContentItem ci ON c.contentItemId = ci.id
+        WHERE c.status = 'TRASH'${filterClause}
+        ORDER BY c.${safeSort} ${safeOrder}
+        LIMIT ? OFFSET ?
+      `;
+      const rows: any[] = await (db as any).$queryRawUnsafe(
+        itemsSql,
+        ...filterParams,
+        pageSize,
+        (page - 1) * pageSize,
+      ).catch(() => []);
+
+      items = rows.map((r) => ({
+        id: r.id,
+        content: r.content,
+        status: 'TRASH',
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        parentId: r.parentId,
+        author: {
+          id: r.author_id,
+          name: r.author_name,
+          email: r.author_email,
+          avatar: r.author_avatar,
+          website: r.author_website,
+        },
+        contentItem: {
+          id: r.contentItem_id,
+          title: r.contentItem_title,
+          slug: r.contentItem_slug,
+        },
+      }));
+    } else {
+      const where: Record<string, unknown> = { ...baseWhere };
+      if (status && status !== 'all') {
+        where.status = status;
+      } else {
+        where.status = { in: ['APPROVED', 'REJECTED', 'FLAGGED', 'SPAM'] };
+      }
+
+      const orderBy: Record<string, string> = { [sort]: order };
+      const [fetchedItems, count] = await Promise.all([
+        db.comment.findMany({
+          where,
+          include: commentIncludes,
+          orderBy,
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+        db.comment.count({ where }),
+      ]);
+      items = fetchedItems;
+      total = count;
+    }
+
+    const [approvedCount, rejectedCount, spamCount, trashCountRes] = await Promise.all([
+      db.comment.count({ where: { ...baseWhere, status: 'APPROVED' } }).catch(() => 0),
+      db.comment.count({ where: { ...baseWhere, status: 'REJECTED' } }).catch(() => 0),
+      db.comment.count({ where: { ...baseWhere, status: 'SPAM' } }).catch(() => 0),
+      (db as any).$queryRawUnsafe(
+        `SELECT COUNT(*) as count FROM Comment c WHERE c.status = 'TRASH'${filterClause}`,
+        ...filterParams,
+      ).catch(() => [{ count: 0 }]),
     ]);
+
+    const trashCount = Number((trashCountRes as Array<{ count: number | bigint }>)[0]?.count ?? 0);
+
+    const statusCounts = {
+      all: approvedCount + rejectedCount + spamCount,
+      APPROVED: approvedCount,
+      REJECTED: rejectedCount,
+      SPAM: spamCount,
+      TRASH: trashCount,
+    };
 
     return NextResponse.json({
       data: items,
       meta: {
         requestId: id,
-        pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+        pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
+        statusCounts,
       },
     });
   } catch (error) {
@@ -93,7 +204,7 @@ export async function GET(request: NextRequest) {
 }
 
 // =====================================================================
-// POST — create (with auto spam detection via Akismet when configured)
+// POST — create a new comment
 // =====================================================================
 
 export async function POST(request: NextRequest) {
@@ -132,55 +243,20 @@ export async function POST(request: NextRequest) {
     const d = parsed.data;
     const siteId = request.nextUrl.searchParams.get('siteId');
 
-    // ---------- Auto spam detection (Akismet) ----------
-    // When the admin has configured Akismet (API key + blog URL saved in
-    // settings) AND auto spam detection is enabled, we check the comment
-    // against Akismet BEFORE creating the record. If Akismet says it's
-    // spam, the comment is created with status=SPAM instead of PENDING
-    // so it never appears on the public site without moderator approval.
-    let initialStatus: 'PENDING' | 'SPAM' = 'PENDING';
-
-    try {
-      const autoSpamEnabled = await getSettingValue('comment_auto_spam_detection');
-      const spamProvider = await getSettingValue('comment_spam_provider');
-
-      if (autoSpamEnabled === 'true' && spamProvider === 'akismet') {
-        // Fetch the author + content item so we can pass full context to Akismet.
-        const [author, contentItem] = await Promise.all([
-          db.user.findUnique({
-            where: { id: d.authorId },
-            select: { name: true, email: true, website: true },
-          }),
-          db.contentItem.findUnique({
-            where: { id: d.contentItemId },
-            select: { id: true, title: true, slug: true },
-          }),
-        ]);
-
-        if (author && contentItem) {
-          const result = await checkCommentSpam({
-            commentContent: d.content,
-            commentAuthor: author.name ?? 'Anonymous',
-            commentAuthorEmail: author.email ?? undefined,
-            commentAuthorUrl: author.website ?? undefined,
-            permalink: contentItem.slug
-              ? `${request.nextUrl.origin}/blog/${contentItem.slug}`
-              : request.nextUrl.origin,
-            userAgentIp: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || undefined,
-            userAgent: request.headers.get('user-agent') || undefined,
-            referrer: request.headers.get('referer') || undefined,
-          });
-
-          if (result.isSpam) {
-            initialStatus = 'SPAM';
-          }
-        }
-      }
-    } catch (spamErr) {
-      // If the spam check throws, we FAIL OPEN — create the comment as
-      // PENDING rather than blocking legitimate comments when the spam
-      // service is temporarily unreachable.
-      console.warn(`[COMMENTS:CREATE] ${id} — spam check failed, failing open:`, spamErr);
+    // 1. Allow Comments setting
+    // When enable_comments === 'false', new comment submissions are rejected.
+    const enableComments = await getSettingValue('enable_comments');
+    if (enableComments === 'false') {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'COMMENTS_DISABLED',
+            message: 'Comments are currently closed on this site.',
+          },
+          meta: { requestId: id },
+        },
+        { status: 403 },
+      );
     }
 
     const item = await db.comment.create({
@@ -190,7 +266,7 @@ export async function POST(request: NextRequest) {
         contentItemId: d.contentItemId,
         parentId: d.parentId === '' ? null : d.parentId ?? null,
         siteId: siteId || undefined,
-        status: initialStatus,
+        status: 'APPROVED',
       },
       include: commentIncludes,
     });

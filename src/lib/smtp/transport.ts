@@ -1,7 +1,7 @@
 // ============================================================
 // SMTP TRANSPORT HELPER
-// Builds a nodemailer transport from saved SMTP settings.
-// Handles password decryption + encryption mode mapping.
+// Builds a nodemailer transport from SMTP settings.
+// Handles password decryption + encryption mode mapping + password normalization.
 // ============================================================
 
 import nodemailer from 'nodemailer';
@@ -28,42 +28,64 @@ export interface SmtpConfigInput {
 // -------------------- Helpers --------------------
 
 /**
- * Heuristic: if the password looks like an AES-256-GCM ciphertext
- * (base64 + 100+ chars from our encrypt() output), try to decrypt it.
- * Otherwise return the plaintext as-is.
+ * Normalizes and decrypts an SMTP password:
+ * - If masked placeholder '••••••••', throws error (must be resolved before transport).
+ * - If AES-256-GCM ciphertext (base64 string of IV(12)+tag(16)+data >= 40 chars), decrypts it.
+ * - Trims leading/trailing whitespace.
+ * - Removes all spaces for Google App Passwords / Gmail credentials.
+ *   (e.g., "abcd efgh ijkl mnop" -> "abcdefghijklmnop")
  */
-async function resolvePassword(raw: string): Promise<string> {
+export async function normalizeSmtpPassword(
+  raw: string,
+  host?: string,
+  username?: string,
+): Promise<string> {
   if (!raw) return '';
 
-  // Masked placeholder from the UI — never attempt to decrypt.
   if (raw.includes('•')) {
     throw new Error(
-      'Password is masked. Please re-enter the actual password before testing or saving.',
+      'Password is masked. Please provide or resolve the actual password.',
     );
   }
 
-  // Encrypted ciphertext is base64 — IV(12) + ciphertext + tag(16) → typically 100+ chars
-  // for any reasonably long password. Plain passwords are usually < 100 chars.
-  const looksEncrypted = /^[A-Za-z0-9+/=]+$/.test(raw) && raw.length >= 100;
-  if (looksEncrypted) {
+  let pass = raw;
+
+  // Try to decrypt if it looks like our AES-256-GCM base64 output
+  if (/^[A-Za-z0-9+/=]+$/.test(pass) && pass.length >= 40) {
     try {
-      return await decrypt(raw);
+      const decrypted = await decrypt(pass);
+      if (decrypted) {
+        pass = decrypted;
+      }
     } catch {
-      // Not actually encrypted, or decryption failed — fall through and use as-is.
-      return raw;
+      // Not an encrypted ciphertext, keep as-is
     }
   }
 
-  return raw;
+  // 1. Trim leading and trailing whitespace
+  pass = pass.trim();
+
+  // 2. Remove all spaces for Google App Passwords or Gmail accounts
+  const withoutSpaces = pass.replace(/\s+/g, '');
+  const isGmail =
+    Boolean(host && (host.toLowerCase().includes('gmail') || host.toLowerCase().includes('googlemail'))) ||
+    Boolean(username && username.toLowerCase().includes('@gmail.com'));
+
+  // Google App Passwords are 16 ascii characters, frequently formatted with spaces
+  if (isGmail || withoutSpaces.length === 16) {
+    pass = withoutSpaces;
+  }
+
+  return pass;
 }
 
 /**
- * Map our encryption enum to nodemailer's secure/requireTLS/ignoreTLS flags.
- *  - SSL      → implicit TLS on connect (secure: true, port 465)
- *  - STARTTLS → opportunistic TLS upgrade (requireTLS: true, port 587)
- *  - none     → plaintext, no TLS upgrade (ignoreTLS: true, port 25)
+ * Map encryption mode to nodemailer transport options:
+ *  - STARTTLS → port 587, secure: false, requireTLS: true
+ *  - SSL      → port 465, secure: true, requireTLS: false
+ *  - none     → port 25, secure: false, ignoreTLS: true
  */
-function buildTlsConfig(encryption: SmtpEncryption) {
+export function buildTlsConfig(encryption: SmtpEncryption) {
   switch (encryption) {
     case 'SSL':
       return { secure: true, requireTLS: false, ignoreTLS: false };
@@ -79,23 +101,23 @@ function buildTlsConfig(encryption: SmtpEncryption) {
 
 /**
  * Create a configured nodemailer transport from SMTP settings.
- * Decrypts the password if it appears encrypted; throws on masked placeholder.
+ * Normalizes credentials and applies TLS/timeout configurations.
  */
 export async function createSmtpTransport(cfg: SmtpConfigInput) {
-  const password = await resolvePassword(cfg.password);
+  const password = await normalizeSmtpPassword(cfg.password, cfg.host, cfg.username);
 
   const timeoutMs = Math.max(1, Number(cfg.timeout) || 10) * 1000;
   const tls = buildTlsConfig(cfg.encryption);
 
   const transport = nodemailer.createTransport({
-    host: cfg.host,
+    host: (cfg.host || '').trim(),
     port: Number(cfg.port) || 587,
     secure: tls.secure,
     requireTLS: tls.requireTLS,
     ignoreTLS: tls.ignoreTLS,
     auth:
       cfg.username || password
-        ? { user: cfg.username, pass: password }
+        ? { user: (cfg.username || '').trim(), pass: password }
         : undefined,
     connectionTimeout: timeoutMs,
     greetingTimeout: timeoutMs,

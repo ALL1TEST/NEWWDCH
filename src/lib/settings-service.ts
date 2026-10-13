@@ -175,7 +175,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryDef[] = [
     fields: [
       { key: 'site_title', label: 'Site Title', description: 'The name of your site displayed in the browser tab and headers', type: 'STRING', control: 'text', defaultValue: 'CMS Admin Dashboard', group: 'Site Info', isPublic: true },
       { key: 'site_description', label: 'Site Description', description: 'A brief description used in meta tags and search results', type: 'STRING', control: 'textarea', defaultValue: 'A powerful content management system', group: 'Site Info', isPublic: true },
-      { key: 'site_url', label: 'Site URL', description: 'The canonical URL of your site', type: 'URL', control: 'url', defaultValue: 'https://cms.example.com', group: 'Site Info', validation: 'url', isPublic: true },
+      { key: 'site_url', label: 'Site URL', description: 'The canonical URL of your site', type: 'URL', control: 'url', defaultValue: 'https://verdantt.vercel.app', group: 'Site Info', validation: 'url', isPublic: true },
       { key: 'site_logo', label: 'Logo URL', description: 'URL or path to the site logo image', type: 'STRING', control: 'text', defaultValue: '/uploads/logo.svg', group: 'Branding', isPublic: true },
       { key: 'site_favicon', label: 'Favicon URL', description: 'URL or path to the favicon', type: 'STRING', control: 'text', defaultValue: '/favicon.ico', group: 'Branding', isPublic: true },
       { key: 'site_email', label: 'Site Email', description: 'Primary contact email for the site', type: 'EMAIL', control: 'email', defaultValue: 'admin@example.com', group: 'Contact', validation: 'email', isPublic: true },
@@ -242,8 +242,6 @@ export const SETTINGS_CATEGORIES: SettingsCategoryDef[] = [
       { key: 'comment_order', label: 'Comment Order', description: 'How comments are sorted', type: 'STRING', control: 'select', defaultValue: 'newest', options: [{ label: 'Newest First', value: 'newest' }, { label: 'Oldest First', value: 'oldest' }, { label: 'Most Liked', value: 'popular' }] },
       { key: 'comment_allow_guest', label: 'Allow Guest Comments', description: 'Allow unauthenticated users to comment', type: 'BOOLEAN', control: 'switch', defaultValue: 'false' },
       { key: 'comment_close_after_days', label: 'Close After Days', description: 'Automatically close comments after X days (0 = never)', type: 'NUMBER', control: 'number', defaultValue: '0', min: 0, max: 365 },
-      { key: 'comment_auto_spam_detection', label: 'Auto Spam Detection', description: 'Automatically detect and filter spam', type: 'BOOLEAN', control: 'switch', defaultValue: 'true' },
-      { key: 'comment_spam_provider', label: 'Spam Provider', description: 'Service for spam detection', type: 'STRING', control: 'select', defaultValue: 'none', options: [{ label: 'None', value: 'none' }, { label: 'Akismet', value: 'akismet' }, { label: 'Custom', value: 'custom' }] },
       { key: 'comment_blacklisted_words', label: 'Blacklisted Words', description: 'Comma-separated list of prohibited words', type: 'STRING', control: 'textarea', defaultValue: '', placeholder: 'word1, word2, word3' },
       { key: 'comment_notification', label: 'Comment Notifications', description: 'Notify authors of new comments', type: 'BOOLEAN', control: 'switch', defaultValue: 'true' },
     ],

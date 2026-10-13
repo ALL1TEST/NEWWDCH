@@ -168,6 +168,11 @@ export async function publishArticleToConnectedSite(
     coverImageUrl || undefined,
   );
 
+  // Fetch associated SEO configuration if present
+  const seoConfig = await db.seoConfig.findFirst({
+    where: { resourceType: 'content', resourceId: item.id },
+  });
+
   const payload = {
     id: item.id,
     title: item.title,
@@ -191,6 +196,11 @@ export async function publishArticleToConnectedSite(
     status: item.status,
     publishedAt: item.publishedAt ? item.publishedAt.toISOString() : new Date().toISOString(),
     tags: item.tags?.map((t) => t.name) || [],
+    canonicalUrl: seoConfig?.canonicalUrl || undefined,
+    metaTitle: seoConfig?.metaTitle || item.seoTitle || undefined,
+    metaDescription: seoConfig?.metaDescription || item.seoDescription || undefined,
+    structuredData: seoConfig?.structuredData || undefined,
+    robots: seoConfig?.robots || undefined,
   };
 
   const endpoint = conn.platform === 'wordpress'

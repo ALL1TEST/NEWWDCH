@@ -70,8 +70,89 @@ export async function GET(request: NextRequest) {
       db.seoIssue.count({ where }),
     ]);
 
+    const enrichedItems = items.map((item) => {
+      const rec = item.recommendation || '';
+      let ruleId = '';
+      let pageType = '';
+      let intent = '';
+      let evidence = '';
+      let expectedValue = '';
+      let verificationMethod = '';
+
+      const ruleMatch = rec.match(/\[RULE_ID\]:\s*([^\n]+)/);
+      if (ruleMatch) ruleId = ruleMatch[1].trim();
+      const pageTypeMatch = rec.match(/\[PAGE_TYPE\]:\s*([^\n]+)/);
+      if (pageTypeMatch) pageType = pageTypeMatch[1].trim();
+      const intentMatch = rec.match(/\[INTENT\]:\s*([^\n]+)/);
+      if (intentMatch) intent = intentMatch[1].trim();
+      const evidenceMatch = rec.match(/\[EVIDENCE\]:\s*([^\n]+)/);
+      if (evidenceMatch) evidence = evidenceMatch[1].trim();
+      const expectedMatch = rec.match(/\[EXPECTED\]:\s*([^\n]+)/);
+      if (expectedMatch) expectedValue = expectedMatch[1].trim();
+      const verificationMatch = rec.match(/\[VERIFICATION\]:\s*([^\n]+)/);
+      if (verificationMatch) verificationMethod = verificationMatch[1].trim();
+
+      let requestedUrl = item.pageUrl;
+      let finalResolvedUrl = item.pageUrl;
+      let redirectChain: any[] = [];
+
+      const reqUrlMatch = rec.match(/\[REQUESTED_URL\]:\s*([^\n]+)/);
+      if (reqUrlMatch) requestedUrl = reqUrlMatch[1].trim();
+      const finalUrlMatch = rec.match(/\[FINAL_URL\]:\s*([^\n]+)/);
+      if (finalUrlMatch) finalResolvedUrl = finalUrlMatch[1].trim();
+      const chainMatch = rec.match(/\[REDIRECT_CHAIN\]:\s*([^\n]+)/);
+      if (chainMatch) {
+        try {
+          redirectChain = JSON.parse(chainMatch[1].trim());
+        } catch {
+          // ignore parse error
+        }
+      }
+
+      const cleanRecommendation = rec.split('\n\n[RULE_ID]')[0].trim();
+
+      // Fallbacks if issue was generated before metadata tagging
+      const derivedPageType = pageType || (
+        item.pageUrl.endsWith('/') || item.pageUrl.includes('/home')
+          ? 'HOME'
+          : item.pageUrl.includes('/about')
+          ? 'ABOUT'
+          : item.pageUrl.includes('/contact')
+          ? 'CONTACT'
+          : item.pageUrl.includes('privacy')
+          ? 'PRIVACY'
+          : 'ARTICLE'
+      );
+
+      const derivedIntent = intent || (
+        derivedPageType === 'ABOUT'
+          ? 'BRAND'
+          : derivedPageType === 'CONTACT'
+          ? 'SUPPORT'
+          : derivedPageType === 'PRIVACY'
+          ? 'LEGAL'
+          : derivedPageType === 'HOME'
+          ? 'BRAND'
+          : 'INFORMATIONAL'
+      );
+
+      return {
+        ...item,
+        ruleId: ruleId || 'seo-signal',
+        pageType: derivedPageType,
+        intent: derivedIntent,
+        evidence: evidence || `Signal detected on ${item.pageUrl}`,
+        expectedValue: expectedValue || 'Optimized SEO compliance',
+        verificationMethod: verificationMethod || 'Inspect page source and meta tags',
+        cleanRecommendation,
+        requestedUrl,
+        finalResolvedUrl,
+        redirectChain,
+      };
+    });
+
     return NextResponse.json({
-      data: { data: items, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } },
+      data: { data: enrichedItems, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } },
       meta: {
         requestId: id,
         timestamp: new Date().toISOString(),

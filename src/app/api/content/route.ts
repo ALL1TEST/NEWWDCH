@@ -43,8 +43,8 @@ const createSchema = z.object({
   status: z
     .enum(['DRAFT', 'IN_REVIEW', 'APPROVED', 'PUBLISHED', 'UNPUBLISHED', 'ARCHIVED'])
     .default('DRAFT'),
-  seoTitle: z.string().max(70).nullable().optional().or(z.literal('')),
-  seoDescription: z.string().max(160).nullable().optional().or(z.literal('')),
+  seoTitle: z.string().max(255).nullable().optional().or(z.literal('')),
+  seoDescription: z.string().max(500).nullable().optional().or(z.literal('')),
   focusKeyword: z.string().trim().nullable().optional().or(z.literal('')),
   scheduledAt: z.string().datetime({ offset: true }).nullable().optional().or(z.literal('')),
   expiresAt: z.string().datetime({ offset: true }).nullable().optional().or(z.literal('')),
@@ -85,11 +85,20 @@ export async function GET(request: NextRequest) {
     if (status) where.status = status;
     const typeParam = sp.get('type') || sp.get('contentType');
     if (typeParam) {
-      const ct = await db.contentType.findFirst({
-        where: { slug: typeParam.toLowerCase() },
-        select: { id: true },
-      });
-      if (ct) where.contentTypeId = ct.id;
+      const normalizedType = typeParam.toLowerCase();
+      if (normalizedType === 'post' || normalizedType === 'article') {
+        const cts = await db.contentType.findMany({
+          where: { slug: { in: ['post', 'article'] } },
+          select: { id: true },
+        });
+        where.contentTypeId = { in: cts.map((c) => c.id) };
+      } else {
+        const ct = await db.contentType.findFirst({
+          where: { slug: normalizedType },
+          select: { id: true },
+        });
+        if (ct) where.contentTypeId = ct.id;
+      }
     } else if (contentTypeId) {
       where.contentTypeId = contentTypeId;
     }

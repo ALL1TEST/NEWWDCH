@@ -945,8 +945,10 @@ function EditPlanDialog({
   };
 
   const saveMutation = useMutation({
-    mutationFn: (patch: PlanPatch) =>
-      putApi<PlanConfigData>(`/api/platform/admin/plans/${plan.planId}`, patch),
+    mutationFn: (patch: PlanPatch) => {
+      const pid = encodeURIComponent((plan.planId || '').trim());
+      return putApi<PlanConfigData>(`/api/platform/admin/plans/${pid}`, patch);
+    },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['platform-plans'] });
       queryClient.invalidateQueries({ queryKey: ['platform-billing-me'] });

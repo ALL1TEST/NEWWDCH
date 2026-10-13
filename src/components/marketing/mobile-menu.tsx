@@ -105,15 +105,6 @@ export function MobileMenu({ open, onClose }: { open: boolean; onClose: () => vo
               </button>
               {solOpen && (
                 <ul className="ml-3 mt-1 flex flex-col gap-0.5 border-l border-border pl-3">
-                  <li>
-                    <a
-                      href={MKT.solutions}
-                      onClick={onClose}
-                      className="mkt-focus flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-text-primary hover:bg-muted"
-                    >
-                      {t('mkt.menu.exploreAll')}
-                    </a>
-                  </li>
                   {solutionLinks.map((l) => (
                     <li key={l.href}>
                       <a

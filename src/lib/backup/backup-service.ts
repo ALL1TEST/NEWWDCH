@@ -30,6 +30,11 @@ async function computeSha256(filePath: string): Promise<string> {
   return createHash('sha256').update(buffer).digest('hex');
 }
 
+async function computeMd5(filePath: string): Promise<string> {
+  const buffer = await readFile(filePath);
+  return createHash('md5').update(buffer).digest('hex');
+}
+
 async function getFirstUserId(): Promise<string | null> {
   const user = await db.user.findFirst({ select: { id: true } });
   return user?.id ?? null;
@@ -83,12 +88,16 @@ async function createBackupRecord(params: CreateBackupParams) {
   }
 
   // Determine storage destination (the record itself; the upload happens later)
-  let storageConfigRecord: { id: string; name: string; provider: string; config: string } | null = null;
+  let storageConfigRecord: { id: string; name: string; provider: string; config: string; siteId?: string | null } | null = null;
   if (params.storageId) {
     storageConfigRecord = await db.backupStorage.findUnique({ where: { id: params.storageId } }) as any;
+    if (!storageConfigRecord) {
+      throw new Error(`Configured storage destination ID "${params.storageId}" was not found.`);
+    }
   }
 
   const encryptionStatus = params.encryptionEnabled ? 'ENCRYPTED' as const : 'NONE' as const;
+  const resolvedSiteId = params.siteId ?? storageConfigRecord?.siteId ?? null;
 
   // Create the backup record (CREATING status — the operation has not yet run)
   const backup = await db.backup.create({
@@ -105,7 +114,7 @@ async function createBackupRecord(params: CreateBackupParams) {
       encryptionStatus,
       verificationStatus: 'PENDING',
       createdById,
-      siteId: params.siteId ?? null,
+      siteId: resolvedSiteId,
       scheduleId: params.scheduleId ?? null,
     },
   });
@@ -119,7 +128,7 @@ async function createBackupRecord(params: CreateBackupParams) {
       status: 'in_progress',
       storageProvider: (storageConfigRecord?.provider || params.storageProvider || 'LOCAL') as any,
       createdById,
-      siteId: params.siteId ?? null,
+      siteId: resolvedSiteId,
     },
   });
 
@@ -304,21 +313,23 @@ export async function startBackup(params: CreateBackupParams) {
 // Create Archive — zip with DB + media + settings depending on scope
 // ============================================================
 
-async function createArchive(archivePath: string, scope: string): Promise<void> {
+async function createArchive(archivePath: string, scope: string): Promise<{ fileCount: number }> {
   const zip = new JSZip();
+  let fileCount = 0;
 
   // Database (always included unless scope is MEDIA_ONLY or FILES_ONLY or SETTINGS_ONLY)
   if (scope !== 'MEDIA_ONLY' && scope !== 'FILES_ONLY' && scope !== 'SETTINGS_ONLY') {
     if (existsSync(DB_PATH)) {
       const dbBuffer = await readFile(DB_PATH);
       zip.file('database.sqlite3', dbBuffer);
+      fileCount++;
     }
   }
 
   // Media files
   if (scope === 'FULL' || scope === 'MEDIA_ONLY') {
     if (existsSync(MEDIA_DIR)) {
-      await addDirToZip(zip, MEDIA_DIR, 'media/');
+      fileCount += await addDirToZip(zip, MEDIA_DIR, 'media/');
     }
   }
 
@@ -326,26 +337,31 @@ async function createArchive(archivePath: string, scope: string): Promise<void> 
   if (scope === 'FULL' || scope === 'SETTINGS_ONLY') {
     const settingsJson = await createSettingsJson();
     zip.file('settings.json', settingsJson);
+    fileCount++;
   }
 
   // Generate the zip file
   const content = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
   await writeFile(archivePath, content);
+  return { fileCount };
 }
 
 // Helper: recursively add a directory to a JSZip instance
-async function addDirToZip(zip: JSZip, dirPath: string, zipPath: string): Promise<void> {
+async function addDirToZip(zip: JSZip, dirPath: string, zipPath: string): Promise<number> {
+  let count = 0;
   const entries = await readdir(dirPath, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = join(dirPath, entry.name);
     const entryZipPath = zipPath + entry.name;
     if (entry.isDirectory()) {
-      await addDirToZip(zip, fullPath, entryZipPath + '/');
+      count += await addDirToZip(zip, fullPath, entryZipPath + '/');
     } else if (entry.isFile()) {
       const buffer = await readFile(fullPath);
       zip.file(entryZipPath, buffer);
+      count++;
     }
   }
+  return count;
 }
 
 async function createSettingsJson(): Promise<string> {

@@ -5,11 +5,12 @@
 // POST   /api/backups/storage/[id]/test-connection — Test connection
 // ============================================================
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server.js';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
-import { requirePlatformAdmin } from '@/lib/platform/platform-auth';
+import { requirePlatformAdmin, requireFeature } from '@/lib/platform/platform-auth';
+import { getSiteWhereIncludeGlobal } from '@/lib/site-context';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -43,6 +44,7 @@ const updateSchema = z.object({
   ]).optional(),
   config: z.string().optional(),
   isActive: z.boolean().optional(),
+  siteId: z.string().nullable().optional(),
 });
 
 // The mask placeholder used by the GET routes for secret fields. When the
@@ -52,7 +54,7 @@ const MASK = '••••••••';
 
 // ---------- config validation ----------------------------------------
 
-function validateConfigJson(configStr: string, provider: string): { valid: boolean; errors: string[] } {
+function validateConfigJson(configStr: string, provider: string, isTest = false): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   let config: Record<string, unknown>;
   try {
@@ -115,21 +117,21 @@ function validateConfigJson(configStr: string, provider: string): { valid: boole
       if (!has('clientId')) errors.push('Google Drive config requires "clientId"');
       if (!has('clientSecret')) errors.push('Google Drive config requires "clientSecret"');
       if (!has('refreshToken')) errors.push('Google Drive config requires "refreshToken"');
-      if (!has('folderId')) errors.push('Google Drive config requires "folderId"');
+      if (!isTest && !has('folderId')) errors.push('Google Drive config requires "folderId"');
       break;
     }
     case 'DROPBOX': {
       if (!has('appKey')) errors.push('Dropbox config requires "appKey"');
       if (!has('appSecret')) errors.push('Dropbox config requires "appSecret"');
       if (!has('refreshToken')) errors.push('Dropbox config requires "refreshToken"');
-      if (!has('folder')) errors.push('Dropbox config requires "folder"');
+      if (!isTest && !has('folder')) errors.push('Dropbox config requires "folder"');
       break;
     }
     case 'ONEDRIVE': {
       if (!has('clientId')) errors.push('OneDrive config requires "clientId"');
       if (!has('clientSecret')) errors.push('OneDrive config requires "clientSecret"');
       if (!has('refreshToken')) errors.push('OneDrive config requires "refreshToken"');
-      if (!has('folder')) errors.push('OneDrive config requires "folder"');
+      if (!isTest && !has('folder')) errors.push('OneDrive config requires "folder"');
       break;
     }
     case 'FTP': {
@@ -233,6 +235,25 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       const { scope: _omit, ...rest } = rawBody;
       void _omit;
       preparedBody = rest;
+    } else {
+      const featureAuth = await requireFeature(request, 'backups');
+      if ('response' in featureAuth) return featureAuth.response;
+
+      const siteFilter = await getSiteWhereIncludeGlobal(request);
+      if (Object.keys(siteFilter).length > 0) {
+        const accessible = await db.backupStorage.findFirst({
+          where: {
+            id: storageId,
+            ...siteFilter,
+          },
+        });
+        if (!accessible) {
+          return NextResponse.json(
+            { error: { code: 'NOT_FOUND', message: 'Storage config not found' }, meta: { requestId: id } },
+            { status: 404 },
+          );
+        }
+      }
     }
 
     const parsed = updateSchema.safeParse(preparedBody);
@@ -268,29 +289,34 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
     if (d.provider !== undefined) updateData.provider = d.provider;
     if (d.config !== undefined) {
+      const providerChanged = d.provider !== undefined && d.provider !== existing.provider;
       const provider = d.provider ?? existing.provider;
-      // Merge the incoming config into the stored one. The incoming config
-      // may contain mask placeholders ('••••••••') for secret fields the
-      // user did NOT re-enter (the GET routes return secrets masked, and
-      // the edit form passes them through unchanged). To avoid wiping or
-      // double-encrypting those secrets, we decrypt the old config, overlay
-      // only the genuinely-changed (non-mask, non-empty) new values, then
-      // re-encrypt the merged result. This preserves unchanged secrets
-      // exactly while letting the user update individual fields.
-      const { decryptConfigFields, encryptConfigForStorage } = await import('@/lib/backup/providers');
+
+      const { decryptConfigFields, encryptConfigForStorage, ENCRYPTED_FIELDS } = await import('@/lib/backup/providers');
       let oldConfig: Record<string, unknown> = {};
       try { oldConfig = JSON.parse(existing.config || '{}'); } catch { oldConfig = {}; }
       const decryptedOld = await decryptConfigFields(oldConfig);
       let newConfig: Record<string, unknown> = {};
       try { newConfig = JSON.parse(d.config); } catch { newConfig = {}; }
-      const merged: Record<string, unknown> = { ...decryptedOld };
+
+      // When provider is unchanged, start from decrypted old config.
+      // Unchanged secrets (omitted, empty string, or MASK placeholder) are preserved.
+      // Only explicitly provided replacement values overwrite existing settings.
+      const merged: Record<string, unknown> = providerChanged ? {} : { ...decryptedOld };
       for (const [k, v] of Object.entries(newConfig)) {
-        if (typeof v === 'string' && (v === MASK || v.trim() === '')) {
-          // Unchanged or cleared — keep the old decrypted value.
+        if (v === undefined || v === null) {
+          // Never overwrite existing configuration with null or undefined
           continue;
+        }
+        if (typeof v === 'string') {
+          if (ENCRYPTED_FIELDS.has(k) && (v === MASK || v.trim() === '')) {
+            // Secret field left blank or masked: preserve existing saved secret
+            continue;
+          }
         }
         merged[k] = v;
       }
+
       const mergedStr = JSON.stringify(merged);
       const configValidation = validateConfigJson(mergedStr, provider);
       if (!configValidation.valid) {
@@ -309,6 +335,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       updateData.config = await encryptConfigForStorage(merged);
     }
     if (d.isActive !== undefined) updateData.isActive = d.isActive;
+    if (d.siteId !== undefined) updateData.siteId = d.siteId;
 
     const updated = await db.backupStorage.update({
       where: { id: storageId },
@@ -405,6 +432,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (isPlatformScope) {
       const auth = await requirePlatformAdmin(request);
       if ('response' in auth) return auth.response;
+    } else {
+      const featureAuth = await requireFeature(request, 'backups');
+      if ('response' in featureAuth) return featureAuth.response;
     }
 
     const storage = await db.backupStorage.findUnique({ where: { id: storageId } });
@@ -415,16 +445,39 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
+    // Tenant / site isolation check for client requests
+    if (!isPlatformScope) {
+      const siteFilter = await getSiteWhereIncludeGlobal(request);
+      if (Object.keys(siteFilter).length > 0) {
+        const accessible = await db.backupStorage.findFirst({
+          where: {
+            id: storageId,
+            ...siteFilter,
+          },
+        });
+        if (!accessible) {
+          return NextResponse.json(
+            { error: { code: 'NOT_FOUND', message: 'Storage config not found' }, meta: { requestId: id } },
+            { status: 404 },
+          );
+        }
+      }
+    }
+
     // Validate the stored config structure for the provider. The stored
     // config is encrypted; validateConfigJson reads it as-is (encrypted
     // strings are non-empty, so presence checks still pass; the mask check
     // only applies to values coming FROM the client, not the stored ones).
-    const configValidation = validateConfigJson(storage.config, storage.provider);
+    const configValidation = validateConfigJson(storage.config, storage.provider, true);
 
     const now = new Date();
 
     if (!configValidation.valid) {
-      const failedResult = { success: false, message: 'Config validation failed', errors: configValidation.errors };
+      const failedResult = {
+        success: false,
+        message: `Config validation failed: ${configValidation.errors.join('; ')}`,
+        errors: configValidation.errors,
+      };
       await db.backupStorage.update({
         where: { id: storageId },
         data: {

@@ -61,6 +61,7 @@ import {
   Layout,
   LayoutGrid,
   CheckSquare,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -86,13 +87,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { StatusBadge, EmptyState } from '@/components/patterns';
-import { getApi, deleteApi } from '@/lib/api-client';
+import { getApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useSiteStore } from '@/lib/stores/site-store';
 import { useSubscriptionStore } from '@/lib/stores/subscription-store';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { formatScheduleTimeTo12Hour } from '@/lib/automation/scheduler-utils';
 import { ArticleIdea, SAVED_IDEAS_STORAGE_KEY } from '@/modules/content/content-list-page';
 import type { PaginatedResponse, PostStatus, CampaignStatus } from '@/shared/types';
 
@@ -103,10 +105,77 @@ type CalendarView = 'year' | 'month' | 'week' | 'day';
 interface CalendarEvent {
   id: string;
   title: string;
-  type: 'article' | 'page' | 'campaign' | 'idea' | 'task';
+  type: 'article' | 'page' | 'campaign' | 'idea' | 'task' | 'automation';
   status: string;
   date: Date;
+  timezone?: string;
   raw: any;
+}
+
+function formatEventTime(date: Date, timezone?: string): string {
+  if (timezone) {
+    try {
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      }).format(date);
+    } catch {}
+  }
+  return format(date, 'h:mm a');
+}
+
+function formatEventDate(date: Date, timezone?: string): string {
+  if (timezone) {
+    try {
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      }).format(date);
+    } catch {}
+  }
+  return format(date, 'EEEE, MMMM d, yyyy');
+}
+
+function getEventDayKey(date: Date, timezone?: string): string {
+  if (timezone) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).formatToParts(date);
+      const m = parts.find((p) => p.type === 'month')?.value;
+      const d = parts.find((p) => p.type === 'day')?.value;
+      const y = parts.find((p) => p.type === 'year')?.value;
+      if (y && m && d) return `${y}-${m}-${d}`;
+    } catch {}
+  }
+  return format(date, 'yyyy-MM-dd');
+}
+
+function getEventHoursMinutes(date: Date, timezone?: string): { hours: number; minutes: number } {
+  if (timezone) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false,
+      }).formatToParts(date);
+      const h = parts.find((p) => p.type === 'hour')?.value;
+      const m = parts.find((p) => p.type === 'minute')?.value;
+      if (h !== undefined && m !== undefined) {
+        return { hours: parseInt(h, 10), minutes: parseInt(m, 10) };
+      }
+    } catch {}
+  }
+  return { hours: date.getHours(), minutes: date.getMinutes() };
 }
 
 interface ArticleRow {
@@ -174,6 +243,9 @@ function eventColorClasses(type: CalendarEvent['type']) {
   if (type === 'idea') {
     return 'bg-indigo-100 text-indigo-800 border-indigo-300 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700';
   }
+  if (type === 'automation') {
+    return 'bg-amber-500/10 text-amber-700 border-amber-300 hover:bg-amber-500/20 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-700/60';
+  }
   return 'bg-violet-100 text-violet-800 border-violet-300 hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700';
 }
 
@@ -193,6 +265,8 @@ function EventTypeIcon({
       ? CheckSquare
       : type === 'idea'
       ? Sparkles
+      : type === 'automation'
+      ? Zap
       : Mail;
   return <Icon className={className} />;
 }
@@ -203,16 +277,20 @@ function eventTypeLabel(type: CalendarEvent['type']) {
   if (type === 'page') return 'title.pages';
   if (type === 'task') return 'nav.tasks';
   if (type === 'idea') return 'articles.aiIdeas';
+  if (type === 'automation') return 'automation.details.automationRuns';
   return 'calendar.eventTypeCampaign';
 }
 
 // -------------------- Data mapping --------------------
 
-function mapContent(rows: ArticleRow[] | undefined): CalendarEvent[] {
+function mapContent(rows: ArticleRow[] | undefined, excludedIds?: Set<string>): CalendarEvent[] {
   if (!rows) return [];
   const events: CalendarEvent[] = [];
   for (const a of rows) {
-    const iso = a.scheduledAt ?? a.publishedAt ?? (a.status === 'DRAFT' ? a.createdAt : undefined);
+    if (excludedIds && excludedIds.has(a.id)) continue;
+    // An article belongs on the calendar if it has a scheduled date, or if published.
+    // Unscheduled drafts must not clutter the calendar.
+    const iso = a.scheduledAt ?? (a.status === 'PUBLISHED' ? a.publishedAt : undefined);
     if (!iso) continue;
     const date = parseISO(iso);
     if (Number.isNaN(date.getTime())) continue;
@@ -289,6 +367,43 @@ function mapTasks(rows: any[] | undefined): CalendarEvent[] {
   return events;
 }
 
+function mapAutomations(rows: any[] | undefined): CalendarEvent[] {
+  if (!rows || !Array.isArray(rows)) return [];
+  const events: CalendarEvent[] = [];
+  const seenIds = new Set<string>();
+
+  for (const item of rows) {
+    if (!item || item.triggerType !== 'SCHEDULED' || item.status !== 'ACTIVE' || !item.nextRunAt) {
+      continue;
+    }
+    if (seenIds.has(item.id)) continue;
+    seenIds.add(item.id);
+
+    const date = parseISO(item.nextRunAt);
+    if (Number.isNaN(date.getTime())) continue;
+
+    let timezone: string | undefined = undefined;
+    try {
+      if (typeof item.scheduleConfig === 'string') {
+        timezone = JSON.parse(item.scheduleConfig || '{}').timezone;
+      } else if (item.scheduleConfig && typeof item.scheduleConfig === 'object') {
+        timezone = item.scheduleConfig.timezone;
+      }
+    } catch {}
+
+    events.push({
+      id: `automation-${item.id}`,
+      title: item.name,
+      type: 'automation',
+      status: 'SCHEDULED',
+      date,
+      timezone,
+      raw: item,
+    });
+  }
+  return events;
+}
+
 // ============================================================
 // Calendar Page
 // ============================================================
@@ -300,7 +415,7 @@ export function CalendarPage() {
 
   const [view, setView] = useState<CalendarView>('month');
   const [referenceDate, setReferenceDate] = useState<Date>(new Date());
-  const [typeFilter, setTypeFilter] = useState<'all' | 'articles' | 'pages' | 'campaigns' | 'tasks'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'articles' | 'pages' | 'campaigns' | 'tasks' | 'automations'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'DRAFT' | 'SCHEDULED' | 'PUBLISHED'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
@@ -346,8 +461,24 @@ export function CalendarPage() {
     refetchOnMount: 'always',
   });
 
+  const { data: automationsData, isLoading: automationsLoading } = useQuery({
+    queryKey: ['calendar', 'automations', isAllSites ? 'all' : activeSiteDbId],
+    queryFn: () => getApi<any>('/api/automations'),
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+
   // Saved ideas from localStorage — strictly isolated by current plan & active site
   const [savedIdeas, setSavedIdeas] = useState<ArticleIdea[]>([]);
+  const [excludedContentIds, setExcludedContentIds] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const raw = window.localStorage.getItem('cms_calendar_excluded_content_ids');
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set();
+    }
+  });
 
   const loadIdeas = useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -459,13 +590,18 @@ export function CalendarPage() {
       (idea) => !articleTitles.has(clean(idea.title)) && clean(idea.title) !== clean('bmw oil change cost and frequency'),
     );
 
+    const rawAutomations = Array.isArray(automationsData)
+      ? automationsData
+      : (automationsData as any)?.data ?? [];
+
     return [
-      ...mapContent(articles),
+      ...mapContent(articles, excludedContentIds),
       ...mapCampaigns(campaigns),
       ...mapIdeas(nonDuplicatedIdeas),
       ...mapTasks(tasks),
+      ...mapAutomations(rawAutomations),
     ].sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [articles, campaigns, savedIdeas, tasks]);
+  }, [articles, campaigns, savedIdeas, tasks, automationsData, excludedContentIds]);
 
   const currentPeriodEvents = useMemo(() => {
     if (view === 'year') {
@@ -498,6 +634,7 @@ export function CalendarPage() {
       if (typeFilter === 'pages' && ev.type !== 'page') return false;
       if (typeFilter === 'campaigns' && ev.type !== 'campaign') return false;
       if (typeFilter === 'tasks' && ev.type !== 'task') return false;
+      if (typeFilter === 'automations' && ev.type !== 'automation') return false;
 
       // Status match
       if (statusFilter !== 'all') {
@@ -512,8 +649,8 @@ export function CalendarPage() {
             if (ev.status === 'DONE') return false;
           } else if (ev.type === 'campaign') {
             if (ev.status !== 'SCHEDULED') return false;
-          } else if (ev.type === 'idea') {
-            // idea is scheduled
+          } else if (ev.type === 'idea' || ev.type === 'automation') {
+            // idea and scheduled automation are scheduled
           } else {
             if (!ev.raw?.scheduledAt) return false;
           }
@@ -540,16 +677,38 @@ export function CalendarPage() {
 
   const queryClient = useQueryClient();
 
-  const deleteContentMutation = useMutation({
-    mutationFn: (id: string) => deleteApi(`/api/content/${id}`),
+  const removeFromCalendarMutation = useMutation({
+    mutationFn: async (item: { id: string; type: string; title: string }) => {
+      // 1. Clear scheduledAt on the backend so article is unscheduled
+      try {
+        await patchApi(`/api/content/${item.id}`, { scheduledAt: null });
+      } catch (patchErr) {
+        console.warn('Failed to clear scheduledAt on backend', patchErr);
+      }
+
+      // 2. Track excluded calendar content IDs locally so article does not show on calendar
+      try {
+        const key = 'cms_calendar_excluded_content_ids';
+        const raw = window.localStorage.getItem(key);
+        const set = new Set<string>(raw ? JSON.parse(raw) : []);
+        set.add(item.id);
+        window.localStorage.setItem(key, JSON.stringify(Array.from(set)));
+        setExcludedContentIds(new Set(set));
+      } catch {}
+
+      // 3. Remove any matching idea from savedIdeas
+      handleRemoveIdeaFromCalendar(item.title, { id: item.id, title: item.title });
+
+      return item;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
-      toast.success(t('articles.deleted') || 'Item deleted');
+      toast.success(t('calendar.removedFromCalendar') || 'Removed from calendar (article kept in drafts)');
       setSelectedEvent(null);
     },
     onError: (err: any) => {
-      toast.error(err.message || 'Failed to delete item');
+      toast.error(err.message || 'Failed to remove from calendar');
     },
   });
 
@@ -557,10 +716,14 @@ export function CalendarPage() {
     (ev: CalendarEvent) => {
       if (!ev || !ev.raw?.id) return;
       if (ev.type === 'article' || ev.type === 'page') {
-        deleteContentMutation.mutate(ev.raw.id);
+        removeFromCalendarMutation.mutate({
+          id: ev.raw.id,
+          type: ev.type,
+          title: ev.title,
+        });
       }
     },
-    [deleteContentMutation],
+    [removeFromCalendarMutation],
   );
 
   const handleRemoveIdeaFromCalendar = useCallback(
@@ -657,7 +820,7 @@ export function CalendarPage() {
     [navigate, handleRemoveIdeaFromCalendar],
   );
 
-  const isLoading = articlesLoading || campaignsLoading || tasksLoading;
+  const isLoading = articlesLoading || campaignsLoading || tasksLoading || automationsLoading;
 
   // -------- Navigation --------
 
@@ -734,12 +897,13 @@ export function CalendarPage() {
           pages: currentPeriodEvents.filter((ev) => ev.type === 'page').length,
           campaigns: currentPeriodEvents.filter((ev) => ev.type === 'campaign').length,
           tasks: currentPeriodEvents.filter((ev) => ev.type === 'task').length,
+          automations: currentPeriodEvents.filter((ev) => ev.type === 'automation').length,
           scheduled: currentPeriodEvents.filter((ev) =>
             ev.type === 'task'
               ? ev.status !== 'DONE'
               : ev.type === 'campaign'
               ? ev.status === 'SCHEDULED'
-              : ev.type === 'idea' || Boolean(ev.raw?.scheduledAt)
+              : ev.type === 'idea' || ev.type === 'automation' || Boolean(ev.raw?.scheduledAt)
           ).length,
           published: currentPeriodEvents.filter((ev) =>
             ev.type === 'task' ? ev.status === 'DONE' : ev.status === 'PUBLISHED' || ev.status === 'SENT'
@@ -800,7 +964,7 @@ export function CalendarPage() {
         onCreateArticleFromIdea={handleCreateFromIdea}
         onRemoveIdeaFromCalendar={handleRemoveIdeaFromCalendar}
         onDeleteEvent={handleDeleteEvent}
-        isDeleting={deleteContentMutation.isPending}
+        isDeleting={removeFromCalendarMutation.isPending}
       />
     </div>
   );
@@ -916,8 +1080,8 @@ function CalendarHeader({
 interface CalendarFilterBarProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  typeFilter: 'all' | 'articles' | 'pages' | 'campaigns' | 'tasks';
-  onTypeChange: (v: 'all' | 'articles' | 'pages' | 'campaigns' | 'tasks') => void;
+  typeFilter: 'all' | 'articles' | 'pages' | 'campaigns' | 'tasks' | 'automations';
+  onTypeChange: (v: 'all' | 'articles' | 'pages' | 'campaigns' | 'tasks' | 'automations') => void;
   statusFilter: 'all' | 'DRAFT' | 'SCHEDULED' | 'PUBLISHED';
   onStatusChange: (v: 'all' | 'DRAFT' | 'SCHEDULED' | 'PUBLISHED') => void;
   counts: {
@@ -926,6 +1090,7 @@ interface CalendarFilterBarProps {
     pages: number;
     campaigns: number;
     tasks: number;
+    automations: number;
     scheduled: number;
     published: number;
     drafts: number;
@@ -999,6 +1164,8 @@ function CalendarFilterBar({
                 ? (t('title.pages') || 'Pages')
                 : typeFilter === 'campaigns'
                 ? (t('calendar.filterCampaigns') || 'Newsletter')
+                : typeFilter === 'automations'
+                ? 'Automations'
                 : (t('nav.tasks') || 'Tasks')}
             </span>
           </div>
@@ -1032,6 +1199,12 @@ function CalendarFilterBar({
             <span className="flex items-center justify-between w-full gap-4">
               <span>{t('nav.tasks') || 'Tasks'}</span>
               <span className="text-[11px] text-muted-foreground font-mono">{counts.tasks}</span>
+            </span>
+          </SelectItem>
+          <SelectItem value="automations">
+            <span className="flex items-center justify-between w-full gap-4">
+              <span>Automations</span>
+              <span className="text-[11px] text-muted-foreground font-mono">{counts.automations}</span>
             </span>
           </SelectItem>
         </SelectContent>
@@ -1113,7 +1286,7 @@ function EventPill({ event, onClick, compact = false }: EventPillProps) {
       <span className="truncate">{event.title}</span>
       {!compact && (
         <span className="ml-auto shrink-0 text-[10px] opacity-70">
-          {format(event.date, 'h:mm a')}
+          {formatEventTime(event.date, event.timezone)}
         </span>
       )}
     </button>
@@ -1261,7 +1434,7 @@ function MonthView({ referenceDate, events, onSelectEvent }: MonthViewProps) {
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
     for (const ev of events) {
-      const key = format(ev.date, 'yyyy-MM-dd');
+      const key = getEventDayKey(ev.date, ev.timezone);
       const arr = map.get(key) ?? [];
       arr.push(ev);
       map.set(key, arr);
@@ -1375,7 +1548,7 @@ function WeekView({ referenceDate, events, onSelectEvent }: WeekViewProps) {
       map.set(format(day, 'yyyy-MM-dd'), []);
     }
     for (const ev of events) {
-      const key = format(ev.date, 'yyyy-MM-dd');
+      const key = getEventDayKey(ev.date, ev.timezone);
       const arr = map.get(key);
       if (arr) arr.push(ev);
     }
@@ -1447,11 +1620,11 @@ function WeekView({ referenceDate, events, onSelectEvent }: WeekViewProps) {
 
                 {/* Absolutely-positioned events */}
                 {dayEvents.map((ev) => {
-                  const evHour = ev.date.getHours();
+                  const { hours: evHour, minutes: evMin } = getEventHoursMinutes(ev.date, ev.timezone);
                   if (evHour < START_HOUR || evHour > END_HOUR) return null;
                   const top =
                     (evHour - START_HOUR) * HOUR_HEIGHT +
-                    (ev.date.getMinutes() / 60) * HOUR_HEIGHT;
+                    (evMin / 60) * HOUR_HEIGHT;
                   return (
                     <button
                       key={ev.id}
@@ -1472,7 +1645,7 @@ function WeekView({ referenceDate, events, onSelectEvent }: WeekViewProps) {
                         <span className="truncate">{ev.title}</span>
                       </div>
                       <div className="mt-0.5 text-[9px] opacity-70">
-                        {format(ev.date, 'h:mm a')}
+                        {formatEventTime(ev.date, ev.timezone)}
                       </div>
                     </button>
                   );
@@ -1502,15 +1675,17 @@ function DayView({ referenceDate, events, onSelectEvent }: DayViewProps) {
   const hours = Array.from({ length: TOTAL_HOURS }, (_, i) => START_HOUR + i);
 
   const dayEvents = useMemo(() => {
+    const refKey = format(referenceDate, 'yyyy-MM-dd');
     return events
-      .filter((ev) => isSameDay(ev.date, referenceDate))
+      .filter((ev) => getEventDayKey(ev.date, ev.timezone) === refKey)
       .sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [events, referenceDate]);
 
   // Events outside the visible hour range (shown as a compact list above the grid)
-  const outOfRangeEvents = dayEvents.filter(
-    (ev) => ev.date.getHours() < START_HOUR || ev.date.getHours() > END_HOUR,
-  );
+  const outOfRangeEvents = dayEvents.filter((ev) => {
+    const { hours: evHour } = getEventHoursMinutes(ev.date, ev.timezone);
+    return evHour < START_HOUR || evHour > END_HOUR;
+  });
 
   return (
     <div className="flex flex-col">
@@ -1580,14 +1755,15 @@ function DayView({ referenceDate, events, onSelectEvent }: DayViewProps) {
           ))}
 
           {dayEvents
-            .filter(
-              (ev) => ev.date.getHours() >= START_HOUR && ev.date.getHours() <= END_HOUR,
-            )
+            .filter((ev) => {
+              const { hours: evHour } = getEventHoursMinutes(ev.date, ev.timezone);
+              return evHour >= START_HOUR && evHour <= END_HOUR;
+            })
             .map((ev) => {
-              const evHour = ev.date.getHours();
+              const { hours: evHour, minutes: evMin } = getEventHoursMinutes(ev.date, ev.timezone);
               const top =
                 (evHour - START_HOUR) * HOUR_HEIGHT +
-                (ev.date.getMinutes() / 60) * HOUR_HEIGHT;
+                (evMin / 60) * HOUR_HEIGHT;
               return (
                 <button
                   key={ev.id}
@@ -1608,7 +1784,7 @@ function DayView({ referenceDate, events, onSelectEvent }: DayViewProps) {
                     <span className="truncate font-semibold">{ev.title}</span>
                   </div>
                   <div className="mt-0.5 text-[10px] opacity-70">
-                    {format(ev.date, 'h:mm a')} · {t(eventTypeLabel(ev.type))}
+                    {formatEventTime(ev.date, ev.timezone)} · {t(eventTypeLabel(ev.type))}
                   </div>
                 </button>
               );
@@ -1649,6 +1825,7 @@ function EventDetailsModal({
   const isCampaign = event?.type === 'campaign';
   const isTask = event?.type === 'task';
   const isIdea = event?.type === 'idea';
+  const isAutomation = event?.type === 'automation';
 
   const handleView = useCallback(() => {
     if (!event) return;
@@ -1657,13 +1834,14 @@ function EventDetailsModal({
     } else if (isPage) {
       onNavigate('pages', event.raw.id, null);
     } else if (isCampaign) {
-      // Open the newsletter campaigns tab and let the page surface this campaign
       onNavigate('newsletter', null, 'campaigns');
     } else if (isTask) {
       onNavigate('tasks');
+    } else if (isAutomation) {
+      onNavigate('automation', event.raw.id, null);
     }
     onClose();
-  }, [event, isArticle, isPage, isCampaign, isTask, onNavigate, onClose]);
+  }, [event, isArticle, isPage, isCampaign, isTask, isAutomation, onNavigate, onClose]);
 
   const handleEdit = useCallback(() => {
     if (!event) return;
@@ -1672,13 +1850,14 @@ function EventDetailsModal({
     } else if (isPage) {
       onNavigate('pages', event.raw.id, 'edit');
     } else if (isCampaign) {
-      // Campaigns are edited in-place inside the newsletter campaigns tab
       onNavigate('newsletter', null, 'campaigns');
     } else if (isTask) {
       onNavigate('tasks');
+    } else if (isAutomation) {
+      onNavigate('automation', event.raw.id, 'edit');
     }
     onClose();
-  }, [event, isArticle, isPage, isCampaign, isTask, onNavigate, onClose]);
+  }, [event, isArticle, isPage, isCampaign, isTask, isAutomation, onNavigate, onClose]);
 
   const formatKeywords = (raw: any): string => {
     if (!raw) return '';
@@ -1758,19 +1937,16 @@ function EventDetailsModal({
                 {t('calendar.scheduledLabel') || 'Scheduled'}
               </div>
               <div className="text-sm font-semibold text-foreground">
-                {format(event.date, 'EEEE, MMMM d, yyyy')}
+                {formatEventDate(event.date, event.timezone)}
               </div>
               <div className="text-xs text-muted-foreground">
-                {format(event.date, 'h:mm a')}
+                {formatEventTime(event.date, event.timezone)}
               </div>
             </div>
 
-            {(isArticle || isPage) && event.raw && (
+            {(isArticle || isPage) && event.raw && event.raw.excerpt && (
               <div className="space-y-2.5 text-sm">
-                <DetailRow label={t('calendar.slug') || 'Slug'} value={event.raw.slug ?? '—'} />
-                {event.raw.excerpt && (
-                  <DetailRow label={t('calendar.excerpt') || 'Excerpt'} value={event.raw.excerpt} />
-                )}
+                <DetailRow label={t('calendar.excerpt') || 'Excerpt'} value={event.raw.excerpt} />
               </div>
             )}
             {isCampaign && event.raw && (
@@ -1808,13 +1984,34 @@ function EventDetailsModal({
                 )}
               </div>
             )}
+            {isAutomation && event.raw && (
+              <div className="space-y-2.5 text-sm">
+                <DetailRow label="Trigger Type" value={event.raw.triggerType || 'SCHEDULED'} />
+                {event.raw.description && (
+                  <DetailRow label={t('calendar.descriptionLabel') || 'Description'} value={event.raw.description} />
+                )}
+                {event.raw.scheduleConfig && (
+                  <DetailRow
+                    label="Schedule Cadence"
+                    value={(() => {
+                      try {
+                        const s = JSON.parse(event.raw.scheduleConfig);
+                        const formattedTime = formatScheduleTimeTo12Hour(s.time || '09:00');
+                        const freq = s.frequency ? s.frequency.charAt(0).toUpperCase() + s.frequency.slice(1).toLowerCase() : 'Daily';
+                        const articlesCount = Math.max(1, Number(s.articlesPerDay) || 1);
+                        return `${freq} at ${formattedTime} (${s.timezone || 'Africa/Casablanca'}) — ${articlesCount} ${articlesCount === 1 ? 'article' : 'articles'}/day`;
+                      } catch {
+                        return 'Scheduled Execution';
+                      }
+                    })()}
+                  />
+                )}
+              </div>
+            )}
           </div>
         )}
 
         <DialogFooter className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-border">
-          <Button variant="outline" size="sm" onClick={onClose} className="rounded-lg h-9">
-            {t('common.close')}
-          </Button>
           {isIdea ? (
             <>
               {onRemoveIdeaFromCalendar && (
@@ -1828,7 +2025,7 @@ function EventDetailsModal({
                   }}
                 >
                   <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                  {t('calendar.removeIdea') || 'Remove from Calendar'}
+                  Remove
                 </Button>
               )}
               {onCreateArticleFromIdea && (
@@ -1845,6 +2042,15 @@ function EventDetailsModal({
                 </Button>
               )}
             </>
+          ) : isAutomation ? (
+            <Button
+              size="sm"
+              onClick={handleView}
+              className="rounded-lg h-9 bg-primary text-primary-foreground font-medium shadow-xs gap-1.5"
+            >
+              <Zap className="h-3.5 w-3.5" />
+              View Automation
+            </Button>
           ) : (
             <>
               {(isArticle || isPage) && onDeleteEvent && (
@@ -1856,7 +2062,7 @@ function EventDetailsModal({
                   onClick={() => onDeleteEvent(event)}
                 >
                   <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                  {isDeleting ? (t('common.deleting') || 'Deleting...') : (t('common.delete') || 'Delete')}
+                  {isDeleting ? 'Removing...' : 'Remove'}
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={handleView} className="rounded-lg h-9">

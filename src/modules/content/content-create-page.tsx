@@ -70,10 +70,11 @@ import { useSiteStore } from '@/lib/stores/site-store';
 import { markdownToEditorHtml } from '@/lib/pipeline/markdown-to-html';
 
 import { useAiWorkspace } from '@/hooks/use-ai-workspace';
-import { PublishDatePicker, PublishTimePicker } from './publishing-datetime-pickers';
+import { PublishTimePicker } from './publishing-datetime-pickers';
 import { useT } from '@/lib/i18n';
 import { slugify, cn } from '@/lib/utils';
 import { sanitizeContentForStorage } from '@/lib/pipeline/content-item-pipeline';
+import { SeoStudioCard } from './components/seo/seo-studio-card';
 import { toast } from 'sonner';
 import { ArticleIdea, SAVED_IDEAS_STORAGE_KEY } from './content-list-page';
 
@@ -99,6 +100,7 @@ interface ArticleCreateDraft {
   customTags?: string[];
   seoTitle?: string;
   seoDescription?: string;
+  focusKeyword?: string;
   aiInput?: string;
   featuredImage?: MediaItem | null;
   targetScheduleDate?: string;
@@ -115,8 +117,9 @@ const contentFormSchema = z.object({
   contentTypeId: z.string().optional().or(z.literal('')),
   categoryId: z.string().optional().or(z.literal('')),
   tagIds: z.array(z.string()),
-  seoTitle: z.string().max(60, 'Meta title must be 60 characters or less').optional().or(z.literal('')),
-  seoDescription: z.string().max(160, 'Meta description must be 160 characters or less').optional().or(z.literal('')),
+  seoTitle: z.string().max(255).optional().or(z.literal('')),
+  seoDescription: z.string().max(500).optional().or(z.literal('')),
+  focusKeyword: z.string().optional().or(z.literal('')),
 });
 
 type ContentFormValues = z.infer<typeof contentFormSchema>;
@@ -363,13 +366,13 @@ function ScheduleDialog({
   initialTime?: string;
 }) {
   const { t } = useT();
-  const [date, setDate] = useState(initialDate || '');
-  const [time, setTime] = useState(initialTime || '');
+  const [date, setDate] = useState(() => initialDate || new Date().toISOString().slice(0, 10));
+  const [time, setTime] = useState(initialTime || '12:00');
 
   useEffect(() => {
     if (open) {
-      setDate(initialDate || '');
-      setTime(initialTime || '');
+      setDate(initialDate || new Date().toISOString().slice(0, 10));
+      setTime(initialTime || '12:00');
     }
   }, [open, initialDate, initialTime]);
 
@@ -386,12 +389,16 @@ function ScheduleDialog({
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">{t('articles.date')}</Label>
-            <PublishDatePicker value={date} onChange={setDate} className="h-10" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">{t('articles.time')}</Label>
-            <PublishTimePicker value={time} onChange={setTime} className="h-10" />
+            <Label className="text-xs text-muted-foreground">{t('articles.time') || 'Publish time'}</Label>
+            <PublishTimePicker
+              value={time}
+              onChange={setTime}
+              dateValue={date}
+              onDateChange={setDate}
+              placeholder={t('articles.selectDateTime') || 'Select date and time'}
+              showIcon
+              className="w-full h-10"
+            />
           </div>
         </div>
 
@@ -480,6 +487,7 @@ function AIAssistDialog({
 
 export function ContentCreatePage({ fixedContentType }: { fixedContentType?: 'post' | 'page' } = {}) {
   const navigate = useNavigationStore((s) => s.navigate);
+  const goBackStore = useNavigationStore((s) => s.goBack);
   const currentModule = useNavigationStore((s) => s.currentModule);
   const queryClient = useQueryClient();
   const { t } = useT();
@@ -571,7 +579,7 @@ export function ContentCreatePage({ fixedContentType }: { fixedContentType?: 'po
     register, handleSubmit, control, watch, setValue, getValues, formState: { errors },
   } = useForm<ContentFormValues>({
     resolver: zodResolver(contentFormSchema),
-    defaultValues: { title: '', excerpt: '', content: '', status: 'DRAFT', contentTypeId: '', categoryId: '', tagIds: [], seoTitle: '', seoDescription: '' },
+    defaultValues: { title: '', excerpt: '', content: '', status: 'DRAFT', contentTypeId: '', categoryId: '', tagIds: [], seoTitle: '', seoDescription: '', focusKeyword: '' },
   });
 
   const selectedTagIds = watch('tagIds');
@@ -627,6 +635,9 @@ export function ContentCreatePage({ fixedContentType }: { fixedContentType?: 'po
       if (draft.seoDescription && !getValues('seoDescription')) {
         setValue('seoDescription', draft.seoDescription);
       }
+      if (draft.focusKeyword && !getValues('focusKeyword')) {
+        setValue('focusKeyword', draft.focusKeyword);
+      }
       if (draft.aiInput) {
         setAiInput(draft.aiInput);
       }
@@ -678,6 +689,7 @@ export function ContentCreatePage({ fixedContentType }: { fixedContentType?: 'po
           customTags,
           seoTitle: currentValues.seoTitle || '',
           seoDescription: currentValues.seoDescription || '',
+          focusKeyword: currentValues.focusKeyword || '',
           aiInput: aiInput || '',
           featuredImage,
           targetScheduleDate,
@@ -990,6 +1002,7 @@ export function ContentCreatePage({ fixedContentType }: { fixedContentType?: 'po
         tagIds: isPage ? [] : data.tagIds,
         seoTitle: data.seoTitle ? data.seoTitle : null,
         seoDescription: data.seoDescription ? data.seoDescription : null,
+        focusKeyword: data.focusKeyword ? data.focusKeyword : null,
         seoReport: generatedSeoReport ? JSON.stringify(generatedSeoReport) : undefined,
         editorialReport: generatedEditorialReport ? JSON.stringify(generatedEditorialReport) : undefined,
         featuredImageId: isPage ? null : (featuredImage ? featuredImage.id : null),
@@ -1398,8 +1411,8 @@ export function ContentCreatePage({ fixedContentType }: { fixedContentType?: 'po
     const targetMod = currentModule.startsWith('platform-')
       ? (fixedContentType === 'page' || isPage || currentModule === 'platform-pages' ? 'platform-pages' : 'platform-content')
       : (fixedContentType === 'page' || isPage || currentModule === 'pages' ? 'pages' : 'content');
-    navigate(targetMod);
-  }, [navigate, fixedContentType, isPage, currentModule]);
+    goBackStore(targetMod);
+  }, [goBackStore, fixedContentType, isPage, currentModule]);
 
   const addTag = useCallback((tagId: string) => {
     if (!selectedTagIds.includes(tagId)) {
@@ -2024,11 +2037,14 @@ export function ContentCreatePage({ fixedContentType }: { fixedContentType?: 'po
                   </AccordionItem>
                 )}
 
-                {/* 7. SEO */}
-                <AccordionItem value="seo">
+                {/* 7. SEO & AI Studio */}
+                <AccordionItem value="seo" className="border-border">
                   <div className="flex items-center justify-between pr-4">
                     <AccordionTrigger className="py-3 text-sm flex-1">
-                      {t('articles.section.seo')}
+                      <span className="flex items-center gap-2">
+                        <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                        {t('articles.section.seo') || 'SEO'}
+                      </span>
                     </AccordionTrigger>
                     <Button
                       type="button"
@@ -2046,16 +2062,22 @@ export function ContentCreatePage({ fixedContentType }: { fixedContentType?: 'po
                     </Button>
                   </div>
                   <AccordionContent>
-                    <div className="pb-4 space-y-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">{t('articles.metaTitle')}</Label>
-                        <Input {...register('seoTitle')} placeholder={t('articles.metaTitlePlaceholder')} className="h-9 text-sm" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">{t('articles.metaDescription')}</Label>
-                        <Textarea {...register('seoDescription')} placeholder={t('articles.metaDescriptionPlaceholder')} rows={2} className="text-sm" />
-                      </div>
-
+                    <div className="pb-3 pt-1">
+                      <SeoStudioCard
+                        title={watch('title') || ''}
+                        content={editorContent || ''}
+                        excerpt={watch('excerpt') || ''}
+                        slug={slugValue || ''}
+                        seoTitle={watch('seoTitle') || ''}
+                        seoDescription={watch('seoDescription') || ''}
+                        focusKeyword={watch('focusKeyword') || ''}
+                        isPage={isPage}
+                        onUpdateSeo={({ seoTitle, seoDescription, focusKeyword: fk }) => {
+                          if (seoTitle !== undefined) setValue('seoTitle', seoTitle, { shouldDirty: true, shouldValidate: true });
+                          if (seoDescription !== undefined) setValue('seoDescription', seoDescription, { shouldDirty: true, shouldValidate: true });
+                          if (fk !== undefined) setValue('focusKeyword', fk, { shouldDirty: true, shouldValidate: true });
+                        }}
+                      />
                     </div>
                   </AccordionContent>
                 </AccordionItem>

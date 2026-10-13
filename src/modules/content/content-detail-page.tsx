@@ -9,6 +9,7 @@ import {
   Tag,
   Search,
   ArrowLeft,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -78,6 +79,12 @@ interface ContentDetail {
   publishedAt?: string;
   scheduledAt?: string;
   tags?: TagOption[];
+  featuredImage?: {
+    id: string;
+    url: string;
+    alt?: string | null;
+    thumbnailUrl?: string | null;
+  } | null;
   author: ContentAuthor;
   createdAt: string;
   updatedAt: string;
@@ -85,8 +92,17 @@ interface ContentDetail {
 
 // -------------------- Component ----------------
 
-export function ContentDetailPage({ contentId, isPage: isPageProp }: { contentId: string; isPage?: boolean }) {
+export function ContentDetailPage({
+  contentId,
+  isPage: isPageProp,
+  isPreview = false,
+}: {
+  contentId: string;
+  isPage?: boolean;
+  isPreview?: boolean;
+}) {
   const navigate = useNavigationStore((s) => s.navigate);
+  const goBack = useNavigationStore((s) => s.goBack);
   const currentModule = useNavigationStore((s) => s.currentModule);
   const { t } = useT();
 
@@ -97,7 +113,7 @@ export function ContentDetailPage({ contentId, isPage: isPageProp }: { contentId
   } = useQuery({
     queryKey: queryKeys.content.detail(contentId),
     queryFn: () =>
-      getApi<ContentDetail>(`/api/content/${contentId}?include=contentType,category,tags,author`),
+      getApi<ContentDetail>(`/api/content/${contentId}?include=contentType,category,tags,author,featuredImage`),
     staleTime: 5_000,
     enabled: !!contentId,
   });
@@ -152,7 +168,7 @@ export function ContentDetailPage({ contentId, isPage: isPageProp }: { contentId
         breadcrumbs={false}
         action={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate(targetModule)}>
+            <Button variant="outline" size="sm" onClick={() => goBack(targetModule)}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               {t('common.back')}
             </Button>
@@ -167,17 +183,30 @@ export function ContentDetailPage({ contentId, isPage: isPageProp }: { contentId
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
         {/* Main content column */}
         <div className="space-y-4">
-          {/* Status bar */}
+          {/* Status bar & Preview Indicator */}
           <div className="flex flex-wrap items-center gap-3">
             <StatusBadge status={content.status} size="md" />
             <Badge variant="outline" className="text-xs">
               {content.contentType?.name ?? t('articles.unknownType')}
             </Badge>
+            {isPreview && (
+              <Badge variant="secondary" className="text-xs gap-1.5 bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300">
+                <Eye className="h-3 w-3" />
+                {t('articles.previewMode') || 'Preview Mode'}
+              </Badge>
+            )}
           </div>
 
-
-
-          {/* Content Body */}
+          {/* Featured Image */}
+          {content.featuredImage?.url && (
+            <div className="overflow-hidden rounded-xl border bg-muted/20">
+              <img
+                src={content.featuredImage.url}
+                alt={content.featuredImage.alt || content.title}
+                className="w-full max-h-[420px] object-cover"
+              />
+            </div>
+          )}          {/* Content Body */}
           <div className="prose prose-gray prose-headings:font-bold prose-h2:text-2xl prose-h3:text-xl prose-p:leading-relaxed prose-a:text-primary dark:prose-invert max-w-none rounded-lg border bg-card p-6 min-h-[200px]">
             {content.content ? (
               <HtmlContent html={normalizeContentToHtml(content.content)} className="editor-content" />

@@ -10,6 +10,7 @@ import {
   batchUpsertSettings,
   SETTINGS_CATEGORIES,
 } from '@/lib/settings-service';
+import { syncVerdantCommentSetting } from '@/lib/services/production-comment-service';
 import { nanoid } from 'nanoid';
 
 function reqId() { return 'req_' + nanoid(8); }
@@ -75,6 +76,14 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await batchUpsertSettings(parsed.data.settings);
+
+    for (const s of parsed.data.settings) {
+      if (s.key === 'enable_comments') {
+        await syncVerdantCommentSetting(s.key, s.value).catch((err) => {
+          console.warn('[SETTINGS:BATCH] syncVerdantCommentSetting error:', err);
+        });
+      }
+    }
 
     return NextResponse.json(
       { data: result, meta: { requestId: id } },

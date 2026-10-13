@@ -9,6 +9,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
 import { requireFeature } from '@/lib/platform/platform-auth';
+import { deleteVerdantComment, updateVerdantCommentStatus } from '@/lib/services/production-comment-service';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -26,7 +27,7 @@ const commentIncludes = {
 // ---------- validation ------------------------------------------------
 
 const updateSchema = z.object({
-  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'FLAGGED', 'SPAM']).optional(),
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'FLAGGED', 'SPAM', 'TRASH']).optional(),
   content: z.string().min(1, 'Comment content is required').trim().optional(),
 });
 
@@ -46,17 +47,45 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const { id: commentId } = await context.params;
 
-    const item = await db.comment.findUnique({
-      where: { id: commentId },
-      include: commentIncludes,
-    });
+    const rows: any[] = await (db as any).$queryRawUnsafe(`
+      SELECT 
+        c.id, c.content, c.status, c.createdAt, c.updatedAt, c.parentId,
+        u.id as author_id, u.name as author_name, u.email as author_email, u.avatar as author_avatar, u.website as author_website,
+        ci.id as contentItem_id, ci.title as contentItem_title, ci.slug as contentItem_slug
+      FROM Comment c
+      LEFT JOIN User u ON c.authorId = u.id
+      LEFT JOIN ContentItem ci ON c.contentItemId = ci.id
+      WHERE c.id = ?
+    `, commentId);
 
-    if (!item) {
+    if (!rows || rows.length === 0) {
       return NextResponse.json(
         { error: { code: 'NOT_FOUND', message: 'Comment not found' }, meta: { requestId: id } },
         { status: 404 },
       );
     }
+
+    const r = rows[0];
+    const item = {
+      id: r.id,
+      content: r.content,
+      status: r.status,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      parentId: r.parentId,
+      author: {
+        id: r.author_id,
+        name: r.author_name,
+        email: r.author_email,
+        avatar: r.author_avatar,
+        website: r.author_website,
+      },
+      contentItem: {
+        id: r.contentItem_id,
+        title: r.contentItem_title,
+        slug: r.contentItem_slug,
+      },
+    };
 
     return NextResponse.json({ data: item, meta: { requestId: id } });
   } catch (error) {
@@ -82,8 +111,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     const { id: commentId } = await context.params;
 
-    const existing = await db.comment.findUnique({ where: { id: commentId } });
-    if (!existing) {
+    const existingRows: any[] = await (db as any).$queryRawUnsafe(
+      'SELECT id, status, content FROM Comment WHERE id = ?',
+      commentId,
+    );
+    if (!existingRows || existingRows.length === 0) {
       return NextResponse.json(
         { error: { code: 'NOT_FOUND', message: 'Comment not found' }, meta: { requestId: id } },
         { status: 404 },
@@ -116,18 +148,62 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const d = parsed.data;
-    const updateData: Record<string, unknown> = {};
-    if (d.status !== undefined) updateData.status = d.status;
-    if (d.content !== undefined) updateData.content = d.content;
 
-    const item = await db.comment.update({
-      where: { id: commentId },
-      data: updateData,
-      include: {
-        author: { select: { id: true, name: true, email: true, avatar: true } },
-        contentItem: { select: { id: true, title: true, slug: true } },
+    if (d.status !== undefined) {
+      await (db as any).$executeRawUnsafe(
+        'UPDATE Comment SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+        d.status,
+        commentId,
+      );
+    }
+
+    if (d.content !== undefined) {
+      await (db as any).$executeRawUnsafe(
+        'UPDATE Comment SET content = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+        d.content,
+        commentId,
+      );
+    }
+
+    if (d.status !== undefined) {
+      await updateVerdantCommentStatus(commentId, d.status).catch((err) => {
+        console.warn(`[COMMENTS:UPDATE] ${id} — production Postgres status sync warning:`, err);
+      });
+    }
+
+    // Fetch the updated item
+    const rows: any[] = await (db as any).$queryRawUnsafe(`
+      SELECT 
+        c.id, c.content, c.status, c.createdAt, c.updatedAt, c.parentId,
+        u.id as author_id, u.name as author_name, u.email as author_email, u.avatar as author_avatar, u.website as author_website,
+        ci.id as contentItem_id, ci.title as contentItem_title, ci.slug as contentItem_slug
+      FROM Comment c
+      LEFT JOIN User u ON c.authorId = u.id
+      LEFT JOIN ContentItem ci ON c.contentItemId = ci.id
+      WHERE c.id = ?
+    `, commentId);
+
+    const r = rows[0];
+    const item = {
+      id: r.id,
+      content: r.content,
+      status: r.status,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      parentId: r.parentId,
+      author: {
+        id: r.author_id,
+        name: r.author_name,
+        email: r.author_email,
+        avatar: r.author_avatar,
+        website: r.author_website,
       },
-    });
+      contentItem: {
+        id: r.contentItem_id,
+        title: r.contentItem_title,
+        slug: r.contentItem_slug,
+      },
+    };
 
     return NextResponse.json({ data: item, meta: { requestId: id } });
   } catch (error) {
@@ -153,15 +229,21 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     const { id: commentId } = await context.params;
 
-    const existing = await db.comment.findUnique({ where: { id: commentId } });
-    if (!existing) {
+    const existingRows: any[] = await (db as any).$queryRawUnsafe(
+      'SELECT id FROM Comment WHERE id = ?',
+      commentId,
+    );
+    if (!existingRows || existingRows.length === 0) {
       return NextResponse.json(
         { error: { code: 'NOT_FOUND', message: 'Comment not found' }, meta: { requestId: id } },
         { status: 404 },
       );
     }
 
-    await db.comment.delete({ where: { id: commentId } });
+    await (db as any).$executeRawUnsafe('DELETE FROM Comment WHERE id = ?', commentId);
+    await deleteVerdantComment(commentId).catch((err) => {
+      console.warn('[COMMENTS:DELETE] Production delete warning:', err);
+    });
 
     return NextResponse.json({ data: { id: commentId, deleted: true }, meta: { requestId: id } });
   } catch (error) {

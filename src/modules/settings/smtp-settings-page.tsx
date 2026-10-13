@@ -115,17 +115,30 @@ export function SmtpSettingsPage() {
   });
 
   // ---------- Draft state (local overrides on top of saved values) ----------
-  // We never sync useEffect→state. Instead we derive "current display value"
-  // from `saved + draft override`. Dirty = draft is non-empty.
   const [draft, setDraft] = useState<Partial<SmtpSettingsResponse>>({});
   const [showPassword, setShowPassword] = useState(false);
 
-  // Password UI state — separate so we can support the masked-placeholder pattern.
-  const [passwordInput, setPasswordInput] = useState<string>(PASSWORD_PLACEHOLDER);
-
   // ---------- Derived values ----------
   const saved = data ?? null;
-  const hasSavedPassword = (saved?.password ?? '').length > 0;
+  const hasSavedPassword = Boolean((saved?.password ?? '').length > 0);
+
+  // Password UI state: if saved password exists, user sees masked placeholder until clicking Change
+  const [isEditingPassword, setIsEditingPassword] = useState(false);
+  const [passwordInput, setPasswordInput] = useState<string>(
+    hasSavedPassword ? PASSWORD_PLACEHOLDER : '',
+  );
+
+  // When saved query updates, sync password state if user isn't actively editing
+  React.useEffect(() => {
+    if (hasSavedPassword) {
+      if (!isEditingPassword) {
+        setPasswordInput(PASSWORD_PLACEHOLDER);
+      }
+    } else {
+      setIsEditingPassword(true);
+      setPasswordInput('');
+    }
+  }, [hasSavedPassword]);
 
   const current: SmtpSettingsResponse = {
     id: saved?.id ?? null,
@@ -144,7 +157,10 @@ export function SmtpSettingsPage() {
   };
 
   const isDirty =
-    Object.keys(draft).length > 0 || passwordInput !== PASSWORD_PLACEHOLDER;
+    Object.keys(draft).length > 0 ||
+    (hasSavedPassword
+      ? passwordInput !== PASSWORD_PLACEHOLDER
+      : passwordInput.length > 0);
 
   // ---------- Setters ----------
   const update = <K extends keyof SmtpSettingsResponse>(
@@ -154,7 +170,16 @@ export function SmtpSettingsPage() {
     setDraft((prev) => ({ ...prev, [key]: value }));
   };
 
-  // When encryption changes, also auto-suggest the matching default port.
+  const handleUsernameChange = (val: string) => {
+    update('username', val);
+    // If fromEmail is empty and username looks like an email, default fromEmail to it
+    if (!draft.fromEmail && !saved?.fromEmail && val.includes('@')) {
+      update('fromEmail', val);
+    }
+  };
+
+  // When encryption changes, also auto-suggest the matching standard default port:
+  // STARTTLS -> 587, SSL -> 465, none -> 25
   const handleEncryptionChange = (value: Encryption) => {
     const option = ENCRYPTION_OPTIONS.find((o) => o.value === value);
     setDraft((prev) => ({
@@ -174,7 +199,7 @@ export function SmtpSettingsPage() {
         encryption: current.encryption,
         username: current.username,
         // Send the masked placeholder when password is unchanged,
-        // OR send the new password when user typed something else.
+        // OR send the new password when user entered a new one.
         password: passwordInput,
         fromName: current.fromName,
         fromEmail: current.fromEmail,
@@ -186,6 +211,7 @@ export function SmtpSettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['settings', 'smtp'] });
       setDraft({});
       setPasswordInput(PASSWORD_PLACEHOLDER);
+      setIsEditingPassword(false);
       toast.success(t('smtp.savedSuccess'));
     },
     onError: (err: unknown) => {
@@ -196,31 +222,29 @@ export function SmtpSettingsPage() {
     },
   });
 
-  // ---------- Test connection mutation ----------
+  // ---------- Test connection mutation (Always tests CURRENT form values) ----------
   const [testResult, setTestResult] = useState<
     { ok: boolean; message: string } | null
   >(null);
 
   const testMutation = useMutation({
     mutationFn: () => {
-      // If dirty, send current draft; otherwise let backend use saved settings.
-      const payload = isDirty
-        ? {
-            settings: {
-              provider: current.provider,
-              host: current.host,
-              port: current.port,
-              encryption: current.encryption,
-              username: current.username,
-              password: passwordInput,
-              fromName: current.fromName,
-              fromEmail: current.fromEmail,
-              replyTo: current.replyTo,
-              timeout: current.timeout,
-              isActive: current.isActive,
-            },
-          }
-        : {};
+      // Single Source of Truth: always test the exact current values from the form
+      const payload = {
+        settings: {
+          provider: current.provider,
+          host: current.host,
+          port: current.port,
+          encryption: current.encryption,
+          username: current.username,
+          password: passwordInput,
+          fromName: current.fromName,
+          fromEmail: current.fromEmail,
+          replyTo: current.replyTo,
+          timeout: current.timeout,
+          isActive: current.isActive,
+        },
+      };
       return postApi<TestResponse>('/api/settings/smtp/test', payload);
     },
     onSuccess: (data) => {
@@ -236,7 +260,7 @@ export function SmtpSettingsPage() {
     },
   });
 
-  // ---------- Send test email mutation ----------
+  // ---------- Send test email mutation (Always uses CURRENT form values) ----------
   const [testEmail, setTestEmail] = useState('');
   const [emailResult, setEmailResult] = useState<
     { ok: boolean; message: string } | null
@@ -246,23 +270,19 @@ export function SmtpSettingsPage() {
     mutationFn: () => {
       const payload = {
         email: testEmail,
-        ...(isDirty
-          ? {
-              settings: {
-                provider: current.provider,
-                host: current.host,
-                port: current.port,
-                encryption: current.encryption,
-                username: current.username,
-                password: passwordInput,
-                fromName: current.fromName,
-                fromEmail: current.fromEmail,
-                replyTo: current.replyTo,
-                timeout: current.timeout,
-                isActive: current.isActive,
-              },
-            }
-          : {}),
+        settings: {
+          provider: current.provider,
+          host: current.host,
+          port: current.port,
+          encryption: current.encryption,
+          username: current.username,
+          password: passwordInput,
+          fromName: current.fromName,
+          fromEmail: current.fromEmail,
+          replyTo: current.replyTo,
+          timeout: current.timeout,
+          isActive: current.isActive,
+        },
       };
       return postApi<TestResponse>('/api/settings/smtp/test-email', payload);
     },
@@ -282,7 +302,13 @@ export function SmtpSettingsPage() {
   // ---------- Reset (discard local draft) ----------
   const handleDiscard = () => {
     setDraft({});
-    setPasswordInput(PASSWORD_PLACEHOLDER);
+    if (hasSavedPassword) {
+      setPasswordInput(PASSWORD_PLACEHOLDER);
+      setIsEditingPassword(false);
+    } else {
+      setPasswordInput('');
+      setIsEditingPassword(true);
+    }
     setTestResult(null);
     setEmailResult(null);
     toast.info(t('smtp.changesDiscarded'));
@@ -430,23 +456,6 @@ export function SmtpSettingsPage() {
               </p>
             </div>
 
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="timeout" className="text-sm font-medium">
-                {t('smtp.timeout')}
-              </Label>
-              <Input
-                id="timeout"
-                type="number"
-                value={current.timeout}
-                onChange={(e) => update('timeout', Number(e.target.value))}
-                min={1}
-                max={120}
-                className="sm:w-40"
-              />
-              <p className="text-xs text-muted-foreground">
-                {t('smtp.timeoutHint')}
-              </p>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -471,7 +480,7 @@ export function SmtpSettingsPage() {
               <Input
                 id="username"
                 value={current.username}
-                onChange={(e) => update('username', e.target.value)}
+                onChange={(e) => handleUsernameChange(e.target.value)}
                 placeholder="user@example.com"
                 autoComplete="off"
                 spellCheck={false}
@@ -485,12 +494,12 @@ export function SmtpSettingsPage() {
               <Label htmlFor="password" className="text-sm font-medium">
                 {t('smtp.password')}
               </Label>
-              {passwordInput === PASSWORD_PLACEHOLDER ? (
+              {hasSavedPassword && !isEditingPassword ? (
                 // Saved password — show masked placeholder + "Change" button
                 <div className="flex items-center gap-2">
                   <div
                     id="password"
-                    className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-3 text-sm text-muted-foreground"
+                    className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-3 text-sm text-muted-foreground select-none"
                   >
                     {PASSWORD_PLACEHOLDER}
                   </div>
@@ -498,59 +507,77 @@ export function SmtpSettingsPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => setPasswordInput('')}
+                    onClick={() => {
+                      setIsEditingPassword(true);
+                      setPasswordInput('');
+                    }}
                   >
                     {t('smtp.change')}
                   </Button>
                 </div>
               ) : (
                 // Editable password input with show/hide toggle
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={passwordInput}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      // If the user typed over the masked placeholder, stray bullets
-                      // may be embedded in the new value. Strip them out.
-                      if (val.includes('•')) {
-                        setPasswordInput(val.replace(/•/g, ''));
-                      } else {
-                        setPasswordInput(val);
-                      }
-                    }}
-                    placeholder={t('smtp.enterNewPassword')}
-                    autoComplete="new-password"
-                    spellCheck={false}
-                    className="pr-10"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-9 w-9 hover:bg-transparent"
-                    onClick={() => setShowPassword((s) => !s)}
-                    aria-label={showPassword ? t('smtp.hidePassword') : t('smtp.showPassword')}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </Button>
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={passwordInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val.includes('•')) {
+                          setPasswordInput(val.replace(/•/g, ''));
+                        } else {
+                          setPasswordInput(val);
+                        }
+                      }}
+                      placeholder={hasSavedPassword ? t('smtp.enterNewPassword') : 'App Password'}
+                      autoComplete="new-password"
+                      spellCheck={false}
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-9 w-9 hover:bg-transparent"
+                      onClick={() => setShowPassword((s) => !s)}
+                      aria-label={showPassword ? t('smtp.hidePassword') : t('smtp.showPassword')}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                  {hasSavedPassword && (
+                    <div className="flex items-center justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          setIsEditingPassword(false);
+                          setPasswordInput(PASSWORD_PLACEHOLDER);
+                        }}
+                      >
+                        Keep existing password
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="flex items-center gap-2 text-xs">
-                {hasSavedPassword ? (
-                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-500">
-                    <CheckCircle2 className="h-3 w-3" />{t('smtp.saved')}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">{t('smtp.noPasswordSaved')}</span>
+                {!hasSavedPassword && (
+                  <>
+                    <span className="text-muted-foreground">{t('smtp.noPasswordSaved')}</span>
+                    <span className="text-muted-foreground">·</span>
+                  </>
                 )}
                 <span className="text-muted-foreground">
-                  {t('smtp.encryptedAtRest')}
+                  {t('smtp.encryptedAtRest').replace(/^[·•]\s*/, '')}
                 </span>
               </div>
             </div>
@@ -767,16 +794,6 @@ export function SmtpSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* 7. Security Note */}
-      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-        <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0" />
-        <div className="text-xs leading-relaxed">
-          <p className="font-medium">{t('smtp.securityNote')}</p>
-          <p className="mt-1">
-            {t('smtp.securityNotePrefix')} <strong>AES-256-GCM</strong>{t('smtp.securityNoteSuffix')}
-          </p>
-        </div>
-      </div>
     </div>
   );
 }

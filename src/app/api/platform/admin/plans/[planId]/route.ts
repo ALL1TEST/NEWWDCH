@@ -1,22 +1,43 @@
 import { NextRequest } from 'next/server';
-import { requireOwner, ok, fail, getClientIp } from '@/lib/platform/platform-auth';
+import { requirePlatformAdmin, requireOwner, ok, fail, getClientIp } from '@/lib/platform/platform-auth';
 import {
   savePlanConfig,
   deletePlanConfig,
   getPlanConfigSync,
+  ensureHydrated,
   type PlanConfigInput,
 } from '@/lib/platform/plan-config';
 import { validatePlanConfigInput } from '@/lib/platform/subscription-data';
 import { logAdminAction } from '@/lib/platform/audit';
 
+type RouteContext = { params: Promise<{ planId: string }> };
+
+export async function GET(request: NextRequest, context: RouteContext) {
+  const auth = await requirePlatformAdmin(request);
+  if ('response' in auth) return auth.response;
+  await ensureHydrated();
+  const { planId: rawPlanId } = await context.params;
+  const planId = (
+    rawPlanId ? decodeURIComponent(rawPlanId) : request.nextUrl.pathname.split('/').filter(Boolean).pop()!
+  ).trim().toLowerCase();
+  if (!planId) return fail('VALIDATION_ERROR', 'planId is required.', 400);
+
+  const plan = getPlanConfigSync(planId);
+  if (!plan) return fail('NOT_FOUND', 'Plan not found.', 404);
+  return ok(plan);
+}
+
 // Owner-only: editing plan pricing / features / entitlements / limits is
 // a sensitive mutation. PLATFORM_ADMIN can view (GET on /plans) but only
 // OWNER can change pricing. This propagates to the Client Billing page
 // and to MRR via the shared plan-config cache.
-export async function PUT(request: NextRequest) {
+export async function PUT(request: NextRequest, context: RouteContext) {
   const auth = await requireOwner(request);
   if ('response' in auth) return auth.response;
-  const planId = request.nextUrl.pathname.split('/').filter(Boolean).pop()!;
+  const { planId: rawPlanId } = await context.params;
+  const planId = (
+    rawPlanId ? decodeURIComponent(rawPlanId) : request.nextUrl.pathname.split('/').filter(Boolean).pop()!
+  ).trim().toLowerCase();
   const body = (await request.json().catch(() => ({}))) as PlanConfigInput;
   if (!planId) return fail('VALIDATION_ERROR', 'planId is required.', 400);
 
@@ -70,10 +91,13 @@ export async function PUT(request: NextRequest) {
  * This is the safe way to remove the legacy "Enterprise" stub — but only after
  * the migration has confirmed no live subscriptions point to it.
  */
-export async function DELETE(request: NextRequest) {
+export async function DELETE(request: NextRequest, context: RouteContext) {
   const auth = await requireOwner(request);
   if ('response' in auth) return auth.response;
-  const planId = request.nextUrl.pathname.split('/').filter(Boolean).pop()!;
+  const { planId: rawPlanId } = await context.params;
+  const planId = (
+    rawPlanId ? decodeURIComponent(rawPlanId) : request.nextUrl.pathname.split('/').filter(Boolean).pop()!
+  ).trim().toLowerCase();
   if (!planId) return fail('VALIDATION_ERROR', 'planId is required.', 400);
 
   const before = getPlanConfigSync(planId);

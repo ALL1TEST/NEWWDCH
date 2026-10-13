@@ -35,6 +35,7 @@ export function PlatformCustomerDetailModule() {
   const { t } = useT();
   const currentItemId = useNavigationStore((s) => s.currentItemId);
   const navigate = useNavigationStore((s) => s.navigate);
+  const goBack = useNavigationStore((s) => s.goBack);
   const qc = useQueryClient();
   const [actionPending, setActionPending] = useState(false);
 
@@ -72,7 +73,7 @@ export function PlatformCustomerDetailModule() {
   if (isError || !data) {
     return (
       <div className="space-y-6">
-        <PlatformPageHeader title={t('platformCustomerDetail.title')} subtitle={t('platformCustomerDetail.subtitle')} onBack={() => navigate('platform-customers')} />
+        <PlatformPageHeader title={t('platformCustomerDetail.title')} subtitle={t('platformCustomerDetail.subtitle')} onBack={() => goBack('platform-customers')} />
         <Card><CardContent className="p-6"><ErrorState message={t('platformCustomerDetail.loadError')} onRetry={() => refetch()} /></CardContent></Card>
       </div>
     );
@@ -85,7 +86,7 @@ export function PlatformCustomerDetailModule() {
       <PlatformPageHeader
         title={data.name}
         subtitle={data.email}
-        onBack={() => navigate('platform-customers')}
+        onBack={() => goBack('platform-customers')}
         actions={
           isSuspended ? (
             <Button size="sm" variant="outline" disabled={actionPending} onClick={() => handleAction('reactivate')}>

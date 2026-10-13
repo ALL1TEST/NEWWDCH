@@ -164,6 +164,7 @@ enum CommentStatus {
   REJECTED
   FLAGGED
   SPAM
+  TRASH
 }
 
 enum FormStatus {

@@ -18,6 +18,7 @@ import {
   CheckCircle2, XCircle, ArrowUpDown,
 } from 'lucide-react';
 import { PageHeader } from '@/components/patterns';
+import { useSiteStore } from '@/lib/stores/site-store';
 import { useT } from '@/lib/i18n';
 
 // -------------------- Types --------------------
@@ -154,6 +155,8 @@ function DetailTable({ type }: { type: DetailType }) {
 
 function ContentDetailTable({ type }: { type: DetailType }) {
   const { t } = useT();
+  const activeSite = useSiteStore((s) => s.getActiveSite());
+  const targetDomain = activeSite?.domain || 'verdantt.vercel.app';
   const { data, isLoading, isError } = useQuery({
     queryKey: ['seo-detail', 'content', type],
     queryFn: () => getApi<{ items: ContentItem[]; configs: SeoConfig[] }>('/api/seo/overview/detail', { type }),
@@ -229,7 +232,7 @@ function ContentDetailTable({ type }: { type: DetailType }) {
             if (!config?.canonicalUrl) return false;
             try {
               const u = new URL(config.canonicalUrl);
-              return u.hostname !== 'cms.example.com';
+              return u.hostname !== targetDomain;
             } catch {
               return true; // Invalid URL
             }

@@ -6,6 +6,8 @@ import { z } from 'zod/v4';
 import { requireAuth } from '@/lib/platform/platform-auth';
 import { hasFeature, forbiddenResponse } from '@/lib/platform/entitlements';
 import { getSiteWhere, getSiteFromRequest, getActivePlanSiteId } from '@/lib/site-context';
+import { calculateNextRun, validateScheduleNotPassed } from '@/lib/automation/scheduler-utils';
+import { startSchedulerDaemon } from '@/lib/automation/scheduler-daemon';
 
 function reqId() { return 'req_' + nanoid(8); }
 
@@ -27,6 +29,7 @@ export async function GET(request: NextRequest) {
   if ('response' in auth) return auth.response;
   const allowed = await hasFeature(auth.user, 'automation');
   if (!allowed) return forbiddenResponse('automation');
+  startSchedulerDaemon();
   const id = reqId();
   try {
     const sp = new URL(request.url).searchParams;
@@ -43,11 +46,29 @@ export async function GET(request: NextRequest) {
     if (status) where.status = status;
 
     const [items, total] = await Promise.all([
-      db.automation.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }),
+      db.automation.findMany({
+        where,
+        include: {
+          runs: {
+            take: 1,
+            orderBy: { createdAt: 'desc' },
+            select: { id: true, status: true, startedAt: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
       db.automation.count({ where }),
     ]);
 
-    return NextResponse.json({ data: items, meta: { requestId: id, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } } });
+    const mappedItems = items.map((a: any) => ({
+      ...a,
+      latestRunStatus: a.runs?.[0]?.status || null,
+      latestRunId: a.runs?.[0]?.id || null,
+    }));
+
+    return NextResponse.json({ data: mappedItems, meta: { requestId: id, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } } });
   } catch (error) {
     console.error(`[AUTOMATIONS:LIST] ${id} —`, error);
     return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch automations' }, meta: { requestId: id } }, { status: 500 });
@@ -60,6 +81,7 @@ export async function POST(request: NextRequest) {
   if ('response' in auth) return auth.response;
   const allowed = await hasFeature(auth.user, 'automation');
   if (!allowed) return forbiddenResponse('automation');
+  startSchedulerDaemon();
   const id = reqId();
   try {
     let body: unknown;
@@ -79,13 +101,23 @@ export async function POST(request: NextRequest) {
       siteId = await getActivePlanSiteId(auth.user);
     }
 
-    // Calculate nextRunAt for scheduled automations
+    // Validate and calculate nextRunAt for scheduled automations
     let nextRunAt: Date | null = null;
     if (d.triggerType === 'SCHEDULED') {
-      try {
-        const cfg = JSON.parse(d.scheduleConfig);
-        if (cfg.time) { nextRunAt = calculateNextRun(cfg); }
-      } catch {}
+      const scheduleValidation = validateScheduleNotPassed(d.scheduleConfig);
+      if (!scheduleValidation.isValid) {
+        return NextResponse.json(
+          {
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: scheduleValidation.error || 'This date and time has already passed. Please choose a future date and time.',
+            },
+            meta: { requestId: id },
+          },
+          { status: 400 }
+        );
+      }
+      nextRunAt = scheduleValidation.scheduledDate;
     }
 
     const item = await db.automation.create({
@@ -106,13 +138,4 @@ export async function POST(request: NextRequest) {
     console.error(`[AUTOMATIONS:CREATE] ${id} —`, error);
     return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to create automation' }, meta: { requestId: id } }, { status: 500 });
   }
-}
-
-function calculateNextRun(cfg: { frequency?: string; time?: string; timezone?: string }): Date {
-  const now = new Date();
-  const [hours, minutes] = (cfg.time || '09:00').split(':').map(Number);
-  const next = new Date(now);
-  next.setHours(hours || 9, minutes || 0, 0, 0);
-  if (next <= now) next.setDate(next.getDate() + 1);
-  return next;
 }

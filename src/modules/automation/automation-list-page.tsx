@@ -2,12 +2,19 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Zap, Plus, Play, Pause, Copy, Trash2, Eye, Loader2, CheckCircle2, XCircle, Clock, Activity, CirclePlay } from 'lucide-react';
+import { Zap, Plus, Play, Pause, Copy, Trash2, Pencil, Loader2, CheckCircle2, XCircle, Clock, Activity, CirclePlay, MoreHorizontal } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/patterns';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { useNavigationStore } from '@/lib/stores/navigation-store';
 import { useT } from '@/lib/i18n';
@@ -22,6 +29,7 @@ interface AutomationRow {
   name: string;
   description: string;
   triggerType: string;
+  scheduleConfig?: string;
   status: string;
   lastRunAt: string | null;
   nextRunAt: string | null;
@@ -29,6 +37,17 @@ interface AutomationRow {
   successfulRuns: number;
   failedRuns: number;
   createdAt: string;
+  latestRunStatus?: string | null;
+  latestRunId?: string | null;
+}
+
+function getScheduleTimezone(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw).timezone;
+  } catch {
+    return undefined;
+  }
 }
 
 export function AutomationListPage({ showRunsOnly = false }: { showRunsOnly?: boolean }) {
@@ -61,26 +80,35 @@ export function AutomationListPage({ showRunsOnly = false }: { showRunsOnly?: bo
     ? (data as any).data
     : [];
 
-  const runMutation = useMutation({
-    mutationFn: (id: string) => postApi(`/api/automations/${id}/run`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['automations'] });
-      queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
-      queryClient.invalidateQueries({ queryKey: ['calendar'] });
-      toast.success(t('automation.started'));
-    },
-    onError: (err: Error) => toast.error(err.message || t('automation.failedToStart')),
-  });
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const toggleMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => patchApi(`/api/automations/${id}`, { status }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['automations'] }); toast.success(t('automation.statusUpdated')); },
+    mutationFn: ({ id, status }: { id: string; status: string }) => {
+      setTogglingId(id);
+      return patchApi<AutomationRow>(`/api/automations/${id}`, { status });
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['automations'] });
+      queryClient.invalidateQueries({ queryKey: ['automation', vars.id] });
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      toast.success(
+        vars.status === 'PAUSED'
+          ? 'Automation paused. Future scheduled executions are suspended.'
+          : 'Automation resumed. Scheduled runs are active.'
+      );
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to update automation status'),
+    onSettled: () => setTogglingId(null),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteApi(`/api/automations/${id}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['automations'] }); setDeleteTarget(null); toast.success(t('automation.deleted')); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['automations'] });
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      setDeleteTarget(null);
+      toast.success(t('automation.deleted'));
+    },
   });
 
   const totalActive = automations.filter((a: AutomationRow) => a.status === 'ACTIVE').length;
@@ -145,8 +173,7 @@ export function AutomationListPage({ showRunsOnly = false }: { showRunsOnly?: bo
                   <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t('automation.trigger')}</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t('common.status')}</th>
                   <th className="hidden md:table-cell text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t('automation.lastRun')}</th>
-                  <th className="hidden lg:table-cell text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t('automation.nextRun')}</th>
-                  <th className="hidden lg:table-cell text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t('automation.runs')}</th>
+                  <th className="hidden lg:table-cell text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Next Article</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t('common.actions')}</th>
                 </tr>
               </thead>
@@ -154,11 +181,11 @@ export function AutomationListPage({ showRunsOnly = false }: { showRunsOnly?: bo
                 {isLoading && !automations.length ? (
                   Array.from({ length: 3 }).map((_, i) => (
                     <tr key={i} className="border-b">
-                      {Array.from({ length: 7 }).map((_, j) => <td key={j} className="px-4 py-3"><Skeleton className="h-5 w-20" /></td>)}
+                      {Array.from({ length: 6 }).map((_, j) => <td key={j} className="px-4 py-3"><Skeleton className="h-5 w-20" /></td>)}
                     </tr>
                   ))
                 ) : automations.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-12 text-center">
+                  <tr><td colSpan={6} className="px-4 py-12 text-center">
                     <Zap className="h-10 w-10 mx-auto text-muted-foreground/30 mb-2" />
                     <p className="text-sm font-medium">{t('automation.noAutomations')}</p>
                     <p className="text-xs text-muted-foreground mt-1">{t('automation.emptyHint')}</p>
@@ -179,17 +206,84 @@ export function AutomationListPage({ showRunsOnly = false }: { showRunsOnly?: bo
                         {a.status === 'ACTIVE' ? t('common.active') : a.status === 'PAUSED' ? t('automation.paused') : a.status}
                       </Badge>
                     </td>
-                    <td className="hidden md:table-cell px-4 py-3 text-xs text-muted-foreground">{a.lastRunAt ? formatRelativeTime(a.lastRunAt) : t('automation.never')}</td>
-                    <td className="hidden lg:table-cell px-4 py-3 text-xs text-muted-foreground">{a.nextRunAt ? formatRelativeTime(a.nextRunAt) : '—'}</td>
-                    <td className="hidden lg:table-cell px-4 py-3 text-right text-xs text-muted-foreground">{a.totalRuns}</td>
-                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-0.5">
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => navigate(targetMod, a.id, 'details')} title={t('common.view')}><Eye className="h-3.5 w-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400" onClick={() => runMutation.mutate(a.id)} disabled={runMutation.isPending} title={t('automation.runNow')}><Play className="h-3.5 w-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-amber-600 hover:text-amber-700 dark:text-amber-400" onClick={() => toggleMutation.mutate({ id: a.id, status: a.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' })} title={a.status === 'ACTIVE' ? t('automation.pause') : t('automation.activate')}>
-                          {a.status === 'ACTIVE' ? <Pause className="h-3.5 w-3.5" /> : <CirclePlay className="h-3.5 w-3.5" />}
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(a)} title={t('common.delete')}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    <td className="hidden md:table-cell px-4 py-3 text-xs text-muted-foreground">{a.lastRunAt ? formatRelativeTime(a.lastRunAt, getScheduleTimezone(a.scheduleConfig)) : t('automation.never')}</td>
+                    <td className="hidden lg:table-cell px-4 py-3 text-xs text-muted-foreground">{a.status === 'PAUSED' ? 'Automation paused' : a.nextRunAt ? formatRelativeTime(a.nextRunAt, getScheduleTimezone(a.scheduleConfig)) : '—'}</td>                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {a.latestRunStatus === 'RUNNING' && (
+                          <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 mr-1 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            <span>Running</span>
+                          </span>
+                        )}
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              aria-label="More actions"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem
+                              onClick={() => navigate(targetMod, a.id, 'edit')}
+                              className="gap-2 cursor-pointer text-xs"
+                            >
+                              <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span>Edit Automation</span>
+                            </DropdownMenuItem>
+
+                            {a.status === 'ACTIVE' ? (
+                              <DropdownMenuItem
+                                onClick={() => toggleMutation.mutate({ id: a.id, status: 'PAUSED' })}
+                                disabled={togglingId === a.id || toggleMutation.isPending}
+                                className="gap-2 cursor-pointer text-xs"
+                              >
+                                {togglingId === a.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                                ) : (
+                                  <Pause className="h-3.5 w-3.5 text-muted-foreground" />
+                                )}
+                                <span>Pause Automation</span>
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                onClick={() => toggleMutation.mutate({ id: a.id, status: 'ACTIVE' })}
+                                disabled={togglingId === a.id || toggleMutation.isPending}
+                                className="gap-2 cursor-pointer text-xs"
+                              >
+                                {togglingId === a.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                                ) : (
+                                  <Play className="h-3.5 w-3.5 text-muted-foreground" />
+                                )}
+                                <span>Resume Automation</span>
+                              </DropdownMenuItem>
+                            )}
+
+                            <DropdownMenuItem
+                              onClick={() => navigate(targetMod, a.id, 'details')}
+                              className="gap-2 cursor-pointer text-xs"
+                            >
+                              <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span>View Run History</span>
+                            </DropdownMenuItem>
+
+                            <DropdownMenuSeparator />
+
+                            <DropdownMenuItem
+                              onClick={() => setDeleteTarget(a)}
+                              disabled={deleteMutation.isPending}
+                              className="gap-2 cursor-pointer text-xs text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>Delete Automation</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </td>
                   </tr>

@@ -208,6 +208,9 @@ export const queryKeys = {
     all: ['ai-playground'] as const,
   },
 
+  // -------------------- Automations --------------------
+  automations: createQueryKeys('automations'),
+
   // -------------------- Webhooks --------------------
   webhooks: createQueryKeys('webhooks'),
   webhookDeliveries: {

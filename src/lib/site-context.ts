@@ -150,3 +150,47 @@ export async function requireSiteId(request: NextRequest): Promise<string> {
   }
   return siteId;
 }
+
+/**
+ * Validate that an authenticated user is authorized to access an automation and its tenant site.
+ * Platform staff (OWNER/PLATFORM_ADMIN) have global visibility.
+ * Client users can only access automations belonging to sites they own or are assigned to.
+ */
+export async function canUserAccessAutomation(
+  authUser: AuthUser,
+  automation: { siteId: string | null; createdById?: string | null }
+): Promise<boolean> {
+  if (authUser.role === 'OWNER' || authUser.role === 'PLATFORM_ADMIN') {
+    return true;
+  }
+
+  if (automation.siteId) {
+    const site = await db.site.findUnique({
+      where: { id: automation.siteId },
+      select: { ownerId: true, status: true },
+    });
+    if (!site || site.status === 'ARCHIVED') {
+      return false;
+    }
+    if (site.ownerId === authUser.id) {
+      return true;
+    }
+
+    const fullUser = await db.user.findUnique({
+      where: { id: authUser.id },
+      select: { assignedSites: true },
+    });
+    if (fullUser?.assignedSites) {
+      try {
+        const assigned: string[] = JSON.parse(fullUser.assignedSites);
+        if (Array.isArray(assigned) && assigned.includes(automation.siteId)) {
+          return true;
+        }
+      } catch {}
+    }
+    return false;
+  }
+
+  // If no siteId, user must be the creator
+  return automation.createdById === authUser.id;
+}

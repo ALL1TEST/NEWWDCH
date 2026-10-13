@@ -4,19 +4,19 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   FileCode,
+  Globe,
   RefreshCw,
+  Send,
   Download,
   Eye,
-  Send,
-  Globe,
-  Loader2,
-  Clock,
-  Link2,
-  Zap,
-  ExternalLink,
-  AlertTriangle,
   CheckCircle2,
+  Clock,
   XCircle,
+  AlertTriangle,
+  Loader2,
+  ExternalLink,
+  Zap,
+  Link2,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,6 +46,10 @@ interface SitemapData {
   xmlContent: string;
   totalUrls: number;
   status: string;
+  isPubliclyAccessible?: boolean;
+  publicHttpStatus?: number;
+  publishingStatus?: 'PUBLISHED' | 'GENERATED_LOCAL' | 'PENDING';
+  publishingMessage?: string;
   autoGenerate: boolean;
   lastGenerated: string | null;
   lastPingGoogle: string | null;
@@ -71,36 +75,40 @@ function formatDate(dateStr: string | null, t: (key: string) => string): string 
   }
 }
 
-function getStatusBadge(status: string, t: (key: string) => string) {
-  switch (status) {
-    case 'GENERATED':
-      return (
-        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-transparent font-medium">
-          <CheckCircle2 className="h-3 w-3 mr-1" />
-          {t('seo.generated')}
-        </Badge>
-      );
-    case 'PENDING':
-      return (
-        <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-transparent font-medium">
-          <Clock className="h-3 w-3 mr-1" />
-          {t('seo.statusPending')}
-        </Badge>
-      );
-    case 'ERROR':
-      return (
-        <Badge variant="destructive" className="font-medium">
-          <XCircle className="h-3 w-3 mr-1" />
-          {t('seo.statusError')}
-        </Badge>
-      );
-    default:
-      return (
-        <Badge variant="secondary" className="font-medium">
-          {status}
-        </Badge>
-      );
+function getStatusBadge(sitemap: SitemapData, t: (key: string) => string) {
+  if (sitemap.isPubliclyAccessible) {
+    return (
+      <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-transparent font-medium gap-1">
+        <CheckCircle2 className="h-3 w-3" />
+        Published & Live
+      </Badge>
+    );
   }
+
+  if (sitemap.status === 'GENERATED' || sitemap.publishingStatus === 'GENERATED_LOCAL') {
+    return (
+      <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800 font-medium gap-1">
+        <Clock className="h-3 w-3" />
+        Generated in CMS — not published
+      </Badge>
+    );
+  }
+
+  if (sitemap.status === 'ERROR') {
+    return (
+      <Badge variant="destructive" className="font-medium gap-1">
+        <XCircle className="h-3 w-3" />
+        {t('seo.statusError')}
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge variant="secondary" className="font-medium gap-1">
+      <Clock className="h-3 w-3" />
+      Not Generated
+    </Badge>
+  );
 }
 
 function downloadBlob(content: string, filename: string) {
@@ -176,7 +184,7 @@ export function SeoSitemapPage() {
   const queryClient = useQueryClient();
   const [previewOpen, setPreviewOpen] = useState(false);
   const activeSite = useSiteStore((s) => s.getActiveSite());
-  const domain = activeSite?.domain ?? 'cms.example.com';
+  const domain = activeSite?.domain || 'verdantt.vercel.app';
 
   const { data: sitemap, isLoading, error } = useQuery({
     queryKey: queryKeys.seoSitemap.all,
@@ -186,10 +194,15 @@ export function SeoSitemapPage() {
 
   // Generate mutation
   const generateMutation = useMutation({
-    mutationFn: () => postApi('/api/seo/sitemap?action=generate'),
-    onSuccess: () => {
+    mutationFn: () => postApi<{ data: SitemapData }>('/api/seo/sitemap?action=generate'),
+    onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.seoSitemap.all });
-      toast.success(t('seo.sitemapGenerated'));
+      const data = res?.data ?? res;
+      if (data?.publishingMessage) {
+        toast.info(data.publishingMessage);
+      } else {
+        toast.success(t('seo.sitemapGenerated'));
+      }
     },
     onError: () => {
       toast.error(t('seo.sitemapGenerateFailed'));
@@ -260,6 +273,60 @@ export function SeoSitemapPage() {
         <SitemapSkeleton />
       ) : sitemap ? (
         <>
+          {/* Informational Banner for Public Deployment State */}
+          {!sitemap.isPubliclyAccessible && sitemap.status === 'GENERATED' && (
+            <Card className="border-amber-200 dark:border-amber-900/60 bg-amber-50/70 dark:bg-amber-950/30 p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <div className="space-y-1 text-xs">
+                  <p className="font-semibold text-amber-900 dark:text-amber-200 text-sm">
+                    Generated in CMS — not published to the public site
+                  </p>
+                  <p className="text-amber-800/90 dark:text-amber-300/90 leading-relaxed">
+                    The sitemap containing <strong>{sitemap.totalUrls} verified public URLs</strong> was generated from your live Verdant site structure. However, the public endpoint{' '}
+                    <a
+                      href={sitemapUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono font-medium underline text-amber-900 dark:text-amber-100"
+                    >
+                      {sitemapUrl}
+                    </a>{' '}
+                    returned HTTP {sitemap.publicHttpStatus || 404}. Real sitemap generation is active in the CMS, but publishing requires deploying the generated <code className="px-1 py-0.5 bg-amber-100 dark:bg-amber-900/60 rounded font-mono text-[11px]">sitemap.xml</code> file to your connected frontend repository.
+                  </p>
+                  <p className="text-amber-800/80 dark:text-amber-300/80 pt-1">
+                    Click <strong>Preview XML</strong> or <strong>Download sitemap.xml</strong> below to inspect or deploy the verified file.
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {sitemap.isPubliclyAccessible && (
+            <Card className="border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/70 dark:bg-emerald-950/30 p-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+                <div className="space-y-1 text-xs">
+                  <p className="font-semibold text-emerald-900 dark:text-emerald-200 text-sm">
+                    Published and Live on Public Site
+                  </p>
+                  <p className="text-emerald-800/90 dark:text-emerald-300/90 leading-relaxed">
+                    The public sitemap at{' '}
+                    <a
+                      href={sitemapUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono font-medium underline text-emerald-900 dark:text-emerald-100"
+                    >
+                      {sitemapUrl}
+                    </a>{' '}
+                    is verified accessible and serving valid XML for search engine indexation.
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+
           {/* Info Card */}
           <Card className="p-6">
             <div className="flex items-center justify-between mb-4">
@@ -268,7 +335,7 @@ export function SeoSitemapPage() {
                 <h3 className="font-semibold text-sm">{t('seo.sitemapInformation')}</h3>
               </div>
               <div className="flex items-center gap-2">
-                {getStatusBadge(sitemap.status, t)}
+                {getStatusBadge(sitemap, t)}
               </div>
             </div>
 
@@ -368,7 +435,7 @@ export function SeoSitemapPage() {
                 {pingBingMutation.isPending ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
-                  <Zap className="h-4 w-4 mr-2" />
+                  <Send className="h-4 w-4 mr-2" />
                 )}
                 {pingBingMutation.isPending ? t('seo.pinging') : t('seo.pingBing')}
               </Button>
@@ -379,7 +446,6 @@ export function SeoSitemapPage() {
                 variant="outline"
                 onClick={() => setPreviewOpen(true)}
                 disabled={!xmlContent}
-                title={!xmlContent ? t('seo.generateFirst') : undefined}
               >
                 <Eye className="h-4 w-4 mr-2" />
                 {t('seo.previewSitemap')}
@@ -396,29 +462,28 @@ export function SeoSitemapPage() {
                   }
                 }}
                 disabled={!xmlContent}
-                title={!xmlContent ? t('seo.generateFirst') : undefined}
               >
                 <Download className="h-4 w-4 mr-2" />
                 {t('seo.downloadSitemap')}
               </Button>
             </div>
           </Card>
+
+          {/* XML Preview Dialog */}
+          <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+            <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+              <DialogHeader>
+                <DialogTitle>{t('seo.sitemapXmlPreview')}</DialogTitle>
+              </DialogHeader>
+              <div className="flex-1 overflow-auto rounded bg-muted p-4 font-mono text-xs">
+                <pre className="whitespace-pre-wrap break-all">
+                  <code>{xmlContent || '<?xml version="1.0" encoding="UTF-8"?>\n<!-- No sitemap content available -->'}</code>
+                </pre>
+              </div>
+            </DialogContent>
+          </Dialog>
         </>
       ) : null}
-
-      {/* Preview Dialog */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle>{t('seo.sitemapXmlPreview')}</DialogTitle>
-          </DialogHeader>
-          <div className="overflow-auto rounded-lg border bg-muted/30 p-4 max-h-[60vh]">
-            <pre className="text-xs font-mono whitespace-pre-wrap break-all text-foreground/80">
-              <code>{xmlContent || '<?xml version="1.0" encoding="UTF-8"?>\n<!-- No sitemap content available -->'}</code>
-            </pre>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

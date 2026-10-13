@@ -95,11 +95,11 @@ function SolutionsDropdown({ currentHash }: { currentHash: string }) {
 
   return (
     <div ref={rootRef} className="relative" onMouseEnter={openNow} onMouseLeave={closeSoon}>
-      <a
-        href={MKT.solutions}
+      <button
+        type="button"
         aria-haspopup="true"
         aria-expanded={open}
-        onClick={(e) => { e.preventDefault(); setOpen((v) => !v); }}
+        onClick={() => setOpen((v) => !v)}
         className={`mkt-focus inline-flex h-9 items-center gap-1 rounded-full px-3 text-sm transition-colors ${
           currentHash.startsWith('#/solutions')
             ? 'text-text-primary font-medium'
@@ -111,7 +111,7 @@ function SolutionsDropdown({ currentHash }: { currentHash: string }) {
           className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
           aria-hidden="true"
         />
-      </a>
+      </button>
 
       {open && (
         <div
@@ -146,16 +146,6 @@ function SolutionsDropdown({ currentHash }: { currentHash: string }) {
                 </a>
               );
             })}
-          </div>
-
-          <div className="mt-1.5 border-t border-border px-2 pb-1 pt-2.5">
-            <a
-              href={MKT.solutions}
-              onClick={() => setOpen(false)}
-              className="text-xs font-medium text-mkt-accent hover:underline"
-            >
-              {t('mkt.menu.exploreAll')} →
-            </a>
           </div>
         </div>
       )}

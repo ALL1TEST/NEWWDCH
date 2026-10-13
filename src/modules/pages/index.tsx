@@ -30,6 +30,7 @@ export function PagesModule() {
   const user = useAuthStore((s) => s.user);
   const isPlatformStaff = user?.role === 'PLATFORM_ADMIN' || user?.role === 'OWNER' || currentModule.startsWith('platform-');
 
+  
   useEffect(() => {
     if (!isPlatformStaff && isSiteInitialized && isAllSites && (currentSubPage === 'new' || currentSubPage === 'create')) {
       navigate('pages');
@@ -46,9 +47,9 @@ export function PagesModule() {
     return <ContentEditPage contentId={currentItemId} isPage={true} />;
   }
 
-  // Detail page (has itemId but no subPage)
-  if (currentItemId && !currentSubPage) {
-    return <ContentDetailPage contentId={currentItemId} isPage={true} />;
+  // Detail / Preview page (has itemId with preview or no subPage)
+  if (currentItemId && (!currentSubPage || currentSubPage === 'preview')) {
+    return <ContentDetailPage contentId={currentItemId} isPage={true} isPreview={currentSubPage === 'preview'} />;
   }
 
   // Default: list page filtered to ContentType = PAGE

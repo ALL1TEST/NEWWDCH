@@ -4,6 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowUp,
   CircleHelp,
+  RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 import {
   Sheet,
@@ -18,58 +20,83 @@ import { useSupportPanelStore } from '@/lib/stores/support-panel-store';
 import { useLocaleStore, useT } from '@/lib/i18n';
 
 // ============================================================
-// HELP / SUPPORT FLOATING PANEL
+// HELP / SUPPORT FLOATING PANEL WITH AI EXPERT SYSTEM
 // ============================================================
-// Right-side FLOATING support panel opened from the account
-// menu's "Help → Help Center" action (see user-profile-menu.tsx).
-// Mounted ONCE in AdminShell next to the CommandPalette and
-// driven by the same global-store pattern
-// (support-panel-store), so any dashboard surface can open it
-// without prop-drilling.
-//
-// FLOATING TREATMENT (unlike a docked drawer): the panel keeps
-// a small margin from the top/right/bottom viewport edges,
-// rounds ALL four corners and floats above the dimmed
-// dashboard through the standard Sheet overlay — a chat
-// card, not an edge-to-edge side drawer.
-//
-// HONESTY CONTRACT (mirrors the marketing Contact page): the
-// product has NO live support backend today, so this panel is a
-// support EXPERIENCE, not a fake assistant —
-//   • the greeting + suggested questions are static UI;
-//   • a suggestion chip only fills the input (nothing is sent);
-//   • sending appends the message locally and answers with ONE
-//     honest notice explaining that live replies aren't
-//     connected yet (no invented support agent, no fake email,
-//     no pretended AI). When a real support/AI backend lands,
-//     replace the local echo in handleSend with the API call.
-//
-// Navigation: the Privacy action now lives in the account
-// menu's Help SUBMENU (user-profile-menu.tsx) and routes to
-// the dashboard's native Privacy Policy module (#/privacy —
-// modules/legal/privacy-page.tsx).
+// Right-side floating support assistant panel powered by Karmax AI
+// and comprehensive platform knowledge base.
+// Handles any question about WordPress sync, publishing, SEO,
+// AI configuration, subscriptions, media, automations, and more.
 // ============================================================
 
-// A suggested quick-help question (its i18n key).
 interface SupportSuggestion {
   key: string;
 }
 
 const SUGGESTIONS: SupportSuggestion[] = [
-  { key: 'support.suggestion1' },
-  { key: 'support.suggestion2' },
-  { key: 'support.suggestion3' },
-  { key: 'support.suggestion4' },
-  { key: 'support.suggestion5' },
+  { key: 'support.suggestion1' }, // How do I connect my website?
+  { key: 'support.suggestion2' }, // How do I publish an article?
+  { key: 'support.suggestion3' }, // How do I configure AI?
+  { key: 'support.suggestion4' }, // How do I manage my subscription?
+  { key: 'support.suggestion5' }, // How do I connect WordPress?
 ];
 
-// One conversation turn. `from: 'assistant'` renders as a
-// left-aligned muted bubble, `from: 'user'` as a right-aligned
-// primary bubble — matching the dashboard's monochrome surfaces.
 interface SupportMessage {
   id: number;
   from: 'assistant' | 'user';
   text: string;
+  source?: 'ai' | 'knowledge-base' | 'fallback';
+}
+
+function FormattedMessage({ text }: { text: string }) {
+  const lines = text.split('\n');
+
+  return (
+    <div className="space-y-1.5 text-sm leading-relaxed">
+      {lines.map((line, idx) => {
+        if (!line.trim()) {
+          return <div key={idx} className="h-1.5" />;
+        }
+
+        // Render inline bold and code snippets
+        const parts = line.split(/(\*\*.*?\*\*|`.*?`)/g);
+        const rendered = parts.map((part, pIdx) => {
+          if (part.startsWith('**') && part.endsWith('**')) {
+            return (
+              <strong key={pIdx} className="font-semibold text-foreground">
+                {part.slice(2, -2)}
+              </strong>
+            );
+          }
+          if (part.startsWith('`') && part.endsWith('`')) {
+            return (
+              <code
+                key={pIdx}
+                className="rounded bg-muted-foreground/20 px-1 py-0.5 font-mono text-xs text-foreground"
+              >
+                {part.slice(1, -1)}
+              </code>
+            );
+          }
+          return part;
+        });
+
+        const isBullet = line.trim().startsWith('- ') || line.trim().startsWith('* ');
+        const isStep = /^\d+\.\s/.test(line.trim());
+
+        return (
+          <p
+            key={idx}
+            className={cn(
+              isBullet && 'ml-2 list-disc pl-1',
+              isStep && 'font-medium text-foreground',
+            )}
+          >
+            {rendered}
+          </p>
+        );
+      })}
+    </div>
+  );
 }
 
 export function SupportPanel() {
@@ -78,32 +105,19 @@ export function SupportPanel() {
   const locale = useLocaleStore((s) => s.locale);
   const { t } = useT();
 
-  // Local conversation state — the greeting is the FIRST
-  // assistant turn, so it is visible the moment the panel opens
-  // (no message required). State lives inside the Sheet content:
-  // Radix unmounts closed sheets, so every open starts a fresh
-  // greeting + suggestions, and the local-only messages never
-  // pretend to persist between sessions.
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [input, setInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
   const idRef = useRef(0);
-  const replyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Clear any pending auto-reply timer if the panel unmounts
-  // mid-"conversation" (closed while the reply delay is running).
-  useEffect(() => {
-    return () => {
-      if (replyTimerRef.current) clearTimeout(replyTimerRef.current);
-    };
-  }, []);
 
   // Keep the latest message in view as the conversation grows.
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
+  }, [messages, isTyping]);
 
   const now = new Date();
   const timeLabel = new Intl.DateTimeFormat(locale, {
@@ -111,80 +125,104 @@ export function SupportPanel() {
     minute: '2-digit',
   }).format(now);
 
-  // Send: append the user's message locally, then — after a beat —
-  // the single honest assistant notice. When a real support/AI
-  // backend exists, this is the ONLY function that needs to
-  // change (swap the timeout for the API call).
-  const handleSend = (raw?: string) => {
-    const text = (raw ?? input).trim();
-    if (!text) return;
+  const handleSend = async (rawText?: string) => {
+    const query = (rawText ?? input).trim();
+    if (!query || isTyping) return;
+
     setInput('');
-    setMessages((prev) => [
-      ...prev,
-      { id: ++idRef.current, from: 'user', text },
-    ]);
-    if (replyTimerRef.current) clearTimeout(replyTimerRef.current);
-    replyTimerRef.current = setTimeout(() => {
+    const userMsgId = ++idRef.current;
+
+    const newMessages = [
+      ...messages,
+      { id: userMsgId, from: 'user' as const, text: query },
+    ];
+    setMessages(newMessages);
+    setIsTyping(true);
+
+    try {
+      const historyPayload = messages.slice(-4).map((m) => ({
+        role: m.from,
+        content: m.text,
+      }));
+
+      const res = await fetch('/api/support/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: query,
+          history: historyPayload,
+          locale,
+        }),
+      });
+
+      const json = await res.json();
+      const reply = json?.data?.reply || t('support.greeting');
+      const source = json?.data?.source;
+
       setMessages((prev) => [
         ...prev,
-        { id: ++idRef.current, from: 'assistant', text: t('support.autoReply') },
+        {
+          id: ++idRef.current,
+          from: 'assistant',
+          text: reply,
+          source,
+        },
       ]);
-    }, 450);
+    } catch (err) {
+      console.error('[SupportPanel] Failed to communicate with support AI:', err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: ++idRef.current,
+          from: 'assistant',
+          text: t('support.autoReply'),
+        },
+      ]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
-  // A suggestion chip only FILLS the input — an honest UI
-  // suggestion. Nothing is sent until the user presses send.
   const handleSuggestion = (question: string) => {
-    setInput(question);
-    // Focus the input so the next Enter/click actually sends it.
-    requestAnimationFrame(() => {
-      scrollRef.current
-        ?.querySelector<HTMLInputElement>('input[data-support-input]')
-        ?.focus();
-    });
+    handleSend(question);
   };
 
   return (
     <Sheet open={isOpen} onOpenChange={(o) => (!o ? closePanel() : undefined)}>
       <SheetContent
         side="right"
-        // FLOATING PANEL: instead of the docked side="right" drawer
-        // (inset-y-0 right-0 h-full w-3/4 border-l), this className
-        // — applied LAST, so tailwind-merge resolves every conflict
-        // in its favour — turns the sheet into a floating card:
-        //   • left-3 right-3 top-3 bottom-3 h-auto w-auto (mobile):
-        //     12px of daylight between the panel and EVERY viewport
-        //     edge, near-full width; sm:left-auto sm:right-4
-        //     sm:top-4 sm:bottom-4 sm:w-[440px] (desktop): a
-        //     440px-wide right-side floating panel (spec: 420–480px)
-        //     with a 16px gap from the top/right/bottom edges and
-        //     the full usable chat height between those gaps.
-        //   • rounded-2xl rounds ALL four corners (the old drawer
-        //     only rounded the left edge); border restores the full
-        //     border ring; shadow-xl floats it above the page.
-        //   • overflow-hidden clips the header's border-b and the
-        //     composer's border-t to those rounded corners.
-        //   • The dashboard stays dimmed behind the panel through
-        //     the Sheet's own overlay (unchanged).
-        // z-[60] keeps the panel above sticky headers (z-40/50)
-        // exactly like the profile dropdown.
-        className="z-[60] flex flex-col gap-0 overflow-hidden p-0 left-3 right-3 top-3 bottom-3 h-auto w-auto rounded-2xl border shadow-xl sm:left-auto sm:right-4 sm:top-4 sm:bottom-4 sm:w-[440px] sm:max-w-[440px]"
-        // No SheetDescription is rendered (single-title header),
-        // so silence Radix's missing-description warning.
+        className="z-[60] flex flex-col gap-0 overflow-hidden p-0 left-3 right-3 top-3 bottom-3 h-auto w-auto rounded-2xl border shadow-xl sm:left-auto sm:right-4 sm:top-4 sm:bottom-4 sm:w-[460px] sm:max-w-[460px]"
         aria-describedby={undefined}
       >
-        {/* ---------- Header: icon + single "Karmax Support"
-            title (the old small "Help" line was removed; the
-            built-in Sheet close button provides the [X] at the
-            panel's top-right corner). ---------- */}
+        {/* ---------- Header ---------- */}
         <SheetHeader className="border-b border-border px-5 py-4 text-left">
-          <div className="flex items-center gap-3 pr-8">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground">
-              <CircleHelp className="h-5 w-5" aria-hidden="true" />
-            </span>
-            <SheetTitle className="text-base font-semibold leading-none">
-              {t('support.title')}
-            </SheetTitle>
+          <div className="flex items-center justify-between pr-8">
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+                <Sparkles className="h-4.5 w-4.5" aria-hidden="true" />
+              </span>
+              <div>
+                <SheetTitle className="text-base font-semibold leading-none">
+                  {t('support.title')}
+                </SheetTitle>
+                <span className="text-[11px] text-muted-foreground">
+                  AI Specialist · Online
+                </span>
+              </div>
+            </div>
+
+            {messages.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setMessages([])}
+                className="h-8 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+                title="Reset conversation"
+              >
+                <RotateCcw className="h-3 w-3" />
+                <span>{locale === 'fr' ? 'Effacer' : locale === 'ar' ? 'مسح' : 'Clear'}</span>
+              </Button>
+            )}
           </div>
         </SheetHeader>
 
@@ -196,69 +234,72 @@ export function SupportPanel() {
           aria-live="polite"
           aria-label={t('support.title')}
         >
-          {/* Timestamp divider — small, centered, muted (reference
-              structure: a light time marker above the greeting). */}
+          {/* Timestamp divider */}
           <p className="mb-4 text-center text-[11px] font-medium text-muted-foreground">
             {t('support.today')} · {timeLabel}
           </p>
 
-          {/* Default greeting — an assistant bubble, visible
-              immediately (before any message is sent). */}
+          {/* Default greeting */}
           <div className="flex">
-            <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-muted px-4 py-3 text-sm leading-relaxed text-foreground">
-              {t('support.greeting')}
+            <div className="max-w-[90%] rounded-2xl rounded-tl-md bg-muted px-4 py-3 text-sm leading-relaxed text-foreground shadow-xs">
+              <FormattedMessage text={t('support.greeting')} />
             </div>
           </div>
 
-          {/* Quick-help suggestions — UI only. Filling the input is
-              the honest behavior: no fake answers, no pretended
-              backend. Chips hide once the user has messages, so the
-              conversation stays the focus. */}
-          {messages.length === 0 && (
-            <div
-              className="mt-4 flex flex-wrap gap-2"
-              role="group"
-              aria-label={t('support.suggestionsLabel')}
-            >
-              {SUGGESTIONS.map(({ key }) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => handleSuggestion(t(key))}
-                  className="rounded-full border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground/25 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                >
-                  {t(key)}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Quick-help suggestions (clickable instant prompts) */}
+          <div
+            className="mt-4 flex flex-wrap gap-2"
+            role="group"
+            aria-label={t('support.suggestionsLabel')}
+          >
+            {SUGGESTIONS.map(({ key }) => (
+              <button
+                key={key}
+                type="button"
+                disabled={isTyping}
+                onClick={() => handleSuggestion(t(key))}
+                className="rounded-full border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground transition-all hover:border-foreground/30 hover:bg-muted hover:text-foreground active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                {t(key)}
+              </button>
+            ))}
+          </div>
 
-          {/* Conversation turns (local echo + honest notice). */}
+          {/* Conversation turns */}
           <div className="mt-4 flex flex-col gap-3">
             {messages.map((m) =>
               m.from === 'user' ? (
                 <div key={m.id} className="flex justify-end">
-                  <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-md bg-primary px-4 py-3 text-sm leading-relaxed text-primary-foreground">
+                  <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-md bg-primary px-4 py-3 text-sm leading-relaxed text-primary-foreground shadow-xs">
                     {m.text}
                   </div>
                 </div>
               ) : (
-                <div key={m.id} className="flex">
-                  <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-tl-md bg-muted px-4 py-3 text-sm leading-relaxed text-foreground">
-                    {m.text}
+                <div key={m.id} className="flex flex-col items-start gap-1">
+                  <div className="max-w-[90%] break-words rounded-2xl rounded-tl-md bg-muted px-4 py-3 text-sm leading-relaxed text-foreground shadow-xs">
+                    <FormattedMessage text={m.text} />
                   </div>
                 </div>
               ),
             )}
+
+            {/* AI Typing indicator */}
+            {isTyping && (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 rounded-2xl rounded-tl-md bg-muted px-4 py-3 text-xs text-muted-foreground shadow-xs">
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-foreground/60 [animation-delay:-0.3s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-foreground/60 [animation-delay:-0.15s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-foreground/60" />
+                  <span className="ml-1 text-[11px] font-medium text-foreground/80">
+                    Karmax AI is writing...
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* ---------- Footer: composer ---------- */}
-        {/* No Privacy row here anymore — Privacy lives in the
-            account menu's Help submenu. The composer is the only
-            footer element: visually separated from the conversation
-            by the border-t divider, with the rounded-full input
-            mirroring the floating panel's rounded design. */}
+        {/* ---------- Footer: Composer ---------- */}
         <div className="border-t border-border px-5 pb-5 pt-4">
           <form
             className="flex items-center gap-2"
@@ -270,20 +311,21 @@ export function SupportPanel() {
             <Input
               data-support-input
               value={input}
+              disabled={isTyping}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={t('support.inputPlaceholder')}
-              className="h-10 flex-1 rounded-full border-border bg-background px-4 text-sm focus-visible:ring-ring focus-visible:ring-offset-0"
+              placeholder={isTyping ? 'Please wait...' : t('support.inputPlaceholder')}
+              className="h-10 flex-1 rounded-full border-border bg-background px-4 text-sm focus-visible:ring-ring focus-visible:ring-offset-0 disabled:opacity-60"
               aria-label={t('support.inputPlaceholder')}
               autoComplete="off"
             />
             <Button
               type="submit"
               size="icon"
-              disabled={!input.trim()}
+              disabled={!input.trim() || isTyping}
               aria-label={t('support.send')}
               className={cn(
-                'h-10 w-10 shrink-0 rounded-full',
-                !input.trim() && 'opacity-50',
+                'h-10 w-10 shrink-0 rounded-full transition-transform active:scale-95',
+                (!input.trim() || isTyping) && 'opacity-50 cursor-not-allowed',
               )}
             >
               <ArrowUp className="h-4 w-4" aria-hidden="true" />

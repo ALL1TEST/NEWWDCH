@@ -63,7 +63,8 @@ interface AuthState {
   isCheckingAuth: boolean;
   error: string | null;
 
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<{ requiresMfa?: boolean; email?: string } | void>;
+  verifyMfaLogin: (email: string, code: string) => Promise<void>;
   // Public Create Account — POST /api/auth/signup. Creates the
   // account AND signs the user in (session cookie), so the state
   // transition is identical to login(): the store flips and the
@@ -88,14 +89,36 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email: string, password: string) => {
     set({ isLoading: true, error: null });
     try {
-      const res = await postApi<{ user: ApiUser; token: string }>('/api/auth/login', { email, password });
+      const res = await postApi<{ user?: ApiUser; token?: string; requiresMfa?: boolean; email?: string }>('/api/auth/login', { email, password });
+      if (res?.requiresMfa) {
+        set({ isLoading: false, error: null });
+        return { requiresMfa: true, email: res.email || email };
+      }
+      if (res?.user) {
+        const user = mapApiUser(res.user);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+        useSiteStore.getState().reset();
+        set({ user, isAuthenticated: true, isLoading: false, error: null });
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Login failed. Please try again.';
+      set({ isLoading: false, error: message });
+      throw err;
+    }
+  },
+
+  verifyMfaLogin: async (email: string, code: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await postApi<{ user: ApiUser; token: string }>('/api/auth/2fa/verify-login', { email, code });
       const user = mapApiUser(res.user);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
       useSiteStore.getState().reset();
       set({ user, isAuthenticated: true, isLoading: false, error: null });
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : 'Login failed. Please try again.';
+        err instanceof Error ? err.message : 'Two-factor authentication failed. Please try again.';
       set({ isLoading: false, error: message });
       throw err;
     }

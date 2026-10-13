@@ -71,10 +71,11 @@ import { KeywordsDialog } from './keywords-dialog';
 import { isImageGenerationIntent, buildImagePrompt } from '@/lib/ai/ai-intent-detector';
 import { markdownToEditorHtml } from '@/lib/pipeline/markdown-to-html';
 import { useAiWorkspace } from '@/hooks/use-ai-workspace';
-import { PublishDatePicker, PublishTimePicker } from './publishing-datetime-pickers';
+import { PublishTimePicker } from './publishing-datetime-pickers';
 import { useT } from '@/lib/i18n';
 import { cn, truncate } from '@/lib/utils';
 import { normalizeContentForEditor, sanitizeContentForStorage } from '@/lib/pipeline/content-item-pipeline';
+import { SeoStudioCard } from './components/seo/seo-studio-card';
 import { toast } from 'sonner';
 import type { PostStatus } from '@/shared/types';
 
@@ -119,8 +120,9 @@ const contentEditSchema = z.object({
   contentTypeId: z.string().optional().or(z.literal('')),
   categoryId: z.string().optional().or(z.literal('')),
   tagIds: z.array(z.string()),
-  seoTitle: z.string().max(60).optional().or(z.literal('')),
-  seoDescription: z.string().max(160).optional().or(z.literal('')),
+  seoTitle: z.string().max(255).optional().or(z.literal('')),
+  seoDescription: z.string().max(500).optional().or(z.literal('')),
+  focusKeyword: z.string().optional().or(z.literal('')),
 });
 
 type ContentEditFormValues = z.infer<typeof contentEditSchema>;
@@ -358,13 +360,13 @@ function ScheduleDialog({
   initialTime?: string;
 }) {
   const { t } = useT();
-  const [date, setDate] = useState(initialDate || '');
-  const [time, setTime] = useState(initialTime || '');
+  const [date, setDate] = useState(() => initialDate || new Date().toISOString().slice(0, 10));
+  const [time, setTime] = useState(initialTime || '12:00');
 
   useEffect(() => {
     if (open) {
-      setDate(initialDate || '');
-      setTime(initialTime || '');
+      setDate(initialDate || new Date().toISOString().slice(0, 10));
+      setTime(initialTime || '12:00');
     }
   }, [open, initialDate, initialTime]);
 
@@ -381,12 +383,16 @@ function ScheduleDialog({
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">{t('articles.date')}</Label>
-            <PublishDatePicker value={date} onChange={setDate} className="h-10" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">{t('articles.time')}</Label>
-            <PublishTimePicker value={time} onChange={setTime} className="h-10" />
+            <Label className="text-xs text-muted-foreground">{t('articles.time') || 'Publish time'}</Label>
+            <PublishTimePicker
+              value={time}
+              onChange={setTime}
+              dateValue={date}
+              onDateChange={setDate}
+              placeholder={t('articles.selectDateTime') || 'Select date and time'}
+              showIcon
+              className="w-full h-10"
+            />
           </div>
         </div>
 
@@ -475,6 +481,7 @@ function AIAssistDialog({
 
 export function ContentEditPage({ contentId, isPage: isPageProp }: { contentId: string; isPage?: boolean }) {
   const navigate = useNavigationStore((s) => s.navigate);
+  const goBackStore = useNavigationStore((s) => s.goBack);
   const currentModule = useNavigationStore((s) => s.currentModule);
   const queryClient = useQueryClient();
   const { t } = useT();
@@ -641,7 +648,7 @@ export function ContentEditPage({ contentId, isPage: isPageProp }: { contentId: 
 
   const { register, handleSubmit, control, watch, reset, setValue, getValues, formState: { errors } } = useForm<ContentEditFormValues>({
     resolver: zodResolver(contentEditSchema),
-    defaultValues: { title: '', excerpt: '', content: '', status: 'DRAFT', contentTypeId: '', categoryId: '', tagIds: [], seoTitle: '', seoDescription: '' },
+    defaultValues: { title: '', excerpt: '', content: '', status: 'DRAFT', contentTypeId: '', categoryId: '', tagIds: [], seoTitle: '', seoDescription: '', focusKeyword: '' },
   });
 
   // Normalize content to HTML (handles legacy ProseMirror JSON, Markdown, and strips editor artifacts)
@@ -667,6 +674,7 @@ export function ContentEditPage({ contentId, isPage: isPageProp }: { contentId: 
         tagIds: content.tags?.map((t) => t.id) ?? [],
         seoTitle: content.seoTitle ?? '',
         seoDescription: content.seoDescription ?? '',
+        focusKeyword: (content as any)?.focusKeyword ?? '',
       });
       setSlugValue(content.slug ?? '');
       setEditorContent(normalizedContent);
@@ -876,6 +884,7 @@ export function ContentEditPage({ contentId, isPage: isPageProp }: { contentId: 
         tagIds: isPage ? [] : data.tagIds,
         seoTitle: data.seoTitle ? data.seoTitle : null,
         seoDescription: data.seoDescription ? data.seoDescription : null,
+        focusKeyword: data.focusKeyword ? data.focusKeyword : null,
         featuredImageId: isPage ? null : (featuredImage ? featuredImage.id : null),
         scheduledAt: data.scheduledAt ? data.scheduledAt : null,
       } as Record<string, unknown>),
@@ -910,6 +919,20 @@ export function ContentEditPage({ contentId, isPage: isPageProp }: { contentId: 
   const deleteMutation = useMutation({
     mutationFn: () => deleteApi(`/api/content/${contentId}`),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.content.all });
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      try {
+        const titleClean = (watchedTitle || getValues('title') || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const raw = window.localStorage.getItem('cms_saved_article_ideas');
+        if (raw) {
+          const list = JSON.parse(raw);
+          const filtered = list.filter((i: any) => {
+            const iTitle = (i.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            return i.id !== contentId && (!titleClean || iTitle !== titleClean);
+          });
+          window.localStorage.setItem('cms_saved_article_ideas', JSON.stringify(filtered));
+        }
+      } catch {}
       const targetMod = currentModule.startsWith('platform-')
         ? (isPage || currentModule === 'platform-pages' ? 'platform-pages' : 'platform-content')
         : (isPage || currentModule === 'pages' ? 'pages' : 'content');
@@ -1304,11 +1327,11 @@ export function ContentEditPage({ contentId, isPage: isPageProp }: { contentId: 
       ? (isPage || currentModule === 'platform-pages' ? 'platform-pages' : 'platform-content')
       : (isPage || currentModule === 'pages' ? 'pages' : 'content');
     if (contentId) {
-      navigate(targetMod, contentId);
+      goBackStore(targetMod, contentId);
     } else {
-      navigate(targetMod);
+      goBackStore(targetMod);
     }
-  }, [navigate, isPage, currentModule, contentId]);
+  }, [goBackStore, isPage, currentModule, contentId]);
 
   const addTag = useCallback((tagId: string) => {
     if (!selectedTagIds.includes(tagId)) {
@@ -1863,13 +1886,13 @@ export function ContentEditPage({ contentId, isPage: isPageProp }: { contentId: 
                   </AccordionItem>
                 )}
 
-                {/* 7. SEO */}
-                <AccordionItem value="seo">
+                {/* 7. SEO & Studio */}
+                <AccordionItem value="seo" className="border-border">
                   <div className="flex items-center justify-between pr-4">
                     <AccordionTrigger className="py-3 text-sm flex-1">
                       <span className="flex items-center gap-2">
                         <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                        {t('articles.section.seo')}
+                        {t('articles.section.seo') || 'SEO'}
                       </span>
                     </AccordionTrigger>
                     <Button
@@ -1888,15 +1911,23 @@ export function ContentEditPage({ contentId, isPage: isPageProp }: { contentId: 
                     </Button>
                   </div>
                   <AccordionContent>
-                    <div className="pb-4 space-y-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">{t('articles.metaTitle')}</Label>
-                        <Input {...register('seoTitle')} placeholder={t('articles.metaTitlePlaceholder')} className="h-9 text-sm" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">{t('articles.metaDescription')}</Label>
-                        <Textarea {...register('seoDescription')} placeholder={t('articles.metaDescriptionPlaceholder')} rows={2} className="text-sm" />
-                      </div>
+                    <div className="pb-3 pt-1">
+                      <SeoStudioCard
+                        title={watch('title') || ''}
+                        content={editorContent || ''}
+                        excerpt={watch('excerpt') || ''}
+                        slug={slugValue || ''}
+                        seoTitle={watch('seoTitle') || ''}
+                        seoDescription={watch('seoDescription') || ''}
+                        focusKeyword={watch('focusKeyword') || ''}
+                        contentId={contentId}
+                        isPage={isPage}
+                        onUpdateSeo={({ seoTitle, seoDescription, focusKeyword: fk }) => {
+                          if (seoTitle !== undefined) setValue('seoTitle', seoTitle, { shouldDirty: true, shouldValidate: true });
+                          if (seoDescription !== undefined) setValue('seoDescription', seoDescription, { shouldDirty: true, shouldValidate: true });
+                          if (fk !== undefined) setValue('focusKeyword', fk, { shouldDirty: true, shouldValidate: true });
+                        }}
+                      />
                     </div>
                   </AccordionContent>
                 </AccordionItem>

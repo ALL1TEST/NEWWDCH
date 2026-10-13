@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { format, formatDistanceToNow, isToday, isYesterday, isThisYear } from 'date-fns';
+import { format, formatDistanceToNow, isToday, isTomorrow, isYesterday, isThisYear } from 'date-fns';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -27,28 +27,112 @@ export function formatFileSize(bytes: number): string {
 
 // -------------------- Date/Time Formatting --------------------
 
-export function formatDateTime(date: Date | string): string {
+export function formatDateTime(date: Date | string, timeZone?: string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '—';
+  if (timeZone) {
+    try {
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      }).format(d);
+    } catch {}
+  }
   return format(d, 'MMM d, yyyy h:mm a');
 }
 
-export function formatDate(date: Date | string): string {
+export function formatDate(date: Date | string, timeZone?: string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '—';
+  if (timeZone) {
+    try {
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }).format(d);
+    } catch {}
+  }
   return format(d, 'MMM d, yyyy');
 }
 
-export function formatRelativeTime(date: Date | string): string {
+export function formatRelativeTime(date: Date | string, timeZone?: string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '—';
   const now = new Date();
+
+  if (timeZone) {
+    try {
+      const dtfDate = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: 'numeric', day: 'numeric' });
+      const partsNow = dtfDate.formatToParts(now);
+      const getVal = (parts: Intl.DateTimeFormatPart[], type: string) => parseInt(parts.find((p) => p.type === type)?.value || '0', 10);
+      const nowY = getVal(partsNow, 'year');
+      const nowM = getVal(partsNow, 'month');
+      const nowD = getVal(partsNow, 'day');
+
+      const partsTarget = dtfDate.formatToParts(d);
+      const targetY = getVal(partsTarget, 'year');
+      const targetM = getVal(partsTarget, 'month');
+      const targetD = getVal(partsTarget, 'day');
+
+      const dNow = new Date(Date.UTC(nowY, nowM - 1, nowD));
+      const dTarget = new Date(Date.UTC(targetY, targetM - 1, targetD));
+      const dayDiff = Math.round((dTarget.getTime() - dNow.getTime()) / (24 * 60 * 60 * 1000));
+
+      const dtfTime = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+      const timeStr = dtfTime.format(d);
+
+      if (dayDiff === 0) {
+        return `Today at ${timeStr}`;
+      }
+      if (dayDiff === 1) {
+        return `Tomorrow at ${timeStr}`;
+      }
+      if (dayDiff === -1) {
+        return `Yesterday at ${timeStr}`;
+      }
+
+      if (nowY === targetY) {
+        const dtfSameYear = new Intl.DateTimeFormat('en-US', {
+          timeZone,
+          month: 'short',
+          day: 'numeric',
+        });
+        return `${dtfSameYear.format(d)} at ${timeStr}`;
+      }
+
+      const dtfFull = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+      return `${dtfFull.format(d)} at ${timeStr}`;
+    } catch {}
+  }
 
   if (isToday(d)) {
     return `Today at ${format(d, 'h:mm a')}`;
+  }
+  if (isTomorrow(d)) {
+    return `Tomorrow at ${format(d, 'h:mm a')}`;
   }
   if (isYesterday(d)) {
     return `Yesterday at ${format(d, 'h:mm a')}`;
   }
   if (isThisYear(d)) {
-    return format(d, 'MMM d, h:mm a');
+    return `${format(d, 'MMM d')} at ${format(d, 'h:mm a')}`;
   }
   return format(d, 'MMM d, yyyy');
 }

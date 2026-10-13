@@ -79,6 +79,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { ConfirmDialog } from '@/components/patterns';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PublishTimePicker } from '@/modules/content/publishing-datetime-pickers';
 
 import { getApi, postApi, patchApi, deleteApi } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
@@ -1052,8 +1053,16 @@ function TaskFormDialog({ mode, task, defaultStatus, open, onOpenChange, onSubmi
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'MEDIUM');
   const [labels, setLabels] = useState<string[]>(task?.labels ?? []);
   const [dueDate, setDueDate] = useState<string>(task?.dueDate ? formatISODate(task.dueDate) : '');
+  const [dueTime, setDueTime] = useState<string>(() => {
+    if (task?.dueDate) {
+      const d = new Date(task.dueDate);
+      if (!isNaN(d.getTime())) {
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      }
+    }
+    return '';
+  });
   const [customLabel, setCustomLabel] = useState('');
-  const [calendarOpen, setCalendarOpen] = useState(false);
 
   // re-sync local state when the target task changes (open the dialog on a different card)
   React.useEffect(() => {
@@ -1064,8 +1073,17 @@ function TaskFormDialog({ mode, task, defaultStatus, open, onOpenChange, onSubmi
       setPriority(task?.priority ?? 'MEDIUM');
       setLabels(task?.labels ?? []);
       setDueDate(task?.dueDate ? formatISODate(task.dueDate) : '');
+      if (task?.dueDate) {
+        const d = new Date(task.dueDate);
+        if (!isNaN(d.getTime())) {
+          setDueTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+        } else {
+          setDueTime('');
+        }
+      } else {
+        setDueTime('');
+      }
       setCustomLabel('');
-      setCalendarOpen(false);
     }
   }, [open, task, defaultStatus]);
 
@@ -1083,7 +1101,7 @@ function TaskFormDialog({ mode, task, defaultStatus, open, onOpenChange, onSubmi
   function handleSubmit() {
     const trimmed = title.trim();
     if (!trimmed) return;
-    const due = dueDate ? new Date(dueDate + 'T12:00:00').toISOString() : null;
+    const due = dueDate ? new Date(`${dueDate}T${dueTime || '12:00'}:00`).toISOString() : null;
     if (mode === 'create') {
       onSubmit({
         title: trimmed,
@@ -1178,54 +1196,23 @@ function TaskFormDialog({ mode, task, defaultStatus, open, onOpenChange, onSubmi
             </div>
           </div>
 
-          {/* Due date with shadcn Calendar picker matching Image 3 */}
+          {/* Due date with PublishTimePicker matching Image 2 */}
           <div className="space-y-1.5">
             <Label>{t('tasks.taskDueDate')}</Label>
-            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-              <div className="relative">
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={cn(
-                      'w-full justify-start text-left font-normal h-10 px-3',
-                      !dueDate && 'text-muted-foreground'
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                    {dueDate ? formatDate(dueDate) : <span>{t('tasks.taskDueDate')}</span>}
-                  </Button>
-                </PopoverTrigger>
-                {dueDate && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDueDate('');
-                    }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
-                    aria-label="clear date"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-              <PopoverContent className="w-auto p-0 rounded-2xl border border-border/80 shadow-xl" align="start">
-                <Calendar
-                  mode="single"
-                  selected={dueDate ? new Date(dueDate + 'T12:00:00') : undefined}
-                  onSelect={(d) => {
-                    if (d) {
-                      setDueDate(formatISODate(d));
-                    } else {
-                      setDueDate('');
-                    }
-                    setCalendarOpen(false);
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <PublishTimePicker
+              dateValue={dueDate}
+              onDateChange={setDueDate}
+              value={dueTime}
+              onChange={setDueTime}
+              placeholder={t('tasks.taskDueDate') || 'Due date'}
+              showIcon
+              showClear
+              onClear={() => {
+                setDueDate('');
+                setDueTime('');
+              }}
+              className="w-full h-10"
+            />
           </div>
 
           {/* Labels */}

@@ -195,10 +195,16 @@ export async function GET(request: NextRequest) {
       searchConsoleConnected,
     };
 
+    // Fetch audit drift snapshots
+    const { getAuditSnapshots } = await import('@/lib/seo/drift-tracker');
+    const snapshotData = await getAuditSnapshots(siteFilter.siteId);
+
     return NextResponse.json({
       data: {
         stats,
         recentIssues,
+        drift: snapshotData.latestComparison || null,
+        latestSnapshot: snapshotData.history[0] || null,
       },
       meta: {
         requestId: id,

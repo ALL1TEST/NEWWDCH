@@ -71,6 +71,33 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const d = parsed.data;
+
+    // Security & Correctness: Never allow blindly resolving without server-side verification
+    if (d.isResolved === true) {
+      const { verifyAndResolveFinding } = await import('@/lib/seo/verifier');
+      const vResult = await verifyAndResolveFinding(issueId);
+      if (!vResult.isResolved) {
+        return NextResponse.json(
+          {
+            error: {
+              code: 'VERIFICATION_FAILED',
+              message: vResult.message,
+              currentEvidence: vResult.currentEvidence,
+            },
+            data: vResult,
+            meta: { requestId: id, timestamp: new Date().toISOString() },
+          },
+          { status: 422 },
+        );
+      }
+      const updated = await db.seoIssue.findUnique({ where: { id: issueId } });
+      return NextResponse.json({
+        data: updated,
+        verification: vResult,
+        meta: { requestId: id, timestamp: new Date().toISOString(), duration: Date.now() - start },
+      });
+    }
+
     const updateData: Record<string, unknown> = {};
     if (d.severity !== undefined) updateData.severity = d.severity;
     if (d.resourceType !== undefined) updateData.resourceType = d.resourceType;

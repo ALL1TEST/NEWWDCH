@@ -327,9 +327,13 @@ EDITORIAL & SEO CONSTRAINTS:
     { userId: context.userId, siteId: input.siteId },
   );
 
+  const langInstruction = input.language
+    ? `\n\nLANGUAGE SPECIFICATION:\nThe entire article (H1, H2 sections, H3 subsections, body paragraphs, bullet points, and conclusion) MUST be written completely and fluently in ${input.language}. Ensure natural idioms and native phrasing.`
+    : '';
+
   const systemPrompt = platformPrompt?.systemPrompt
-    ? `${editorialPrompts.systemPrompt}\n\nADDITIONAL PLATFORM INSTRUCTIONS:\n${platformPrompt.systemPrompt}`
-    : editorialPrompts.systemPrompt;
+    ? `${editorialPrompts.systemPrompt}\n\nADDITIONAL PLATFORM INSTRUCTIONS:\n${platformPrompt.systemPrompt}${langInstruction}`
+    : `${editorialPrompts.systemPrompt}${langInstruction}`;
 
   const userPrompt = platformPrompt?.userPrompt
     ? `${editorialPrompts.userPrompt}\n\nADDITIONAL INSTRUCTIONS:\n${platformPrompt.userPrompt}`
@@ -437,7 +441,67 @@ EDITORIAL & SEO CONSTRAINTS:
 
   let primaryArticle = rawDrafts[0] || '';
   const initialWordCount = primaryArticle.split(/\s+/).filter(Boolean).length;
-  console.log(`[PIPELINE] AI Generation complete. Output: ${rawDrafts.length} draft(s), ~${initialWordCount} words.`);
+function breakSentenceIntoChunks(sentence: string): string {
+  const cur = sentence.trim();
+  const words = cur.split(/\s+/).filter(Boolean);
+  if (words.length <= 32) return cur;
+
+  // 1. Semicolons
+  if (cur.includes(';')) {
+    return cur.split(/;\s*/).map((s) => breakSentenceIntoChunks(s)).join('. ');
+  }
+  // 2. Dashes
+  if (/[\u2014\u2013]|--/.test(cur)) {
+    return cur.split(/\s*(?:[\u2014\u2013]|--)\s*/).map((s) => breakSentenceIntoChunks(s)).join('. ');
+  }
+  // 3. Comma + conjunction
+  const commaConjRegex = /,\s+(and|but|or|so|yet|while|whereas|which|because|although|since|as|meaning|enabling|allowing|helping|leading|providing|however)\s+/i;
+  const match = commaConjRegex.exec(cur);
+  if (match && match.index > 0) {
+    const before = cur.substring(0, match.index).trim();
+    const conj = match[1];
+    const after = cur.substring(match.index + match[0].length).trim();
+    const cap = conj.charAt(0).toUpperCase() + conj.slice(1);
+    return `${breakSentenceIntoChunks(before)}. ${cap} ${breakSentenceIntoChunks(after)}`;
+  }
+  // 4. Any comma near the midpoint
+  const commaIndices: number[] = [];
+  let cIdx = cur.indexOf(',');
+  while (cIdx !== -1) {
+    commaIndices.push(cIdx);
+    cIdx = cur.indexOf(',', cIdx + 1);
+  }
+  if (commaIndices.length > 0) {
+    const mid = cur.length / 2;
+    let bestIdx = commaIndices[0];
+    for (const idx of commaIndices) {
+      if (Math.abs(idx - mid) < Math.abs(bestIdx - mid)) {
+        bestIdx = idx;
+      }
+    }
+    const before = cur.substring(0, bestIdx).trim();
+    const after = cur.substring(bestIdx + 1).trim();
+    const capAfter = after.charAt(0).toUpperCase() + after.slice(1);
+    return `${breakSentenceIntoChunks(before)}. ${breakSentenceIntoChunks(capAfter)}`;
+  }
+  // 5. Fallback: split at middle word
+  const midWordIdx = Math.floor(words.length / 2);
+  const part1 = words.slice(0, midWordIdx).join(' ');
+  const part2Words = words.slice(midWordIdx);
+  const capPart2 = part2Words[0].charAt(0).toUpperCase() + part2Words[0].slice(1) + (part2Words.length > 1 ? ' ' + part2Words.slice(1).join(' ') : '');
+  return `${breakSentenceIntoChunks(part1)}. ${breakSentenceIntoChunks(capPart2)}`;
+}
+
+function breakLongSentencesInText(text: string): string {
+  const paragraphs = text.split('\n\n');
+  const fixedParagraphs = paragraphs.map((para) => {
+    if (/^#+\s/.test(para.trim()) || para.startsWith('|') || para.startsWith('```') || para.startsWith('<')) return para;
+    const rawSentences = para.replace(/([.?!])\s+(?=[A-Z0-9"“])/g, '$1|---SPLIT---|').split('|---SPLIT---|');
+    const processed = rawSentences.map((s) => breakSentenceIntoChunks(s));
+    return processed.join(' ');
+  });
+  return fixedParagraphs.join('\n\n');
+}
 
   // ============================================================
   // PHASE 3 & PHASE 4: VALIDATE & OPTIMIZE (Fix Loop - Max 2 Passes)
@@ -509,6 +573,12 @@ EDITORIAL & SEO CONSTRAINTS:
         authorName: input.authorName,
       });
       modified = `${modified}\n\n<script type="application/ld+json">\n${generatedSchema}\n</script>`;
+    }
+
+    // Fix 5: Break ultra-long run-on sentences for CS-10
+    const cs10 = editorialReport.checks.find((c) => c.id === 'CS-10');
+    if (cs10 && cs10.result !== 'PASS') {
+      modified = breakLongSentencesInText(modified);
     }
 
     primaryArticle = modified;

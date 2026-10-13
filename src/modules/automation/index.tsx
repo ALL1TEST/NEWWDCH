@@ -50,7 +50,7 @@ export function AutomationModule() {
 
   // Builder page (create/edit)
   if (currentSubPage === 'create' || currentSubPage === 'edit') {
-    return <AutomationBuilderPage />;
+    return <AutomationBuilderPage automationId={currentSubPage === 'edit' ? currentItemId || undefined : undefined} />;
   }
 
   // Generate mode — same builder but with one-time manual generation

@@ -23,7 +23,7 @@ export function markdownToEditorHtml(markdown: string): string {
   }
 
   // If text already appears to be pure HTML (e.g., starts with block tag and has no markdown headings)
-  if (/^\s*<(?:article|section|div|p|h[1-6]|ul|ol|table)\b/i.test(text) && !/(?:^|\n)#{1,6}\s+/m.test(text)) {
+  if (/^\s*<(?:article|section|div|p|h[1-6]|ul|ol|table|figure)\b/i.test(text) && !/(?:^|\n)#{1,6}\s+/m.test(text)) {
     return text;
   }
 

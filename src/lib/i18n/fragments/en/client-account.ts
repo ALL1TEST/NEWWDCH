@@ -316,6 +316,7 @@ export const clientAccountEn: Record<string, string> = {
   'automation.details.lastRun': 'Last Run',
   'automation.details.nextRun': 'Next Run',
   'automation.details.created': 'Created',
+  'automation.details.updated': 'Updated',
   'automation.details.never': 'Never',
   'automation.details.workflow': 'Workflow',
   'automation.details.triggerLabel': 'Trigger:',

@@ -137,9 +137,9 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.feat.engagement.label': 'Newsletter & Comments',
   'mkt.feat.engagement.title': 'Grow the audience you already have.',
   'mkt.feat.engagement.body':
-    'Manage subscribers, send campaigns over your own SMTP, and moderate comments with Akismet spam protection — engagement lives next to the content it belongs to.',
+    'Manage subscribers, send campaigns over your own SMTP, and moderate comments — engagement lives next to the content it belongs to.',
   'mkt.feat.engagement.point1': 'Subscriber management and campaign sending',
-  'mkt.feat.engagement.point2': 'Comment moderation queue with spam checks',
+  'mkt.feat.engagement.point2': 'Comment moderation queue',
   'mkt.feat.engagement.cta': 'Explore engagement',
 
   'mkt.feat.multisite.label': 'Multi-site',
@@ -177,8 +177,6 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.platform.smtpDesc': 'Your own mail server for newsletters and notifications',
   'mkt.platform.ai': 'AI Providers',
   'mkt.platform.aiDesc': 'Bring your own keys and models',
-  'mkt.platform.akismet': 'Akismet',
-  'mkt.platform.akismetDesc': 'Comment spam protection',
   'mkt.platform.webhooks': 'Webhooks',
   'mkt.platform.webhooksDesc': 'Outgoing webhooks for content events',
 
@@ -560,13 +558,13 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.solp.in.story1p3': 'Provider status and latency at a glance',
   'mkt.solp.in.story2Title': 'A documented API surface.',
   'mkt.solp.in.story2Body':
-    'WordPress via the native REST client, any standard CMS via the adapter, SMTP for campaigns, Akismet for comments and webhooks for events.',
+    'WordPress via the native REST client, any standard CMS via the adapter, SMTP for campaigns, and webhooks for events.',
   'mkt.solp.in.story2p1': 'WordPress REST API client with connection verification',
   'mkt.solp.in.story2p2': 'Standard REST CMS adapter with API-key auth',
   'mkt.solp.in.story2p3': 'Outgoing webhooks for content events',
   'mkt.solp.in.benefit1': 'Connect WordPress or any compatible REST CMS',
   'mkt.solp.in.benefit2': 'Connection verification before anything publishes',
-  'mkt.solp.in.benefit3': 'Your own SMTP, AI keys and spam protection',
+  'mkt.solp.in.benefit3': 'Your own SMTP and AI keys',
   'mkt.solp.in.benefit4': 'Outgoing webhooks for content events',
 
   // ---- Login page ----
@@ -764,7 +762,7 @@ export const clientMarketingEn: Record<string, string> = {
     'Strictly necessary cookies (session, language, theme) always work. Analytics cookies load only after you accept them in the cookie banner. You can change your choice anytime via “Cookie preferences” in the footer.',
   'mkt.privacy.thirdTitle': 'Third parties',
   'mkt.privacy.thirdBody':
-    'Payments are processed by Stripe. If you connect AI providers, your own SMTP server or Akismet, those services receive the data their integration requires. We do not sell data, and we run no advertising trackers.',
+    'Payments are processed by Stripe. If you connect AI providers, or your own SMTP server, those services receive the data their integration requires. We do not sell data, and we run no advertising trackers.',
   'mkt.privacy.rightsTitle': 'Your rights',
   'mkt.privacy.rightsBody':
     'You can export or delete your content from the dashboard at any time. Deleting your account removes your user data. Contact us for anything else and we will help.',
@@ -792,7 +790,7 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.privacy.s1P1':
     'This Privacy Policy applies to the Karmax website, applications and hosted service (together, the “Service”) operated by [Company Legal Name] (“we”, “us”, “our”). It describes how we handle personal information when you browse our website, create an account or use the Service.',
   'mkt.privacy.s1P2':
-    'It does not apply to services operated by third parties. When you connect an integration — such as an AI provider, your own SMTP server or Akismet — that service handles information under its own privacy policy. Your use of the Service in general is governed by our {terms}.',
+    'It does not apply to services operated by third parties. When you connect an integration — such as an AI provider, or your own SMTP server — that service handles information under its own privacy policy. Your use of the Service in general is governed by our {terms}.',
 
   'mkt.privacy.s2Title': 'What Information Do We Collect?',
   'mkt.privacy.s2P1':
@@ -836,7 +834,7 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.privacy.s6P1':
     'We do not purchase personal information from data brokers, and we do not collect it from third-party sources for our own purposes.',
   'mkt.privacy.s6P2':
-    'When you connect an integration — an AI provider, your own SMTP server or Akismet — we may receive the limited information the integration returns in order to work, such as delivery or spam-check results for the content you send through it.',
+    'When you connect an integration — an AI provider, or your own SMTP server — we may receive the limited information the integration returns in order to work, such as delivery or spam-check results for the content you send through it.',
 
   'mkt.privacy.s7Title': 'How We Use Your Information',
   'mkt.privacy.s7P1': 'We use the information described in this policy to:',
@@ -876,7 +874,7 @@ export const clientMarketingEn: Record<string, string> = {
   'mkt.privacy.s10L1':
     'Payments — paid plans are billed through Stripe, which processes your payment information under its own policies.',
   'mkt.privacy.s10L2':
-    'Integrations you connect — if you connect an AI provider, your own SMTP server or Akismet, those services receive the data their integration requires to work.',
+    'Integrations you connect — if you connect an AI provider, or your own SMTP server, those services receive the data their integration requires to work.',
   'mkt.privacy.s10P2':
     'We share with these providers only what is necessary for the task at hand.',
 
@@ -1048,7 +1046,7 @@ export const clientMarketingEn: Record<string, string> = {
 
   'mkt.terms.s9Title': 'Third-Party Services',
   'mkt.terms.s9P1':
-    'The Service supports integrations with third-party services — for example AI providers you connect, your own SMTP server, or Akismet. When you connect an integration, it receives the data it needs to work, and your use of that service is governed by its own terms and policies.',
+    'The Service supports integrations with third-party services — for example AI providers you connect, or your own SMTP server. When you connect an integration, it receives the data it needs to work, and your use of that service is governed by its own terms and policies.',
   'mkt.terms.s9P2':
     'We do not control third-party services and are not responsible for their actions or availability. Payments for paid plans are processed by Stripe under its own terms.',
 
@@ -1260,7 +1258,7 @@ export const clientMarketingEn: Record<string, string> = {
 
   'mkt.security.s12Title': 'Third-Party Services',
   'mkt.security.s12P1':
-    'The Service relies on a small number of third-party providers for specific functions: payment processing (Stripe), AI-powered features (our AI provider), outbound email (SMTP) and spam checking (Akismet). Each provider processes only the data needed to perform its function.',
+    'The Service relies on a small number of third-party providers for specific functions: payment processing (Stripe), AI-powered features (our AI provider), outbound email (SMTP) . Each provider processes only the data needed to perform its function.',
   'mkt.security.s12P2':
     'For more information, see the Service Providers section of our {privacy}.',
 

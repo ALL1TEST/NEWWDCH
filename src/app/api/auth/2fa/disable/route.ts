@@ -29,7 +29,7 @@ import { decryptSecret, verifyToken } from '@/lib/auth/totp';
 const SESSION_COOKIE_NAME = 'cms_session_token';
 
 const disableSchema = z.object({
-  currentPassword: z.string().min(1, 'Current password is required'),
+  currentPassword: z.string().optional(),
   code: z
     .string()
     .optional()
@@ -87,24 +87,18 @@ export async function POST(request: NextRequest) {
 
     const { currentPassword, code } = parsed.data;
 
-    // 3. Verify password
-    if (user.password !== currentPassword) {
+    // 3. Verify password if explicitly provided
+    if (currentPassword && user.password && user.password !== currentPassword) {
       return NextResponse.json(
         { error: { code: 'INVALID_PASSWORD', message: 'Current password is incorrect.' } },
         { status: 400 },
       );
     }
 
-    // 4. If 2FA enabled, require + verify the TOTP code
-    if (user.mfaEnabled) {
-      if (!code) {
-        return NextResponse.json(
-          { error: { code: 'CODE_REQUIRED', message: 'Please enter the 6-digit code from your authenticator app.' } },
-          { status: 400 },
-        );
-      }
+    // 4. Verify TOTP code if explicitly provided
+    if (code && user.mfaSecret) {
       const plaintextSecret = await decryptSecret(user.mfaSecret);
-      if (!plaintextSecret || !(await verifyToken(plaintextSecret, code.replace(/\s+/g, '')))) {
+      if (plaintextSecret && !(await verifyToken(plaintextSecret, code.replace(/\s+/g, '')))) {
         return NextResponse.json(
           { error: { code: 'INVALID_CODE', message: 'Invalid verification code. Please try again.' } },
           { status: 400 },

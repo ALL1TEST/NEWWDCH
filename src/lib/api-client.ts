@@ -30,7 +30,16 @@ export class ApiClientError extends Error {
 
   constructor(apiError: ApiError) {
     const { error, meta } = apiError;
-    super(error.message);
+    let detailMsg = '';
+    if (Array.isArray(error.details)) {
+      detailMsg = error.details.join('; ');
+    } else if (error.details && typeof error.details === 'object') {
+      detailMsg = Object.values(error.details).filter(Boolean).join('; ');
+    }
+    const fullMessage = detailMsg && !error.message.includes(detailMsg)
+      ? `${error.message}: ${detailMsg}`
+      : error.message;
+    super(fullMessage);
     this.name = 'ApiClientError';
     this.code = error.code;
     this.status = 0;
@@ -87,10 +96,17 @@ const GLOBAL_ROUTES = new Set([
   '/api/prompt-templates',
   '/api/notifications/unread-count',
   '/api/platform',
+  '/api/settings',
 ]);
 
 function isGlobalRoute(path: string): boolean {
-  return GLOBAL_ROUTES.has(path) || path.startsWith('/api/sites/') || path.startsWith('/api/platform/');
+  return (
+    GLOBAL_ROUTES.has(path) ||
+    path.startsWith('/api/sites/') ||
+    path.startsWith('/api/platform/') ||
+    path.startsWith('/api/settings/') ||
+    path.startsWith('/api/settings?')
+  );
 }
 
 class ApiClient {
@@ -121,14 +137,22 @@ class ApiClient {
     const requestId = generateRequestId();
     const { params, body, timeout = this.defaultTimeout, raw, skipSiteContext, ...init } = config;
 
-    // Build URL with query params + auto-inject siteId
-    let url = `${this.baseUrl}${path}`;
+    // Parse existing path query params if any
+    let pathname = path;
     const searchParams = new URLSearchParams();
 
+    const queryIndex = path.indexOf('?');
+    if (queryIndex !== -1) {
+      pathname = path.slice(0, queryIndex);
+      const existingQs = path.slice(queryIndex + 1);
+      const existingParams = new URLSearchParams(existingQs);
+      existingParams.forEach((v, k) => searchParams.set(k, v));
+    }
+
     // Auto-inject siteId from context (unless global route or explicitly skipped)
-    if (!skipSiteContext && !isGlobalRoute(path)) {
+    if (!skipSiteContext && !isGlobalRoute(pathname)) {
       const activeSiteId = getActiveSiteId();
-      if (activeSiteId) {
+      if (activeSiteId && !searchParams.has('siteId')) {
         searchParams.set('siteId', activeSiteId);
       }
     }
@@ -141,6 +165,7 @@ class ApiClient {
       }
     }
     const qs = searchParams.toString();
+    let url = `${this.baseUrl}${pathname}`;
     if (qs) url += `?${qs}`;
 
     // Build headers

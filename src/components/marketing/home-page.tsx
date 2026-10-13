@@ -397,7 +397,6 @@ function PlatformSection() {
     { icon: ShieldCheck, nameKey: 'mkt.platform.stripe', descKey: 'mkt.platform.stripeDesc' },
     { icon: Mail, nameKey: 'mkt.platform.smtp', descKey: 'mkt.platform.smtpDesc' },
     { icon: Bot, nameKey: 'mkt.platform.ai', descKey: 'mkt.platform.aiDesc' },
-    { icon: Network, nameKey: 'mkt.platform.akismet', descKey: 'mkt.platform.akismetDesc' },
     { icon: Workflow, nameKey: 'mkt.platform.webhooks', descKey: 'mkt.platform.webhooksDesc' },
   ];
 

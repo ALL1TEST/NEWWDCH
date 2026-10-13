@@ -704,7 +704,7 @@ async function main() {
       // General
       { key: 'site_title', value: 'CMS Admin Dashboard', type: 'STRING', scope: 'GLOBAL', category: 'GENERAL', isPublic: true, description: 'The name of your site' },
       { key: 'site_description', value: 'A modern, enterprise-grade content management system', type: 'STRING', scope: 'GLOBAL', category: 'GENERAL', isPublic: true, description: 'Site meta description' },
-      { key: 'site_url', value: 'https://cms.example.com', type: 'URL', scope: 'GLOBAL', category: 'GENERAL', isPublic: true, description: 'Canonical site URL' },
+      { key: 'site_url', value: 'https://verdantt.vercel.app', type: 'URL', scope: 'GLOBAL', category: 'GENERAL', isPublic: true, description: 'Canonical site URL' },
       { key: 'site_logo', value: '/uploads/logo.svg', type: 'STRING', scope: 'GLOBAL', category: 'GENERAL', isPublic: true, description: 'Site logo URL' },
       { key: 'site_favicon', value: '/favicon.ico', type: 'STRING', scope: 'GLOBAL', category: 'GENERAL', isPublic: true, description: 'Favicon URL' },
       { key: 'site_email', value: 'admin@example.com', type: 'EMAIL', scope: 'GLOBAL', category: 'GENERAL', description: 'Primary contact email' },

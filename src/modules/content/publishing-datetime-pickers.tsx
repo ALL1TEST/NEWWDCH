@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 
 // ==========================================
@@ -217,218 +218,363 @@ export function PublishDatePicker({ value, onChange, className }: PublishDatePic
 }
 
 // ==========================================
-// 2. TIME PICKER (Matches Image 2 & User Request: Black Active Color, not sticking to right)
+// 2. TIME PICKER (Matches Month Calendar Style with Black Active State)
 // ==========================================
 
-interface PublishTimePickerProps {
-  value: string; // HH:mm (24h)
-  onChange: (timeStr: string) => void;
+export interface PublishTimePickerProps {
+  value?: string; // HH:mm (24h)
+  onChange?: (timeStr: string) => void;
+  dateValue?: string; // Optional YYYY-MM-DD
+  onDateChange?: (dateStr: string) => void;
+  showDateInButton?: boolean;
+  placeholder?: string;
   className?: string;
+  showIcon?: boolean;
+  showClear?: boolean;
+  onClear?: () => void;
+  id?: string;
 }
 
-const HOURS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
-const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
-const PERIODS = ['AM', 'PM'] as const;
-
-export function PublishTimePicker({ value, onChange, className }: PublishTimePickerProps) {
+export function PublishTimePicker({
+  value = '',
+  onChange,
+  dateValue,
+  onDateChange,
+  showDateInButton = true,
+  placeholder,
+  className,
+  showIcon,
+  showClear,
+  onClear,
+  id,
+}: PublishTimePickerProps) {
   const [open, setOpen] = useState(false);
+  const [hourOpen, setHourOpen] = useState(false);
+  const [minuteOpen, setMinuteOpen] = useState(false);
+  const hourContainerRef = useRef<HTMLDivElement>(null);
+  const minuteContainerRef = useRef<HTMLDivElement>(null);
 
-  // Parse 24h value to 12h + period
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    if (dateValue) {
+      const d = new Date(dateValue.includes('T') ? dateValue : `${dateValue}T12:00:00`);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return new Date();
+  });
+
+  useEffect(() => {
+    if (dateValue) {
+      const d = new Date(dateValue.includes('T') ? dateValue : `${dateValue}T12:00:00`);
+      if (!isNaN(d.getTime())) setSelectedDate(d);
+    }
+  }, [dateValue]);
+
+  // Parse 24h into 12h + period
   const { hour12, minute, period } = useMemo(() => {
     if (!value) {
-      const now = new Date();
-      const h24 = now.getHours();
-      const m = now.getMinutes();
-      const p = h24 >= 12 ? 'PM' : 'AM';
-      const h12 = (h24 % 12 || 12).toString().padStart(2, '0');
-      return { hour12: h12, minute: String(m).padStart(2, '0'), period: p };
+      return { hour12: '12', minute: '00', period: 'PM' as const };
     }
     const [hStr, mStr] = value.split(':');
-    const hNum = parseInt(hStr || '10', 10);
-    const mNum = parseInt(mStr || '00', 10);
+    const hNum = parseInt(hStr ?? '12', 10);
+    const mNum = parseInt(mStr ?? '0', 10);
     const p = hNum >= 12 ? 'PM' : 'AM';
     const h12 = (hNum % 12 || 12).toString().padStart(2, '0');
-    return {
-      hour12: h12,
-      minute: (isNaN(mNum) ? 0 : mNum).toString().padStart(2, '0'),
-      period: p,
-    };
+    const m = (isNaN(mNum) ? 0 : mNum).toString().padStart(2, '0');
+    return { hour12: h12, minute: m, period: p as 'AM' | 'PM' };
   }, [value]);
 
   const updateTime = (newH12: string, newMin: string, newPeriod: 'AM' | 'PM') => {
     let h = parseInt(newH12, 10);
     if (newPeriod === 'PM' && h < 12) h += 12;
     if (newPeriod === 'AM' && h === 12) h = 0;
-    const final24 = `${String(h).padStart(2, '0')}:${newMin}`;
-    onChange(final24);
+    const final24 = `${String(h).padStart(2, '0')}:${newMin.padStart(2, '0')}`;
+    if (onChange) onChange(final24);
   };
 
   const displayText = useMemo(() => {
-    if (!value) return '--:-- --';
-    return `${hour12}:${minute} ${period}`;
-  }, [value, hour12, minute, period]);
+    if (!showDateInButton) {
+      if (value) return `${hour12}:${minute} ${period}`;
+      return placeholder || '--:-- --';
+    }
 
-  // Refs for scrolling to selected item
-  const hourListRef = useRef<HTMLDivElement>(null);
-  const minListRef = useRef<HTMLDivElement>(null);
+    let datePart = '';
+    if (dateValue) {
+      const d = new Date(dateValue.includes('T') ? dateValue : `${dateValue}T12:00:00`);
+      if (!isNaN(d.getTime())) {
+        datePart = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+    }
+
+    if (datePart && value) {
+      return `${datePart} at ${hour12}:${minute} ${period}`;
+    }
+    if (datePart && !value) {
+      return datePart;
+    }
+    if (value) {
+      return `${hour12}:${minute} ${period}`;
+    }
+    return placeholder || '--:-- --';
+  }, [value, hour12, minute, period, dateValue, placeholder, showDateInButton]);
+
+  // Auto scroll to active number on open
+  useEffect(() => {
+    if (!hourOpen) return;
+    const timer = setTimeout(() => {
+      const container = hourContainerRef.current;
+      if (!container) return;
+      const selected = container.querySelector('[data-selected="true"]') as HTMLElement | null;
+      if (selected) {
+        container.scrollTop = selected.offsetTop - container.clientHeight / 2 + selected.clientHeight / 2;
+      }
+    }, 20);
+    return () => clearTimeout(timer);
+  }, [hourOpen]);
 
   useEffect(() => {
-    if (!open) return;
-    const hourEl = hourListRef.current;
-    const minEl = minListRef.current;
-
-    const onWheelScroll = (e: WheelEvent) => {
-      e.stopPropagation();
-      e.preventDefault();
-      const target = e.currentTarget as HTMLElement;
-      if (target) {
-        target.scrollTop += e.deltaY;
-      }
-    };
-
-    if (hourEl) {
-      hourEl.addEventListener('wheel', onWheelScroll, { passive: false });
-    }
-    if (minEl) {
-      minEl.addEventListener('wheel', onWheelScroll, { passive: false });
-    }
-
+    if (!minuteOpen) return;
     const timer = setTimeout(() => {
-      if (hourEl) {
-        const selected = hourEl.querySelector('[data-selected="true"]') as HTMLElement;
-        if (selected) {
-          hourEl.scrollTop = selected.offsetTop - 40;
-        }
+      const container = minuteContainerRef.current;
+      if (!container) return;
+      const selected = container.querySelector('[data-selected="true"]') as HTMLElement | null;
+      if (selected) {
+        container.scrollTop = selected.offsetTop - container.clientHeight / 2 + selected.clientHeight / 2;
       }
-      if (minEl) {
-        const selected = minEl.querySelector('[data-selected="true"]') as HTMLElement;
-        if (selected) {
-          minEl.scrollTop = selected.offsetTop - 40;
-        }
-      }
-    }, 50);
+    }, 20);
+    return () => clearTimeout(timer);
+  }, [minuteOpen]);
 
-    return () => {
-      clearTimeout(timer);
-      if (hourEl) {
-        hourEl.removeEventListener('wheel', onWheelScroll);
-      }
-      if (minEl) {
-        minEl.removeEventListener('wheel', onWheelScroll);
-      }
-    };
-  }, [open]);
+  const shouldShowIcon = showIcon ?? (dateValue !== undefined || Boolean(placeholder));
+  const hasValue = Boolean(value || dateValue);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
+          id={id}
           type="button"
           className={cn(
-            'flex items-center justify-between h-10 px-3 w-full rounded-md border border-input bg-transparent hover:bg-muted/10 transition-colors text-sm font-normal shadow-xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring text-left',
+            'flex items-center justify-between h-10 px-3 w-[260px] rounded-md border border-input bg-transparent hover:bg-muted/10 transition-colors text-xs shadow-xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring text-left',
             className,
           )}
         >
-          <span className={value ? 'text-foreground' : 'text-muted-foreground'}>{displayText}</span>
-          <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+          <div className="flex items-center gap-2 truncate flex-1 mr-2">
+            {shouldShowIcon && <CalendarIcon className="h-4 w-4 text-muted-foreground shrink-0" />}
+            <span
+              className={cn(
+                'truncate',
+                hasValue ? 'text-foreground font-semibold font-mono' : 'text-muted-foreground font-normal',
+              )}
+            >
+              {displayText}
+            </span>
+          </div>
+          {showClear && hasValue && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onClear) {
+                  onClear();
+                } else {
+                  if (onChange) onChange('');
+                  if (onDateChange) onDateChange('');
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation();
+                  if (onClear) onClear();
+                }
+              }}
+              className="rounded-full p-1 text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 transition-colors"
+              aria-label="clear date and time"
+            >
+              <X className="h-3.5 w-3.5" />
+            </span>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent
         side="bottom"
         align="start"
         sideOffset={6}
-        data-scroll-locked=""
-        data-radix-scroll-lock-ignore=""
-        className="w-auto p-2.5 rounded-xl border border-border/80 bg-popover shadow-xl select-none z-[200]"
+        className="w-auto p-3 rounded-2xl border border-border/80 bg-popover shadow-xl select-none z-[200]"
       >
-        <div className="flex items-start gap-1" data-scroll-locked="" data-radix-scroll-lock-ignore="">
-          {/* Column 1: Hours (matches Image 2 with black active color) */}
-          <div
-            ref={hourListRef}
-            data-scroll-locked=""
-            data-radix-scroll-lock-ignore=""
-            onWheel={(e) => {
-              e.stopPropagation();
-              e.currentTarget.scrollTop += e.deltaY;
-            }}
-            className="flex flex-col gap-1 max-h-56 overflow-y-auto pr-1 scrollbar-thin select-none"
-            style={{ overscrollBehavior: 'contain' }}
-          >
-            {HOURS.map((h) => {
-              const isSelected = h === hour12;
-              return (
+        <Calendar
+          mode="single"
+          selected={selectedDate}
+          onSelect={(d) => {
+            if (d) {
+              setSelectedDate(d);
+              if (onDateChange) {
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                onDateChange(`${y}-${m}-${day}`);
+              }
+              if (!value && onChange) {
+                onChange('12:00');
+              }
+            }
+          }}
+          initialFocus
+        />
+        {/* Time Selector matching Calendar Month styling (no blue, rounded-2xl border matching big month card) */}
+        <div className="border-t border-border/60 pt-2.5 mt-2 flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-1.5">
+            <Clock className="h-4 w-4 text-muted-foreground shrink-0 mr-1" />
+
+            {/* Custom Hour Picker */}
+            <Popover open={hourOpen} onOpenChange={setHourOpen}>
+              <PopoverTrigger asChild>
                 <button
-                  key={h}
                   type="button"
-                  data-selected={isSelected}
-                  onClick={() => updateTime(h, minute, period as any)}
                   className={cn(
-                    'px-3 py-1.5 text-xs font-semibold rounded-md transition-colors text-center cursor-pointer',
-                    isSelected
-                      ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold shadow-xs'
-                      : 'text-foreground hover:bg-muted',
+                    'h-8 px-2.5 rounded-lg border border-input bg-background hover:bg-muted/40 font-mono text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer',
+                    hourOpen && 'border-neutral-900 ring-1 ring-neutral-900',
                   )}
                 >
-                  {h}
+                  <span>{hour12}</span>
+                  <ChevronDown
+                    className={cn('h-3 w-3 text-muted-foreground transition-transform', hourOpen && 'rotate-180')}
+                  />
                 </button>
-              );
-            })}
+              </PopoverTrigger>
+              <PopoverContent
+                side="top"
+                align="start"
+                sideOffset={6}
+                className="w-20 p-1.5 rounded-2xl border border-border/80 bg-popover shadow-xl z-[250] select-none"
+              >
+                <div
+                  ref={hourContainerRef}
+                  data-radix-scroll-lock-ignore=""
+                  onWheel={(e) => {
+                    e.stopPropagation();
+                    if (hourContainerRef.current) {
+                      hourContainerRef.current.scrollTop += e.deltaY;
+                    }
+                  }}
+                  style={{ maxHeight: '180px', overscrollBehavior: 'contain' }}
+                  className="overflow-y-auto flex flex-col gap-0.5 scrollbar-thin"
+                >
+                  {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map((h) => {
+                    const isSelected = h === hour12;
+                    return (
+                      <button
+                        key={h}
+                        type="button"
+                        data-selected={isSelected}
+                        onClick={() => {
+                          updateTime(h, minute, period);
+                          setHourOpen(false);
+                        }}
+                        className={cn(
+                          'h-7 text-xs font-mono font-medium rounded-lg transition-colors text-center cursor-pointer',
+                          isSelected
+                            ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold shadow-xs'
+                            : 'text-foreground hover:bg-muted',
+                        )}
+                      >
+                        {h}
+                      </button>
+                    );
+                  })}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <span className="font-bold text-muted-foreground text-xs">:</span>
+
+            {/* Custom Minute Picker */}
+            <Popover open={minuteOpen} onOpenChange={setMinuteOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    'h-8 px-2.5 rounded-lg border border-input bg-background hover:bg-muted/40 font-mono text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer',
+                    minuteOpen && 'border-neutral-900 ring-1 ring-neutral-900',
+                  )}
+                >
+                  <span>{minute}</span>
+                  <ChevronDown
+                    className={cn('h-3 w-3 text-muted-foreground transition-transform', minuteOpen && 'rotate-180')}
+                  />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                side="top"
+                align="start"
+                sideOffset={6}
+                className="w-20 p-1.5 rounded-2xl border border-border/80 bg-popover shadow-xl z-[250] select-none"
+              >
+                <div
+                  ref={minuteContainerRef}
+                  data-radix-scroll-lock-ignore=""
+                  onWheel={(e) => {
+                    e.stopPropagation();
+                    if (minuteContainerRef.current) {
+                      minuteContainerRef.current.scrollTop += e.deltaY;
+                    }
+                  }}
+                  style={{ maxHeight: '180px', overscrollBehavior: 'contain' }}
+                  className="overflow-y-auto flex flex-col gap-0.5 scrollbar-thin"
+                >
+                  {Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0')).map((m) => {
+                    const isSelected = m === minute;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        data-selected={isSelected}
+                        onClick={() => {
+                          updateTime(hour12, m, period);
+                          setMinuteOpen(false);
+                        }}
+                        className={cn(
+                          'h-7 text-xs font-mono font-medium rounded-lg transition-colors text-center cursor-pointer',
+                          isSelected
+                            ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold shadow-xs'
+                            : 'text-foreground hover:bg-muted',
+                        )}
+                      >
+                        {m}
+                      </button>
+                    );
+                  })}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
 
-          {/* Column 2: Minutes (matches Image 2 with black active color) */}
-          <div
-            ref={minListRef}
-            data-scroll-locked=""
-            data-radix-scroll-lock-ignore=""
-            onWheel={(e) => {
-              e.stopPropagation();
-              e.currentTarget.scrollTop += e.deltaY;
-            }}
-            className="flex flex-col gap-1 max-h-56 overflow-y-auto px-1 border-x border-border/60 scrollbar-thin select-none"
-            style={{ overscrollBehavior: 'contain' }}
-          >
-            {MINUTES.map((m) => {
-              const isSelected = m === minute;
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  data-selected={isSelected}
-                  onClick={() => updateTime(hour12, m, period as any)}
-                  className={cn(
-                    'px-3 py-1.5 text-xs font-semibold rounded-md transition-colors text-center cursor-pointer',
-                    isSelected
-                      ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold shadow-xs'
-                      : 'text-foreground hover:bg-muted',
-                  )}
-                >
-                  {m}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Column 3: AM / PM (matches Image 2 with black active color) */}
-          <div className="flex flex-col gap-1 pl-1">
-            {PERIODS.map((p) => {
-              const isSelected = p === period;
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  data-selected={isSelected}
-                  onClick={() => updateTime(hour12, minute, p)}
-                  className={cn(
-                    'px-3 py-1.5 text-xs font-semibold rounded-md transition-colors text-center cursor-pointer',
-                    isSelected
-                      ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold shadow-xs'
-                      : 'text-foreground hover:bg-muted',
-                  )}
-                >
-                  {p}
-                </button>
-              );
-            })}
+          {/* AM / PM Segmented Control */}
+          <div className="flex rounded-md border border-input p-0.5 bg-muted/30">
+            <button
+              type="button"
+              onClick={() => updateTime(hour12, minute, 'AM')}
+              className={cn(
+                'px-2.5 py-1 text-[11px] font-semibold rounded transition-all cursor-pointer',
+                period === 'AM'
+                  ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              AM
+            </button>
+            <button
+              type="button"
+              onClick={() => updateTime(hour12, minute, 'PM')}
+              className={cn(
+                'px-2.5 py-1 text-[11px] font-semibold rounded transition-all cursor-pointer',
+                period === 'PM'
+                  ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              PM
+            </button>
           </div>
         </div>
       </PopoverContent>

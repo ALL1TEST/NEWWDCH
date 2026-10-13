@@ -117,6 +117,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 4b. Check if Two-Factor Authentication (2FA) is enabled
+    if (user.mfaEnabled) {
+      return NextResponse.json(
+        {
+          data: {
+            requiresMfa: true,
+            email: user.email,
+          },
+          meta: { requestId, timestamp, duration: Date.now() - startTime },
+        },
+        { status: 200 },
+      );
+    }
+
     // 5. Generate session token
     const token = generateRequestId() + '-' + generateRequestId();
 

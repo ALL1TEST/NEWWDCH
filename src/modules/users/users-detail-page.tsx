@@ -152,6 +152,7 @@ const ROLE_COLORS: Record<UserRole, string> = {
 export function UsersDetailPage({ userId }: { userId: string }) {
   const { t } = useT();
   const navigate = useNavigationStore((s) => s.navigate);
+  const goBack = useNavigationStore((s) => s.goBack);
   const queryClient = useQueryClient();
 
   // Role/Status options (translated at render time so labels switch with locale)
@@ -306,7 +307,7 @@ export function UsersDetailPage({ userId }: { userId: string }) {
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          onClick={() => navigate('users')}
+          onClick={() => goBack('users')}
         >
           <ArrowLeft className="h-4 w-4" />
           <span className="sr-only">{t('users.backToUsersSr')}</span>

@@ -53,61 +53,50 @@ async function resolveSettings(
   siteFilter: Record<string, string>,
 ): Promise<SmtpConfigInput | null> {
   const where = { isDefault: true, ...siteFilter };
-  const saved = await db.smtpSetting.findFirst({ where });
-
-  if (!settings) {
-    if (!saved) return null;
-    let password = saved.password || '';
-    if (password && /^[A-Za-z0-9+/=]+$/.test(password) && password.length >= 100) {
-      try {
-        password = await decrypt(password);
-      } catch {
-        // ignore
-      }
-    }
-    return {
-      provider: saved.provider,
-      host: saved.host,
-      port: saved.port,
-      encryption: (saved.encryption as SmtpConfigInput['encryption']) || 'STARTTLS',
-      username: saved.username,
-      password,
-      fromName: saved.fromName,
-      fromEmail: saved.fromEmail,
-      replyTo: saved.replyTo,
-      timeout: saved.timeout,
-      isActive: saved.isActive,
-    };
+  let saved = await db.smtpSetting.findFirst({ where, orderBy: { updatedAt: 'desc' } });
+  if (!saved && siteFilter.siteId) {
+    saved = await db.smtpSetting.findFirst({
+      where: { isDefault: true, siteId: null },
+      orderBy: { updatedAt: 'desc' },
+    });
   }
 
-  let password = settings.password ?? '';
-  if (password.includes('•')) {
-    if (!saved) return null;
-    password = saved.password || '';
-    if (password && /^[A-Za-z0-9+/=]+$/.test(password) && password.length >= 100) {
+  // Determine password:
+  // If settings provided a new, unmasked password, use that.
+  // Otherwise, use saved DB password (decrypted).
+  let password = settings?.password ?? '';
+  const isMaskedOrEmpty = !password || password.includes('•');
+
+  if (isMaskedOrEmpty) {
+    if (saved?.password) {
       try {
-        password = await decrypt(password);
+        const decrypted = await decrypt(saved.password);
+        password = decrypted || saved.password;
       } catch {
-        // ignore
+        password = saved.password;
       }
     }
+  }
+
+  if (!settings && !saved) {
+    return null;
   }
 
   return {
-    provider: settings.provider ?? 'SMTP',
-    host: settings.host ?? saved?.host ?? '',
-    port: settings.port ?? saved?.port ?? 587,
+    provider: settings?.provider ?? saved?.provider ?? 'SMTP',
+    host: settings?.host ?? saved?.host ?? '',
+    port: settings?.port ?? saved?.port ?? 587,
     encryption:
-      (settings.encryption as SmtpConfigInput['encryption'] | undefined) ??
+      (settings?.encryption as SmtpConfigInput['encryption'] | undefined) ??
       (saved?.encryption as SmtpConfigInput['encryption'] | undefined) ??
       'STARTTLS',
-    username: settings.username ?? saved?.username ?? '',
+    username: settings?.username ?? saved?.username ?? '',
     password,
-    fromName: settings.fromName ?? saved?.fromName ?? '',
-    fromEmail: settings.fromEmail ?? saved?.fromEmail ?? '',
-    replyTo: settings.replyTo ?? saved?.replyTo ?? '',
-    timeout: settings.timeout ?? saved?.timeout ?? 10,
-    isActive: settings.isActive ?? saved?.isActive ?? true,
+    fromName: settings?.fromName ?? saved?.fromName ?? '',
+    fromEmail: settings?.fromEmail ?? saved?.fromEmail ?? '',
+    replyTo: settings?.replyTo ?? saved?.replyTo ?? '',
+    timeout: settings?.timeout ?? saved?.timeout ?? 10,
+    isActive: settings?.isActive ?? saved?.isActive ?? true,
   };
 }
 

@@ -110,6 +110,7 @@ function parseKeywords(raw: string | null | undefined): string[] {
 
 export function MediaDetailPage({ mediaId }: { mediaId: string }) {
   const navigate = useNavigationStore((s) => s.navigate);
+  const goBack = useNavigationStore((s) => s.goBack);
   const queryClient = useQueryClient();
   const { t } = useT();
 
@@ -287,7 +288,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center px-6">
         <p className="text-lg font-medium">{t('media.notFound')}</p>
-        <Button variant="outline" className="mt-4" onClick={() => navigate('media')}><ArrowLeft className="h-4 w-4 mr-2" />{t('media.backToMediaLibrary')}</Button>
+        <Button variant="outline" className="mt-4" onClick={() => goBack('media')}><ArrowLeft className="h-4 w-4 mr-2" />{t('media.backToMediaLibrary')}</Button>
       </div>
     );
   }
@@ -304,7 +305,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
 
   return (
     <div className="space-y-6 px-6 pb-6 pt-4">
-      <Button variant="ghost" size="sm" onClick={() => navigate('media')}>
+      <Button variant="ghost" size="sm" onClick={() => goBack('media')}>
         <ArrowLeft className="h-4 w-4 mr-2" />{t('media.backToMediaLibrary')}
       </Button>
 

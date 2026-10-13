@@ -45,9 +45,9 @@ export function ContentModule() {
     return <ContentEditPage contentId={currentItemId} />;
   }
 
-  // Detail page (has itemId but no subPage)
-  if (currentItemId && !currentSubPage) {
-    return <ContentDetailPage contentId={currentItemId} />;
+  // Detail / Preview page (has itemId with preview or no subPage)
+  if (currentItemId && (!currentSubPage || currentSubPage === 'preview')) {
+    return <ContentDetailPage contentId={currentItemId} isPreview={currentSubPage === 'preview'} />;
   }
 
   // Default: list page

@@ -12,6 +12,7 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { getSiteWhere } from '@/lib/site-context';
 import { requireFeature } from '@/lib/platform/platform-auth';
+import { syncVerdantSubscribers } from '@/lib/services/production-subscriber-service';
 
 function reqId() {
   return 'req_' + nanoid(8);
@@ -23,6 +24,9 @@ export async function GET(request: NextRequest) {
   const id = reqId();
 
   try {
+    const siteParam = request.nextUrl.searchParams.get('siteId');
+    await syncVerdantSubscribers(siteParam ?? undefined).catch(() => {});
+
     const siteFilter = await getSiteWhere(request);
     const where: Record<string, unknown> = { ...siteFilter, status: 'SUBSCRIBED' };
 

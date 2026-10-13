@@ -8,8 +8,10 @@ import {
 } from '@/lib/platform/platform-auth';
 import {
   getPlanConfigsSync,
+  getPlanConfigSync,
   ensureHydrated,
   createPlanConfig,
+  savePlanConfig,
   type PlanConfigInput,
 } from '@/lib/platform/plan-config';
 import { validatePlanConfigInput } from '@/lib/platform/subscription-data';
@@ -106,3 +108,46 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// Update an existing plan via /api/platform/admin/plans?planId=... or with planId in body.
+export async function PUT(request: NextRequest) {
+  const auth = await requireOwner(request);
+  if ('response' in auth) return auth.response;
+  const searchParams = request.nextUrl.searchParams;
+  const body = (await request.json().catch(() => ({}))) as PlanConfigInput & { planId?: string };
+  const planId = (searchParams.get('planId') || body.planId || '').trim().toLowerCase();
+  if (!planId) return fail('VALIDATION_ERROR', 'planId is required.', 400);
+
+  const errors = validatePlanConfigInput(body);
+  if (errors.length > 0) {
+    return fail('VALIDATION_ERROR', errors.join(' '), 400);
+  }
+
+  const currentPlan = getPlanConfigSync(planId);
+  const mergedMonthly = body.billingMonthly ?? currentPlan.billingMonthly;
+  const mergedYearly = body.billingYearly ?? currentPlan.billingYearly;
+  if (!mergedMonthly && !mergedYearly) {
+    return fail(
+      'VALIDATION_ERROR',
+      'At least one billing period must be enabled — check Monthly and/or Yearly.',
+      400,
+    );
+  }
+
+  const before = getPlanConfigSync(planId);
+  const updated = await savePlanConfig(planId, body);
+  if (!updated) return fail('NOT_FOUND', 'Plan not found.', 404);
+  const priceChanged =
+    before.priceMonthly !== updated.priceMonthly || before.priceYearly !== updated.priceYearly;
+  await logAdminAction({
+    userId: auth.user.id,
+    action: priceChanged ? 'plan.price_changed' : 'plan.update',
+    resourceType: 'PlanConfig',
+    resourceId: planId,
+    details: `${updated.name}: ${before.priceMonthly}→${updated.priceMonthly} ${updated.currency}/mo, features=${updated.features.length}, entitlements=${updated.entitlements.length}`,
+    ipAddress: getClientIp(request) ?? undefined,
+    userAgent: request.headers.get('user-agent') ?? undefined,
+  });
+  return ok(updated);
+}
+

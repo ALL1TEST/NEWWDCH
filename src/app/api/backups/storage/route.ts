@@ -3,12 +3,12 @@
 // POST /api/backups/storage      — Create a storage config
 // ============================================================
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server.js';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { z } from 'zod/v4';
-import { getSiteWhere } from '@/lib/site-context';
-import { requirePlatformAdmin, requireFeature } from '@/lib/platform/platform-auth';
+import { getSiteWhereIncludeGlobal, getSiteFromRequest } from '@/lib/site-context';
+import { requirePlatformAdmin, requireFeature, getAuthUser } from '@/lib/platform/platform-auth';
 
 // ---------- helpers ---------------------------------------------------
 
@@ -40,7 +40,7 @@ const createSchema = z.object({
   ]),
   config: z.string().default('{}'),
   isActive: z.boolean().default(true),
-  siteId: z.string().optional(),
+  siteId: z.string().nullable().optional(),
   createdById: z.string().min(1, 'Creator ID is required').optional(),
 });
 
@@ -74,7 +74,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 
 // ---------- validation helpers for config JSON -----------------------
 
-function validateConfigJson(configStr: string, provider: string): { valid: boolean; errors: string[] } {
+function validateConfigJson(configStr: string, provider: string, isTest = false): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   let config: Record<string, unknown>;
   try {
@@ -150,21 +150,21 @@ function validateConfigJson(configStr: string, provider: string): { valid: boole
       if (!has('clientId')) errors.push('Google Drive config requires "clientId"');
       if (!has('clientSecret')) errors.push('Google Drive config requires "clientSecret"');
       if (!has('refreshToken')) errors.push('Google Drive config requires "refreshToken"');
-      if (!has('folderId')) errors.push('Google Drive config requires "folderId"');
+      if (!isTest && !has('folderId')) errors.push('Google Drive config requires "folderId"');
       break;
     }
     case 'DROPBOX': {
       if (!has('appKey')) errors.push('Dropbox config requires "appKey"');
       if (!has('appSecret')) errors.push('Dropbox config requires "appSecret"');
       if (!has('refreshToken')) errors.push('Dropbox config requires "refreshToken"');
-      if (!has('folder')) errors.push('Dropbox config requires "folder"');
+      if (!isTest && !has('folder')) errors.push('Dropbox config requires "folder"');
       break;
     }
     case 'ONEDRIVE': {
       if (!has('clientId')) errors.push('OneDrive config requires "clientId"');
       if (!has('clientSecret')) errors.push('OneDrive config requires "clientSecret"');
       if (!has('refreshToken')) errors.push('OneDrive config requires "refreshToken"');
-      if (!has('folder')) errors.push('OneDrive config requires "folder"');
+      if (!isTest && !has('folder')) errors.push('OneDrive config requires "folder"');
       break;
     }
     case 'FTP': {
@@ -218,14 +218,18 @@ export async function GET(request: NextRequest) {
       // feature entitlement (server-side enforced; owner bypass passes).
       const featureAuth = await requireFeature(request, 'backups');
       if ('response' in featureAuth) return featureAuth.response;
-      siteFilter = await getSiteWhere(request);
+      siteFilter = await getSiteWhereIncludeGlobal(request);
     }
 
-    const where: Record<string, unknown> = { ...siteFilter };
-
-    if (provider) where.provider = provider;
+    const conditions: Record<string, unknown>[] = [];
+    if (Object.keys(siteFilter).length > 0) {
+      conditions.push(siteFilter);
+    }
+    if (provider) {
+      conditions.push({ provider });
+    }
     if (isActive !== null && isActive !== undefined && isActive !== '') {
-      where.isActive = isActive === 'true';
+      conditions.push({ isActive: isActive === 'true' });
     }
     if (search) {
       // Search matches the destination Name OR the Provider. Provider
@@ -249,8 +253,15 @@ export async function GET(request: NextRequest) {
       if (matchedProviders.length > 0) {
         orClauses.push({ provider: { in: matchedProviders } });
       }
-      where.OR = orClauses;
+      conditions.push({ OR: orClauses });
     }
+
+    const where: Record<string, unknown> =
+      conditions.length === 0
+        ? {}
+        : conditions.length === 1
+        ? conditions[0]
+        : { AND: conditions };
 
     const orderBy: Record<string, string> = { [sort]: order };
 
@@ -358,22 +369,6 @@ export async function POST(request: NextRequest) {
 
     const d = parsed.data;
 
-    // Validate config JSON structure based on provider
-    const configValidation = validateConfigJson(d.config, d.provider);
-    if (!configValidation.valid) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'INVALID_CONFIG',
-            message: 'Storage config validation failed',
-            details: configValidation.errors,
-          },
-          meta: { requestId: id },
-        },
-        { status: 400 },
-      );
-    }
-
     // ---- Test Connection action ----
     // The modal's Test Connection / Connect button POSTs to this route
     // with `?action=test` in the query string (the body carries the
@@ -382,7 +377,25 @@ export async function POST(request: NextRequest) {
     // The test runs the real provider adapter against the (unpersisted)
     // form config; no row is written.
     const urlAction = new URL(request.url).searchParams.get('action');
-    if (urlAction === 'test' || (body as Record<string, unknown>).action === 'test') {
+    const isTestAction = urlAction === 'test' || (body as Record<string, unknown>).action === 'test';
+
+    // Validate config JSON structure based on provider
+    const configValidation = validateConfigJson(d.config, d.provider, isTestAction);
+    if (!configValidation.valid) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'INVALID_CONFIG',
+            message: `Storage config validation failed: ${configValidation.errors.join('; ')}`,
+            details: configValidation.errors,
+          },
+          meta: { requestId: id },
+        },
+        { status: 400 },
+      );
+    }
+
+    if (isTestAction) {
       const { testStorageConnection } = await import('@/lib/backup/backup-service');
       let configObj: Record<string, unknown>;
       try {
@@ -395,13 +408,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Resolve createdById — for platform scope, use the authenticated
-    // admin's id (override client-supplied). For client scope, fall back
-    // to first user if not provided (existing behavior preserved).
+    // admin's id (override client-supplied). For client scope, prefer
+    // authenticated user, then client-supplied createdById, falling back
+    // to first user if not authenticated.
     let createdById: string | undefined;
     if (isPlatformScope && platformUser) {
       createdById = platformUser.id;
     } else {
-      createdById = d.createdById;
+      const authUser = await getAuthUser(request);
+      createdById = d.createdById || authUser?.id;
       if (!createdById) {
         const firstUser = await db.user.findFirst({ select: { id: true } });
         createdById = firstUser?.id;
@@ -434,9 +449,9 @@ export async function POST(request: NextRequest) {
     const encryptedConfig = await encryptConfigForStorage(configObj);
 
     // Platform scope: force siteId = null (platform-wide). Client scope:
-    // leave siteId exactly as the caller provided (or null) — existing
-    // behavior preserved.
-    const siteId = isPlatformScope ? null : (d.siteId ?? null);
+    // resolve siteId from the payload body or from the request query param / context.
+    const requestedSiteId = await getSiteFromRequest(request);
+    const siteId = isPlatformScope ? null : (d.siteId ?? requestedSiteId ?? null);
 
     const item = await db.backupStorage.create({
       data: {

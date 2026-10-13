@@ -12,12 +12,21 @@ import {
   ChevronRight,
   Search,
   ArrowUpDown,
+  ArrowDown,
+  ArrowUp,
   Flag,
+  Flag as FlagIcon,
   ChevronsLeft,
   ChevronsRight,
   Loader2,
   Shield,
   Save,
+  AlertTriangle,
+  CheckCircle2,
+  AlertCircle,
+  Archive,
+  RotateCcw,
+  Info,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +34,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import {
   DropdownMenu,
@@ -56,14 +66,8 @@ import type {
   PaginatedResponse,
   CommentStatus,
 } from '@/shared/types';
-import { DEFAULT_PAGE_SIZE } from '@/shared/constants';
+import { DEFAULT_PAGE_SIZE, PAGE_SIZES } from '@/shared/constants';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Flag as FlagIcon,
-  Archive,
-  RotateCcw,
-  Info,
-} from 'lucide-react';
 import {
   DEMO_COMMENTS,
   getStatusCounts,
@@ -118,10 +122,8 @@ interface CommentRow {
 
 const STATUS_TABS: { label: string; value: string }[] = [
   { label: 'All', value: 'all' },
-  { label: 'Pending', value: 'PENDING' },
   { label: 'Approved', value: 'APPROVED' },
   { label: 'Rejected', value: 'REJECTED' },
-  { label: 'Flagged', value: 'FLAGGED' },
   { label: 'Spam', value: 'SPAM' },
   { label: 'Trash', value: 'TRASH' },
 ];
@@ -153,8 +155,8 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
 };
 
 const SORT_OPTIONS = [
-  { label: 'Date', value: 'createdAt' },
-  { label: 'Content', value: 'content' },
+  { value: 'createdAt_desc', labelKey: 'comments.newest', defaultLabel: 'Newest' },
+  { value: 'createdAt_asc', labelKey: 'comments.oldest', defaultLabel: 'Oldest' },
 ] as const;
 
 // -------------------- Sub-components --------------------
@@ -276,115 +278,74 @@ function CommentCardSkeleton() {
 
 // -------------------- Comment Settings Card --------------------
 
-const SPAM_PROVIDERS = [
-  { value: 'none', label: 'None' },
-  { value: 'akismet', label: 'Akismet' },
-  { value: 'custom', label: 'Custom' },
-];
-
-// Masked placeholder shown when an API key is already saved. The backend
-// returns '[ENCRYPTED]' for sensitive fields; we never display the actual
-// secret. Submitting this exact placeholder preserves the existing value.
-const API_KEY_MASK = '••••••••';
-
-interface ProviderDraft {
-  commentsEnabled?: boolean;
-  spamDetection?: boolean;
-  spamProvider?: string;
-  // Custom provider fields
-  customProviderName?: string;
-  customApiEndpoint?: string;
-  customApiKey?: string;
-  customEnabled?: boolean;
-  // Akismet fields
-  akismetApiKey?: string;
-  akismetBlogUrl?: string;
-}
-
 function CommentSettingsCard() {
   const queryClient = useQueryClient();
   const { t } = useT();
 
   const { data: settingsData, isLoading } = useQuery({
     queryKey: ['settings', 'discussion', 'comments-page'],
-    queryFn: () => getApi<Record<string, string> | null>('/api/settings?category=DISCUSSION'),
+    queryFn: () => getApi<Record<string, string> | null>('/api/settings', { category: 'DISCUSSION' }),
     staleTime: 10_000,
   });
 
-  // Hydrate from saved settings. API keys come back as '[ENCRYPTED]' when
-  // a value is stored — we show the mask placeholder instead of the real
-  // secret. Empty string means no key has been saved yet.
-  const savedCommentsEnabled = settingsData?.enable_comments !== 'false';
-  const savedSpamDetection = settingsData?.comment_auto_spam_detection === 'true';
-  const savedSpamProvider = settingsData?.comment_spam_provider || 'none';
+  const savedCommentsEnabled = settingsData
+    ? settingsData.enable_comments !== 'false'
+    : false;
+  const [localCommentsEnabled, setLocalCommentsEnabled] = useState<boolean | null>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('cms_allow_comments');
+      if (stored !== null) return stored === 'true';
+    }
+    return null;
+  });
 
-  const savedCustomProviderName = settingsData?.comment_spam_provider_name || '';
-  const savedCustomApiEndpoint = settingsData?.comment_spam_api_endpoint || '';
-  const hasSavedCustomApiKey = settingsData?.comment_spam_api_key && settingsData.comment_spam_api_key !== '';
-  const savedCustomEnabled = settingsData?.comment_spam_enabled !== 'false';
+  useEffect(() => {
+    if (settingsData) {
+      const isCommentsEnabled = settingsData.enable_comments !== 'false';
+      setLocalCommentsEnabled(isCommentsEnabled);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('cms_allow_comments', String(isCommentsEnabled));
+      }
+    }
+  }, [settingsData]);
 
-  const savedAkismetBlogUrl = settingsData?.akismet_blog_url || '';
-  const hasSavedAkismetApiKey = settingsData?.akismet_api_key && settingsData.akismet_api_key !== '';
-
-  const [draft, setDraft] = useState<ProviderDraft>({});
-
-  const commentsEnabled = draft.commentsEnabled ?? savedCommentsEnabled;
-  const spamDetection = draft.spamDetection ?? savedSpamDetection;
-  const spamProvider = draft.spamProvider ?? savedSpamProvider;
-
-  // Custom-provider draft values (fall back to saved).
-  const customProviderName = draft.customProviderName ?? savedCustomProviderName;
-  const customApiEndpoint = draft.customApiEndpoint ?? savedCustomApiEndpoint;
-  // API key: show mask when a key is saved AND the user hasn't typed a new one.
-  const customApiKey = draft.customApiKey ?? (hasSavedCustomApiKey ? API_KEY_MASK : '');
-  const customEnabled = draft.customEnabled ?? savedCustomEnabled;
-
-  // Akismet draft values.
-  const akismetApiKey = draft.akismetApiKey ?? (hasSavedAkismetApiKey ? API_KEY_MASK : '');
-  const akismetBlogUrl = draft.akismetBlogUrl ?? savedAkismetBlogUrl;
-
-  const isDirty = Object.keys(draft).length > 0;
+  const commentsEnabled = localCommentsEnabled ?? savedCommentsEnabled;
 
   const saveMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: (variables: { commentsEnabled?: boolean }) => {
+      const activeComments = variables.commentsEnabled !== undefined ? variables.commentsEnabled : commentsEnabled;
+
       const settings: Array<{ key: string; value: string; type?: string; category: string }> = [
-        { key: 'enable_comments', value: String(commentsEnabled), type: 'BOOLEAN', category: 'DISCUSSION' },
-        { key: 'comment_auto_spam_detection', value: String(spamDetection), type: 'BOOLEAN', category: 'DISCUSSION' },
-        { key: 'comment_spam_provider', value: spamProvider, type: 'STRING', category: 'DISCUSSION' },
+        { key: 'enable_comments', value: String(activeComments), type: 'BOOLEAN', category: 'DISCUSSION' },
       ];
-
-      // Custom provider config — only include the API key when the user
-      // typed something OTHER than the mask placeholder (so submitting the
-      // mask preserves the existing stored secret).
-      if (spamProvider === 'custom') {
-        settings.push(
-          { key: 'comment_spam_provider_name', value: customProviderName, type: 'STRING', category: 'DISCUSSION' },
-          { key: 'comment_spam_api_endpoint', value: customApiEndpoint, type: 'URL', category: 'DISCUSSION' },
-          { key: 'comment_spam_enabled', value: String(customEnabled), type: 'BOOLEAN', category: 'DISCUSSION' },
-        );
-        if (customApiKey && customApiKey !== API_KEY_MASK) {
-          settings.push({ key: 'comment_spam_api_key', value: customApiKey, type: 'ENCRYPTED', category: 'DISCUSSION' });
-        }
-      }
-
-      // Akismet config — same mask-preservation logic.
-      if (spamProvider === 'akismet') {
-        settings.push(
-          { key: 'akismet_blog_url', value: akismetBlogUrl, type: 'URL', category: 'DISCUSSION' },
-        );
-        if (akismetApiKey && akismetApiKey !== API_KEY_MASK) {
-          settings.push({ key: 'akismet_api_key', value: akismetApiKey, type: 'ENCRYPTED', category: 'DISCUSSION' });
-        }
-      }
 
       return postApi('/api/settings', { settings });
     },
-    onSuccess: () => {
-      setDraft({});
+    onSuccess: (_, variables) => {
+      const activeComments = variables.commentsEnabled !== undefined ? variables.commentsEnabled : commentsEnabled;
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('cms_allow_comments', String(activeComments));
+      }
+
+      queryClient.setQueryData(['settings', 'discussion', 'comments-page'], (old: Record<string, string> | null) => ({
+        ...(old || {}),
+        enable_comments: String(activeComments),
+      }));
+
       queryClient.invalidateQueries({ queryKey: ['settings'] });
-      toast.success(t('comments.settingsSaved'));
+      toast.success(t('comments.settingsSaved') || 'Settings saved');
     },
-    onError: (err: Error) => toast.error(err.message || t('comments.settingsSaveFailed')),
+    onError: (err: Error) => {
+      if (settingsData) {
+        const isCommentsEnabled = settingsData.enable_comments !== 'false';
+        setLocalCommentsEnabled(isCommentsEnabled);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('cms_allow_comments', String(isCommentsEnabled));
+        }
+      }
+      toast.error(err.message || t('comments.settingsSaveFailed') || 'Failed to save settings');
+    },
   });
 
   if (isLoading) {
@@ -393,7 +354,6 @@ function CommentSettingsCard() {
         <div className="flex items-center gap-3">
           <Skeleton className="h-6 w-32" />
           <Skeleton className="h-6 w-40" />
-          <Skeleton className="h-6 w-48" />
         </div>
       </Card>
     );
@@ -401,198 +361,29 @@ function CommentSettingsCard() {
 
   return (
     <Card className="p-4">
-      {/* Top row — global comment settings */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        {/* Enable Comments */}
-        <div className="flex items-center gap-2">
-          <Switch
-            id="enable-comments"
-            checked={commentsEnabled}
-            onCheckedChange={(v) => setDraft((prev) => ({ ...prev, commentsEnabled: v }))}
-          />
+      {/* Global comment settings */}
+      <div className="flex items-start gap-3">
+        <Switch
+          id="enable-comments"
+          checked={commentsEnabled}
+          onCheckedChange={(v) => {
+            setLocalCommentsEnabled(v);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('cms_allow_comments', String(v));
+            }
+            saveMutation.mutate({ commentsEnabled: v });
+          }}
+          className="mt-0.5"
+        />
+        <div className="space-y-0.5">
           <Label htmlFor="enable-comments" className="text-sm font-medium cursor-pointer">
-            {t('comments.enableComments')}
+            {t('comments.allowComments') || 'Allow Comments'}
           </Label>
+          <p className="text-xs text-muted-foreground">
+            {t('comments.allowCommentsDesc') || 'Allow visitors to post comments on your articles.'}
+          </p>
         </div>
-
-        <Separator orientation="vertical" className="h-6 hidden sm:block" />
-
-        {/* Auto Spam Detection */}
-        <div className="flex items-center gap-2">
-          <Shield className="h-3.5 w-3.5 text-muted-foreground" />
-          <Switch
-            id="spam-detection"
-            checked={spamDetection}
-            onCheckedChange={(v) => setDraft((prev) => ({ ...prev, spamDetection: v }))}
-          />
-          <Label htmlFor="spam-detection" className="text-sm font-medium cursor-pointer">
-            {t('comments.autoSpamDetection')}
-          </Label>
-        </div>
-
-        {/* Spam Provider (conditional on spam detection being on) */}
-        {spamDetection && (
-          <div className="flex items-center gap-2">
-            <Label className="text-sm text-muted-foreground">{t('comments.provider')}</Label>
-            <Select
-              value={spamProvider}
-              onValueChange={(v) => setDraft((prev) => ({ ...prev, spamProvider: v }))}
-            >
-              <SelectTrigger size="sm" className="w-[120px] h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SPAM_PROVIDERS.map((p) => (
-                  <SelectItem key={p.value} value={p.value}>
-                    {p.value === 'none'
-                      ? t('comments.providerNone')
-                      : p.value === 'custom'
-                        ? t('comments.providerCustom')
-                        : t('comments.providerAkismet')}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {/* Save button — only visible when there are unsaved changes */}
-        <Button
-          size="sm"
-          className={cn('ml-auto', !isDirty && 'invisible')}
-          onClick={() => saveMutation.mutate()}
-          disabled={saveMutation.isPending}
-        >
-          {saveMutation.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-          ) : null}
-          {t('common.save')}
-        </Button>
       </div>
-
-      {/* ---------- Provider configuration sections ---------- */}
-
-      {/* Custom provider config — only when Provider = Custom */}
-      {spamDetection && spamProvider === 'custom' && (
-        <div className="mt-4 pt-4 border-t border-dashed">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold">{t('comments.customSpamProvider')}</h3>
-              {/* Helper text as a small info tooltip to keep the UI clean */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground transition-colors" onClick={(e) => e.preventDefault()}>
-                    <Info className="h-3.5 w-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs text-xs leading-relaxed">
-                  {t('comments.customEndpointHint')} {`{ "spam": true|false, "score": 0-100 }`}
-                </TooltipContent>
-              </Tooltip>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="custom-enabled" className="text-xs text-muted-foreground cursor-pointer">
-                {customEnabled ? t('comments.enabled') : t('comments.disabled')}
-              </Label>
-              <Switch
-                id="custom-enabled"
-                checked={customEnabled}
-                onCheckedChange={(v) => setDraft((prev) => ({ ...prev, customEnabled: v }))}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="custom-provider-name" className="text-xs font-medium">
-                {t('comments.providerName')}
-              </Label>
-              <Input
-                id="custom-provider-name"
-                value={customProviderName}
-                onChange={(e) => setDraft((prev) => ({ ...prev, customProviderName: e.target.value }))}
-                placeholder={t('comments.providerNamePlaceholder')}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="custom-api-endpoint" className="text-xs font-medium">
-                {t('comments.apiEndpoint')}
-              </Label>
-              <Input
-                id="custom-api-endpoint"
-                value={customApiEndpoint}
-                onChange={(e) => setDraft((prev) => ({ ...prev, customApiEndpoint: e.target.value }))}
-                placeholder="https://api.example.com/v1/spam-check"
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="custom-api-key" className="text-xs font-medium">
-                {t('comments.apiKey')}
-              </Label>
-              <Input
-                id="custom-api-key"
-                type="password"
-                value={customApiKey}
-                onChange={(e) => setDraft((prev) => ({ ...prev, customApiKey: e.target.value }))}
-                placeholder={hasSavedCustomApiKey ? API_KEY_MASK : t('comments.enterApiKey')}
-                className="h-8 text-sm"
-              />
-              {hasSavedCustomApiKey && !draft.customApiKey && (
-                <p className="text-[10px] text-muted-foreground">{t('comments.keepKeyPrefix')}{API_KEY_MASK}{t('comments.keepKeySuffix')}</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Akismet config — only when Provider = Akismet */}
-      {spamDetection && spamProvider === 'akismet' && (
-        <div className="mt-4 pt-4 border-t border-dashed">
-          <div className="flex items-center gap-2 mb-3">
-            <Shield className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-semibold">{t('comments.akismetConfiguration')}</h3>
-            <span className="text-[10px] text-muted-foreground">
-              {t('comments.getKeyAt')}{' '}
-              <a href="https://akismet.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                akismet.com
-              </a>
-            </span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="akismet-api-key" className="text-xs font-medium">
-                {t('comments.akismetApiKey')}
-              </Label>
-              <Input
-                id="akismet-api-key"
-                type="password"
-                value={akismetApiKey}
-                onChange={(e) => setDraft((prev) => ({ ...prev, akismetApiKey: e.target.value }))}
-                placeholder={hasSavedAkismetApiKey ? API_KEY_MASK : t('comments.enterAkismetKey')}
-                className="h-8 text-sm"
-              />
-              {hasSavedAkismetApiKey && !draft.akismetApiKey && (
-                <p className="text-[10px] text-muted-foreground">{t('comments.keepKeyPrefix')}{API_KEY_MASK}{t('comments.keepKeySuffix')}</p>
-              )}
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="akismet-blog-url" className="text-xs font-medium">
-                {t('comments.blogUrl')}
-              </Label>
-              <Input
-                id="akismet-blog-url"
-                value={akismetBlogUrl}
-                onChange={(e) => setDraft((prev) => ({ ...prev, akismetBlogUrl: e.target.value }))}
-                placeholder="https://yoursite.com"
-                className="h-8 text-sm"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* None — no config fields shown */}
     </Card>
   );
 }
@@ -627,6 +418,7 @@ export function CommentsPage() {
   const [sortField, setSortField] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<CommentRow | null>(null);
   const [expandedComments, setExpandedComments] = useState<Set<string>>(
@@ -638,13 +430,13 @@ export function CommentsPage() {
   const queryParams = useMemo(
     () => ({
       page: currentPage,
-      pageSize: DEFAULT_PAGE_SIZE,
+      pageSize,
       sort: sortField,
       order: sortOrder,
       search: searchValue || undefined,
       ...(statusTab !== 'all' ? { status: statusTab } : {}),
     }),
-    [currentPage, sortField, sortOrder, searchValue, statusTab],
+    [currentPage, pageSize, sortField, sortOrder, searchValue, statusTab],
   );
 
   // ---------- DEMO DATA STATE ----------
@@ -658,7 +450,14 @@ export function CommentsPage() {
   const { data, isLoading: apiIsLoading } = useQuery({
     queryKey: queryKeys.comments.list(queryParams),
     queryFn: () =>
-      getApi<PaginatedResponse<CommentRow>>('/api/comments', queryParams),
+      getApi<{
+        data: CommentRow[];
+        meta: {
+          requestId: string;
+          pagination: { page: number; pageSize: number; total: number; totalPages: number };
+          statusCounts: Record<string, number>;
+        };
+      }>('/api/comments', queryParams, { raw: true }),
     staleTime: 10_000,
     enabled: !USE_DEMO_DATA,
   });
@@ -703,19 +502,68 @@ export function CommentsPage() {
 
   // Paginate the filtered set (mirrors the API pagination shape).
   const demoTotalItems = filteredDemoComments.length;
-  const demoTotalPages = Math.max(1, Math.ceil(demoTotalItems / DEFAULT_PAGE_SIZE));
+  const demoTotalPages = Math.max(1, Math.ceil(demoTotalItems / pageSize));
   const demoPageItems = useMemo(() => {
-    const start = (currentPage - 1) * DEFAULT_PAGE_SIZE;
-    return filteredDemoComments.slice(start, start + DEFAULT_PAGE_SIZE);
-  }, [filteredDemoComments, currentPage]);
+    const start = (currentPage - 1) * pageSize;
+    return filteredDemoComments.slice(start, start + pageSize);
+  }, [filteredDemoComments, currentPage, pageSize]);
 
   // Decide which data the UI renders.
+  const apiComments: CommentRow[] = useMemo(() => {
+    if (Array.isArray(data)) return data as CommentRow[];
+    if (Array.isArray((data as unknown as { data?: CommentRow[] })?.data)) {
+      return (data as unknown as { data: CommentRow[] }).data;
+    }
+    return [];
+  }, [data]);
+
   const comments: CommentRow[] = USE_DEMO_DATA
-    ? demoPageItems as unknown as CommentRow[]
-    : (data?.data ?? []);
+    ? (demoPageItems as unknown as CommentRow[])
+    : apiComments;
   const isLoading = USE_DEMO_DATA ? false : apiIsLoading;
-  const totalItems = USE_DEMO_DATA ? demoTotalItems : (data?.pagination?.total ?? 0);
-  const totalPages = USE_DEMO_DATA ? demoTotalPages : (data?.pagination?.totalPages ?? 1);
+  const totalItems = USE_DEMO_DATA
+    ? demoTotalItems
+    : ((data as unknown as { pagination?: { total?: number } })?.pagination?.total ??
+       (data as unknown as { meta?: { pagination?: { total?: number } } })?.meta?.pagination?.total ??
+       apiComments.length);
+  const totalPages = USE_DEMO_DATA
+    ? demoTotalPages
+    : ((data as unknown as { pagination?: { totalPages?: number } })?.pagination?.totalPages ??
+       (data as unknown as { meta?: { pagination?: { totalPages?: number } } })?.meta?.pagination?.totalPages ??
+       Math.max(1, Math.ceil(totalItems / pageSize)));
+
+  // Helper to optimistically adjust meta.statusCounts in React Query cache
+  const adjustStatusCounts = useCallback(
+    (transitions: Array<{ fromStatus?: string; toStatus: string }>) => {
+      queryClient.setQueriesData({ queryKey: queryKeys.comments.all }, (old: any) => {
+        if (!old || !old.meta?.statusCounts) return old;
+        const newCounts = { ...old.meta.statusCounts };
+        for (const { fromStatus, toStatus } of transitions) {
+          if (fromStatus && fromStatus !== toStatus) {
+            if (newCounts[fromStatus] !== undefined) {
+              newCounts[fromStatus] = Math.max(0, newCounts[fromStatus] - 1);
+            }
+            if (newCounts[toStatus] !== undefined) {
+              newCounts[toStatus] = (newCounts[toStatus] || 0) + 1;
+            }
+            if (toStatus === 'TRASH' && fromStatus !== 'TRASH') {
+              newCounts.all = Math.max(0, (newCounts.all || 1) - 1);
+            } else if (fromStatus === 'TRASH' && toStatus !== 'TRASH') {
+              newCounts.all = (newCounts.all || 0) + 1;
+            }
+          }
+        }
+        return {
+          ...old,
+          meta: {
+            ...old.meta,
+            statusCounts: newCounts,
+          },
+        };
+      });
+    },
+    [queryClient],
+  );
 
   // ---------- Mutations ----------
   // Real API mutations — kept intact so flipping USE_DEMO_DATA to
@@ -723,32 +571,161 @@ export function CommentsPage() {
   const approveMutation = useMutation({
     mutationFn: (id: string) =>
       patchApi(`/api/comments/${id}`, { status: 'APPROVED' }),
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.comments.all });
+      const previous = queryClient.getQueriesData({ queryKey: queryKeys.comments.all });
+      const target = comments.find((c) => c.id === id);
+      adjustStatusCounts([{ fromStatus: target?.status, toStatus: 'APPROVED' }]);
+      queryClient.setQueriesData({ queryKey: queryKeys.comments.all }, (old: any) => {
+        if (!old) return old;
+        const updateRow = (r: CommentRow) => (r.id === id ? { ...r, status: 'APPROVED' as const } : r);
+        if (Array.isArray(old)) return old.map(updateRow);
+        if (Array.isArray(old.data)) return { ...old, data: old.data.map(updateRow) };
+        return old;
+      });
+      return { previous };
+    },
     onSuccess: () => {
+      toast.success(t('comments.toastApproved') || 'Comment approved');
       queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
+    },
+    onError: (err: Error, _id, context) => {
+      if (context?.previous) {
+        context.previous.forEach(([k, v]) => queryClient.setQueryData(k, v));
+      }
+      toast.error(err.message || 'Failed to approve comment');
     },
   });
 
   const rejectMutation = useMutation({
     mutationFn: (id: string) =>
       patchApi(`/api/comments/${id}`, { status: 'REJECTED' }),
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.comments.all });
+      const previous = queryClient.getQueriesData({ queryKey: queryKeys.comments.all });
+      const target = comments.find((c) => c.id === id);
+      adjustStatusCounts([{ fromStatus: target?.status, toStatus: 'REJECTED' }]);
+      queryClient.setQueriesData({ queryKey: queryKeys.comments.all }, (old: any) => {
+        if (!old) return old;
+        const updateRow = (r: CommentRow) => (r.id === id ? { ...r, status: 'REJECTED' as const } : r);
+        if (Array.isArray(old)) return old.map(updateRow);
+        if (Array.isArray(old.data)) return { ...old, data: old.data.map(updateRow) };
+        return old;
+      });
+      return { previous };
+    },
     onSuccess: () => {
+      toast.success(t('comments.toastRejected') || 'Comment rejected');
       queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
+    },
+    onError: (err: Error, _id, context) => {
+      if (context?.previous) {
+        context.previous.forEach(([k, v]) => queryClient.setQueryData(k, v));
+      }
+      toast.error(err.message || 'Failed to reject comment');
+    },
+  });
+
+  const unapproveMutation = useMutation({
+    mutationFn: (id: string) =>
+      patchApi(`/api/comments/${id}`, { status: 'PENDING' }),
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.comments.all });
+      const previous = queryClient.getQueriesData({ queryKey: queryKeys.comments.all });
+      const target = comments.find((c) => c.id === id);
+      adjustStatusCounts([{ fromStatus: target?.status, toStatus: 'PENDING' }]);
+      queryClient.setQueriesData({ queryKey: queryKeys.comments.all }, (old: any) => {
+        if (!old) return old;
+        const updateRow = (r: CommentRow) => (r.id === id ? { ...r, status: 'PENDING' as const } : r);
+        if (Array.isArray(old)) return old.map(updateRow);
+        if (Array.isArray(old.data)) return { ...old, data: old.data.map(updateRow) };
+        return old;
+      });
+      return { previous };
+    },
+    onSuccess: () => {
+      toast.success(t('comments.toastUnapproved') || 'Comment moved to pending');
+      queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
+    },
+    onError: (err: Error, _id, context) => {
+      if (context?.previous) {
+        context.previous.forEach(([k, v]) => queryClient.setQueryData(k, v));
+      }
+      toast.error(err.message || 'Failed to update comment');
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteApi(`/api/comments/${id}`),
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.comments.all });
+      const previous = queryClient.getQueriesData({ queryKey: queryKeys.comments.all });
+      const target = comments.find((c) => c.id === id);
+      queryClient.setQueriesData({ queryKey: queryKeys.comments.all }, (old: any) => {
+        if (!old) return old;
+        const newCounts = { ...(old.meta?.statusCounts || {}) };
+        const status = target?.status;
+        if (status && newCounts[status] !== undefined) {
+          newCounts[status] = Math.max(0, newCounts[status] - 1);
+        }
+        if (status && status !== 'TRASH') {
+          newCounts.all = Math.max(0, (newCounts.all || 1) - 1);
+        }
+        const filterRow = (r: CommentRow) => r.id !== id;
+        if (Array.isArray(old)) return old.filter(filterRow);
+        if (Array.isArray(old.data)) {
+          return {
+            ...old,
+            data: old.data.filter(filterRow),
+            meta: {
+              ...old.meta,
+              statusCounts: newCounts,
+            },
+          };
+        }
+        return old;
+      });
+      return { previous };
+    },
     onSuccess: () => {
+      toast.success(t('comments.toastDeleted') || 'Comment deleted');
       queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
       setDeleteTarget(null);
+    },
+    onError: (err: Error, _id, context) => {
+      if (context?.previous) {
+        context.previous.forEach(([k, v]) => queryClient.setQueryData(k, v));
+      }
+      toast.error(err.message || 'Failed to delete comment');
     },
   });
 
   const markSpamMutation = useMutation({
     mutationFn: (id: string) =>
       patchApi(`/api/comments/${id}`, { status: 'SPAM' }),
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.comments.all });
+      const previous = queryClient.getQueriesData({ queryKey: queryKeys.comments.all });
+      const target = comments.find((c) => c.id === id);
+      adjustStatusCounts([{ fromStatus: target?.status, toStatus: 'SPAM' }]);
+      queryClient.setQueriesData({ queryKey: queryKeys.comments.all }, (old: any) => {
+        if (!old) return old;
+        const updateRow = (r: CommentRow) => (r.id === id ? { ...r, status: 'SPAM' as const } : r);
+        if (Array.isArray(old)) return old.map(updateRow);
+        if (Array.isArray(old.data)) return { ...old, data: old.data.map(updateRow) };
+        return old;
+      });
+      return { previous };
+    },
     onSuccess: () => {
+      toast.success(t('comments.toastMarkedSpam') || 'Comment marked as spam');
       queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
+    },
+    onError: (err: Error, _id, context) => {
+      if (context?.previous) {
+        context.previous.forEach(([k, v]) => queryClient.setQueryData(k, v));
+      }
+      toast.error(err.message || 'Failed to mark comment as spam');
     },
   });
 
@@ -763,62 +740,244 @@ export function CommentsPage() {
   const trashMutation = useMutation({
     mutationFn: (id: string) =>
       patchApi(`/api/comments/${id}`, { status: 'TRASH' as CommentStatus }),
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.comments.all });
+      const previous = queryClient.getQueriesData({ queryKey: queryKeys.comments.all });
+      const target = comments.find((c) => c.id === id);
+      adjustStatusCounts([{ fromStatus: target?.status, toStatus: 'TRASH' }]);
+      queryClient.setQueriesData({ queryKey: queryKeys.comments.all }, (old: any) => {
+        if (!old) return old;
+        const updateRow = (r: CommentRow) => (r.id === id ? { ...r, status: 'TRASH' as any } : r);
+        if (Array.isArray(old)) return old.map(updateRow);
+        if (Array.isArray(old.data)) return { ...old, data: old.data.map(updateRow) };
+        return old;
+      });
+      return { previous };
+    },
     onSuccess: () => {
+      toast.success(t('comments.toastTrashed') || 'Comment moved to trash');
       queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
+    },
+    onError: (err: Error, _id, context) => {
+      if (context?.previous) {
+        context.previous.forEach(([k, v]) => queryClient.setQueryData(k, v));
+      }
+      toast.error(err.message || 'Failed to move comment to trash');
     },
   });
 
-  // Restore = move a trashed comment back to Pending.
+  // Restore = restore comment directly to APPROVED.
   const restoreMutation = useMutation({
     mutationFn: (id: string) =>
-      patchApi(`/api/comments/${id}`, { status: 'PENDING' }),
+      patchApi(`/api/comments/${id}`, { status: 'APPROVED' }),
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.comments.all });
+      const previous = queryClient.getQueriesData({ queryKey: queryKeys.comments.all });
+      const target = comments.find((c) => c.id === id);
+      adjustStatusCounts([{ fromStatus: target?.status ?? 'TRASH', toStatus: 'APPROVED' }]);
+      queryClient.setQueriesData({ queryKey: queryKeys.comments.all }, (old: any) => {
+        if (!old) return old;
+        const updateRow = (r: CommentRow) => (r.id === id ? { ...r, status: 'APPROVED' as const } : r);
+        if (Array.isArray(old)) return old.map(updateRow);
+        if (Array.isArray(old.data)) return { ...old, data: old.data.map(updateRow) };
+        return old;
+      });
+      return { previous };
+    },
     onSuccess: () => {
+      toast.success(t('comments.toastRestored') || 'Comment restored');
       queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
+    },
+    onError: (err: Error, _id, context) => {
+      if (context?.previous) {
+        context.previous.forEach(([k, v]) => queryClient.setQueryData(k, v));
+      }
+      toast.error(err.message || 'Failed to restore comment');
     },
   });
 
   const bulkApproveMutation = useMutation({
     mutationFn: (ids: string[]) =>
       patchApi('/api/comments/bulk-status', { ids, status: 'APPROVED' }),
-    onSuccess: () => {
+    onMutate: async (ids: string[]) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.comments.all });
+      const previous = queryClient.getQueriesData({ queryKey: queryKeys.comments.all });
+      const transitions = ids.map((id) => {
+        const comment = comments.find((c) => c.id === id);
+        return { fromStatus: comment?.status, toStatus: 'APPROVED' };
+      });
+      adjustStatusCounts(transitions);
+      queryClient.setQueriesData({ queryKey: queryKeys.comments.all }, (old: any) => {
+        if (!old) return old;
+        const idSet = new Set(ids);
+        const updateRow = (r: CommentRow) => (idSet.has(r.id) ? { ...r, status: 'APPROVED' as const } : r);
+        if (Array.isArray(old)) return old.map(updateRow);
+        if (Array.isArray(old.data)) return { ...old, data: old.data.map(updateRow) };
+        return old;
+      });
+      return { previous };
+    },
+    onSuccess: (_, ids) => {
+      toast.success(ids.length === 1 ? t('comments.bulkApprovedSingular') : `${ids.length} ${t('comments.bulkApprovedPlural')}`);
       queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
       setSelectedIds(new Set());
+    },
+    onError: (err: Error, _ids, context) => {
+      if (context?.previous) {
+        context.previous.forEach(([k, v]) => queryClient.setQueryData(k, v));
+      }
+      toast.error(err.message || 'Failed to approve comments');
     },
   });
 
   const bulkRejectMutation = useMutation({
     mutationFn: (ids: string[]) =>
       patchApi('/api/comments/bulk-status', { ids, status: 'REJECTED' }),
-    onSuccess: () => {
+    onMutate: async (ids: string[]) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.comments.all });
+      const previous = queryClient.getQueriesData({ queryKey: queryKeys.comments.all });
+      const transitions = ids.map((id) => {
+        const comment = comments.find((c) => c.id === id);
+        return { fromStatus: comment?.status, toStatus: 'REJECTED' };
+      });
+      adjustStatusCounts(transitions);
+      queryClient.setQueriesData({ queryKey: queryKeys.comments.all }, (old: any) => {
+        if (!old) return old;
+        const idSet = new Set(ids);
+        const updateRow = (r: CommentRow) => (idSet.has(r.id) ? { ...r, status: 'REJECTED' as const } : r);
+        if (Array.isArray(old)) return old.map(updateRow);
+        if (Array.isArray(old.data)) return { ...old, data: old.data.map(updateRow) };
+        return old;
+      });
+      return { previous };
+    },
+    onSuccess: (_, ids) => {
+      toast.success(ids.length === 1 ? t('comments.bulkRejectedSingular') : `${ids.length} ${t('comments.bulkRejectedPlural')}`);
       queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
       setSelectedIds(new Set());
+    },
+    onError: (err: Error, _ids, context) => {
+      if (context?.previous) {
+        context.previous.forEach(([k, v]) => queryClient.setQueryData(k, v));
+      }
+      toast.error(err.message || 'Failed to reject comments');
     },
   });
 
   const bulkSpamMutation = useMutation({
     mutationFn: (ids: string[]) =>
       patchApi('/api/comments/bulk-status', { ids, status: 'SPAM' }),
-    onSuccess: () => {
+    onMutate: async (ids: string[]) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.comments.all });
+      const previous = queryClient.getQueriesData({ queryKey: queryKeys.comments.all });
+      const transitions = ids.map((id) => {
+        const comment = comments.find((c) => c.id === id);
+        return { fromStatus: comment?.status, toStatus: 'SPAM' };
+      });
+      adjustStatusCounts(transitions);
+      queryClient.setQueriesData({ queryKey: queryKeys.comments.all }, (old: any) => {
+        if (!old) return old;
+        const idSet = new Set(ids);
+        const updateRow = (r: CommentRow) => (idSet.has(r.id) ? { ...r, status: 'SPAM' as const } : r);
+        if (Array.isArray(old)) return old.map(updateRow);
+        if (Array.isArray(old.data)) return { ...old, data: old.data.map(updateRow) };
+        return old;
+      });
+      return { previous };
+    },
+    onSuccess: (_, ids) => {
+      toast.success(ids.length === 1 ? t('comments.bulkSpamSingular') : `${ids.length} ${t('comments.bulkSpamPlural')}`);
       queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
       setSelectedIds(new Set());
+    },
+    onError: (err: Error, _ids, context) => {
+      if (context?.previous) {
+        context.previous.forEach(([k, v]) => queryClient.setQueryData(k, v));
+      }
+      toast.error(err.message || 'Failed to mark comments as spam');
     },
   });
 
   const bulkTrashMutation = useMutation({
     mutationFn: (ids: string[]) =>
       patchApi('/api/comments/bulk-status', { ids, status: 'TRASH' as CommentStatus }),
-    onSuccess: () => {
+    onMutate: async (ids: string[]) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.comments.all });
+      const previous = queryClient.getQueriesData({ queryKey: queryKeys.comments.all });
+      const transitions = ids.map((id) => {
+        const comment = comments.find((c) => c.id === id);
+        return { fromStatus: comment?.status, toStatus: 'TRASH' };
+      });
+      adjustStatusCounts(transitions);
+      queryClient.setQueriesData({ queryKey: queryKeys.comments.all }, (old: any) => {
+        if (!old) return old;
+        const idSet = new Set(ids);
+        const updateRow = (r: CommentRow) => (idSet.has(r.id) ? { ...r, status: 'TRASH' as any } : r);
+        if (Array.isArray(old)) return old.map(updateRow);
+        if (Array.isArray(old.data)) return { ...old, data: old.data.map(updateRow) };
+        return old;
+      });
+      return { previous };
+    },
+    onSuccess: (_, ids) => {
+      toast.success(ids.length === 1 ? t('comments.bulkTrashSingular') : `${ids.length} ${t('comments.bulkTrashPlural')}`);
       queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
       setSelectedIds(new Set());
+    },
+    onError: (err: Error, _ids, context) => {
+      if (context?.previous) {
+        context.previous.forEach(([k, v]) => queryClient.setQueryData(k, v));
+      }
+      toast.error(err.message || 'Failed to move comments to trash');
     },
   });
 
   const bulkDeleteMutation = useMutation({
     mutationFn: (ids: string[]) =>
       Promise.all(ids.map((id) => deleteApi(`/api/comments/${id}`))),
-    onSuccess: () => {
+    onMutate: async (ids: string[]) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.comments.all });
+      const previous = queryClient.getQueriesData({ queryKey: queryKeys.comments.all });
+      const idSet = new Set(ids);
+      queryClient.setQueriesData({ queryKey: queryKeys.comments.all }, (old: any) => {
+        if (!old) return old;
+        const newCounts = { ...(old.meta?.statusCounts || {}) };
+        for (const id of ids) {
+          const comment = comments.find((c) => c.id === id);
+          const status = comment?.status;
+          if (status && newCounts[status] !== undefined) {
+            newCounts[status] = Math.max(0, newCounts[status] - 1);
+          }
+          if (status && status !== 'TRASH') {
+            newCounts.all = Math.max(0, (newCounts.all || 1) - 1);
+          }
+        }
+        const filterRow = (r: CommentRow) => !idSet.has(r.id);
+        if (Array.isArray(old)) return old.filter(filterRow);
+        if (Array.isArray(old.data)) {
+          return {
+            ...old,
+            data: old.data.filter(filterRow),
+            meta: {
+              ...old.meta,
+              statusCounts: newCounts,
+            },
+          };
+        }
+        return old;
+      });
+      return { previous };
+    },
+    onSuccess: (_, ids) => {
+      toast.success(ids.length === 1 ? t('comments.bulkDeleteSingular') : `${ids.length} ${t('comments.bulkDeletePlural')}`);
       queryClient.invalidateQueries({ queryKey: queryKeys.comments.all });
       setSelectedIds(new Set());
+    },
+    onError: (err: Error, _ids, context) => {
+      if (context?.previous) {
+        context.previous.forEach(([k, v]) => queryClient.setQueryData(k, v));
+      }
+      toast.error(err.message || 'Failed to delete comments');
     },
   });
 
@@ -865,6 +1024,18 @@ export function CommentsPage() {
       }
     },
     [rejectMutation, updateDemoStatus, t],
+  );
+
+  const handleUnapprove = useCallback(
+    (id: string) => {
+      if (USE_DEMO_DATA) {
+        updateDemoStatus(id, 'PENDING');
+        toast.success(t('comments.toastUnapproved') || 'Comment moved to pending');
+      } else {
+        unapproveMutation.mutate(id);
+      }
+    },
+    [unapproveMutation, updateDemoStatus, t],
   );
 
   const handleMarkSpam = useCallback(
@@ -916,12 +1087,11 @@ export function CommentsPage() {
     [deleteMutation, removeDemoComment, t],
   );
 
-  // Restore a trashed comment back to Pending (the previous status is not
-  // tracked, so Pending is the safe default — moderators can re-classify).
+  // Restore a comment back to Approved.
   const handleRestore = useCallback(
     (id: string) => {
       if (USE_DEMO_DATA) {
-        updateDemoStatus(id, 'PENDING');
+        updateDemoStatus(id, 'APPROVED');
         toast.success(t('comments.toastRestored'));
       } else {
         restoreMutation.mutate(id);
@@ -1059,6 +1229,24 @@ export function CommentsPage() {
     setSelectedIds(new Set());
   }, []);
 
+  // Status-aware bulk actions based on selected comments
+  const selectedComments = useMemo(() => {
+    return comments.filter((c) => selectedIds.has(c.id));
+  }, [comments, selectedIds]);
+
+  const canBulkApprove = selectedComments.length > 0 && selectedComments.every((c) => c.status !== 'APPROVED');
+  const canBulkReject = selectedComments.length > 0 && selectedComments.every((c) => c.status === 'APPROVED' || (c.status as string) === 'PENDING');
+  const canBulkSpam = selectedComments.length > 0 && selectedComments.every((c) => c.status !== 'SPAM' && c.status !== 'TRASH');
+  const canBulkTrash = selectedComments.length > 0 && selectedComments.every((c) => c.status !== 'TRASH');
+  const canBulkDelete = selectedComments.length > 0;
+
+  const allSelectedTrash = selectedComments.length > 0 && selectedComments.every((c) => c.status === 'TRASH');
+  const allSelectedSpam = selectedComments.length > 0 && selectedComments.every((c) => c.status === 'SPAM');
+  const allSelectedPending = selectedComments.length > 0 && selectedComments.every((c) => c.status === 'PENDING');
+  const approveLabel = allSelectedTrash
+    ? (t('comments.restore') || 'Restore')
+    : (t('comments.approve') || 'Approve');
+
   // Pagination helpers
   const pageStart = totalItems === 0 ? 0 : (currentPage - 1) * DEFAULT_PAGE_SIZE + 1;
   const pageEnd = Math.min(currentPage * DEFAULT_PAGE_SIZE, totalItems);
@@ -1068,13 +1256,11 @@ export function CommentsPage() {
     if (searchValue) return t('comments.emptySearch');
     switch (statusTab) {
       case 'PENDING':
-        return t('comments.emptyPending');
+        return t('comments.emptyPending') || 'No pending comments to review.';
       case 'APPROVED':
         return t('comments.emptyApproved');
       case 'REJECTED':
         return t('comments.emptyRejected');
-      case 'FLAGGED':
-        return t('comments.emptyFlagged');
       case 'SPAM':
         return t('comments.emptySpam');
       case 'TRASH':
@@ -1136,44 +1322,37 @@ export function CommentsPage() {
         {/* Comment Settings (inline — moved from Discussion settings) */}
         <CommentSettingsCard />
 
-        {/* Search + Sort Bar */}
+        {/* Search + Filter + Sort Bar */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder={t('comments.searchPlaceholder')}
+              placeholder={t('comments.searchPlaceholder') || 'Search by author, content or email...'}
               value={searchValue}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-9 h-9"
             />
           </div>
-          <Select value={sortField} onValueChange={handleSortChange}>
-            <SelectTrigger size="sm" className="w-[140px]">
+          <Select
+            value={`${sortField}_${sortOrder}`}
+            onValueChange={(val) => {
+              const [field, order] = val.split('_');
+              setSortField(field);
+              setSortOrder(order as 'asc' | 'desc');
+              setCurrentPage(1);
+            }}
+          >
+            <SelectTrigger className="h-9 w-full sm:w-[130px] shrink-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {SORT_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
-                  <span className="flex items-center gap-2">
-                    {opt.value === 'createdAt' ? t('comments.sortDate') : t('comments.sortContent')}
-                    {sortField === opt.value && (
-                      <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
-                    )}
-                  </span>
+                  {t(opt.labelKey) || opt.defaultLabel}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 gap-1.5"
-            onClick={() => {
-              setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
-            }}
-          >
-            {sortOrder === 'desc' ? t('comments.newest') : t('comments.oldest')}
-          </Button>
         </div>
 
         {/* Custom Status Filter Tabs — each tab shows its live count */}
@@ -1183,9 +1362,13 @@ export function CommentsPage() {
         >
           {STATUS_TABS.map((tab) => {
             const isActive = statusTab === tab.value;
+            const apiStatusCounts = (data as unknown as { meta?: { statusCounts?: Record<string, number> } })?.meta?.statusCounts;
             const count = USE_DEMO_DATA
               ? (statusCounts[tab.value as DemoCommentStatus | 'all'] ?? 0)
-              : 0; // In API mode the count would come from the server.
+              : (apiStatusCounts?.[tab.value] ??
+                  (tab.value === 'all'
+                    ? totalItems
+                    : comments.filter((c) => c.status === tab.value).length));
             return (
               <button
                 key={tab.value}
@@ -1203,18 +1386,16 @@ export function CommentsPage() {
                 {STATUS_LABEL_KEYS[tab.value]
                   ? t(STATUS_LABEL_KEYS[tab.value])
                   : tab.label}
-                {USE_DEMO_DATA && (
-                  <span
-                    className={cn(
-                      'inline-flex items-center justify-center rounded-full px-1.5 min-w-[1.25rem] h-5 text-[11px] font-semibold leading-none',
-                      isActive
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground',
-                    )}
-                  >
-                    {count}
-                  </span>
-                )}
+                <span
+                  className={cn(
+                    'inline-flex items-center justify-center rounded-full px-1.5 min-w-[1.25rem] h-5 text-[11px] font-semibold leading-none',
+                    isActive
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground',
+                  )}
+                >
+                  {count}
+                </span>
                 {isActive && (
                   <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-primary" />
                 )}
@@ -1244,20 +1425,22 @@ export function CommentsPage() {
           ) : (
             <div>
               {/* Select all header */}
-              <div className="flex items-center gap-3 px-4 py-2 border-b bg-muted/20">
-                <Checkbox
-                  checked={
-                    comments.length > 0 &&
-                    selectedIds.size === comments.length
-                  }
-                  onCheckedChange={toggleSelectAll}
-                  aria-label={t('comments.selectAllAria')}
-                />
-                <span className="text-xs text-muted-foreground">
-                  {selectedIds.size > 0
-                    ? `${selectedIds.size} ${t('comments.selectedCount')}`
-                    : `${totalItems} ${totalItems !== 1 ? t('comments.commentsPlural') : t('comments.commentSingular')}`}
-                </span>
+              <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/20">
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    checked={
+                      comments.length > 0 &&
+                      selectedIds.size === comments.length
+                    }
+                    onCheckedChange={toggleSelectAll}
+                    aria-label={t('comments.selectAllAria')}
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {selectedIds.size > 0
+                      ? `${selectedIds.size} ${t('comments.selectedCount')}`
+                      : `${totalItems} ${totalItems !== 1 ? t('comments.commentsPlural') : t('comments.commentSingular')}`}
+                  </span>
+                </div>
               </div>
 
               {/* Comment Cards — natural page scroll (no nested scrollbar) */}
@@ -1265,29 +1448,11 @@ export function CommentsPage() {
                 {comments.map((comment) => {
                   const isSelected = selectedIds.has(comment.id);
                   const isHovered = hoveredId === comment.id;
-                  const isFlagged = comment.status === 'FLAGGED';
+                  const isApproved = comment.status === 'APPROVED';
+                  const isRejected = comment.status === 'REJECTED';
                   const isSpam = comment.status === 'SPAM';
                   const isTrashed = comment.status === 'TRASH';
                   const isExpanded = expandedComments.has(comment.id);
-
-                  // Compute which secondary actions belong in the More dropdown
-                  // for this status. The dropdown is only rendered if at least
-                  // one item exists — no empty "..." menus.
-                  // Note: "Unflag (Approve)" is NOT in the More dropdown because
-                  // the Approve hover button already handles unflagging for
-                  // flagged comments (approving a flagged comment = unflagging).
-                  const showFlagInMore = !isFlagged && comment.status !== 'TRASH';
-                  const showMarkSpamInMore = comment.status !== 'SPAM' && comment.status !== 'TRASH';
-                  const showMoveToTrashInMore = comment.status !== 'TRASH';
-                  const showDeleteInMore =
-                    comment.status !== 'REJECTED' &&
-                    comment.status !== 'SPAM' &&
-                    comment.status !== 'TRASH';
-                  const hasMoreActions =
-                    showFlagInMore ||
-                    showMarkSpamInMore ||
-                    showMoveToTrashInMore ||
-                    showDeleteInMore;
 
                   return (
                     <div
@@ -1295,7 +1460,6 @@ export function CommentsPage() {
                       className={cn(
                         'flex items-start gap-3 px-4 py-3 border-b last:border-b-0 transition-colors hover:bg-muted/30',
                         isSpam && 'bg-red-50/40 dark:bg-red-900/5',
-                        isFlagged && 'bg-orange-50/40 dark:bg-orange-900/5',
                         isTrashed && 'opacity-60',
                       )}
                       onMouseEnter={() => setHoveredId(comment.id)}
@@ -1353,141 +1517,97 @@ export function CommentsPage() {
                         </div>
                       </div>
 
-                      {/* Actions — contextual per comment status.
-                          All actions are available directly; no drawer/modal. */}
-                      <div
-                        className={cn(
-                          'flex items-center gap-0.5 shrink-0 transition-opacity',
-                          isHovered || isSelected ? 'opacity-100' : 'opacity-0',
-                        )}
-                      >
-                        {/* Approve — for Pending, Rejected, Flagged, Spam (not Approved/Trash) */}
-                        {comment.status !== 'APPROVED' &&
-                          comment.status !== 'TRASH' && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                                onClick={() => handleApprove(comment.id)}
-                              >
-                                <Check className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {isSpam ? t('comments.notSpamApprove') : t('comments.approve')}
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-
-                        {/* Reject — for Pending, Approved (not Rejected/Flagged/Spam/Trash)
-                            Flagged uses Approve to unflag, not Reject. */}
-                        {(comment.status === 'PENDING' ||
-                          comment.status === 'APPROVED') && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                onClick={() => handleReject(comment.id)}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {comment.status === 'APPROVED' ? t('comments.unapprove') : t('comments.reject')}
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-
-                        {/* Restore — for Trash only */}
-                        {comment.status === 'TRASH' && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                                onClick={() => handleRestore(comment.id)}
-                              >
-                                <RotateCcw className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>{t('comments.restore')}</TooltipContent>
-                          </Tooltip>
-                        )}
-
-                        {/* Delete Permanently — for Rejected, Spam, Trash */}
-                        {(comment.status === 'REJECTED' ||
-                          comment.status === 'SPAM' ||
-                          comment.status === 'TRASH') && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                onClick={() => setDeleteTarget(comment)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>{t('comments.deletePermanently')}</TooltipContent>
-                          </Tooltip>
-                        )}
-
-                        {/* More dropdown — only rendered when there are
-                            secondary actions that aren't already hover buttons.
-                            Trash comments have Restore + Delete as hover buttons
-                            and NO secondary actions, so no "..." menu appears. */}
-                        {hasMoreActions && (
+                      {/* Actions — status-aware More menu */}
+                      <div className="flex items-center shrink-0">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            >
                               <MoreHorizontal className="h-4 w-4" />
-                              <span className="sr-only">{t('comments.moreActions')}</span>
+                              <span className="sr-only">{t('comments.moreActions') || 'Actions'}</span>
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48">
-                            {/* Flag for Review */}
-                            {showFlagInMore && (
-                              <DropdownMenuItem onClick={() => handleFlag(comment.id)}>
-                                <FlagIcon className="h-4 w-4 mr-2" />
-                                {t('comments.flagForReview')}
+                          <DropdownMenuContent align="end" className="w-52">
+                            {/* Restore / Approve (valid on REJECTED, SPAM, TRASH) */}
+                            {!isApproved && (
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isTrashed) {
+                                    handleRestore(comment.id);
+                                  } else {
+                                    handleApprove(comment.id);
+                                  }
+                                }}
+                                className="text-emerald-600 focus:text-emerald-600 focus:bg-emerald-50 dark:focus:bg-emerald-950/30 cursor-pointer"
+                              >
+                                <Check className="h-4 w-4 mr-2" />
+                                {isTrashed
+                                  ? (t('comments.restore') || 'Restore')
+                                  : (t('comments.approve') || 'Approve')}
                               </DropdownMenuItem>
                             )}
-                            {/* Mark as Spam */}
-                            {showMarkSpamInMore && (
-                              <DropdownMenuItem onClick={() => handleMarkSpam(comment.id)}>
+
+                            {/* Reject (valid on APPROVED and legacy PENDING) */}
+                            {(isApproved || (comment.status as string) === 'PENDING') && (
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleReject(comment.id);
+                                }}
+                                className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/30 cursor-pointer"
+                              >
+                                <X className="h-4 w-4 mr-2" />
+                                {t('comments.reject') || 'Reject'}
+                              </DropdownMenuItem>
+                            )}
+
+                            {/* Mark as Spam (valid on APPROVED, REJECTED, and PENDING) */}
+                            {!isSpam && !isTrashed && (
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMarkSpam(comment.id);
+                                }}
+                                className="cursor-pointer"
+                              >
                                 <Flag className="h-4 w-4 mr-2" />
-                                {t('comments.markAsSpam')}
+                                {t('comments.markAsSpam') || 'Mark as Spam'}
                               </DropdownMenuItem>
                             )}
-                            {/* Move to Trash */}
-                            {showMoveToTrashInMore && (
-                              <DropdownMenuItem onClick={() => handleMoveToTrash(comment.id)}>
+
+                            {/* Move to Trash (valid on APPROVED, REJECTED, SPAM, and PENDING) */}
+                            {!isTrashed && (
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMoveToTrash(comment.id);
+                                }}
+                                className="cursor-pointer"
+                              >
                                 <Archive className="h-4 w-4 mr-2" />
-                                {t('comments.moveToTrash')}
+                                {t('comments.moveToTrash') || 'Move to Trash'}
                               </DropdownMenuItem>
                             )}
-                            {/* Delete Permanently */}
-                            {showDeleteInMore && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  onClick={() => setDeleteTarget(comment)}
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  {t('comments.deletePermanently')}
-                                </DropdownMenuItem>
-                              </>
-                            )}
+
+                            {/* Delete (valid on ALL) */}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteTarget(comment);
+                              }}
+                              className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/30"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              {t('common.delete') || 'Delete'}
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                        )}
                       </div>
                     </div>
                   );
@@ -1496,83 +1616,59 @@ export function CommentsPage() {
             </div>
           )}
 
-          {/* Pagination */}
+          {/* Pagination matching Image 2 & 3 */}
           {!isLoading && comments.length > 0 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t">
-              <p className="text-sm text-muted-foreground">
-                {t('common.showing')} {pageStart} {t('comments.toText')} {pageEnd} {t('common.of')} {totalItems}
-              </p>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={currentPage <= 1}
-                  onClick={() => setCurrentPage(1)}
-                >
-                  <ChevronsLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={currentPage <= 1}
-                  onClick={() => setCurrentPage((p) => p - 1)}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter(
-                    (p) =>
-                      p === 1 ||
-                      p === totalPages ||
-                      Math.abs(p - currentPage) <= 1,
-                  )
-                  .reduce<(number | string)[]>((acc, page, idx, arr) => {
-                    if (idx > 0 && page - (arr[idx - 1] as number) > 1) {
-                      acc.push('...');
-                    }
-                    acc.push(page);
-                    return acc;
-                  }, [])
-                  .map((item, idx) =>
-                    typeof item === 'string' ? (
-                      <span
-                        key={`ellipsis-${idx}`}
-                        className="px-1 text-muted-foreground text-sm"
-                      >
-                        ...
-                      </span>
-                    ) : (
-                      <Button
-                        key={item}
-                        variant={currentPage === item ? 'default' : 'outline'}
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setCurrentPage(item)}
-                      >
-                        {item}
-                      </Button>
-                    ),
-                  )}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage((p) => p + 1)}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage(totalPages)}
-                >
-                  <ChevronsRight className="h-4 w-4" />
-                </Button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-t">
+              <div className="text-xs text-muted-foreground">
+                {t('app.showingRange') || 'Showing'} {totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalItems)} {t('app.showingRangeOf') || 'of'} {totalItems} {t('app.showingRangeItems') || 'items'}
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">{t('app.rows') || 'Rows'}</span>
+                  <Select
+                    value={String(pageSize)}
+                    onValueChange={(v) => {
+                      setPageSize(Number(v));
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <SelectTrigger size="sm" className="w-[70px] h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAGE_SIZES.map((size) => (
+                        <SelectItem key={size} value={String(size)}>
+                          {size}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage <= 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    <span className="sr-only">{t('app.previousPage') || 'Previous'}</span>
+                  </Button>
+                  <span className="text-xs text-muted-foreground min-w-[60px] text-center">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage >= totalPages}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                    <span className="sr-only">{t('app.nextPage') || 'Next'}</span>
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -1580,65 +1676,71 @@ export function CommentsPage() {
 
         {/* Bulk Actions Bar */}
         {selectedIds.size > 0 && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-wrap items-center gap-2 rounded-xl border bg-card px-4 py-2.5 shadow-lg animate-in fade-in-0 slide-in-from-bottom-4 max-w-[calc(100vw-2rem)]">
-            <span className="text-sm font-medium whitespace-nowrap">
-              {selectedIds.size} {t('comments.selectedCount')}
-            </span>
-            <div className="w-px h-5 bg-border" />
-            <Button
-              size="sm"
-              className="h-8 gap-1.5"
-              onClick={() => handleBulkApprove(Array.from(selectedIds))}
-            >
-              <Check className="h-3.5 w-3.5 text-emerald-100" />
-              {t('comments.approve')}
-            </Button>
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-xl border bg-card px-4 py-2.5 shadow-lg animate-in fade-in-0 slide-in-from-bottom-4 max-w-[calc(100vw-2rem)]">
+            {canBulkApprove && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5"
+                onClick={() => handleBulkApprove(Array.from(selectedIds))}
+              >
+                <Check className="h-3.5 w-3.5 text-emerald-600" />
+                {approveLabel}
+              </Button>
+            )}
+            {canBulkReject && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5"
+                onClick={() => handleBulkReject(Array.from(selectedIds))}
+              >
+                <X className="h-3.5 w-3.5 text-red-600" />
+                {t('comments.reject') || 'Reject'}
+              </Button>
+            )}
+            {canBulkSpam && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5"
+                onClick={() => handleBulkSpam(Array.from(selectedIds))}
+              >
+                <Flag className="h-3.5 w-3.5 text-purple-600" />
+                <span className="hidden sm:inline">{t('comments.markAsSpam') || 'Mark as Spam'}</span>
+                <span className="sm:hidden">{t('comments.spam') || 'Spam'}</span>
+              </Button>
+            )}
+            {canBulkTrash && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5"
+                onClick={() => handleBulkTrash(Array.from(selectedIds))}
+              >
+                <Archive className="h-3.5 w-3.5 text-orange-600" />
+                <span className="hidden sm:inline">{t('comments.moveToTrash') || 'Move to Trash'}</span>
+                <span className="sm:hidden">{t('comments.trash') || 'Trash'}</span>
+              </Button>
+            )}
+            {canBulkDelete && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-destructive hover:text-destructive"
+                onClick={() => handleBulkDelete(Array.from(selectedIds))}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {t('common.delete') || 'Delete'}
+              </Button>
+            )}
             <Button
               size="sm"
               variant="outline"
               className="h-8 gap-1.5"
-              onClick={() => handleBulkReject(Array.from(selectedIds))}
-            >
-              <X className="h-3.5 w-3.5 text-red-600" />
-              {t('comments.reject')}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 gap-1.5"
-              onClick={() => handleBulkSpam(Array.from(selectedIds))}
-            >
-              <Flag className="h-3.5 w-3.5 text-purple-600" />
-              <span className="hidden sm:inline">{t('comments.markAsSpam')}</span>
-              <span className="sm:hidden">{t('comments.spam')}</span>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 gap-1.5"
-              onClick={() => handleBulkTrash(Array.from(selectedIds))}
-            >
-              <Archive className="h-3.5 w-3.5 text-orange-600" />
-              <span className="hidden sm:inline">{t('comments.moveToTrash')}</span>
-              <span className="sm:hidden">{t('comments.trash')}</span>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 gap-1.5 text-destructive hover:text-destructive"
-              onClick={() => handleBulkDelete(Array.from(selectedIds))}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              {t('common.delete')}
-            </Button>
-            <div className="w-px h-5 bg-border hidden sm:block" />
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8"
               onClick={clearSelection}
             >
-              {t('comments.clear')}
+              {t('common.cancel') || 'Cancel'}
             </Button>
           </div>
         )}
@@ -1653,7 +1755,7 @@ export function CommentsPage() {
               ? `${t('comments.deleteConfirmPrefix')}${deleteTarget.author?.name ?? t('comments.anonymous')}${t('comments.deleteConfirmSuffix')}`
               : undefined
           }
-          confirmLabel={t('comments.deletePermanently')}
+          confirmLabel={t('common.delete') || 'Delete'}
           variant="destructive"
           onConfirm={() => {
             if (deleteTarget) handleDelete(deleteTarget.id);

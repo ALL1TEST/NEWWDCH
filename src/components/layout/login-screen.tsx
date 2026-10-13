@@ -51,6 +51,7 @@ const quickLabel = (a: (typeof QUICK_ACCOUNTS)[number], t: (k: string) => string
 
 export function LoginScreen({ embedded = false }: { embedded?: boolean }) {
   const login = useAuthStore((s) => s.login);
+  const verifyMfaLogin = useAuthStore((s) => s.verifyMfaLogin);
   const isLoading = useAuthStore((s) => s.isLoading);
   const error = useAuthStore((s) => s.error);
   const clearError = useAuthStore((s) => s.clearError);
@@ -63,38 +64,256 @@ export function LoginScreen({ embedded = false }: { embedded?: boolean }) {
   // inline spinner); null while idle or when the normal form is used.
   const [pendingQuick, setPendingQuick] = useState<string | null>(null);
 
+  // 2FA state (matches Image 4)
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaEmail, setMfaEmail] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaError, setMfaError] = useState<string | null>(null);
+  const [isVerifyingMfa, setIsVerifyingMfa] = useState(false);
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     clearError();
+    setMfaError(null);
     try {
-      await login(email, password);
+      const res = await login(email, password);
+      if (res && res.requiresMfa) {
+        setMfaEmail(res.email || email);
+        setMfaRequired(true);
+      }
     } catch {
       // Error is already set in the store
     }
   };
 
   // One-click demo sign-in — reuses the SAME login() the form uses
-  // (existing authentication + demo-account logic, no separate path).
-  // The credentials are also mirrored into the form fields so a failed
-  // sign-in visibly shows which account was used and can be retried or
-  // corrected through the normal form.
   const handleQuickSignIn = async (account: {
     labelKey: string;
     email: string;
     password: string;
   }) => {
     clearError();
+    setMfaError(null);
     setEmail(account.email);
     setPassword(account.password);
     setPendingQuick(account.labelKey);
     try {
-      await login(account.email, account.password);
+      const res = await login(account.email, account.password);
+      if (res && res.requiresMfa) {
+        setMfaEmail(res.email || account.email);
+        setMfaRequired(true);
+      }
     } catch {
       // Error is already set in the store and shown in the form's Alert
     } finally {
       setPendingQuick(null);
     }
   };
+
+  const triggerVerify = async (codeToVerify: string) => {
+    const clean = codeToVerify.replace(/\D/g, '');
+    if (!clean || clean.length !== 6 || isVerifyingMfa) return;
+    setIsVerifyingMfa(true);
+    setMfaError(null);
+    try {
+      await verifyMfaLogin(mfaEmail, clean);
+      // Immediately clear 2FA view
+      setMfaRequired(false);
+      setMfaCode('');
+      // Navigate straight to CMS dashboard
+      window.location.hash = '#dashboard';
+      useNavigationStore.getState().navigate('dashboard');
+    } catch (err: any) {
+      setMfaError(err?.message || 'Invalid verification code. Please try again.');
+      setIsVerifyingMfa(false);
+    }
+  };
+
+  const handleMfaSubmit = async (e?: FormEvent) => {
+    if (e) e.preventDefault();
+    if (!mfaCode.trim()) return;
+    await triggerVerify(mfaCode);
+  };
+
+  // When 2FA is required, render CMS-branded verification screen
+  if (mfaRequired) {
+    if (embedded) {
+      return (
+        <div className="w-full space-y-4 py-2">
+          <div className="text-center space-y-2 pb-2">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-bold text-xl shadow-md shadow-primary/20">
+              C
+            </div>
+            <h2 className="text-lg font-bold tracking-tight text-foreground">
+              Two-factor authentication
+            </h2>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Enter the 6-digit code from your authenticator app.
+            </p>
+          </div>
+
+          {mfaError && (
+            <Alert variant="destructive" className="py-2.5 text-xs rounded-xl">
+              <AlertDescription>{mfaError}</AlertDescription>
+            </Alert>
+          )}
+
+          <form onSubmit={handleMfaSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="auth-mfa-code" className="text-xs font-medium text-foreground block text-center">
+                Authentication Code
+              </Label>
+              <div className="relative">
+                <input
+                  id="auth-mfa-code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  autoFocus
+                  value={mfaCode}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                    setMfaCode(val);
+                    setMfaError(null);
+                    if (val.length === 6) {
+                      void triggerVerify(val);
+                    }
+                  }}
+                  placeholder="000000"
+                  className="w-full h-12 text-center font-mono text-xl tracking-[0.45em] text-foreground bg-muted/25 border-2 border-border focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl transition-all outline-none font-semibold placeholder:text-muted-foreground/40"
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground text-center">
+                Automatically verifies upon entering 6 digits
+              </p>
+            </div>
+
+            <Button
+              type="submit"
+              disabled={isVerifyingMfa || mfaCode.length !== 6}
+              className="w-full h-10 font-semibold rounded-xl transition-all shadow-md cursor-pointer"
+            >
+              {isVerifyingMfa ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                'Verify'
+              )}
+            </Button>
+
+            <div className="pt-2 text-center border-t border-border/50">
+              <button
+                type="button"
+                onClick={() => {
+                  setMfaRequired(false);
+                  setMfaCode('');
+                  setMfaError(null);
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground font-medium transition-colors cursor-pointer"
+              >
+                &larr; Back to sign in
+              </button>
+            </div>
+          </form>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
+        <div className="w-full max-w-sm mx-auto">
+          <Card className="border border-border/80 shadow-xl bg-card rounded-2xl overflow-hidden">
+            <CardHeader className="text-center space-y-3 pb-3 pt-6">
+              {/* CMS Brand Logo */}
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-bold text-2xl shadow-lg shadow-primary/20">
+                C
+              </div>
+              <div>
+                <CardTitle className="text-xl font-bold tracking-tight text-foreground">
+                  Two-factor authentication
+                </CardTitle>
+                <CardDescription className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                  Enter the 6-digit code from your authenticator app to access your account.
+                </CardDescription>
+              </div>
+            </CardHeader>
+
+            <CardContent className="space-y-4 px-6 pb-6">
+              {mfaError && (
+                <Alert variant="destructive" className="py-2.5 text-xs rounded-xl">
+                  <AlertDescription>{mfaError}</AlertDescription>
+                </Alert>
+              )}
+
+              <form onSubmit={handleMfaSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="auth-mfa-code" className="text-xs font-medium text-foreground block text-center">
+                    Authentication Code
+                  </Label>
+                  <div className="relative">
+                    <input
+                      id="auth-mfa-code"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      autoFocus
+                      value={mfaCode}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                        setMfaCode(val);
+                        setMfaError(null);
+                        if (val.length === 6) {
+                          void triggerVerify(val);
+                        }
+                      }}
+                      placeholder="000000"
+                      className="w-full h-12 text-center font-mono text-xl tracking-[0.45em] text-foreground bg-muted/25 border-2 border-border focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl transition-all outline-none font-semibold placeholder:text-muted-foreground/40"
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Automatically verifies upon entering 6 digits
+                  </p>
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={isVerifyingMfa || mfaCode.length !== 6}
+                  className="w-full h-10 font-semibold rounded-xl transition-all shadow-md cursor-pointer"
+                >
+                  {isVerifyingMfa ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Verifying...
+                    </>
+                  ) : (
+                    'Verify'
+                  )}
+                </Button>
+
+                <div className="pt-2 text-center border-t border-border/50">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMfaRequired(false);
+                      setMfaCode('');
+                      setMfaError(null);
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground font-medium transition-colors cursor-pointer"
+                  >
+                    &larr; Back to sign in
+                  </button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

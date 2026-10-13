@@ -1327,7 +1327,7 @@ export function AppSidebar() {
               <Search className="h-4 w-4" />
               <span className="sr-only">{t('app.search')}</span>
             </Button>
-            <CollapseToggle side="bottom" />
+            <CollapseToggle side="right" />
           </div>
         </div>
         {/* Collapsed rail: ONLY the "C" logo. */}
